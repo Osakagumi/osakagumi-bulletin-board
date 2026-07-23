@@ -197,6 +197,11 @@ function escapeHtml(s){
   return String(s??"").replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 function catInfo(id){ return CATEGORIES.find(c=>c.id===id) || {label:id, color:"#888"}; }
+function formatDateJP(dateStr){
+  const d = new Date(dateStr + "T00:00:00");
+  const labels = ["日","月","火","水","木","金","土"];
+  return `${dateStr}(${labels[d.getDay()]})`;
+}
 
 let currentUser = null;
 let editingEquipmentId = null;
@@ -384,7 +389,7 @@ function renderReservationsTable(){
   list.forEach(r=>{
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td>${r.date}</td>
+      <td>${formatDateJP(r.date)}</td>
       <td>${r.startTime}〜${r.endTime}</td>
       <td>${escapeHtml(r.equipmentName)}</td>
       <td>${escapeHtml(r.userName || r.userEmail)}</td>
