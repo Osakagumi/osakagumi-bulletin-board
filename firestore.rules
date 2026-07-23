@@ -1,0 +1,46 @@
+rules_version = '2';
+
+// 使い方:
+// Firebaseコンソール > Firestore Database > ルール タブに、このファイルの中身を
+// そのまま貼り付けて「公開」してください。
+//
+// 管理者の登録方法:
+// Firestoreの「admins」コレクションに、管理者にしたい人のメールアドレスを
+// ドキュメントIDとしてドキュメントを1つ作成してください（中身は空でOK）。
+// 例: コレクション admins > ドキュメントID: hine@osakagumi.co.jp
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.token.email));
+    }
+
+    // 管理者一覧: ログインしていれば読めるが、書き込みは管理者のみ
+    match /admins/{email} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // 設備マスタ: ログインしていれば読めるが、追加・編集・削除は管理者のみ
+    match /equipment/{equipmentId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // 予約: ログインしていれば読める。
+    // 作成は本人のuserIdでのみ可能。更新・削除は本人または管理者のみ可能。
+    match /reservations/{reservationId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() &&
+        request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isSignedIn() &&
+        (resource.data.userId == request.auth.uid || isAdmin());
+    }
+  }
+}

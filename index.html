@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>設備予約 | 大坂組</title>
+<style>
+  :root{
+    --brand:#1C5AA5;
+    --brand-dark:#124079;
+    --bg:#F4F6F9;
+    --surface:#FFFFFF;
+    --line:#DDE3EC;
+    --text:#1F2937;
+    --muted:#6B7280;
+    --survey:#E8853F;
+    --room:#2E9E8F;
+    --vehicle:#4B5FA3;
+    --danger:#C0392B;
+    --mono: "SFMono-Regular", Consolas, "Courier New", monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP", sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font-smoothing:antialiased;}
+  button{font-family:inherit;cursor:pointer;}
+  input,select{font-family:inherit;}
+
+  /* ---------- Login ---------- */
+  #login-screen{
+    min-height:100vh;display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(180deg,#0F2F55 0%, var(--brand) 100%);
+    padding:24px;
+  }
+  .login-card{
+    background:var(--surface);border-radius:14px;padding:36px 32px;width:100%;max-width:360px;
+    box-shadow:0 20px 60px rgba(15,47,85,0.35);
+  }
+  .login-card h1{font-size:20px;margin:0 0 4px;letter-spacing:.02em;}
+  .login-card .sub{font-size:12px;color:var(--muted);margin:0 0 24px;font-family:var(--mono);letter-spacing:.03em;}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;}
+  .field input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font-size:14px;}
+  .field input:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 3px rgba(28,90,165,.15);}
+  #login-btn{width:100%;padding:11px;background:var(--brand);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;margin-top:6px;}
+  #login-btn:hover{background:var(--brand-dark);}
+  #login-error{color:var(--danger);font-size:12.5px;margin-top:10px;min-height:16px;}
+
+  /* ---------- App shell ---------- */
+  #app{display:none;min-height:100vh;flex-direction:column;}
+  header{
+    background:var(--surface);border-bottom:1px solid var(--line);
+    padding:12px 18px;display:flex;align-items:center;justify-content:space-between;
+    position:sticky;top:0;z-index:20;
+  }
+  header .brand{display:flex;align-items:center;gap:10px;}
+  header .brand .mark{width:30px;height:30px;border-radius:7px;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;font-family:var(--mono);}
+  header .brand .title{font-size:14.5px;font-weight:700;}
+  header .brand .title small{display:block;font-weight:400;color:var(--muted);font-size:10.5px;font-family:var(--mono);letter-spacing:.03em;}
+  header .user-box{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--muted);}
+  header .user-box a, header .user-box button{
+    border:1px solid var(--line);background:#fff;padding:6px 10px;border-radius:7px;font-size:12px;color:var(--text);text-decoration:none;
+  }
+
+  nav.tabs{display:flex;gap:4px;padding:8px 14px 0;background:var(--surface);border-bottom:1px solid var(--line);}
+  nav.tabs button{
+    background:none;border:none;padding:10px 14px;font-size:13.5px;color:var(--muted);border-bottom:2.5px solid transparent;font-weight:600;
+  }
+  nav.tabs button.active{color:var(--brand);border-color:var(--brand);}
+
+  main{flex:1;padding:16px;max-width:960px;width:100%;margin:0 auto;}
+
+  /* category pills */
+  .cat-row{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
+  .cat-pill{
+    padding:8px 14px;border-radius:20px;border:1.5px solid var(--line);background:#fff;font-size:13px;font-weight:600;color:var(--muted);
+    display:flex;align-items:center;gap:6px;
+  }
+  .cat-pill .dot{width:8px;height:8px;border-radius:50%;}
+  .cat-pill.active{border-color:currentColor;background:rgba(0,0,0,0.02);}
+
+  /* equipment grid */
+  .eq-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:18px;}
+  .eq-card{
+    background:var(--surface);border:1.5px solid var(--line);border-radius:10px;padding:12px;text-align:left;
+  }
+  .eq-card.selected{border-color:var(--brand);box-shadow:0 0 0 3px rgba(28,90,165,.12);}
+  .eq-card .name{font-size:13.5px;font-weight:700;margin-bottom:2px;}
+  .eq-card .note{font-size:11.5px;color:var(--muted);line-height:1.4;}
+  .eq-card.empty{color:var(--muted);font-size:12.5px;text-align:center;padding:20px 10px;}
+
+  /* timeline panel */
+  #timeline-panel{background:var(--surface);border:1.5px solid var(--line);border-radius:12px;padding:16px;display:none;}
+  #timeline-panel.show{display:block;}
+  .tl-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;}
+  .tl-head .eq-title{font-size:15px;font-weight:700;}
+  .tl-head .eq-title .cat-tag{font-size:10.5px;font-weight:600;font-family:var(--mono);padding:2px 6px;border-radius:4px;margin-left:6px;color:#fff;}
+  .date-nav{display:flex;align-items:center;gap:6px;}
+  .date-nav button{border:1px solid var(--line);background:#fff;border-radius:6px;width:30px;height:30px;font-size:14px;}
+  .date-nav input[type=date]{border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-size:13px;}
+
+  .timeline-wrap{overflow-x:auto;}
+  .timeline{position:relative;min-width:640px;}
+  .tl-ruler{display:flex;border-bottom:1px solid var(--line);padding-left:0;}
+  .tl-ruler .tick{flex:1;font-family:var(--mono);font-size:10px;color:var(--muted);border-left:1px solid var(--line);padding:2px 0 4px 3px;}
+  .tl-slots{display:flex;background:
+      repeating-linear-gradient(90deg, transparent, transparent calc(100%/1 - 1px));
+    border-bottom:1px solid var(--line);}
+  .slot{
+    flex:1;height:46px;border-left:1px solid #EDF1F6;position:relative;background:#fff;
+  }
+  .slot.hour-start{border-left:1px solid var(--line);}
+  .slot.free:hover{background:#EFF5FC;cursor:pointer;}
+  .slot.pending{background:rgba(28,90,165,0.18);box-shadow:inset 0 0 0 1.5px var(--brand);cursor:pointer;}
+  .slot.booked{background:var(--slot-color,#ccc);cursor:default;}
+  .slot.booked .lbl{position:absolute;inset:2px 4px;font-size:9.5px;color:#fff;line-height:1.2;overflow:hidden;font-weight:600;}
+  .slot.past{background:#F6F7F9;cursor:not-allowed;}
+
+  .legend{display:flex;gap:16px;margin-top:10px;font-size:11.5px;color:var(--muted);flex-wrap:wrap;}
+  .legend span{display:inline-flex;align-items:center;gap:5px;}
+  .legend i{width:10px;height:10px;border-radius:2px;display:inline-block;}
+
+  .selection-bar{
+    margin-top:14px;padding:12px;border-radius:9px;background:#F4F8FC;border:1px dashed var(--brand);
+    display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;font-size:13px;
+  }
+  .selection-bar .range{font-family:var(--mono);font-weight:700;color:var(--brand-dark);}
+  .selection-bar .actions button{border:none;border-radius:7px;padding:8px 14px;font-size:13px;font-weight:600;}
+  .btn-primary{background:var(--brand);color:#fff;}
+  .btn-primary:hover{background:var(--brand-dark);}
+  .btn-ghost{background:none;color:var(--muted);}
+
+  /* my reservations */
+  .res-list{display:flex;flex-direction:column;gap:8px;}
+  .res-item{
+    background:var(--surface);border:1.5px solid var(--line);border-radius:10px;padding:12px 14px;
+    display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
+  }
+  .res-item.past{opacity:.55;}
+  .res-item .meta{font-size:13px;}
+  .res-item .meta b{display:block;font-size:13.5px;margin-bottom:2px;}
+  .res-item .meta .time{font-family:var(--mono);color:var(--muted);font-size:12px;}
+  .res-item button{border:1px solid var(--danger);color:var(--danger);background:#fff;border-radius:7px;padding:6px 12px;font-size:12px;}
+  .res-item button:hover{background:var(--danger);color:#fff;}
+  .empty-state{color:var(--muted);font-size:13px;text-align:center;padding:40px 10px;}
+
+  /* modal */
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(15,25,40,.45);display:none;align-items:center;justify-content:center;padding:20px;z-index:50;
+  }
+  .modal-overlay.show{display:flex;}
+  .modal{background:#fff;border-radius:12px;padding:22px;width:100%;max-width:380px;}
+  .modal h3{margin:0 0 4px;font-size:16px;}
+  .modal .sub{font-size:12px;color:var(--muted);font-family:var(--mono);margin-bottom:16px;}
+  .modal .field{margin-bottom:14px;}
+  .modal textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:9px 10px;font-size:13.5px;font-family:inherit;resize:vertical;min-height:60px;}
+  .modal .row-btns{display:flex;gap:8px;margin-top:6px;}
+  .modal .row-btns button{flex:1;padding:10px;border-radius:8px;border:none;font-size:13.5px;font-weight:600;}
+  .modal-err{color:var(--danger);font-size:12px;margin-top:8px;min-height:16px;}
+
+  .toast{
+    position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1F2937;color:#fff;padding:10px 18px;
+    border-radius:8px;font-size:13px;z-index:60;opacity:0;transition:opacity .25s;pointer-events:none;
+  }
+  .toast.show{opacity:1;}
+
+  @media (max-width:520px){
+    main{padding:12px;}
+    .timeline{min-width:560px;}
+  }
+</style>
+</head>
+<body>
+
+  <!-- ============ LOGIN ============ -->
+  <div id="login-screen">
+    <div class="login-card">
+      <h1>設備予約システム</h1>
+      <p class="sub">OSAKAGUMI FACILITY BOOKING</p>
+      <div class="field">
+        <label>メールアドレス</label>
+        <input type="email" id="login-email" autocomplete="username" placeholder="you@osakagumi.co.jp">
+      </div>
+      <div class="field">
+        <label>パスワード</label>
+        <input type="password" id="login-password" autocomplete="current-password" placeholder="••••••••">
+      </div>
+      <button id="login-btn">ログイン</button>
+      <div id="login-error"></div>
+    </div>
+  </div>
+
+  <!-- ============ APP ============ -->
+  <div id="app">
+    <header>
+      <div class="brand">
+        <div class="mark">大坂</div>
+        <div class="title">設備予約<small>OSAKAGUMI FACILITY BOOKING</small></div>
+      </div>
+      <div class="user-box">
+        <span id="user-email">-</span>
+        <a href="admin.html" id="admin-link" style="display:none;">管理画面</a>
+        <button id="logout-btn">ログアウト</button>
+      </div>
+    </header>
+
+    <nav class="tabs">
+      <button class="tab-btn active" data-view="book">予約する</button>
+      <button class="tab-btn" data-view="mine">マイ予約</button>
+    </nav>
+
+    <main>
+      <!-- ---- 予約する ---- -->
+      <section id="view-book">
+        <div class="cat-row" id="cat-row"></div>
+        <div class="eq-grid" id="eq-grid"></div>
+
+        <div id="timeline-panel">
+          <div class="tl-head">
+            <div class="eq-title" id="tl-eq-title"></div>
+            <div class="date-nav">
+              <button id="date-prev">◀</button>
+              <input type="date" id="date-input">
+              <button id="date-next">▶</button>
+            </div>
+          </div>
+          <div class="timeline-wrap">
+            <div class="timeline">
+              <div class="tl-ruler" id="tl-ruler"></div>
+              <div class="tl-slots" id="tl-slots"></div>
+            </div>
+          </div>
+          <div class="legend">
+            <span><i style="background:#fff;border:1px solid var(--line);"></i>空き</span>
+            <span><i style="background:rgba(28,90,165,0.18);box-shadow:inset 0 0 0 1.5px var(--brand);"></i>選択中</span>
+            <span><i style="background:var(--muted);"></i>予約済み</span>
+            <span><i style="background:#F6F7F9;"></i>予約不可（過去）</span>
+          </div>
+
+          <div class="selection-bar" id="selection-bar" style="display:none;">
+            <div>選択中: <span class="range" id="selection-range"></span></div>
+            <div class="actions">
+              <button class="btn-ghost" id="clear-selection">クリア</button>
+              <button class="btn-primary" id="open-reserve-modal">この時間で予約する</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---- マイ予約 ---- -->
+      <section id="view-mine" style="display:none;">
+        <div class="res-list" id="my-res-list"></div>
+      </section>
+    </main>
+  </div>
+
+  <!-- ============ RESERVE MODAL ============ -->
+  <div class="modal-overlay" id="reserve-modal">
+    <div class="modal">
+      <h3>予約内容の確認</h3>
+      <div class="sub" id="modal-summary"></div>
+      <div class="field">
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">利用目的・行き先など</label>
+        <textarea id="modal-purpose" placeholder="例）〇〇現場 測量／〇〇工事 打合せ／〇〇市役所"></textarea>
+      </div>
+      <div class="modal-err" id="modal-error"></div>
+      <div class="row-btns">
+        <button class="btn-ghost" id="modal-cancel" style="border:1px solid var(--line);">キャンセル</button>
+        <button class="btn-primary" id="modal-confirm">予約を確定する</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+  getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {
+  getFirestore, collection, doc, getDoc, addDoc, deleteDoc, query, where,
+  onSnapshot, orderBy, Timestamp
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { firebaseConfig, BUSINESS_HOURS, CATEGORIES } from "./firebase-config.js";
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+/* ---------- helpers ---------- */
+const pad2 = n => String(n).padStart(2,"0");
+const todayStr = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+};
+function buildSlots(){
+  const slots = [];
+  const { startHour, endHour, slotMinutes } = BUSINESS_HOURS;
+  let cur = startHour*60;
+  const end = endHour*60;
+  while(cur < end){
+    const h = Math.floor(cur/60), m = cur%60;
+    slots.push({ start: cur, label: `${pad2(h)}:${pad2(m)}` });
+    cur += slotMinutes;
+  }
+  return slots;
+}
+const SLOTS = buildSlots();
+const SLOT_MIN = BUSINESS_HOURS.slotMinutes;
+function minutesToHHMM(mins){ return `${pad2(Math.floor(mins/60))}:${pad2(mins%60)}`; }
+function toast(msg){
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  setTimeout(()=>t.classList.remove("show"), 2400);
+}
+function catInfo(id){ return CATEGORIES.find(c=>c.id===id) || {label:id, color:"#888"}; }
+
+/* ---------- state ---------- */
+let currentUser = null;
+let isAdmin = false;
+let equipmentAll = [];
+let selectedCategory = CATEGORIES[0]?.id || null;
+let selectedEquipment = null;
+let selectedDate = todayStr();
+let reservationsUnsub = null;
+let reservationsForDay = [];
+let pendingStart = null, pendingEnd = null;
+let myResUnsub = null;
+
+/* ---------- auth ---------- */
+document.getElementById("login-btn").addEventListener("click", doLogin);
+document.getElementById("login-password").addEventListener("keydown", e=>{ if(e.key==="Enter") doLogin(); });
+
+async function doLogin(){
+  const email = document.getElementById("login-email").value.trim();
+  const pw = document.getElementById("login-password").value;
+  const errEl = document.getElementById("login-error");
+  errEl.textContent = "";
+  if(!email || !pw){ errEl.textContent = "メールアドレスとパスワードを入力してください。"; return; }
+  try{
+    await signInWithEmailAndPassword(auth, email, pw);
+  }catch(e){
+    errEl.textContent = "ログインに失敗しました。メールアドレスまたはパスワードをご確認ください。";
+  }
+}
+document.getElementById("logout-btn").addEventListener("click", ()=> signOut(auth));
+
+onAuthStateChanged(auth, async (user)=>{
+  if(user){
+    currentUser = user;
+    document.getElementById("login-screen").style.display = "none";
+    document.getElementById("app").style.display = "flex";
+    document.getElementById("user-email").textContent = user.email;
+    try{
+      const adminDoc = await getDoc(doc(db, "admins", user.email));
+      isAdmin = adminDoc.exists();
+    }catch(e){ isAdmin = false; }
+    document.getElementById("admin-link").style.display = isAdmin ? "inline-block" : "none";
+    initEquipmentListener();
+    initMyReservationsListener();
+  }else{
+    currentUser = null;
+    document.getElementById("login-screen").style.display = "flex";
+    document.getElementById("app").style.display = "none";
+  }
+});
+
+/* ---------- tabs ---------- */
+document.querySelectorAll(".tab-btn").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
+    btn.classList.add("active");
+    const v = btn.dataset.view;
+    document.getElementById("view-book").style.display = v==="book" ? "block":"none";
+    document.getElementById("view-mine").style.display = v==="mine" ? "block":"none";
+  });
+});
+
+/* ---------- categories & equipment ---------- */
+function renderCategoryRow(){
+  const row = document.getElementById("cat-row");
+  row.innerHTML = "";
+  CATEGORIES.forEach(cat=>{
+    const pill = document.createElement("button");
+    pill.className = "cat-pill" + (cat.id===selectedCategory ? " active":"");
+    pill.style.color = cat.color;
+    pill.innerHTML = `<span class="dot" style="background:${cat.color}"></span>${cat.label}`;
+    pill.addEventListener("click", ()=>{
+      selectedCategory = cat.id;
+      selectedEquipment = null;
+      document.getElementById("timeline-panel").classList.remove("show");
+      renderCategoryRow();
+      renderEquipmentGrid();
+    });
+    row.appendChild(pill);
+  });
+}
+
+function initEquipmentListener(){
+  const q = query(collection(db,"equipment"), where("active","==",true));
+  onSnapshot(q, snap=>{
+    equipmentAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    equipmentAll.sort((a,b)=> (a.order??0)-(b.order??0) || a.name.localeCompare(b.name,"ja"));
+    renderCategoryRow();
+    renderEquipmentGrid();
+  });
+}
+
+function renderEquipmentGrid(){
+  const grid = document.getElementById("eq-grid");
+  grid.innerHTML = "";
+  const items = equipmentAll.filter(e=>e.category===selectedCategory);
+  if(items.length===0){
+    grid.innerHTML = `<div class="eq-card empty">このカテゴリに登録された設備はまだありません。管理画面から追加してください。</div>`;
+    return;
+  }
+  items.forEach(eq=>{
+    const card = document.createElement("button");
+    card.className = "eq-card" + (selectedEquipment?.id===eq.id ? " selected":"");
+    card.innerHTML = `<div class="name">${escapeHtml(eq.name)}</div><div class="note">${escapeHtml(eq.note||"")}</div>`;
+    card.addEventListener("click", ()=>{
+      selectedEquipment = eq;
+      pendingStart = pendingEnd = null;
+      renderEquipmentGrid();
+      showTimelinePanel();
+    });
+    grid.appendChild(card);
+  });
+}
+
+function escapeHtml(s){
+  return String(s??"").replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* ---------- timeline ---------- */
+document.getElementById("date-input").value = selectedDate;
+document.getElementById("date-input").addEventListener("change", e=>{
+  selectedDate = e.target.value || todayStr();
+  pendingStart = pendingEnd = null;
+  loadReservationsForDay();
+});
+document.getElementById("date-prev").addEventListener("click", ()=> shiftDate(-1));
+document.getElementById("date-next").addEventListener("click", ()=> shiftDate(1));
+function shiftDate(delta){
+  const d = new Date(selectedDate + "T00:00:00");
+  d.setDate(d.getDate()+delta);
+  selectedDate = `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+  document.getElementById("date-input").value = selectedDate;
+  pendingStart = pendingEnd = null;
+  loadReservationsForDay();
+}
+
+function showTimelinePanel(){
+  const panel = document.getElementById("timeline-panel");
+  panel.classList.add("show");
+  const cat = catInfo(selectedEquipment.category);
+  document.getElementById("tl-eq-title").innerHTML =
+    `${escapeHtml(selectedEquipment.name)}<span class="cat-tag" style="background:${cat.color}">${cat.label}</span>`;
+  renderRuler();
+  loadReservationsForDay();
+}
+
+function renderRuler(){
+  const ruler = document.getElementById("tl-ruler");
+  ruler.innerHTML = "";
+  SLOTS.forEach(s=>{
+    const isHour = s.start % 60 === 0;
+    const tick = document.createElement("div");
+    tick.className = "tick";
+    tick.textContent = isHour ? s.label : "";
+    ruler.appendChild(tick);
+  });
+}
+
+function loadReservationsForDay(){
+  if(reservationsUnsub){ reservationsUnsub(); reservationsUnsub = null; }
+  if(!selectedEquipment) return;
+  const q = query(
+    collection(db,"reservations"),
+    where("equipmentId","==", selectedEquipment.id),
+    where("date","==", selectedDate)
+  );
+  reservationsUnsub = onSnapshot(q, snap=>{
+    reservationsForDay = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    renderSlots();
+  });
+}
+
+function renderSlots(){
+  const wrap = document.getElementById("tl-slots");
+  wrap.innerHTML = "";
+  const now = new Date();
+  const isToday = selectedDate === todayStr();
+  const nowMins = now.getHours()*60 + now.getMinutes();
+  const cat = catInfo(selectedEquipment.category);
+
+  SLOTS.forEach(s=>{
+    const div = document.createElement("div");
+    div.className = "slot" + (s.start%60===0 ? " hour-start":"");
+    const isPast = isToday && s.start < nowMins;
+
+    const booking = reservationsForDay.find(r=>{
+      const [sh,sm] = r.startTime.split(":").map(Number);
+      const [eh,em] = r.endTime.split(":").map(Number);
+      const startM = sh*60+sm, endM = eh*60+em;
+      return s.start >= startM && s.start < endM;
+    });
+
+    if(booking){
+      div.classList.add("booked");
+      div.style.setProperty("--slot-color", cat.color);
+      div.title = `${booking.startTime}-${booking.endTime} ${booking.userName||booking.userEmail}\n${booking.purpose||""}`;
+      if(s.start === Math.round(timeToMinutes(booking.startTime))){
+        const lbl = document.createElement("div");
+        lbl.className = "lbl";
+        lbl.textContent = `${booking.userName || booking.userEmail}`;
+        div.appendChild(lbl);
+      }
+    } else if(isPast){
+      div.classList.add("past");
+    } else {
+      div.classList.add("free");
+      div.addEventListener("click", ()=> handleSlotClick(s.start));
+    }
+    wrap.appendChild(div);
+  });
+
+  updateSelectionRendering();
+}
+
+function timeToMinutes(hhmm){
+  const [h,m] = hhmm.split(":").map(Number);
+  return h*60+m;
+}
+
+function handleSlotClick(slotStart){
+  if(pendingStart===null){
+    pendingStart = slotStart;
+    pendingEnd = slotStart + SLOT_MIN;
+  } else if(pendingEnd===null){
+    // shouldn't happen, safety
+    pendingEnd = slotStart + SLOT_MIN;
+  } else {
+    // extend/reset selection
+    const lo = Math.min(pendingStart, slotStart);
+    const hi = Math.max(pendingStart, slotStart) + SLOT_MIN;
+    // check no booked slot within range
+    if(rangeHasConflict(lo, hi)){
+      pendingStart = slotStart; pendingEnd = slotStart + SLOT_MIN;
+    } else {
+      pendingStart = lo; pendingEnd = hi;
+    }
+  }
+  renderSlots();
+}
+
+function rangeHasConflict(lo, hi){
+  return reservationsForDay.some(r=>{
+    const s = timeToMinutes(r.startTime), e = timeToMinutes(r.endTime);
+    return Math.max(lo,s) < Math.min(hi,e);
+  });
+}
+
+function updateSelectionRendering(){
+  const bar = document.getElementById("selection-bar");
+  if(pendingStart===null || pendingEnd===null){
+    bar.style.display = "none";
+    return;
+  }
+  const lo = Math.min(pendingStart,pendingEnd), hi = Math.max(pendingStart,pendingEnd);
+  // paint pending slots
+  const slotEls = document.getElementById("tl-slots").children;
+  SLOTS.forEach((s, idx)=>{
+    const el = slotEls[idx];
+    if(!el) return;
+    if(el.classList.contains("booked") || el.classList.contains("past")) return;
+    if(s.start >= lo && s.start < hi){
+      el.classList.add("pending"); el.classList.remove("free");
+    }
+  });
+  bar.style.display = "flex";
+  document.getElementById("selection-range").textContent =
+    `${minutesToHHMM(lo)} 〜 ${minutesToHHMM(hi)}`;
+}
+
+document.getElementById("clear-selection").addEventListener("click", ()=>{
+  pendingStart = pendingEnd = null;
+  renderSlots();
+});
+
+/* ---------- reserve modal ---------- */
+const reserveModal = document.getElementById("reserve-modal");
+document.getElementById("open-reserve-modal").addEventListener("click", ()=>{
+  if(pendingStart===null || pendingEnd===null) return;
+  const lo = Math.min(pendingStart,pendingEnd), hi = Math.max(pendingStart,pendingEnd);
+  document.getElementById("modal-summary").textContent =
+    `${selectedEquipment.name} / ${selectedDate} ${minutesToHHMM(lo)}〜${minutesToHHMM(hi)}`;
+  document.getElementById("modal-purpose").value = "";
+  document.getElementById("modal-error").textContent = "";
+  reserveModal.classList.add("show");
+});
+document.getElementById("modal-cancel").addEventListener("click", ()=> reserveModal.classList.remove("show"));
+document.getElementById("modal-confirm").addEventListener("click", confirmReservation);
+
+async function confirmReservation(){
+  const errEl = document.getElementById("modal-error");
+  errEl.textContent = "";
+  const lo = Math.min(pendingStart,pendingEnd), hi = Math.max(pendingStart,pendingEnd);
+  if(rangeHasConflict(lo,hi)){
+    errEl.textContent = "この時間帯は既に予約されています。画面を更新して選び直してください。";
+    return;
+  }
+  const purpose = document.getElementById("modal-purpose").value.trim();
+  try{
+    await addDoc(collection(db,"reservations"), {
+      equipmentId: selectedEquipment.id,
+      equipmentName: selectedEquipment.name,
+      category: selectedEquipment.category,
+      date: selectedDate,
+      startTime: minutesToHHMM(lo),
+      endTime: minutesToHHMM(hi),
+      purpose,
+      userId: currentUser.uid,
+      userEmail: currentUser.email,
+      userName: currentUser.displayName || currentUser.email,
+      createdAt: Timestamp.now()
+    });
+    reserveModal.classList.remove("show");
+    pendingStart = pendingEnd = null;
+    toast("予約を確定しました。");
+  }catch(e){
+    errEl.textContent = "予約の登録に失敗しました。時間をおいて再度お試しください。";
+  }
+}
+
+/* ---------- my reservations ---------- */
+function initMyReservationsListener(){
+  if(myResUnsub) myResUnsub();
+  const q = query(collection(db,"reservations"), where("userId","==", currentUser.uid));
+  myResUnsub = onSnapshot(q, snap=>{
+    const list = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    list.sort((a,b)=> (a.date+a.startTime).localeCompare(b.date+b.startTime));
+    renderMyReservations(list);
+  });
+}
+
+function renderMyReservations(list){
+  const el = document.getElementById("my-res-list");
+  if(list.length===0){
+    el.innerHTML = `<div class="empty-state">予約はまだありません。「予約する」タブから登録してください。</div>`;
+    return;
+  }
+  const now = todayStr();
+  el.innerHTML = "";
+  list.forEach(r=>{
+    const isPast = (r.date + r.startTime) < (now + "00:00");
+    const item = document.createElement("div");
+    item.className = "res-item" + (isPast ? " past":"");
+    const cat = catInfo(r.category);
+    item.innerHTML = `
+      <div class="meta">
+        <b>${escapeHtml(r.equipmentName)} <span style="color:${cat.color};font-size:11px;">[${cat.label}]</span></b>
+        <div class="time">${r.date} ${r.startTime}〜${r.endTime}</div>
+        <div style="color:var(--muted);font-size:12px;margin-top:2px;">${escapeHtml(r.purpose||"")}</div>
+      </div>
+    `;
+    if(!isPast){
+      const btn = document.createElement("button");
+      btn.textContent = "キャンセル";
+      btn.addEventListener("click", async ()=>{
+        if(!confirm("この予約をキャンセルしますか？")) return;
+        await deleteDoc(doc(db,"reservations", r.id));
+        toast("予約をキャンセルしました。");
+      });
+      item.appendChild(btn);
+    }
+    el.appendChild(item);
+  });
+}
+</script>
+</body>
+</html>

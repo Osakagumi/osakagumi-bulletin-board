@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>管理画面 | 設備予約 大坂組</title>
+<style>
+  :root{
+    --brand:#1C5AA5; --brand-dark:#124079; --bg:#F4F6F9; --surface:#FFFFFF; --line:#DDE3EC;
+    --text:#1F2937; --muted:#6B7280; --survey:#E8853F; --room:#2E9E8F; --vehicle:#4B5FA3; --danger:#C0392B;
+    --mono:"SFMono-Regular",Consolas,"Courier New",monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Yu Gothic","Noto Sans JP",sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);}
+  button{font-family:inherit;cursor:pointer;}
+  input,select,textarea{font-family:inherit;}
+
+  #gate{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;text-align:center;}
+  #gate .box{background:#fff;border-radius:12px;padding:30px;max-width:340px;box-shadow:0 10px 40px rgba(0,0,0,.08);}
+  #gate .box p{color:var(--muted);font-size:13.5px;line-height:1.6;}
+  #gate a{color:var(--brand);}
+
+  header{background:var(--surface);border-bottom:1px solid var(--line);padding:12px 18px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;}
+  header .brand{display:flex;align-items:center;gap:10px;}
+  header .brand .mark{width:30px;height:30px;border-radius:7px;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;font-family:var(--mono);}
+  header .title{font-size:14.5px;font-weight:700;}
+  header .title small{display:block;font-weight:400;color:var(--muted);font-size:10.5px;font-family:var(--mono);}
+  header a.back{font-size:12px;border:1px solid var(--line);padding:6px 10px;border-radius:7px;text-decoration:none;color:var(--text);background:#fff;}
+
+  nav.tabs{display:flex;gap:4px;padding:8px 14px 0;background:var(--surface);border-bottom:1px solid var(--line);overflow-x:auto;}
+  nav.tabs button{background:none;border:none;padding:10px 14px;font-size:13.5px;color:var(--muted);border-bottom:2.5px solid transparent;font-weight:600;white-space:nowrap;}
+  nav.tabs button.active{color:var(--brand);border-color:var(--brand);}
+
+  main{padding:16px;max-width:900px;margin:0 auto;}
+  .panel{background:var(--surface);border:1.5px solid var(--line);border-radius:12px;padding:18px;margin-bottom:16px;}
+  .panel h2{font-size:14.5px;margin:0 0 14px;}
+
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;}
+  .form-grid .full{grid-column:1/-1;}
+  .field label{display:block;font-size:11.5px;color:var(--muted);margin-bottom:5px;}
+  .field input, .field select, .field textarea{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:13.5px;}
+  .field textarea{min-height:50px;resize:vertical;}
+  .btn{border:none;border-radius:7px;padding:9px 16px;font-size:13px;font-weight:600;}
+  .btn-primary{background:var(--brand);color:#fff;}
+  .btn-primary:hover{background:var(--brand-dark);}
+  .btn-danger{background:none;border:1px solid var(--danger);color:var(--danger);}
+  .btn-danger:hover{background:var(--danger);color:#fff;}
+  .btn-ghost{background:none;color:var(--muted);border:1px solid var(--line);}
+
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top;}
+  th{color:var(--muted);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.02em;}
+  td.actions{white-space:nowrap;}
+  td.actions button{margin-right:6px;}
+  .tag{font-size:10.5px;font-weight:700;color:#fff;padding:2px 7px;border-radius:4px;font-family:var(--mono);}
+  .muted-row{opacity:.5;}
+  .filter-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:flex-end;}
+  .filter-row .field{min-width:140px;}
+  .empty{color:var(--muted);font-size:13px;text-align:center;padding:30px 0;}
+
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1F2937;color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;z-index:60;opacity:0;transition:opacity .25s;pointer-events:none;}
+  .toast.show{opacity:1;}
+</style>
+</head>
+<body>
+
+<div id="gate" style="display:none;">
+  <div class="box">
+    <h2>管理画面</h2>
+    <p id="gate-msg">確認しています…</p>
+    <p><a href="index.html">予約画面に戻る</a></p>
+  </div>
+</div>
+
+<div id="admin-app" style="display:none;">
+  <header>
+    <div class="brand">
+      <div class="mark">大坂</div>
+      <div class="title">管理画面<small>OSAKAGUMI FACILITY BOOKING - ADMIN</small></div>
+    </div>
+    <a class="back" href="index.html">← 予約画面へ</a>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab-btn active" data-view="equipment">設備管理</button>
+    <button class="tab-btn" data-view="reservations">予約状況（全体）</button>
+    <button class="tab-btn" data-view="admins">管理者管理</button>
+  </nav>
+
+  <main>
+    <!-- ============ 設備管理 ============ -->
+    <section id="view-equipment">
+      <div class="panel">
+        <h2 id="eq-form-title">設備を追加</h2>
+        <div class="form-grid">
+          <div class="field">
+            <label>設備名</label>
+            <input type="text" id="eq-name" placeholder="例）トータルステーション①">
+          </div>
+          <div class="field">
+            <label>カテゴリ</label>
+            <select id="eq-category"></select>
+          </div>
+          <div class="field full">
+            <label>備考（保管場所・注意事項など）</label>
+            <textarea id="eq-note" placeholder="例）本社倉庫棚A／使用後は電源off"></textarea>
+          </div>
+          <div class="field">
+            <label>表示順（小さいほど上に表示）</label>
+            <input type="number" id="eq-order" value="0">
+          </div>
+          <div class="field" style="display:flex;align-items:center;gap:6px;padding-top:20px;">
+            <input type="checkbox" id="eq-active" checked style="width:auto;">
+            <label style="margin:0;font-size:12.5px;color:var(--text);">予約対象として表示する</label>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="eq-save-btn">追加する</button>
+        <button class="btn btn-ghost" id="eq-cancel-edit" style="display:none;">編集をやめる</button>
+      </div>
+
+      <div class="panel">
+        <h2>登録済み設備一覧</h2>
+        <table>
+          <thead><tr><th>設備名</th><th>カテゴリ</th><th>備考</th><th>状態</th><th>操作</th></tr></thead>
+          <tbody id="eq-table-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============ 予約状況 ============ -->
+    <section id="view-reservations" style="display:none;">
+      <div class="panel">
+        <div class="filter-row">
+          <div class="field">
+            <label>日付</label>
+            <input type="date" id="res-filter-date">
+          </div>
+          <div class="field">
+            <label>カテゴリ</label>
+            <select id="res-filter-category"><option value="">すべて</option></select>
+          </div>
+          <button class="btn btn-ghost" id="res-clear-filter">絞り込み解除</button>
+        </div>
+        <table>
+          <thead><tr><th>日付</th><th>時間</th><th>設備</th><th>申請者</th><th>目的</th><th>操作</th></tr></thead>
+          <tbody id="res-table-body"></tbody>
+        </table>
+        <div class="empty" id="res-empty" style="display:none;">該当する予約はありません。</div>
+      </div>
+    </section>
+
+    <!-- ============ 管理者管理 ============ -->
+    <section id="view-admins" style="display:none;">
+      <div class="panel">
+        <h2>管理者を追加</h2>
+        <div class="form-grid">
+          <div class="field full">
+            <label>メールアドレス（Firebase Authに登録済みのもの）</label>
+            <input type="email" id="admin-email-input" placeholder="you@osakagumi.co.jp">
+          </div>
+        </div>
+        <button class="btn btn-primary" id="admin-add-btn">管理者に追加</button>
+      </div>
+      <div class="panel">
+        <h2>現在の管理者一覧</h2>
+        <table>
+          <thead><tr><th>メールアドレス</th><th>操作</th></tr></thead>
+          <tbody id="admin-table-body"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {
+  getFirestore, collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, setDoc,
+  query, where, onSnapshot, orderBy
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { firebaseConfig, CATEGORIES } from "./firebase-config.js";
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+function toast(msg){
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  setTimeout(()=>t.classList.remove("show"), 2400);
+}
+function escapeHtml(s){
+  return String(s??"").replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function catInfo(id){ return CATEGORIES.find(c=>c.id===id) || {label:id, color:"#888"}; }
+
+let currentUser = null;
+let editingEquipmentId = null;
+let equipmentAll = [];
+
+onAuthStateChanged(auth, async (user)=>{
+  if(!user){
+    document.getElementById("gate").style.display = "flex";
+    document.getElementById("gate-msg").textContent = "この画面を利用するにはログインが必要です。";
+    return;
+  }
+  currentUser = user;
+  let isAdmin = false;
+  try{
+    const d = await getDoc(doc(db,"admins", user.email));
+    isAdmin = d.exists();
+  }catch(e){ isAdmin = false; }
+
+  if(!isAdmin){
+    document.getElementById("gate").style.display = "flex";
+    document.getElementById("gate-msg").textContent = "この画面は管理者のみ利用できます。管理者権限が必要な場合は既存の管理者にご相談ください。";
+    return;
+  }
+
+  document.getElementById("admin-app").style.display = "block";
+  populateCategorySelects();
+  initEquipmentListener();
+  initReservationsListener();
+  initAdminsListener();
+});
+
+/* ---------- tabs ---------- */
+document.querySelectorAll(".tab-btn").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
+    btn.classList.add("active");
+    ["equipment","reservations","admins"].forEach(v=>{
+      document.getElementById("view-"+v).style.display = (v===btn.dataset.view) ? "block":"none";
+    });
+  });
+});
+
+function populateCategorySelects(){
+  const sel = document.getElementById("eq-category");
+  const filterSel = document.getElementById("res-filter-category");
+  CATEGORIES.forEach(c=>{
+    const o1 = document.createElement("option"); o1.value=c.id; o1.textContent=c.label;
+    sel.appendChild(o1);
+    const o2 = document.createElement("option"); o2.value=c.id; o2.textContent=c.label;
+    filterSel.appendChild(o2);
+  });
+}
+
+/* ============ 設備管理 ============ */
+function initEquipmentListener(){
+  onSnapshot(collection(db,"equipment"), snap=>{
+    equipmentAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    equipmentAll.sort((a,b)=> (a.order??0)-(b.order??0) || (a.name||"").localeCompare(b.name||"","ja"));
+    renderEquipmentTable();
+  });
+}
+
+function renderEquipmentTable(){
+  const body = document.getElementById("eq-table-body");
+  body.innerHTML = "";
+  if(equipmentAll.length===0){
+    body.innerHTML = `<tr><td colspan="5" class="empty">まだ設備が登録されていません。</td></tr>`;
+    return;
+  }
+  equipmentAll.forEach(eq=>{
+    const cat = catInfo(eq.category);
+    const tr = document.createElement("tr");
+    if(eq.active===false) tr.classList.add("muted-row");
+    tr.innerHTML = `
+      <td>${escapeHtml(eq.name)}</td>
+      <td><span class="tag" style="background:${cat.color}">${cat.label}</span></td>
+      <td style="color:var(--muted);max-width:220px;">${escapeHtml(eq.note||"")}</td>
+      <td>${eq.active===false ? "非表示" : "表示中"}</td>
+      <td class="actions"></td>
+    `;
+    const actionsTd = tr.querySelector(".actions");
+    const editBtn = document.createElement("button");
+    editBtn.className="btn btn-ghost"; editBtn.textContent="編集";
+    editBtn.addEventListener("click", ()=> startEditEquipment(eq));
+    const delBtn = document.createElement("button");
+    delBtn.className="btn btn-danger"; delBtn.textContent="削除";
+    delBtn.addEventListener("click", ()=> deleteEquipment(eq));
+    actionsTd.appendChild(editBtn); actionsTd.appendChild(delBtn);
+    body.appendChild(tr);
+  });
+}
+
+function startEditEquipment(eq){
+  editingEquipmentId = eq.id;
+  document.getElementById("eq-form-title").textContent = "設備を編集：" + eq.name;
+  document.getElementById("eq-name").value = eq.name || "";
+  document.getElementById("eq-category").value = eq.category || CATEGORIES[0].id;
+  document.getElementById("eq-note").value = eq.note || "";
+  document.getElementById("eq-order").value = eq.order ?? 0;
+  document.getElementById("eq-active").checked = eq.active !== false;
+  document.getElementById("eq-save-btn").textContent = "変更を保存";
+  document.getElementById("eq-cancel-edit").style.display = "inline-block";
+  window.scrollTo({top:0, behavior:"smooth"});
+}
+
+document.getElementById("eq-cancel-edit").addEventListener("click", resetEquipmentForm);
+function resetEquipmentForm(){
+  editingEquipmentId = null;
+  document.getElementById("eq-form-title").textContent = "設備を追加";
+  document.getElementById("eq-name").value = "";
+  document.getElementById("eq-note").value = "";
+  document.getElementById("eq-order").value = 0;
+  document.getElementById("eq-active").checked = true;
+  document.getElementById("eq-save-btn").textContent = "追加する";
+  document.getElementById("eq-cancel-edit").style.display = "none";
+}
+
+document.getElementById("eq-save-btn").addEventListener("click", async ()=>{
+  const name = document.getElementById("eq-name").value.trim();
+  if(!name){ toast("設備名を入力してください。"); return; }
+  const payload = {
+    name,
+    category: document.getElementById("eq-category").value,
+    note: document.getElementById("eq-note").value.trim(),
+    order: Number(document.getElementById("eq-order").value)||0,
+    active: document.getElementById("eq-active").checked
+  };
+  try{
+    if(editingEquipmentId){
+      await updateDoc(doc(db,"equipment", editingEquipmentId), payload);
+      toast("設備情報を更新しました。");
+    } else {
+      await addDoc(collection(db,"equipment"), payload);
+      toast("設備を追加しました。");
+    }
+    resetEquipmentForm();
+  }catch(e){
+    toast("保存に失敗しました。権限をご確認ください。");
+  }
+});
+
+async function deleteEquipment(eq){
+  if(!confirm(`「${eq.name}」を削除しますか？\n過去の予約履歴は残りますが、今後この設備は予約できなくなります。`)) return;
+  try{
+    await deleteDoc(doc(db,"equipment", eq.id));
+    toast("設備を削除しました。");
+  }catch(e){
+    toast("削除に失敗しました。");
+  }
+}
+
+/* ============ 予約状況（全体） ============ */
+let allReservations = [];
+function initReservationsListener(){
+  const q = query(collection(db,"reservations"));
+  onSnapshot(q, snap=>{
+    allReservations = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    allReservations.sort((a,b)=> (a.date+a.startTime).localeCompare(b.date+b.startTime));
+    renderReservationsTable();
+  });
+}
+document.getElementById("res-filter-date").addEventListener("change", renderReservationsTable);
+document.getElementById("res-filter-category").addEventListener("change", renderReservationsTable);
+document.getElementById("res-clear-filter").addEventListener("click", ()=>{
+  document.getElementById("res-filter-date").value = "";
+  document.getElementById("res-filter-category").value = "";
+  renderReservationsTable();
+});
+
+function renderReservationsTable(){
+  const dateFilter = document.getElementById("res-filter-date").value;
+  const catFilter = document.getElementById("res-filter-category").value;
+  const body = document.getElementById("res-table-body");
+  const emptyEl = document.getElementById("res-empty");
+  let list = allReservations.slice();
+  if(dateFilter) list = list.filter(r=>r.date===dateFilter);
+  if(catFilter) list = list.filter(r=>r.category===catFilter);
+
+  body.innerHTML = "";
+  if(list.length===0){
+    emptyEl.style.display = "block";
+    return;
+  }
+  emptyEl.style.display = "none";
+  list.forEach(r=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${r.date}</td>
+      <td>${r.startTime}〜${r.endTime}</td>
+      <td>${escapeHtml(r.equipmentName)}</td>
+      <td>${escapeHtml(r.userName || r.userEmail)}</td>
+      <td style="color:var(--muted);max-width:200px;">${escapeHtml(r.purpose||"")}</td>
+      <td class="actions"></td>
+    `;
+    const btn = document.createElement("button");
+    btn.className = "btn btn-danger"; btn.textContent = "取消";
+    btn.addEventListener("click", async ()=>{
+      if(!confirm("この予約を取り消しますか？")) return;
+      await deleteDoc(doc(db,"reservations", r.id));
+      toast("予約を取り消しました。");
+    });
+    tr.querySelector(".actions").appendChild(btn);
+    body.appendChild(tr);
+  });
+}
+
+/* ============ 管理者管理 ============ */
+function initAdminsListener(){
+  onSnapshot(collection(db,"admins"), snap=>{
+    const list = snap.docs.map(d=>d.id);
+    renderAdminsTable(list);
+  });
+}
+function renderAdminsTable(list){
+  const body = document.getElementById("admin-table-body");
+  body.innerHTML = "";
+  if(list.length===0){
+    body.innerHTML = `<tr><td colspan="2" class="empty">管理者が登録されていません。</td></tr>`;
+    return;
+  }
+  list.forEach(email=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${escapeHtml(email)}</td><td class="actions"></td>`;
+    const btn = document.createElement("button");
+    btn.className = "btn btn-danger"; btn.textContent = "削除";
+    btn.addEventListener("click", async ()=>{
+      if(email === currentUser.email){
+        if(!confirm("自分自身を管理者から外します。よろしいですか？")) return;
+      } else {
+        if(!confirm(`${email} を管理者から外しますか？`)) return;
+      }
+      await deleteDoc(doc(db,"admins", email));
+      toast("管理者を削除しました。");
+    });
+    tr.querySelector(".actions").appendChild(btn);
+    body.appendChild(tr);
+  });
+}
+document.getElementById("admin-add-btn").addEventListener("click", async ()=>{
+  const email = document.getElementById("admin-email-input").value.trim();
+  if(!email){ toast("メールアドレスを入力してください。"); return; }
+  try{
+    await setDoc(doc(db,"admins", email), { addedBy: currentUser.email, addedAt: new Date().toISOString() });
+    document.getElementById("admin-email-input").value = "";
+    toast("管理者に追加しました。");
+  }catch(e){
+    toast("追加に失敗しました。");
+  }
+});
+</script>
+</body>
+</html>
