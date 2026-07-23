@@ -21,10 +21,57 @@ service cloud.firestore {
         exists(/databases/$(database)/documents/admins/$(request.auth.token.email));
     }
 
+    function isPoster() {
+      return isAdmin() ||
+        (isSignedIn() &&
+          exists(/databases/$(database)/documents/announcement_posters/$(request.auth.token.email)));
+    }
+
+    function isWhereaboutsEditor() {
+      return isAdmin() ||
+        (isSignedIn() &&
+          exists(/databases/$(database)/documents/whereabouts_editors/$(request.auth.token.email)));
+    }
+
     // 管理者一覧: ログインしていれば読めるが、書き込みは管理者のみ
     match /admins/{email} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
+    }
+
+    // お知らせ投稿権限一覧: ログインしていれば読めるが、書き込みは管理者のみ
+    match /announcement_posters/{email} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // 行き先ボード「他者設定権限」一覧: ログインしていれば読めるが、書き込みは管理者のみ
+    match /whereabouts_editors/{email} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // 所属（部署）マスタ: 全員が読める。追加・編集・削除は管理者のみ。
+    match /departments/{deptId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // 行き先ステータスマスタ（在席・外出・現場・休みなど）: 全員が読める。管理は管理者のみ。
+    match /wb_statuses/{statusId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // 社員名簿（行き先ボード兼用）: ログインすると自動で自分の行が作られる。
+    // 読み取りは全員。新規作成は本人のみ（なりすまし登録防止）。
+    // 更新（氏名・所属・状態など）は本人 / 管理者 / 行き先の他者設定権限者。削除は管理者のみ。
+    match /employees/{email} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.auth.token.email == email;
+      allow update: if isSignedIn() &&
+        (request.auth.token.email == email || isAdmin() || isWhereaboutsEditor());
+      allow delete: if isAdmin();
     }
 
     // 設備マスタ: ログインしていれば読めるが、追加・編集・削除は管理者のみ
@@ -41,6 +88,30 @@ service cloud.firestore {
         request.resource.data.userId == request.auth.uid;
       allow update, delete: if isSignedIn() &&
         (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    // お知らせ: 全員が読める。投稿は投稿権限者のみ。削除・編集は本人 or 管理者。
+    match /announcements/{postId} {
+      allow read: if isSignedIn();
+      allow create: if isPoster() &&
+        request.resource.data.authorEmail == request.auth.token.email;
+      allow update, delete: if isSignedIn() &&
+        (resource.data.authorEmail == request.auth.token.email || isAdmin());
+    }
+
+    // 安否確認キャンペーン: 全員が読める。作成・編集・終了は管理者のみ。
+    match /safety_campaigns/{campaignId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // 安否確認への回答: 全員が読める（誰が回答済みか管理者が把握するため）。
+    // 書き込みは本人のuserIdでのみ可能。
+    match /safety_responses/{responseId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() &&
+        request.resource.data.userId == request.auth.uid;
+      allow delete: if isAdmin();
     }
   }
 }
