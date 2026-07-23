@@ -97,6 +97,13 @@
   .date-nav{display:flex;align-items:center;gap:6px;}
   .date-nav button{border:1px solid var(--line);background:#fff;border-radius:6px;width:30px;height:30px;font-size:14px;}
   .date-nav input[type=date]{border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-size:13px;}
+  .weekday-badge{font-size:12px;font-weight:700;color:var(--brand-dark);background:#EAF1FA;border-radius:6px;padding:5px 9px;font-family:var(--mono);min-width:24px;text-align:center;}
+  .weekday-badge.weekend-sat{color:#2E6FA3;}
+  .weekday-badge.weekend-sun{color:var(--danger);}
+  .howto{
+    background:#F4F8FC;border:1px solid #DCE8F5;border-radius:8px;padding:9px 12px;font-size:12.5px;color:#2C4A6B;
+    margin-bottom:12px;line-height:1.6;
+  }
 
   .timeline-wrap{overflow-x:auto;}
   .timeline{position:relative;min-width:640px;}
@@ -220,8 +227,12 @@
             <div class="date-nav">
               <button id="date-prev">◀</button>
               <input type="date" id="date-input">
+              <span id="date-weekday" class="weekday-badge"></span>
               <button id="date-next">▶</button>
             </div>
+          </div>
+          <div class="howto">
+            <b>予約の仕方：</b>①開始したい時刻のマスをタップ → ②終了したい時刻のマスをタップ → ③下に出る「この時間で予約する」を押して確定
           </div>
           <div class="timeline-wrap">
             <div class="timeline">
@@ -314,6 +325,11 @@ function toast(msg){
   setTimeout(()=>t.classList.remove("show"), 2400);
 }
 function catInfo(id){ return CATEGORIES.find(c=>c.id===id) || {label:id, color:"#888"}; }
+function formatDateJP(dateStr){
+  const d = new Date(dateStr + "T00:00:00");
+  const labels = ["日","月","火","水","木","金","土"];
+  return `${dateStr}(${labels[d.getDay()]})`;
+}
 
 /* ---------- state ---------- */
 let currentUser = null;
@@ -434,9 +450,11 @@ function escapeHtml(s){
 
 /* ---------- timeline ---------- */
 document.getElementById("date-input").value = selectedDate;
+updateWeekdayBadge();
 document.getElementById("date-input").addEventListener("change", e=>{
   selectedDate = e.target.value || todayStr();
   pendingStart = pendingEnd = null;
+  updateWeekdayBadge();
   loadReservationsForDay();
 });
 document.getElementById("date-prev").addEventListener("click", ()=> shiftDate(-1));
@@ -447,7 +465,18 @@ function shiftDate(delta){
   selectedDate = `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
   document.getElementById("date-input").value = selectedDate;
   pendingStart = pendingEnd = null;
+  updateWeekdayBadge();
   loadReservationsForDay();
+}
+function updateWeekdayBadge(){
+  const d = new Date(selectedDate + "T00:00:00");
+  const labels = ["日","月","火","水","木","金","土"];
+  const badge = document.getElementById("date-weekday");
+  const dow = d.getDay();
+  badge.textContent = labels[dow];
+  badge.classList.remove("weekend-sat","weekend-sun");
+  if(dow===6) badge.classList.add("weekend-sat");
+  if(dow===0) badge.classList.add("weekend-sun");
 }
 
 function showTimelinePanel(){
@@ -456,6 +485,7 @@ function showTimelinePanel(){
   const cat = catInfo(selectedEquipment.category);
   document.getElementById("tl-eq-title").innerHTML =
     `${escapeHtml(selectedEquipment.name)}<span class="cat-tag" style="background:${cat.color}">${cat.label}</span>`;
+  updateWeekdayBadge();
   renderRuler();
   loadReservationsForDay();
 }
@@ -594,7 +624,7 @@ document.getElementById("open-reserve-modal").addEventListener("click", ()=>{
   if(pendingStart===null || pendingEnd===null) return;
   const lo = Math.min(pendingStart,pendingEnd), hi = Math.max(pendingStart,pendingEnd);
   document.getElementById("modal-summary").textContent =
-    `${selectedEquipment.name} / ${selectedDate} ${minutesToHHMM(lo)}〜${minutesToHHMM(hi)}`;
+    `${selectedEquipment.name} / ${formatDateJP(selectedDate)} ${minutesToHHMM(lo)}〜${minutesToHHMM(hi)}`;
   document.getElementById("modal-purpose").value = "";
   document.getElementById("modal-error").textContent = "";
   reserveModal.classList.add("show");
@@ -660,7 +690,7 @@ function renderMyReservations(list){
     item.innerHTML = `
       <div class="meta">
         <b>${escapeHtml(r.equipmentName)} <span style="color:${cat.color};font-size:11px;">[${cat.label}]</span></b>
-        <div class="time">${r.date} ${r.startTime}〜${r.endTime}</div>
+        <div class="time">${formatDateJP(r.date)} ${r.startTime}〜${r.endTime}</div>
         <div style="color:var(--muted);font-size:12px;margin-top:2px;">${escapeHtml(r.purpose||"")}</div>
       </div>
     `;
