@@ -61,9 +61,9 @@
     border:1px solid var(--line);background:#fff;padding:6px 10px;border-radius:7px;font-size:12px;color:var(--text);text-decoration:none;
   }
 
-  nav.tabs{display:flex;gap:4px;padding:8px 14px 0;background:var(--surface);border-bottom:1px solid var(--line);}
+  nav.tabs{display:flex;gap:4px;padding:8px 14px 0;background:var(--surface);border-bottom:1px solid var(--line);overflow-x:auto;}
   nav.tabs button{
-    background:none;border:none;padding:10px 14px;font-size:13.5px;color:var(--muted);border-bottom:2.5px solid transparent;font-weight:600;
+    background:none;border:none;padding:10px 14px;font-size:13.5px;color:var(--muted);border-bottom:2.5px solid transparent;font-weight:600;white-space:nowrap;
   }
   nav.tabs button.active{color:var(--brand);border-color:var(--brand);}
 
@@ -150,6 +150,52 @@
   .res-item button:hover{background:var(--danger);color:#fff;}
   .empty-state{color:var(--muted);font-size:13px;text-align:center;padding:40px 10px;}
 
+  /* ---------- shared toolbar / toggle ---------- */
+  .section-toolbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;}
+  .seg-toggle{display:inline-flex;border:1.5px solid var(--line);border-radius:8px;overflow:hidden;}
+  .seg-btn{background:#fff;border:none;padding:8px 14px;font-size:13px;font-weight:600;color:var(--muted);}
+  .seg-btn.active{background:var(--brand);color:#fff;}
+
+  /* ---------- お知らせ ---------- */
+  .notice-list{display:flex;flex-direction:column;gap:10px;}
+  .notice-item{background:var(--surface);border:1.5px solid var(--line);border-radius:10px;padding:14px 16px;}
+  .notice-item .n-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:6px;flex-wrap:wrap;}
+  .notice-item .n-title{font-size:14.5px;font-weight:700;}
+  .notice-item .n-meta{font-size:11.5px;color:var(--muted);font-family:var(--mono);white-space:nowrap;}
+  .notice-item .n-body{font-size:13.5px;line-height:1.7;white-space:pre-wrap;color:var(--text);}
+  .notice-item .n-actions{margin-top:8px;}
+  .notice-item .n-actions button{border:1px solid var(--danger);color:var(--danger);background:#fff;border-radius:7px;padding:5px 11px;font-size:11.5px;}
+  .notice-item .n-actions button:hover{background:var(--danger);color:#fff;}
+
+  /* ---------- 行き先 ---------- */
+  .wb-table{width:100%;border-collapse:collapse;font-size:13px;background:var(--surface);border:1.5px solid var(--line);border-radius:10px;overflow:hidden;}
+  .wb-table th{text-align:left;padding:9px 10px;background:#F0F3F8;color:var(--muted);font-size:11.5px;font-weight:700;border-bottom:1px solid var(--line);}
+  .wb-table td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:middle;}
+  .wb-table tr.dept-row td{background:#FAFBFC;font-size:11px;font-weight:700;color:var(--brand-dark);letter-spacing:.03em;padding:6px 10px;}
+  .wb-table tr:last-child td{border-bottom:none;}
+  .wb-status-badge{display:inline-block;padding:4px 10px;border-radius:14px;font-size:12px;font-weight:700;color:#fff;white-space:nowrap;}
+  .wb-note-cell{color:var(--muted);font-size:12.5px;}
+  .wb-editable{cursor:pointer;}
+  .wb-editable:hover{text-decoration:underline;}
+  .wb-board{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;}
+  .wb-board-col{background:var(--surface);border:1.5px solid var(--line);border-radius:10px;overflow:hidden;}
+  .wb-board-col .col-head{padding:9px 12px;font-size:13px;font-weight:700;color:#fff;}
+  .wb-board-col .col-body{padding:10px 12px;display:flex;flex-direction:column;gap:6px;min-height:40px;}
+  .wb-board-col .name-chip{font-size:13px;color:var(--text);}
+  .wb-board-col .empty-col{font-size:11.5px;color:var(--muted);}
+
+  /* ---------- 安否確認 ---------- */
+  .safety-banner{background:linear-gradient(180deg,#1C5AA5,#124079);color:#fff;border-radius:12px;padding:20px;margin-bottom:16px;}
+  .safety-banner h2{margin:0 0 6px;font-size:16px;}
+  .safety-banner .msg{font-size:13.5px;line-height:1.7;white-space:pre-wrap;opacity:.95;}
+  .safety-form{background:var(--surface);border:1.5px solid var(--line);border-radius:10px;padding:16px;}
+  .safety-radio-group{display:flex;flex-direction:column;gap:8px;margin-bottom:14px;}
+  .safety-radio-option{display:flex;align-items:center;gap:9px;border:1.5px solid var(--line);border-radius:8px;padding:10px 12px;cursor:pointer;font-size:13.5px;}
+  .safety-radio-option.checked{border-color:var(--brand);background:#F4F8FC;}
+  .safety-radio-option input{width:auto;}
+  .safety-answered-note{font-size:12px;color:var(--muted);margin-top:10px;}
+  .safety-none{color:var(--muted);font-size:13.5px;text-align:center;padding:40px 10px;}
+
   /* modal */
   .modal-overlay{
     position:fixed;inset:0;background:rgba(15,25,40,.45);display:none;align-items:center;justify-content:center;padding:20px;z-index:50;
@@ -213,6 +259,9 @@
     <nav class="tabs">
       <button class="tab-btn active" data-view="book">予約する</button>
       <button class="tab-btn" data-view="mine">マイ予約</button>
+      <button class="tab-btn" data-view="notices">お知らせ</button>
+      <button class="tab-btn" data-view="whereabouts">行き先</button>
+      <button class="tab-btn" data-view="safety">安否確認</button>
     </nav>
 
     <main>
@@ -261,7 +310,80 @@
       <section id="view-mine" style="display:none;">
         <div class="res-list" id="my-res-list"></div>
       </section>
+
+      <!-- ---- お知らせ ---- -->
+      <section id="view-notices" style="display:none;">
+        <div class="section-toolbar">
+          <button class="btn-primary" id="notice-new-btn" style="display:none;">＋ 新規投稿</button>
+        </div>
+        <div class="notice-list" id="notice-list"></div>
+      </section>
+
+      <!-- ---- 行き先 ---- -->
+      <section id="view-whereabouts" style="display:none;">
+        <div class="section-toolbar">
+          <div class="seg-toggle" id="wb-view-toggle">
+            <button class="seg-btn active" data-wbview="list">一覧</button>
+            <button class="seg-btn" data-wbview="board">ボード</button>
+          </div>
+          <button class="btn-primary" id="wb-edit-my-btn">自分の行き先を入力</button>
+        </div>
+        <div id="wb-list-view">
+          <table class="wb-table">
+            <thead><tr><th>所属</th><th>氏名</th><th>状態</th><th>備考</th></tr></thead>
+            <tbody id="wb-table-body"></tbody>
+          </table>
+        </div>
+        <div id="wb-board-view" style="display:none;">
+          <div class="wb-board" id="wb-board"></div>
+        </div>
+      </section>
+
+      <!-- ---- 安否確認 ---- -->
+      <section id="view-safety" style="display:none;">
+        <div id="safety-content"></div>
+      </section>
     </main>
+  </div>
+
+  <!-- ============ NOTICE MODAL ============ -->
+  <div class="modal-overlay" id="notice-modal">
+    <div class="modal">
+      <h3>お知らせを投稿</h3>
+      <div class="field">
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">タイトル</label>
+        <input type="text" id="notice-title" style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;">
+      </div>
+      <div class="field">
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">本文</label>
+        <textarea id="notice-body" style="min-height:110px;"></textarea>
+      </div>
+      <div class="modal-err" id="notice-error"></div>
+      <div class="row-btns">
+        <button class="btn-ghost" id="notice-cancel" style="border:1px solid var(--line);">キャンセル</button>
+        <button class="btn-primary" id="notice-submit">投稿する</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ WHEREABOUTS EDIT MODAL ============ -->
+  <div class="modal-overlay" id="wb-modal">
+    <div class="modal">
+      <h3 id="wb-modal-title">行き先を入力</h3>
+      <div class="field">
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">状態</label>
+        <select id="wb-status-select" style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;"></select>
+      </div>
+      <div class="field">
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">備考（行き先・戻り時間など）</label>
+        <textarea id="wb-note" placeholder="例）〇〇現場／〇〇時頃戻ります"></textarea>
+      </div>
+      <div class="modal-err" id="wb-error"></div>
+      <div class="row-btns">
+        <button class="btn-ghost" id="wb-cancel" style="border:1px solid var(--line);">キャンセル</button>
+        <button class="btn-primary" id="wb-save">保存する</button>
+      </div>
+    </div>
   </div>
 
   <!-- ============ RESERVE MODAL ============ -->
@@ -289,10 +411,10 @@ import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  getFirestore, collection, doc, getDoc, addDoc, deleteDoc, query, where,
-  onSnapshot, orderBy, Timestamp
+  getFirestore, collection, doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, query, where,
+  onSnapshot, orderBy, limit, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig, BUSINESS_HOURS, CATEGORIES } from "./firebase-config.js";
+import { firebaseConfig, BUSINESS_HOURS, CATEGORIES, SAFETY_STATUSES } from "./firebase-config.js";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -334,6 +456,8 @@ function formatDateJP(dateStr){
 /* ---------- state ---------- */
 let currentUser = null;
 let isAdmin = false;
+let isPoster = false;
+let isWhereaboutsEditor = false;
 let equipmentAll = [];
 let selectedCategory = CATEGORIES[0]?.id || null;
 let selectedEquipment = null;
@@ -342,6 +466,15 @@ let reservationsUnsub = null;
 let reservationsForDay = [];
 let pendingStart = null, pendingEnd = null;
 let myResUnsub = null;
+
+let employeesAll = [];
+let departmentsAll = [];
+let wbStatusesAll = [];
+let noticesAll = [];
+let activeSafetyCampaign = null;
+let mySafetyResponse = null;
+let wbEditingEmail = null;
+let wbCurrentView = "list";
 
 /* ---------- auth ---------- */
 document.getElementById("login-btn").addEventListener("click", doLogin);
@@ -371,9 +504,24 @@ onAuthStateChanged(auth, async (user)=>{
       const adminDoc = await getDoc(doc(db, "admins", user.email));
       isAdmin = adminDoc.exists();
     }catch(e){ isAdmin = false; }
+    try{
+      const posterDoc = await getDoc(doc(db, "announcement_posters", user.email));
+      isPoster = isAdmin || posterDoc.exists();
+    }catch(e){ isPoster = isAdmin; }
+    try{
+      const wbEditorDoc = await getDoc(doc(db, "whereabouts_editors", user.email));
+      isWhereaboutsEditor = isAdmin || wbEditorDoc.exists();
+    }catch(e){ isWhereaboutsEditor = isAdmin; }
     document.getElementById("admin-link").style.display = isAdmin ? "inline-block" : "none";
+    document.getElementById("notice-new-btn").style.display = isPoster ? "inline-block" : "none";
+    await ensureEmployeeRecord();
     initEquipmentListener();
     initMyReservationsListener();
+    initNoticesListener();
+    initDepartmentsListener();
+    initWbStatusesListener();
+    initEmployeesListener();
+    initSafetyCampaignListener();
   }else{
     currentUser = null;
     document.getElementById("login-screen").style.display = "flex";
@@ -382,15 +530,39 @@ onAuthStateChanged(auth, async (user)=>{
 });
 
 /* ---------- tabs ---------- */
+const ALL_VIEWS = ["book","mine","notices","whereabouts","safety"];
 document.querySelectorAll(".tab-btn").forEach(btn=>{
   btn.addEventListener("click", ()=>{
     document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
     btn.classList.add("active");
     const v = btn.dataset.view;
-    document.getElementById("view-book").style.display = v==="book" ? "block":"none";
-    document.getElementById("view-mine").style.display = v==="mine" ? "block":"none";
+    ALL_VIEWS.forEach(name=>{
+      document.getElementById("view-"+name).style.display = (name===v) ? "block":"none";
+    });
   });
 });
+
+/* ---------- 社員名簿（行き先ボード兼用） ---------- */
+async function ensureEmployeeRecord(){
+  try{
+    const ref = doc(db, "employees", currentUser.email);
+    const snap = await getDoc(ref);
+    if(!snap.exists()){
+      await setDoc(ref, {
+        name: currentUser.displayName || currentUser.email.split("@")[0],
+        email: currentUser.email,
+        department: "",
+        order: 0,
+        status: "",
+        note: "",
+        statusUpdatedAt: new Date().toISOString(),
+        lastLogin: new Date().toISOString()
+      });
+    } else {
+      await updateDoc(ref, { lastLogin: new Date().toISOString() });
+    }
+  }catch(e){ /* ロールの読み書き権限がまだ整っていない場合は静かに無視 */ }
+}
 
 /* ---------- categories & equipment ---------- */
 function renderCategoryRow(){
@@ -706,6 +878,365 @@ function renderMyReservations(list){
     }
     el.appendChild(item);
   });
+}
+
+/* =========================================================
+   お知らせ
+========================================================= */
+function tsToStr(ts){
+  if(!ts) return "";
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+function initNoticesListener(){
+  const q = query(collection(db,"announcements"), orderBy("createdAt","desc"));
+  onSnapshot(q, snap=>{
+    noticesAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    renderNotices();
+  }, ()=>{ /* 権限反映前は無視 */ });
+}
+
+function renderNotices(){
+  const el = document.getElementById("notice-list");
+  el.innerHTML = "";
+  if(noticesAll.length===0){
+    el.innerHTML = `<div class="empty-state">お知らせはまだありません。</div>`;
+    return;
+  }
+  noticesAll.forEach(n=>{
+    const item = document.createElement("div");
+    item.className = "notice-item";
+    item.innerHTML = `
+      <div class="n-head">
+        <div class="n-title">${escapeHtml(n.title)}</div>
+        <div class="n-meta">${escapeHtml(n.authorName||n.authorEmail||"")} ・ ${tsToStr(n.createdAt)}</div>
+      </div>
+      <div class="n-body">${escapeHtml(n.body||"")}</div>
+    `;
+    if(isAdmin || n.authorEmail===currentUser.email){
+      const actions = document.createElement("div");
+      actions.className = "n-actions";
+      const delBtn = document.createElement("button");
+      delBtn.textContent = "削除";
+      delBtn.addEventListener("click", async ()=>{
+        if(!confirm("このお知らせを削除しますか？")) return;
+        await deleteDoc(doc(db,"announcements", n.id));
+        toast("お知らせを削除しました。");
+      });
+      actions.appendChild(delBtn);
+      item.appendChild(actions);
+    }
+    el.appendChild(item);
+  });
+}
+
+const noticeModal = document.getElementById("notice-modal");
+document.getElementById("notice-new-btn").addEventListener("click", ()=>{
+  document.getElementById("notice-title").value = "";
+  document.getElementById("notice-body").value = "";
+  document.getElementById("notice-error").textContent = "";
+  noticeModal.classList.add("show");
+});
+document.getElementById("notice-cancel").addEventListener("click", ()=> noticeModal.classList.remove("show"));
+document.getElementById("notice-submit").addEventListener("click", async ()=>{
+  const title = document.getElementById("notice-title").value.trim();
+  const body = document.getElementById("notice-body").value.trim();
+  const errEl = document.getElementById("notice-error");
+  if(!title){ errEl.textContent = "タイトルを入力してください。"; return; }
+  try{
+    await addDoc(collection(db,"announcements"), {
+      title, body,
+      authorEmail: currentUser.email,
+      authorName: currentUser.displayName || currentUser.email,
+      createdAt: Timestamp.now()
+    });
+    noticeModal.classList.remove("show");
+    toast("お知らせを投稿しました。");
+  }catch(e){
+    errEl.textContent = "投稿に失敗しました。権限をご確認ください。";
+  }
+});
+
+/* =========================================================
+   行き先ボード
+========================================================= */
+function initDepartmentsListener(){
+  onSnapshot(collection(db,"departments"), snap=>{
+    departmentsAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    departmentsAll.sort((a,b)=> (a.order??0)-(b.order??0));
+    renderWhereabouts();
+  }, ()=>{});
+}
+function initWbStatusesListener(){
+  onSnapshot(collection(db,"wb_statuses"), snap=>{
+    wbStatusesAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    wbStatusesAll.sort((a,b)=> (a.order??0)-(b.order??0));
+    renderWhereabouts();
+  }, ()=>{});
+}
+function initEmployeesListener(){
+  onSnapshot(collection(db,"employees"), snap=>{
+    employeesAll = snap.docs.map(d=>({ email:d.id, ...d.data() }));
+    renderWhereabouts();
+  }, ()=>{});
+}
+
+function departmentName(id){
+  const d = departmentsAll.find(x=>x.id===id);
+  return d ? d.name : "未所属";
+}
+function wbStatusInfo(id){
+  return wbStatusesAll.find(x=>x.id===id) || null;
+}
+function getSortedEmployees(){
+  const deptOrder = new Map(departmentsAll.map((d,i)=>[d.id, d.order ?? i]));
+  return employeesAll.slice().sort((a,b)=>{
+    const da = deptOrder.has(a.department) ? deptOrder.get(a.department) : 9999;
+    const dbb = deptOrder.has(b.department) ? deptOrder.get(b.department) : 9999;
+    if(da!==dbb) return da-dbb;
+    if((a.order??0)!==(b.order??0)) return (a.order??0)-(b.order??0);
+    return (a.name||"").localeCompare(b.name||"","ja");
+  });
+}
+
+function renderWhereabouts(){
+  renderWbList();
+  renderWbBoard();
+}
+
+function renderWbList(){
+  const body = document.getElementById("wb-table-body");
+  if(!body) return;
+  body.innerHTML = "";
+  const list = getSortedEmployees();
+  if(list.length===0){
+    body.innerHTML = `<tr><td colspan="4" class="empty-state">まだ社員データがありません。ログインすると自動的に登録されます。</td></tr>`;
+    return;
+  }
+  list.forEach(emp=>{
+    const canEdit = isAdmin || isWhereaboutsEditor || emp.email===currentUser.email;
+    const st = wbStatusInfo(emp.status);
+    const tr = document.createElement("tr");
+    const tdDept = document.createElement("td");
+    tdDept.textContent = emp.department ? departmentName(emp.department) : "未所属";
+    const tdName = document.createElement("td");
+    tdName.textContent = emp.name || emp.email;
+    const tdStatus = document.createElement("td");
+    const badge = document.createElement("span");
+    badge.className = "wb-status-badge" + (canEdit ? " wb-editable" : "");
+    badge.style.background = st ? st.color : "#9CA3AF";
+    badge.textContent = st ? st.name : "未設定";
+    if(canEdit) badge.addEventListener("click", ()=> openWbModal(emp.email));
+    tdStatus.appendChild(badge);
+    const tdNote = document.createElement("td");
+    tdNote.className = "wb-note-cell";
+    tdNote.textContent = emp.note || "";
+    tr.appendChild(tdDept); tr.appendChild(tdName); tr.appendChild(tdStatus); tr.appendChild(tdNote);
+    body.appendChild(tr);
+  });
+}
+
+function renderWbBoard(){
+  const board = document.getElementById("wb-board");
+  if(!board) return;
+  board.innerHTML = "";
+  const list = getSortedEmployees();
+  const columns = wbStatusesAll.slice();
+  columns.push({ id: "__unset__", name: "未設定", color: "#9CA3AF" });
+
+  columns.forEach(col=>{
+    const colEl = document.createElement("div");
+    colEl.className = "wb-board-col";
+    const head = document.createElement("div");
+    head.className = "col-head";
+    head.style.background = col.color;
+    head.textContent = col.name;
+    const bodyEl = document.createElement("div");
+    bodyEl.className = "col-body";
+    const members = list.filter(emp=>{
+      if(col.id==="__unset__") return !emp.status || !wbStatusInfo(emp.status);
+      return emp.status === col.id;
+    });
+    if(members.length===0){
+      const e = document.createElement("div");
+      e.className = "empty-col";
+      e.textContent = "-";
+      bodyEl.appendChild(e);
+    } else {
+      members.forEach(emp=>{
+        const chip = document.createElement("div");
+        chip.className = "name-chip";
+        chip.textContent = emp.name || emp.email;
+        bodyEl.appendChild(chip);
+      });
+    }
+    colEl.appendChild(head); colEl.appendChild(bodyEl);
+    board.appendChild(colEl);
+  });
+}
+
+document.querySelectorAll("#wb-view-toggle .seg-btn").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    document.querySelectorAll("#wb-view-toggle .seg-btn").forEach(b=>b.classList.remove("active"));
+    btn.classList.add("active");
+    wbCurrentView = btn.dataset.wbview;
+    document.getElementById("wb-list-view").style.display = wbCurrentView==="list" ? "block":"none";
+    document.getElementById("wb-board-view").style.display = wbCurrentView==="board" ? "block":"none";
+  });
+});
+
+const wbModal = document.getElementById("wb-modal");
+document.getElementById("wb-edit-my-btn").addEventListener("click", ()=> openWbModal(currentUser.email));
+document.getElementById("wb-cancel").addEventListener("click", ()=> wbModal.classList.remove("show"));
+
+function openWbModal(email){
+  wbEditingEmail = email;
+  const emp = employeesAll.find(e=>e.email===email);
+  document.getElementById("wb-modal-title").textContent =
+    email===currentUser.email ? "自分の行き先を入力" : `${emp?.name || email} さんの行き先を入力`;
+  const sel = document.getElementById("wb-status-select");
+  sel.innerHTML = "";
+  if(wbStatusesAll.length===0){
+    const opt = document.createElement("option");
+    opt.value = ""; opt.textContent = "（管理画面でステータス未登録）";
+    sel.appendChild(opt);
+  } else {
+    wbStatusesAll.forEach(s=>{
+      const opt = document.createElement("option");
+      opt.value = s.id; opt.textContent = s.name;
+      sel.appendChild(opt);
+    });
+  }
+  sel.value = emp?.status || (wbStatusesAll[0]?.id || "");
+  document.getElementById("wb-note").value = emp?.note || "";
+  document.getElementById("wb-error").textContent = "";
+  wbModal.classList.add("show");
+}
+
+document.getElementById("wb-save").addEventListener("click", async ()=>{
+  const errEl = document.getElementById("wb-error");
+  if(wbStatusesAll.length===0){
+    errEl.textContent = "先に管理画面でステータスを登録してください。";
+    return;
+  }
+  const status = document.getElementById("wb-status-select").value;
+  const note = document.getElementById("wb-note").value.trim();
+  try{
+    await updateDoc(doc(db,"employees", wbEditingEmail), {
+      status, note,
+      statusUpdatedAt: new Date().toISOString(),
+      statusUpdatedBy: currentUser.email
+    });
+    wbModal.classList.remove("show");
+    toast("行き先を更新しました。");
+  }catch(e){
+    errEl.textContent = "更新に失敗しました。権限をご確認ください。";
+  }
+});
+
+/* =========================================================
+   安否確認
+========================================================= */
+function initSafetyCampaignListener(){
+  const q = query(collection(db,"safety_campaigns"), where("active","==",true), orderBy("createdAt","desc"), limit(1));
+  onSnapshot(q, async snap=>{
+    if(snap.empty){
+      activeSafetyCampaign = null;
+      mySafetyResponse = null;
+      renderSafety();
+      return;
+    }
+    const d = snap.docs[0];
+    activeSafetyCampaign = { id:d.id, ...d.data() };
+    try{
+      const respSnap = await getDoc(doc(db,"safety_responses", `${activeSafetyCampaign.id}_${currentUser.uid}`));
+      mySafetyResponse = respSnap.exists() ? respSnap.data() : null;
+    }catch(e){ mySafetyResponse = null; }
+    renderSafety();
+  }, ()=>{});
+}
+
+function renderSafety(){
+  const el = document.getElementById("safety-content");
+  el.innerHTML = "";
+  if(!activeSafetyCampaign){
+    el.innerHTML = `<div class="safety-none">現在発信中の安否確認はありません。</div>`;
+    return;
+  }
+  const banner = document.createElement("div");
+  banner.className = "safety-banner";
+  banner.innerHTML = `<h2>${escapeHtml(activeSafetyCampaign.title)}</h2><div class="msg">${escapeHtml(activeSafetyCampaign.message||"")}</div>`;
+  el.appendChild(banner);
+
+  const form = document.createElement("div");
+  form.className = "safety-form";
+
+  const group = document.createElement("div");
+  group.className = "safety-radio-group";
+  SAFETY_STATUSES.forEach(opt=>{
+    const label = document.createElement("label");
+    label.className = "safety-radio-option" + (mySafetyResponse?.status===opt.id ? " checked":"");
+    label.innerHTML = `<input type="radio" name="safety-status" value="${opt.id}" ${mySafetyResponse?.status===opt.id?"checked":""}> ${escapeHtml(opt.label)}`;
+    label.addEventListener("click", ()=>{
+      form.querySelectorAll(".safety-radio-option").forEach(l=>l.classList.remove("checked"));
+      label.classList.add("checked");
+    });
+    group.appendChild(label);
+  });
+  form.appendChild(group);
+
+  const commentField = document.createElement("div");
+  commentField.className = "field";
+  commentField.innerHTML = `
+    <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">コメント（任意）</label>
+    <textarea id="safety-comment" placeholder="例）自宅は無事です／会社に向かいます" style="width:100%;min-height:60px;border:1px solid var(--line);border-radius:8px;padding:9px 10px;font-size:13.5px;font-family:inherit;"></textarea>
+  `;
+  form.appendChild(commentField);
+  form.querySelector("#safety-comment").value = mySafetyResponse?.comment || "";
+
+  const errDiv = document.createElement("div");
+  errDiv.className = "modal-err";
+  errDiv.id = "safety-error";
+  form.appendChild(errDiv);
+
+  const submitBtn = document.createElement("button");
+  submitBtn.className = "btn-primary";
+  submitBtn.style.width = "100%";
+  submitBtn.textContent = mySafetyResponse ? "回答を更新する" : "回答する";
+  submitBtn.addEventListener("click", async ()=>{
+    const checked = form.querySelector('input[name="safety-status"]:checked');
+    if(!checked){ errDiv.textContent = "状態を選択してください。"; return; }
+    const comment = form.querySelector("#safety-comment").value.trim();
+    try{
+      const payload = {
+        campaignId: activeSafetyCampaign.id,
+        campaignTitle: activeSafetyCampaign.title,
+        userId: currentUser.uid,
+        userEmail: currentUser.email,
+        userName: currentUser.displayName || currentUser.email,
+        status: checked.value,
+        comment,
+        respondedAt: Timestamp.now()
+      };
+      await setDoc(doc(db,"safety_responses", `${activeSafetyCampaign.id}_${currentUser.uid}`), payload);
+      mySafetyResponse = payload;
+      toast("回答を送信しました。");
+      renderSafety();
+    }catch(e){
+      errDiv.textContent = "送信に失敗しました。時間をおいて再度お試しください。";
+    }
+  });
+  form.appendChild(submitBtn);
+
+  if(mySafetyResponse){
+    const note = document.createElement("div");
+    note.className = "safety-answered-note";
+    note.textContent = `前回の回答: ${tsToStr(mySafetyResponse.respondedAt)}`;
+    form.appendChild(note);
+  }
+
+  el.appendChild(form);
 }
 </script>
 </body>
