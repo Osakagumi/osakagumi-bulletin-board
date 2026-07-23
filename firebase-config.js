@@ -1,12 +1,12 @@
 // ここに新規Firebaseプロジェクトの設定値を貼り付けてください。
 // Firebaseコンソール > プロジェクトの設定 > 全般 > マイアプリ（ウェブアプリを追加）で取得できます。
 export const firebaseConfig = {
-  apiKey: "AIzaSyDMI0o5Sg6BT4fbCKCMbOg7PVCFqkigsmk",
-  authDomain: "osakagumi-bulletin-board.firebaseapp.com",
-  projectId: "osakagumi-bulletin-board",
-  storageBucket: "osakagumi-bulletin-board.firebasestorage.app",
-  messagingSenderId: "416929871112",
-  appId: "1:416929871112:web:8a322a28a0323ccab168bd",
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID",
 };
 
 // 予約可能時間帯・時間単位の設定（必要に応じて変更してください）
@@ -22,3 +22,14 @@ export const CATEGORIES = [
   { id: "room",    label: "会議室",       color: "#2E9E8F" },
   { id: "vehicle", label: "業務共用車輌", color: "#4B5FA3" }
 ];
+
+// 行き先ボードの「所属」「状態」は、管理画面（admin.html）から自由に追加・編集できます。
+// 初回セットアップ時は admin.html の「行き先管理」タブから登録してください。
+
+// 安否確認の回答ステータス定義
+export const SAFETY_STATUSES = [
+  { id: "safe",     label: "無事です",         color: "#2E9E8F" },
+  { id: "damage",   label: "被害があります",   color: "#C0392B" },
+  { id: "unknown",  label: "わからない・確認中", color: "#E8853F" }
+];
+
