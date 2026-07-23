@@ -1,7 +1,7 @@
 // ここに新規Firebaseプロジェクトの設定値を貼り付けてください。
 // Firebaseコンソール > プロジェクトの設定 > 全般 > マイアプリ（ウェブアプリを追加）で取得できます。
 export const firebaseConfig = {
-  apiKey: "AIzaSyDMI0oSSg6BT4FbCKCMbOg7PVCFqkigmk",
+  apiKey: "AIzaSyDMI0o5Sg6BT4fbCKCMbOg7PVCFqkigsmk",
   authDomain: "osakagumi-bulletin-board.firebaseapp.com",
   projectId: "osakagumi-bulletin-board",
   storageBucket: "osakagumi-bulletin-board.firebasestorage.app",
