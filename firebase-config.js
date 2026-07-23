@@ -1,12 +1,12 @@
 // ここに新規Firebaseプロジェクトの設定値を貼り付けてください。
 // Firebaseコンソール > プロジェクトの設定 > 全般 > マイアプリ（ウェブアプリを追加）で取得できます。
 export const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID",
+  apiKey: "AIzaSyDMI0oSSg6BT4FbCKCMbOg7PVCFqkigmk",
+  authDomain: "osakagumi-bulletin-board.firebaseapp.com",
+  projectId: "osakagumi-bulletin-board",
+  storageBucket: "osakagumi-bulletin-board.firebasestorage.app",
+  messagingSenderId: "416929871112",
+  appId: "1:416929871112:web:8a322a28a0323ccab168bd",
 };
 
 // 予約可能時間帯・時間単位の設定（必要に応じて変更してください）
