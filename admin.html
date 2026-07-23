@@ -61,6 +61,9 @@
 
   .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1F2937;color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;z-index:60;opacity:0;transition:opacity .25s;pointer-events:none;}
   .toast.show{opacity:1;}
+  .color-dot{display:inline-block;width:14px;height:14px;border-radius:4px;vertical-align:middle;}
+  .unanswered-row{background:#FFF7ED;}
+  .status-pill-admin{display:inline-block;padding:3px 9px;border-radius:12px;font-size:11.5px;font-weight:700;color:#fff;}
 </style>
 </head>
 <body>
@@ -86,6 +89,9 @@
     <button class="tab-btn active" data-view="equipment">設備管理</button>
     <button class="tab-btn" data-view="reservations">予約状況（全体）</button>
     <button class="tab-btn" data-view="admins">管理者管理</button>
+    <button class="tab-btn" data-view="notices">お知らせ管理</button>
+    <button class="tab-btn" data-view="whereabouts">行き先管理</button>
+    <button class="tab-btn" data-view="safety">安否確認管理</button>
   </nav>
 
   <main>
@@ -170,6 +176,135 @@
         </table>
       </div>
     </section>
+
+    <!-- ============ お知らせ管理 ============ -->
+    <section id="view-notices" style="display:none;">
+      <div class="panel">
+        <h2>投稿権限を追加</h2>
+        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">管理者は常に投稿できます。それ以外の人に投稿を許可したい場合はここに追加してください。</p>
+        <div class="form-grid">
+          <div class="field full">
+            <label>メールアドレス（Firebase Authに登録済みのもの）</label>
+            <input type="email" id="poster-email-input" placeholder="you@osakagumi.co.jp">
+          </div>
+        </div>
+        <button class="btn btn-primary" id="poster-add-btn">投稿権限を追加</button>
+      </div>
+      <div class="panel">
+        <h2>投稿権限を持つ人一覧（管理者以外）</h2>
+        <table>
+          <thead><tr><th>メールアドレス</th><th>操作</th></tr></thead>
+          <tbody id="poster-table-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============ 行き先管理 ============ -->
+    <section id="view-whereabouts" style="display:none;">
+      <div class="panel">
+        <h2>所属（部署）</h2>
+        <div class="form-grid">
+          <div class="field">
+            <label>部署名</label>
+            <input type="text" id="dept-name" placeholder="例）工務部">
+          </div>
+          <div class="field">
+            <label>表示順（小さいほど上）</label>
+            <input type="number" id="dept-order" value="0">
+          </div>
+        </div>
+        <button class="btn btn-primary" id="dept-save-btn">追加する</button>
+        <button class="btn btn-ghost" id="dept-cancel-edit" style="display:none;">編集をやめる</button>
+        <table style="margin-top:14px;">
+          <thead><tr><th>部署名</th><th>表示順</th><th>操作</th></tr></thead>
+          <tbody id="dept-table-body"></tbody>
+        </table>
+      </div>
+
+      <div class="panel">
+        <h2>行き先ステータス</h2>
+        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">まだ何も登録されていない場合は、下のボタンで「在席・外出・現場・休み」を一括作成できます。</p>
+        <button class="btn btn-ghost" id="status-seed-btn">初期セット（在席・外出・現場・休み）を作成</button>
+        <div class="form-grid" style="margin-top:14px;">
+          <div class="field">
+            <label>ステータス名</label>
+            <input type="text" id="status-name" placeholder="例）現場">
+          </div>
+          <div class="field">
+            <label>色</label>
+            <input type="color" id="status-color" value="#4B5FA3" style="height:36px;padding:2px;">
+          </div>
+          <div class="field">
+            <label>表示順（小さいほど上）</label>
+            <input type="number" id="status-order" value="0">
+          </div>
+        </div>
+        <button class="btn btn-primary" id="status-save-btn">追加する</button>
+        <button class="btn btn-ghost" id="status-cancel-edit" style="display:none;">編集をやめる</button>
+        <table style="margin-top:14px;">
+          <thead><tr><th>ステータス名</th><th>色</th><th>表示順</th><th>操作</th></tr></thead>
+          <tbody id="status-table-body"></tbody>
+        </table>
+      </div>
+
+      <div class="panel">
+        <h2>他者の行き先を設定できる人（管理者以外）</h2>
+        <div class="form-grid">
+          <div class="field full">
+            <label>メールアドレス</label>
+            <input type="email" id="wbeditor-email-input" placeholder="you@osakagumi.co.jp">
+          </div>
+        </div>
+        <button class="btn btn-primary" id="wbeditor-add-btn">権限を追加</button>
+        <table style="margin-top:14px;">
+          <thead><tr><th>メールアドレス</th><th>操作</th></tr></thead>
+          <tbody id="wbeditor-table-body"></tbody>
+        </table>
+      </div>
+
+      <div class="panel">
+        <h2>社員一覧（氏名・所属・並び順の編集）</h2>
+        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">ログインすると自動的にここへ追加されます。氏名や所属は下の一覧から編集してください。</p>
+        <table>
+          <thead><tr><th>氏名</th><th>メールアドレス</th><th>所属</th><th>並び順</th><th>操作</th></tr></thead>
+          <tbody id="emp-table-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============ 安否確認管理 ============ -->
+    <section id="view-safety" style="display:none;">
+      <div class="panel">
+        <h2>新しい安否確認を発信</h2>
+        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">発信すると、それまで発信中だった安否確認は自動的に終了扱いになります。</p>
+        <div class="form-grid">
+          <div class="field full">
+            <label>タイトル</label>
+            <input type="text" id="safety-title-input" placeholder="例）〇月〇日 地震に伴う安否確認">
+          </div>
+          <div class="field full">
+            <label>本文</label>
+            <textarea id="safety-message-input" placeholder="例）大きな地震がありました。安全が確認できたら回答をお願いします。"></textarea>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="safety-launch-btn">発信する</button>
+      </div>
+
+      <div class="panel">
+        <div class="filter-row">
+          <div class="field" style="min-width:260px;">
+            <label>表示する安否確認</label>
+            <select id="safety-campaign-select"></select>
+          </div>
+          <button class="btn btn-danger" id="safety-close-btn" style="display:none;">この安否確認を終了する</button>
+        </div>
+        <div id="safety-dashboard-summary" style="font-size:13px;color:var(--muted);margin-bottom:10px;"></div>
+        <table>
+          <thead><tr><th>氏名</th><th>所属</th><th>状態</th><th>コメント</th><th>回答時刻</th></tr></thead>
+          <tbody id="safety-table-body"></tbody>
+        </table>
+      </div>
+    </section>
   </main>
 </div>
 
@@ -180,9 +315,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/fireba
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, setDoc,
-  query, where, onSnapshot, orderBy
+  query, where, onSnapshot, orderBy, limit, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig, CATEGORIES } from "./firebase-config.js";
+import { firebaseConfig, CATEGORIES, SAFETY_STATUSES } from "./firebase-config.js";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -231,14 +366,21 @@ onAuthStateChanged(auth, async (user)=>{
   initEquipmentListener();
   initReservationsListener();
   initAdminsListener();
+  initPostersListener();
+  initDepartmentsListener();
+  initWbStatusesListener();
+  initWbEditorsListener();
+  initEmployeesListener();
+  initSafetyCampaignsListener();
 });
 
 /* ---------- tabs ---------- */
+const ADMIN_VIEWS = ["equipment","reservations","admins","notices","whereabouts","safety"];
 document.querySelectorAll(".tab-btn").forEach(btn=>{
   btn.addEventListener("click", ()=>{
     document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
     btn.classList.add("active");
-    ["equipment","reservations","admins"].forEach(v=>{
+    ADMIN_VIEWS.forEach(v=>{
       document.getElementById("view-"+v).style.display = (v===btn.dataset.view) ? "block":"none";
     });
   });
@@ -449,6 +591,459 @@ document.getElementById("admin-add-btn").addEventListener("click", async ()=>{
     toast("管理者に追加しました。");
   }catch(e){
     toast("追加に失敗しました。");
+  }
+});
+
+/* ============================================================
+   お知らせ管理（投稿権限）
+============================================================ */
+function initPostersListener(){
+  onSnapshot(collection(db,"announcement_posters"), snap=>{
+    renderPosters(snap.docs.map(d=>d.id));
+  });
+}
+function renderPosters(list){
+  const body = document.getElementById("poster-table-body");
+  body.innerHTML = "";
+  if(list.length===0){
+    body.innerHTML = `<tr><td colspan="2" class="empty">管理者以外の投稿権限者はいません。</td></tr>`;
+    return;
+  }
+  list.forEach(email=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${escapeHtml(email)}</td><td class="actions"></td>`;
+    const btn = document.createElement("button");
+    btn.className = "btn btn-danger"; btn.textContent = "削除";
+    btn.addEventListener("click", async ()=>{
+      if(!confirm(`${email} の投稿権限を削除しますか？`)) return;
+      await deleteDoc(doc(db,"announcement_posters", email));
+      toast("投稿権限を削除しました。");
+    });
+    tr.querySelector(".actions").appendChild(btn);
+    body.appendChild(tr);
+  });
+}
+document.getElementById("poster-add-btn").addEventListener("click", async ()=>{
+  const email = document.getElementById("poster-email-input").value.trim();
+  if(!email){ toast("メールアドレスを入力してください。"); return; }
+  try{
+    await setDoc(doc(db,"announcement_posters", email), { addedBy: currentUser.email, addedAt: new Date().toISOString() });
+    document.getElementById("poster-email-input").value = "";
+    toast("投稿権限を追加しました。");
+  }catch(e){
+    toast("追加に失敗しました。");
+  }
+});
+
+/* ============================================================
+   行き先管理：所属（部署）
+============================================================ */
+let departmentsAll = [];
+let editingDeptId = null;
+function initDepartmentsListener(){
+  onSnapshot(collection(db,"departments"), snap=>{
+    departmentsAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    departmentsAll.sort((a,b)=> (a.order??0)-(b.order??0));
+    renderDepartments();
+    renderEmployees();
+  });
+}
+function renderDepartments(){
+  const body = document.getElementById("dept-table-body");
+  body.innerHTML = "";
+  if(departmentsAll.length===0){
+    body.innerHTML = `<tr><td colspan="3" class="empty">まだ部署がありません。</td></tr>`;
+    return;
+  }
+  departmentsAll.forEach(dep=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${escapeHtml(dep.name)}</td><td>${dep.order??0}</td><td class="actions"></td>`;
+    const editBtn = document.createElement("button");
+    editBtn.className = "btn btn-ghost"; editBtn.textContent = "編集";
+    editBtn.addEventListener("click", ()=>{
+      editingDeptId = dep.id;
+      document.getElementById("dept-name").value = dep.name;
+      document.getElementById("dept-order").value = dep.order??0;
+      document.getElementById("dept-save-btn").textContent = "変更を保存";
+      document.getElementById("dept-cancel-edit").style.display = "inline-block";
+    });
+    const delBtn = document.createElement("button");
+    delBtn.className = "btn btn-danger"; delBtn.textContent = "削除";
+    delBtn.addEventListener("click", async ()=>{
+      if(!confirm(`「${dep.name}」を削除しますか？この部署に割り当てられた社員は「未所属」表示になります。`)) return;
+      await deleteDoc(doc(db,"departments", dep.id));
+      toast("部署を削除しました。");
+    });
+    tr.querySelector(".actions").appendChild(editBtn);
+    tr.querySelector(".actions").appendChild(delBtn);
+    body.appendChild(tr);
+  });
+}
+document.getElementById("dept-cancel-edit").addEventListener("click", resetDeptForm);
+function resetDeptForm(){
+  editingDeptId = null;
+  document.getElementById("dept-name").value = "";
+  document.getElementById("dept-order").value = 0;
+  document.getElementById("dept-save-btn").textContent = "追加する";
+  document.getElementById("dept-cancel-edit").style.display = "none";
+}
+document.getElementById("dept-save-btn").addEventListener("click", async ()=>{
+  const name = document.getElementById("dept-name").value.trim();
+  if(!name){ toast("部署名を入力してください。"); return; }
+  const payload = { name, order: Number(document.getElementById("dept-order").value)||0 };
+  try{
+    if(editingDeptId){
+      await updateDoc(doc(db,"departments", editingDeptId), payload);
+      toast("部署を更新しました。");
+    } else {
+      await addDoc(collection(db,"departments"), payload);
+      toast("部署を追加しました。");
+    }
+    resetDeptForm();
+  }catch(e){
+    toast("保存に失敗しました。");
+  }
+});
+
+/* ============================================================
+   行き先管理：ステータス
+============================================================ */
+let wbStatusesAll = [];
+let editingStatusId = null;
+function initWbStatusesListener(){
+  onSnapshot(collection(db,"wb_statuses"), snap=>{
+    wbStatusesAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    wbStatusesAll.sort((a,b)=> (a.order??0)-(b.order??0));
+    renderWbStatuses();
+  });
+}
+function renderWbStatuses(){
+  const body = document.getElementById("status-table-body");
+  body.innerHTML = "";
+  if(wbStatusesAll.length===0){
+    body.innerHTML = `<tr><td colspan="4" class="empty">まだステータスがありません。上のボタンで初期セットを作成するか、下から追加してください。</td></tr>`;
+    return;
+  }
+  wbStatusesAll.forEach(st=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${escapeHtml(st.name)}</td><td><span class="color-dot" style="background:${st.color}"></span></td><td>${st.order??0}</td><td class="actions"></td>`;
+    const editBtn = document.createElement("button");
+    editBtn.className = "btn btn-ghost"; editBtn.textContent = "編集";
+    editBtn.addEventListener("click", ()=>{
+      editingStatusId = st.id;
+      document.getElementById("status-name").value = st.name;
+      document.getElementById("status-color").value = st.color || "#4B5FA3";
+      document.getElementById("status-order").value = st.order??0;
+      document.getElementById("status-save-btn").textContent = "変更を保存";
+      document.getElementById("status-cancel-edit").style.display = "inline-block";
+    });
+    const delBtn = document.createElement("button");
+    delBtn.className = "btn btn-danger"; delBtn.textContent = "削除";
+    delBtn.addEventListener("click", async ()=>{
+      if(!confirm(`「${st.name}」を削除しますか？`)) return;
+      await deleteDoc(doc(db,"wb_statuses", st.id));
+      toast("ステータスを削除しました。");
+    });
+    tr.querySelector(".actions").appendChild(editBtn);
+    tr.querySelector(".actions").appendChild(delBtn);
+    body.appendChild(tr);
+  });
+}
+document.getElementById("status-cancel-edit").addEventListener("click", resetStatusForm);
+function resetStatusForm(){
+  editingStatusId = null;
+  document.getElementById("status-name").value = "";
+  document.getElementById("status-color").value = "#4B5FA3";
+  document.getElementById("status-order").value = 0;
+  document.getElementById("status-save-btn").textContent = "追加する";
+  document.getElementById("status-cancel-edit").style.display = "none";
+}
+document.getElementById("status-save-btn").addEventListener("click", async ()=>{
+  const name = document.getElementById("status-name").value.trim();
+  if(!name){ toast("ステータス名を入力してください。"); return; }
+  const payload = {
+    name,
+    color: document.getElementById("status-color").value,
+    order: Number(document.getElementById("status-order").value)||0
+  };
+  try{
+    if(editingStatusId){
+      await updateDoc(doc(db,"wb_statuses", editingStatusId), payload);
+      toast("ステータスを更新しました。");
+    } else {
+      await addDoc(collection(db,"wb_statuses"), payload);
+      toast("ステータスを追加しました。");
+    }
+    resetStatusForm();
+  }catch(e){
+    toast("保存に失敗しました。");
+  }
+});
+document.getElementById("status-seed-btn").addEventListener("click", async ()=>{
+  if(wbStatusesAll.length>0){
+    if(!confirm("すでにステータスが登録されています。初期セットを追加で作成しますか？")) return;
+  }
+  const defaults = [
+    { name:"在席", color:"#2E9E8F", order:0 },
+    { name:"外出", color:"#E8853F", order:1 },
+    { name:"現場", color:"#4B5FA3", order:2 },
+    { name:"休み", color:"#8A8F98", order:3 }
+  ];
+  try{
+    for(const d of defaults){ await addDoc(collection(db,"wb_statuses"), d); }
+    toast("初期セットを作成しました。");
+  }catch(e){
+    toast("作成に失敗しました。");
+  }
+});
+
+/* ============================================================
+   行き先管理：他者設定権限
+============================================================ */
+function initWbEditorsListener(){
+  onSnapshot(collection(db,"whereabouts_editors"), snap=>{
+    renderWbEditors(snap.docs.map(d=>d.id));
+  });
+}
+function renderWbEditors(list){
+  const body = document.getElementById("wbeditor-table-body");
+  body.innerHTML = "";
+  if(list.length===0){
+    body.innerHTML = `<tr><td colspan="2" class="empty">管理者以外の権限者はいません。</td></tr>`;
+    return;
+  }
+  list.forEach(email=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${escapeHtml(email)}</td><td class="actions"></td>`;
+    const btn = document.createElement("button");
+    btn.className = "btn btn-danger"; btn.textContent = "削除";
+    btn.addEventListener("click", async ()=>{
+      if(!confirm(`${email} の権限を削除しますか？`)) return;
+      await deleteDoc(doc(db,"whereabouts_editors", email));
+      toast("権限を削除しました。");
+    });
+    tr.querySelector(".actions").appendChild(btn);
+    body.appendChild(tr);
+  });
+}
+document.getElementById("wbeditor-add-btn").addEventListener("click", async ()=>{
+  const email = document.getElementById("wbeditor-email-input").value.trim();
+  if(!email){ toast("メールアドレスを入力してください。"); return; }
+  try{
+    await setDoc(doc(db,"whereabouts_editors", email), { addedBy: currentUser.email, addedAt: new Date().toISOString() });
+    document.getElementById("wbeditor-email-input").value = "";
+    toast("権限を追加しました。");
+  }catch(e){
+    toast("追加に失敗しました。");
+  }
+});
+
+/* ============================================================
+   行き先管理：社員一覧（氏名・所属・並び順）
+============================================================ */
+let employeesAll = [];
+function initEmployeesListener(){
+  onSnapshot(collection(db,"employees"), snap=>{
+    employeesAll = snap.docs.map(d=>({email:d.id, ...d.data()}));
+    employeesAll.sort((a,b)=> (a.name||"").localeCompare(b.name||"","ja"));
+    renderEmployees();
+  });
+}
+function renderEmployees(){
+  const body = document.getElementById("emp-table-body");
+  if(!body) return;
+  body.innerHTML = "";
+  if(employeesAll.length===0){
+    body.innerHTML = `<tr><td colspan="5" class="empty">まだ社員データがありません。対象の人がログインすると自動的に追加されます。</td></tr>`;
+    return;
+  }
+  employeesAll.forEach(emp=>{
+    const tr = document.createElement("tr");
+    const tdName = document.createElement("td");
+    const nameInput = document.createElement("input");
+    nameInput.type = "text"; nameInput.value = emp.name || ""; nameInput.style.minWidth="120px";
+    tdName.appendChild(nameInput);
+
+    const tdEmail = document.createElement("td");
+    tdEmail.textContent = emp.email;
+    tdEmail.style.color = "var(--muted)"; tdEmail.style.fontSize="12px";
+
+    const tdDept = document.createElement("td");
+    const deptSelect = document.createElement("select");
+    const noneOpt = document.createElement("option");
+    noneOpt.value = ""; noneOpt.textContent = "未所属";
+    deptSelect.appendChild(noneOpt);
+    departmentsAll.forEach(dep=>{
+      const opt = document.createElement("option");
+      opt.value = dep.id; opt.textContent = dep.name;
+      if(emp.department===dep.id) opt.selected = true;
+      deptSelect.appendChild(opt);
+    });
+    tdDept.appendChild(deptSelect);
+
+    const tdOrder = document.createElement("td");
+    const orderInput = document.createElement("input");
+    orderInput.type = "number"; orderInput.value = emp.order ?? 0; orderInput.style.width="70px";
+    tdOrder.appendChild(orderInput);
+
+    const tdActions = document.createElement("td");
+    tdActions.className = "actions";
+    const saveBtn = document.createElement("button");
+    saveBtn.className = "btn btn-primary"; saveBtn.textContent = "保存";
+    saveBtn.addEventListener("click", async ()=>{
+      try{
+        await updateDoc(doc(db,"employees", emp.email), {
+          name: nameInput.value.trim() || emp.email,
+          department: deptSelect.value,
+          order: Number(orderInput.value)||0
+        });
+        toast("社員情報を更新しました。");
+      }catch(e){
+        toast("更新に失敗しました。");
+      }
+    });
+    tdActions.appendChild(saveBtn);
+
+    tr.appendChild(tdName); tr.appendChild(tdEmail); tr.appendChild(tdDept); tr.appendChild(tdOrder); tr.appendChild(tdActions);
+    body.appendChild(tr);
+  });
+}
+
+/* ============================================================
+   安否確認管理
+============================================================ */
+let safetyCampaignsAll = [];
+let selectedSafetyCampaignId = null;
+let safetyResponsesUnsub = null;
+
+function initSafetyCampaignsListener(){
+  const q = query(collection(db,"safety_campaigns"), orderBy("createdAt","desc"));
+  onSnapshot(q, snap=>{
+    safetyCampaignsAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    renderSafetyCampaignSelect();
+  });
+}
+function renderSafetyCampaignSelect(){
+  const sel = document.getElementById("safety-campaign-select");
+  const prevValue = selectedSafetyCampaignId;
+  sel.innerHTML = "";
+  if(safetyCampaignsAll.length===0){
+    sel.innerHTML = `<option value="">まだ安否確認はありません</option>`;
+    selectedSafetyCampaignId = null;
+    document.getElementById("safety-close-btn").style.display = "none";
+    renderSafetyDashboard();
+    return;
+  }
+  safetyCampaignsAll.forEach(c=>{
+    const opt = document.createElement("option");
+    opt.value = c.id;
+    opt.textContent = `${c.active ? "【発信中】":"【終了】"} ${c.title} (${tsToStr(c.createdAt)})`;
+    sel.appendChild(opt);
+  });
+  if(prevValue && safetyCampaignsAll.some(c=>c.id===prevValue)){
+    sel.value = prevValue;
+  } else {
+    sel.value = safetyCampaignsAll[0].id;
+  }
+  selectedSafetyCampaignId = sel.value;
+  watchSelectedCampaignResponses();
+}
+document.getElementById("safety-campaign-select").addEventListener("change", e=>{
+  selectedSafetyCampaignId = e.target.value;
+  watchSelectedCampaignResponses();
+});
+
+function watchSelectedCampaignResponses(){
+  if(safetyResponsesUnsub){ safetyResponsesUnsub(); safetyResponsesUnsub = null; }
+  const campaign = safetyCampaignsAll.find(c=>c.id===selectedSafetyCampaignId);
+  document.getElementById("safety-close-btn").style.display = (campaign && campaign.active) ? "inline-block" : "none";
+  if(!selectedSafetyCampaignId){ renderSafetyDashboard([]); return; }
+  const q = query(collection(db,"safety_responses"), where("campaignId","==", selectedSafetyCampaignId));
+  safetyResponsesUnsub = onSnapshot(q, snap=>{
+    renderSafetyDashboard(snap.docs.map(d=>({id:d.id, ...d.data()})));
+  });
+}
+
+function tsToStr(ts){
+  if(!ts) return "";
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  const pad2 = n=>String(n).padStart(2,"0");
+  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+function safetyStatusInfo(id){ return SAFETY_STATUSES.find(s=>s.id===id) || {label:id, color:"#888"}; }
+function departmentNameById(id){
+  const d = departmentsAll.find(x=>x.id===id);
+  return d ? d.name : "未所属";
+}
+
+function renderSafetyDashboard(responses){
+  const body = document.getElementById("safety-table-body");
+  const summary = document.getElementById("safety-dashboard-summary");
+  body.innerHTML = "";
+  if(!selectedSafetyCampaignId){
+    summary.textContent = "";
+    body.innerHTML = `<tr><td colspan="5" class="empty">安否確認を発信すると、ここに回答状況が表示されます。</td></tr>`;
+    return;
+  }
+  const respMap = new Map((responses||[]).map(r=>[r.userEmail, r]));
+  const roster = employeesAll.slice().sort((a,b)=> (a.name||"").localeCompare(b.name||"","ja"));
+  const answeredCount = roster.filter(e=>respMap.has(e.email)).length;
+  summary.textContent = `回答済み: ${answeredCount} / ${roster.length} 人`;
+
+  if(roster.length===0){
+    body.innerHTML = `<tr><td colspan="5" class="empty">社員データがまだありません。</td></tr>`;
+    return;
+  }
+  roster.forEach(emp=>{
+    const resp = respMap.get(emp.email);
+    const tr = document.createElement("tr");
+    if(!resp) tr.classList.add("unanswered-row");
+    const statusCell = resp
+      ? `<span class="status-pill-admin" style="background:${safetyStatusInfo(resp.status).color}">${escapeHtml(safetyStatusInfo(resp.status).label)}</span>`
+      : `<span style="color:var(--muted);font-size:12px;">未回答</span>`;
+    tr.innerHTML = `
+      <td>${escapeHtml(emp.name||emp.email)}</td>
+      <td>${escapeHtml(departmentNameById(emp.department))}</td>
+      <td>${statusCell}</td>
+      <td style="color:var(--muted);max-width:200px;">${escapeHtml(resp?.comment||"")}</td>
+      <td style="font-size:12px;color:var(--muted);">${resp ? tsToStr(resp.respondedAt) : ""}</td>
+    `;
+    body.appendChild(tr);
+  });
+}
+
+document.getElementById("safety-launch-btn").addEventListener("click", async ()=>{
+  const title = document.getElementById("safety-title-input").value.trim();
+  const message = document.getElementById("safety-message-input").value.trim();
+  if(!title){ toast("タイトルを入力してください。"); return; }
+  if(!confirm("安否確認を発信します。よろしいですか？")) return;
+  try{
+    const activeOnes = safetyCampaignsAll.filter(c=>c.active);
+    for(const c of activeOnes){
+      await updateDoc(doc(db,"safety_campaigns", c.id), { active:false });
+    }
+    await addDoc(collection(db,"safety_campaigns"), {
+      title, message,
+      active: true,
+      createdBy: currentUser.email,
+      createdAt: Timestamp.now()
+    });
+    document.getElementById("safety-title-input").value = "";
+    document.getElementById("safety-message-input").value = "";
+    toast("安否確認を発信しました。");
+  }catch(e){
+    toast("発信に失敗しました。");
+  }
+});
+
+document.getElementById("safety-close-btn").addEventListener("click", async ()=>{
+  if(!selectedSafetyCampaignId) return;
+  if(!confirm("この安否確認を終了しますか？")) return;
+  try{
+    await updateDoc(doc(db,"safety_campaigns", selectedSafetyCampaignId), { active:false });
+    toast("安否確認を終了しました。");
+  }catch(e){
+    toast("操作に失敗しました。");
   }
 });
 </script>
