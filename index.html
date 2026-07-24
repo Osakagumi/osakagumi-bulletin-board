@@ -270,16 +270,16 @@
     </header>
 
     <nav class="tabs" id="main-tabs">
-      <button class="tab-btn" data-view="notices">お知らせ</button>
+      <button class="tab-btn active" data-view="notices">お知らせ</button>
       <button class="tab-btn" data-view="whereabouts">行き先</button>
-      <button class="tab-btn active" data-view="reserve">予約</button>
+      <button class="tab-btn" data-view="reserve">予約</button>
       <button class="tab-btn" data-view="safety">安否確認</button>
       <button class="tab-reorder-btn" id="tab-reorder-toggle" title="タブの並び替え">並び替え</button>
     </nav>
 
     <main>
       <!-- ---- 予約（予約する＋マイ予約） ---- -->
-      <section id="view-reserve">
+      <section id="view-reserve" style="display:none;">
         <div class="cat-row" id="cat-row"></div>
         <div class="eq-grid" id="eq-grid"></div>
 
@@ -323,7 +323,7 @@
       </section>
 
       <!-- ---- お知らせ ---- -->
-      <section id="view-notices" style="display:none;">
+      <section id="view-notices">
         <div class="section-toolbar">
           <button class="btn-primary" id="notice-new-btn" style="display:none;">＋ 新規投稿</button>
         </div>
