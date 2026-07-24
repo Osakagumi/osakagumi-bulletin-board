@@ -420,6 +420,18 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
+/* ---------- メールリンクからの自動入力・自動選択 ---------- */
+const urlParams = new URLSearchParams(location.search);
+const urlPreselect = {
+  campaign: urlParams.get("campaign"),
+  status: urlParams.get("status"),
+  email: urlParams.get("email")
+};
+if(urlPreselect.email){
+  const emailInput = document.getElementById("login-email");
+  if(emailInput) emailInput.value = urlPreselect.email;
+}
+
 /* ---------- helpers ---------- */
 const pad2 = n => String(n).padStart(2,"0");
 const todayStr = () => {
@@ -522,6 +534,11 @@ onAuthStateChanged(auth, async (user)=>{
     initWbStatusesListener();
     initEmployeesListener();
     initSafetyCampaignListener();
+
+    if(urlPreselect.campaign){
+      switchToTab("safety");
+      history.replaceState(null, "", location.pathname);
+    }
   }else{
     currentUser = null;
     document.getElementById("login-screen").style.display = "flex";
@@ -531,14 +548,17 @@ onAuthStateChanged(auth, async (user)=>{
 
 /* ---------- tabs ---------- */
 const ALL_VIEWS = ["book","mine","notices","whereabouts","safety"];
+function switchToTab(viewName){
+  document.querySelectorAll(".tab-btn").forEach(b=>{
+    b.classList.toggle("active", b.dataset.view===viewName);
+  });
+  ALL_VIEWS.forEach(name=>{
+    document.getElementById("view-"+name).style.display = (name===viewName) ? "block":"none";
+  });
+}
 document.querySelectorAll(".tab-btn").forEach(btn=>{
   btn.addEventListener("click", ()=>{
-    document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
-    btn.classList.add("active");
-    const v = btn.dataset.view;
-    ALL_VIEWS.forEach(name=>{
-      document.getElementById("view-"+name).style.display = (name===v) ? "block":"none";
-    });
+    switchToTab(btn.dataset.view);
   });
 });
 
@@ -1172,12 +1192,19 @@ function renderSafety(){
   const form = document.createElement("div");
   form.className = "safety-form";
 
+  const useUrlPreselect = urlPreselect.campaign===activeSafetyCampaign.id && !!urlPreselect.status;
+  const effectiveStatus = useUrlPreselect ? urlPreselect.status : mySafetyResponse?.status;
+  if(useUrlPreselect){
+    urlPreselect.campaign = null;
+    urlPreselect.status = null;
+  }
+
   const group = document.createElement("div");
   group.className = "safety-radio-group";
   SAFETY_STATUSES.forEach(opt=>{
     const label = document.createElement("label");
-    label.className = "safety-radio-option" + (mySafetyResponse?.status===opt.id ? " checked":"");
-    label.innerHTML = `<input type="radio" name="safety-status" value="${opt.id}" ${mySafetyResponse?.status===opt.id?"checked":""}> ${escapeHtml(opt.label)}`;
+    label.className = "safety-radio-option" + (effectiveStatus===opt.id ? " checked":"");
+    label.innerHTML = `<input type="radio" name="safety-status" value="${opt.id}" ${effectiveStatus===opt.id?"checked":""}> ${escapeHtml(opt.label)}`;
     label.addEventListener("click", ()=>{
       form.querySelectorAll(".safety-radio-option").forEach(l=>l.classList.remove("checked"));
       label.classList.add("checked");
