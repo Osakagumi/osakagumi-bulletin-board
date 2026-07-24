@@ -68,7 +68,7 @@ service cloud.firestore {
     // 更新（氏名・所属・状態など）は本人 / 管理者 / 行き先の他者設定権限者。削除は管理者のみ。
     match /employees/{email} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.auth.token.email == email;
+      allow create: if isSignedIn() && (request.auth.token.email == email || isAdmin());
       allow update: if isSignedIn() &&
         (request.auth.token.email == email || isAdmin() || isWhereaboutsEditor());
       allow delete: if isAdmin();
