@@ -33,3 +33,10 @@ export const SAFETY_STATUSES = [
   { id: "unknown",  label: "わからない・確認中", color: "#E8853F" }
 ];
 
+// 安否確認メール通知（EmailJS）の設定
+export const EMAILJS_CONFIG = {
+  publicKey: "29JtZyFekWscWEfBU",
+  serviceId: "service_10htgiq",
+  templateId: "template_7pjv16s"
+};
+
