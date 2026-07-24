@@ -287,7 +287,12 @@
             <textarea id="safety-message-input" placeholder="例）大きな地震がありました。安全が確認できたら回答をお願いします。"></textarea>
           </div>
         </div>
+        <div class="field" style="display:flex;align-items:center;gap:6px;margin-bottom:12px;">
+          <input type="checkbox" id="safety-send-email" checked style="width:auto;">
+          <label style="margin:0;font-size:12.5px;color:var(--text);">社員全員にメールでも通知する（EmailJS未設定の場合は自動的にスキップされます）</label>
+        </div>
         <button class="btn btn-primary" id="safety-launch-btn">発信する</button>
+        <div id="safety-launch-status" style="font-size:12.5px;color:var(--muted);margin-top:8px;"></div>
       </div>
 
       <div class="panel">
@@ -310,6 +315,7 @@
 
 <div class="toast" id="toast"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
@@ -317,11 +323,16 @@ import {
   getFirestore, collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, setDoc,
   query, where, onSnapshot, orderBy, limit, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig, CATEGORIES, SAFETY_STATUSES } from "./firebase-config.js";
+import { firebaseConfig, CATEGORIES, SAFETY_STATUSES, EMAILJS_CONFIG } from "./firebase-config.js";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+
+const emailjsReady = !!(window.emailjs && EMAILJS_CONFIG.publicKey && !EMAILJS_CONFIG.publicKey.startsWith("YOUR_"));
+if(emailjsReady){
+  window.emailjs.init(EMAILJS_CONFIG.publicKey);
+}
 
 function toast(msg){
   const t = document.getElementById("toast");
@@ -1012,17 +1023,60 @@ function renderSafetyDashboard(responses){
   });
 }
 
+function indexPageUrl(){
+  return location.href.replace(/admin\.html.*$/i, "index.html");
+}
+
+async function sendSafetyEmails(campaignId, title, message){
+  const statusEl = document.getElementById("safety-launch-status");
+  if(!emailjsReady){
+    statusEl.textContent = "（EmailJSが未設定のため、メール送信はスキップされました）";
+    return;
+  }
+  const recipients = employeesAll.filter(e=> !!e.email);
+  if(recipients.length===0){
+    statusEl.textContent = "送信先の社員データがありません。";
+    return;
+  }
+  let ok = 0, fail = 0;
+  const base = indexPageUrl();
+  const buildLink = (email, status) =>
+    `${base}?campaign=${encodeURIComponent(campaignId)}&status=${status}&email=${encodeURIComponent(email)}`;
+  for(const emp of recipients){
+    try{
+      await window.emailjs.send(EMAILJS_CONFIG.serviceId, EMAILJS_CONFIG.templateId, {
+        to_email: emp.email,
+        to_name: emp.name || emp.email,
+        title, message,
+        link: buildLink(emp.email, ""),
+        link_safe: buildLink(emp.email, "safe"),
+        link_damage: buildLink(emp.email, "damage"),
+        link_unknown: buildLink(emp.email, "unknown")
+      });
+      ok++;
+    }catch(e){
+      fail++;
+    }
+    statusEl.textContent = `メール送信中… ${ok+fail}/${recipients.length}（成功${ok}・失敗${fail}）`;
+    await new Promise(r=>setTimeout(r, 300));
+  }
+  statusEl.textContent = `メール送信完了：${recipients.length}件中 ${ok}件成功${fail>0 ? `（${fail}件失敗）` : ""}`;
+}
+
 document.getElementById("safety-launch-btn").addEventListener("click", async ()=>{
   const title = document.getElementById("safety-title-input").value.trim();
   const message = document.getElementById("safety-message-input").value.trim();
+  const sendEmail = document.getElementById("safety-send-email").checked;
+  const statusEl = document.getElementById("safety-launch-status");
   if(!title){ toast("タイトルを入力してください。"); return; }
   if(!confirm("安否確認を発信します。よろしいですか？")) return;
+  statusEl.textContent = "";
   try{
     const activeOnes = safetyCampaignsAll.filter(c=>c.active);
     for(const c of activeOnes){
       await updateDoc(doc(db,"safety_campaigns", c.id), { active:false });
     }
-    await addDoc(collection(db,"safety_campaigns"), {
+    const newCampaignRef = await addDoc(collection(db,"safety_campaigns"), {
       title, message,
       active: true,
       createdBy: currentUser.email,
@@ -1031,6 +1085,9 @@ document.getElementById("safety-launch-btn").addEventListener("click", async ()=
     document.getElementById("safety-title-input").value = "";
     document.getElementById("safety-message-input").value = "";
     toast("安否確認を発信しました。");
+    if(sendEmail){
+      await sendSafetyEmails(newCampaignRef.id, title, message);
+    }
   }catch(e){
     toast("発信に失敗しました。");
   }
