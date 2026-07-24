@@ -89,6 +89,7 @@
     <button class="tab-btn active" data-view="equipment">設備管理</button>
     <button class="tab-btn" data-view="reservations">予約状況（全体）</button>
     <button class="tab-btn" data-view="admins">管理者管理</button>
+    <button class="tab-btn" data-view="userimport">ユーザー登録</button>
     <button class="tab-btn" data-view="notices">お知らせ管理</button>
     <button class="tab-btn" data-view="whereabouts">行き先管理</button>
     <button class="tab-btn" data-view="safety">安否確認管理</button>
@@ -174,6 +175,41 @@
           <thead><tr><th>メールアドレス</th><th>操作</th></tr></thead>
           <tbody id="admin-table-body"></tbody>
         </table>
+      </div>
+    </section>
+
+    <!-- ============ ユーザー登録（CSV一括） ============ -->
+    <section id="view-userimport" style="display:none;">
+      <div class="panel">
+        <h2>CSVで一括登録</h2>
+        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
+          1行目はヘッダー行として無視されます。2行目以降を1人ずつ登録します。<br>
+          列の順番：<b>社員番号, 氏名, 所属, 管理者フラグ, お知らせ投稿フラグ, メールアドレス, パスワード, 電話番号, 備考</b><br>
+          必須は「メールアドレス」「パスワード」のみで、他は省略可です。<br>
+          管理者フラグ・お知らせ投稿フラグは <code>1</code> / <code>TRUE</code> / <code>○</code> / <code>はい</code> のいずれかを入れると有効になります（空欄は無効）。<br>
+          所属欄には「行き先管理」タブで登録済みの部署名をそのまま入力してください（一致しない場合は未所属として登録されます）。
+        </p>
+        <div class="field full" style="margin-bottom:12px;">
+          <label>サンプル</label>
+          <pre style="background:#F7F8FA;border:1px solid var(--line);border-radius:7px;padding:10px 12px;font-size:12px;overflow-x:auto;">社員番号,氏名,所属,管理者フラグ,お知らせ投稿フラグ,メールアドレス,パスワード,電話番号,備考
+1001,山田太郎,工務部,,1,yamada@osakagumi.co.jp,Osaka2026!,090-1234-5678,現場責任者
+1002,佐藤花子,総務経理部,1,1,sato@osakagumi.co.jp,Osaka2026!,090-2345-6789,</pre>
+        </div>
+        <div class="field full">
+          <label>CSVファイルを選択</label>
+          <input type="file" id="userimport-file" accept=".csv,text/csv">
+        </div>
+        <button class="btn btn-ghost" id="userimport-preview-btn">内容を確認する</button>
+      </div>
+
+      <div class="panel" id="userimport-preview-panel" style="display:none;">
+        <h2>登録内容の確認（<span id="userimport-count">0</span>件）</h2>
+        <table>
+          <thead><tr><th>社員番号</th><th>氏名</th><th>所属</th><th>管理者</th><th>お知らせ投稿</th><th>メールアドレス</th><th>電話番号</th><th>備考</th></tr></thead>
+          <tbody id="userimport-preview-body"></tbody>
+        </table>
+        <button class="btn btn-primary" id="userimport-execute-btn" style="margin-top:12px;">この内容で登録を実行する</button>
+        <div id="userimport-status" style="font-size:12.5px;color:var(--muted);margin-top:10px;white-space:pre-line;"></div>
       </div>
     </section>
 
@@ -263,10 +299,10 @@
       </div>
 
       <div class="panel">
-        <h2>社員一覧（氏名・所属・並び順の編集）</h2>
-        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">ログインすると自動的にここへ追加されます。氏名や所属は下の一覧から編集してください。</p>
+        <h2>社員一覧（氏名・所属・並び順・電話番号・備考の編集）</h2>
+        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">ログインすると自動的にここへ追加されます。CSV一括登録した場合は社員番号・電話番号・備考も反映されています。</p>
         <table>
-          <thead><tr><th>氏名</th><th>メールアドレス</th><th>所属</th><th>並び順</th><th>操作</th></tr></thead>
+          <thead><tr><th>社員番号</th><th>氏名</th><th>メールアドレス</th><th>所属</th><th>並び順</th><th>電話番号</th><th>備考</th><th>操作</th></tr></thead>
           <tbody id="emp-table-body"></tbody>
         </table>
       </div>
@@ -318,7 +354,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signOut, inMemoryPersistence, setPersistence } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, setDoc,
   query, where, onSnapshot, orderBy, limit, Timestamp
@@ -386,7 +422,7 @@ onAuthStateChanged(auth, async (user)=>{
 });
 
 /* ---------- tabs ---------- */
-const ADMIN_VIEWS = ["equipment","reservations","admins","notices","whereabouts","safety"];
+const ADMIN_VIEWS = ["equipment","reservations","admins","userimport","notices","whereabouts","safety"];
 document.querySelectorAll(".tab-btn").forEach(btn=>{
   btn.addEventListener("click", ()=>{
     document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
@@ -865,14 +901,20 @@ function renderEmployees(){
   if(!body) return;
   body.innerHTML = "";
   if(employeesAll.length===0){
-    body.innerHTML = `<tr><td colspan="5" class="empty">まだ社員データがありません。対象の人がログインすると自動的に追加されます。</td></tr>`;
+    body.innerHTML = `<tr><td colspan="8" class="empty">まだ社員データがありません。対象の人がログインするか、CSV一括登録すると追加されます。</td></tr>`;
     return;
   }
   employeesAll.forEach(emp=>{
     const tr = document.createElement("tr");
+
+    const tdNo = document.createElement("td");
+    const noInput = document.createElement("input");
+    noInput.type = "text"; noInput.value = emp.employeeNo || ""; noInput.style.width="70px";
+    tdNo.appendChild(noInput);
+
     const tdName = document.createElement("td");
     const nameInput = document.createElement("input");
-    nameInput.type = "text"; nameInput.value = emp.name || ""; nameInput.style.minWidth="120px";
+    nameInput.type = "text"; nameInput.value = emp.name || ""; nameInput.style.minWidth="110px";
     tdName.appendChild(nameInput);
 
     const tdEmail = document.createElement("td");
@@ -897,6 +939,16 @@ function renderEmployees(){
     orderInput.type = "number"; orderInput.value = emp.order ?? 0; orderInput.style.width="70px";
     tdOrder.appendChild(orderInput);
 
+    const tdPhone = document.createElement("td");
+    const phoneInput = document.createElement("input");
+    phoneInput.type = "text"; phoneInput.value = emp.phone || ""; phoneInput.style.width="120px";
+    tdPhone.appendChild(phoneInput);
+
+    const tdMemo = document.createElement("td");
+    const memoInput = document.createElement("input");
+    memoInput.type = "text"; memoInput.value = emp.memo || ""; memoInput.style.minWidth="120px";
+    tdMemo.appendChild(memoInput);
+
     const tdActions = document.createElement("td");
     tdActions.className = "actions";
     const saveBtn = document.createElement("button");
@@ -904,9 +956,12 @@ function renderEmployees(){
     saveBtn.addEventListener("click", async ()=>{
       try{
         await updateDoc(doc(db,"employees", emp.email), {
+          employeeNo: noInput.value.trim(),
           name: nameInput.value.trim() || emp.email,
           department: deptSelect.value,
-          order: Number(orderInput.value)||0
+          order: Number(orderInput.value)||0,
+          phone: phoneInput.value.trim(),
+          memo: memoInput.value.trim()
         });
         toast("社員情報を更新しました。");
       }catch(e){
@@ -915,7 +970,7 @@ function renderEmployees(){
     });
     tdActions.appendChild(saveBtn);
 
-    tr.appendChild(tdName); tr.appendChild(tdEmail); tr.appendChild(tdDept); tr.appendChild(tdOrder); tr.appendChild(tdActions);
+    tr.appendChild(tdNo); tr.appendChild(tdName); tr.appendChild(tdEmail); tr.appendChild(tdDept); tr.appendChild(tdOrder); tr.appendChild(tdPhone); tr.appendChild(tdMemo); tr.appendChild(tdActions);
     body.appendChild(tr);
   });
 }
@@ -1102,6 +1157,167 @@ document.getElementById("safety-close-btn").addEventListener("click", async ()=>
   }catch(e){
     toast("操作に失敗しました。");
   }
+});
+
+/* ============================================================
+   ユーザー登録（CSV一括）
+============================================================ */
+let userImportRows = [];
+
+function parseCsv(text){
+  // 先頭のBOMを除去
+  text = text.replace(/^\uFEFF/, "");
+  const lines = text.split(/\r\n|\n|\r/).filter(l=>l.trim().length>0);
+  const rows = [];
+  for(let i=1;i<lines.length;i++){ // 1行目はヘッダーとして無視
+    const cols = parseCsvLine(lines[i]);
+    if(cols.length===0) continue;
+    const [employeeNo, name, department, adminFlag, posterFlag, email, password, phone, memo] = cols;
+    if(!email || !email.trim()) continue;
+    rows.push({
+      employeeNo: (employeeNo||"").trim(),
+      name: (name||"").trim(),
+      department: (department||"").trim(),
+      isAdmin: isTruthyFlag(adminFlag),
+      isPoster: isTruthyFlag(posterFlag),
+      email: email.trim(),
+      password: (password||"").trim(),
+      phone: (phone||"").trim(),
+      memo: (memo||"").trim()
+    });
+  }
+  return rows;
+}
+function isTruthyFlag(v){
+  if(!v) return false;
+  const s = String(v).trim().toLowerCase();
+  return ["1","true","○","はい","yes","y","済"].includes(s);
+}
+function parseCsvLine(line){
+  const result = [];
+  let cur = "", inQuotes = false;
+  for(let i=0;i<line.length;i++){
+    const ch = line[i];
+    if(inQuotes){
+      if(ch === '"'){
+        if(line[i+1] === '"'){ cur += '"'; i++; }
+        else inQuotes = false;
+      } else cur += ch;
+    } else {
+      if(ch === '"') inQuotes = true;
+      else if(ch === ","){ result.push(cur); cur = ""; }
+      else cur += ch;
+    }
+  }
+  result.push(cur);
+  return result;
+}
+
+function departmentIdByName(name){
+  if(!name) return "";
+  const dep = departmentsAll.find(d=>d.name===name);
+  return dep ? dep.id : "";
+}
+
+document.getElementById("userimport-preview-btn").addEventListener("click", async ()=>{
+  const fileInput = document.getElementById("userimport-file");
+  const file = fileInput.files[0];
+  if(!file){ toast("CSVファイルを選択してください。"); return; }
+  const text = await file.text();
+  userImportRows = parseCsv(text);
+  renderUserImportPreview();
+});
+
+function renderUserImportPreview(){
+  const panel = document.getElementById("userimport-preview-panel");
+  const body = document.getElementById("userimport-preview-body");
+  document.getElementById("userimport-count").textContent = userImportRows.length;
+  body.innerHTML = "";
+  if(userImportRows.length===0){
+    panel.style.display = "block";
+    body.innerHTML = `<tr><td colspan="8" class="empty">読み取れる行がありませんでした。CSVの形式をご確認ください。</td></tr>`;
+    return;
+  }
+  userImportRows.forEach(row=>{
+    const deptId = departmentIdByName(row.department);
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHtml(row.employeeNo)}</td>
+      <td>${escapeHtml(row.name || "（未入力）")}</td>
+      <td>${row.department ? escapeHtml(row.department) + (deptId ? "" : "（未登録・未所属になります）") : "未所属"}</td>
+      <td>${row.isAdmin ? "○" : ""}</td>
+      <td>${row.isPoster ? "○" : ""}</td>
+      <td>${escapeHtml(row.email)}</td>
+      <td>${escapeHtml(row.phone)}</td>
+      <td style="max-width:160px;color:var(--muted);">${escapeHtml(row.memo)}</td>
+    `;
+    body.appendChild(tr);
+  });
+  panel.style.display = "block";
+  document.getElementById("userimport-status").textContent = "";
+}
+
+document.getElementById("userimport-execute-btn").addEventListener("click", async ()=>{
+  if(userImportRows.length===0) return;
+  if(!confirm(`${userImportRows.length}件のアカウントを作成します。よろしいですか？`)) return;
+  const statusEl = document.getElementById("userimport-status");
+  let ok = 0, exists = 0, fail = 0;
+  const failDetails = [];
+
+  // 管理者自身のログイン状態を保ったまま作成するため、別名のセカンダリFirebaseアプリを使う
+  const secondaryApp = initializeApp(firebaseConfig, "userImportApp_" + Date.now());
+  const secondaryAuth = getAuth(secondaryApp);
+  try{ await setPersistence(secondaryAuth, inMemoryPersistence); }catch(e){}
+
+  for(const row of userImportRows){
+    if(!row.password){
+      fail++; failDetails.push(`${row.email}: パスワードが未入力`);
+      statusEl.textContent = `処理中… ${ok+exists+fail}/${userImportRows.length}（成功${ok}・既存${exists}・失敗${fail}）`;
+      continue;
+    }
+    try{
+      await createUserWithEmailAndPassword(secondaryAuth, row.email, row.password);
+      await signOut(secondaryAuth);
+      ok++;
+    }catch(e){
+      if(e.code === "auth/email-already-in-use"){
+        exists++;
+      } else {
+        fail++;
+        failDetails.push(`${row.email}: ${e.code || e.message}`);
+      }
+    }
+    // Authアカウントの有無によらず、Firestore側のプロフィールは作成/更新しておく
+    try{
+      await setDoc(doc(db,"employees", row.email), {
+        employeeNo: row.employeeNo,
+        name: row.name || row.email.split("@")[0],
+        email: row.email,
+        department: departmentIdByName(row.department),
+        phone: row.phone,
+        memo: row.memo,
+        order: 0,
+        createdBy: currentUser.email,
+        importedAt: new Date().toISOString()
+      }, { merge: true });
+      if(row.isAdmin){
+        await setDoc(doc(db,"admins", row.email), { addedBy: currentUser.email, addedAt: new Date().toISOString() });
+      }
+      if(row.isPoster){
+        await setDoc(doc(db,"announcement_posters", row.email), { addedBy: currentUser.email, addedAt: new Date().toISOString() });
+      }
+    }catch(e){ /* 権限エラー等は無視して続行 */ }
+
+    statusEl.textContent = `処理中… ${ok+exists+fail}/${userImportRows.length}（成功${ok}・既存${exists}・失敗${fail}）`;
+    await new Promise(r=>setTimeout(r, 300));
+  }
+
+  let summary = `完了：新規作成${ok}件・既存スキップ${exists}件・失敗${fail}件`;
+  if(failDetails.length>0){
+    summary += "\n\n【失敗の詳細】\n" + failDetails.join("\n");
+  }
+  statusEl.textContent = summary;
+  toast("CSV一括登録が完了しました。");
 });
 </script>
 </body>
