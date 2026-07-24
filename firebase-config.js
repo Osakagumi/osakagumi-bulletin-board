@@ -18,9 +18,9 @@ export const BUSINESS_HOURS = {
 
 // 設備カテゴリの定義
 export const CATEGORIES = [
-  { id: "survey",  label: "測量機器",     color: "#E8853F" },
   { id: "room",    label: "会議室",       color: "#2E9E8F" },
-  { id: "vehicle", label: "業務共用車輌", color: "#4B5FA3" }
+  { id: "vehicle", label: "業務共用車輌", color: "#4B5FA3" },
+  { id: "survey",  label: "測量機器",     color: "#E8853F" }
 ];
 
 // 行き先ボードの「所属」「状態」は、管理画面（admin.html）から自由に追加・編集できます。
@@ -34,9 +34,10 @@ export const SAFETY_STATUSES = [
 ];
 
 // 安否確認メール通知（EmailJS）の設定
+// https://www.emailjs.com/ で無料アカウントを作成し、以下3つの値を貼り付けてください。
+// 未設定（YOUR_で始まる値のまま）の場合は、メール送信をスキップしてシステム内表示のみになります。
 export const EMAILJS_CONFIG = {
   publicKey: "29JtZyFekWscWEfBU",
   serviceId: "service_10htgiq",
   templateId: "template_7pjv16s"
 };
-
