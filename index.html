@@ -1175,6 +1175,7 @@ function initSafetyCampaignListener(){
     }catch(e){ mySafetyResponse = null; }
     renderSafety();
   }, (err)=>{ console.error("[安否確認取得エラー]", err); });
+}
 
 function renderSafety(){
   const el = document.getElementById("safety-content");
