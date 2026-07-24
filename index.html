@@ -108,10 +108,16 @@
   .tl-head .eq-title .cat-tag{font-size:10.5px;font-weight:600;font-family:var(--mono);padding:2px 6px;border-radius:4px;margin-left:6px;color:#fff;}
   .date-nav{display:flex;align-items:center;gap:6px;}
   .date-nav button{border:1px solid var(--line);background:#fff;border-radius:6px;width:30px;height:30px;font-size:14px;}
-  .date-nav input[type=date]{border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-size:13px;}
-  .weekday-badge{font-size:12px;font-weight:700;color:var(--brand-dark);background:#EAF1FA;border-radius:6px;padding:5px 9px;font-family:var(--mono);min-width:24px;text-align:center;}
-  .weekday-badge.weekend-sat{color:#2E6FA3;}
-  .weekday-badge.weekend-sun{color:var(--danger);}
+  .date-picker-wrap{position:relative;display:inline-flex;align-items:center;}
+  .date-picker-wrap input[type=date]{
+    position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:none;padding:0;margin:0;
+  }
+  .date-picker-label{
+    border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:13px;font-weight:700;
+    color:var(--brand-dark);background:#fff;white-space:nowrap;pointer-events:none;font-family:var(--mono);
+  }
+  .date-picker-label.weekend-sat{color:#2E6FA3;}
+  .date-picker-label.weekend-sun{color:var(--danger);}
   .howto{
     background:#F4F8FC;border:1px solid #DCE8F5;border-radius:8px;padding:9px 12px;font-size:12.5px;color:#2C4A6B;
     margin-bottom:12px;line-height:1.6;
@@ -288,8 +294,10 @@
             <div class="eq-title" id="tl-eq-title"></div>
             <div class="date-nav">
               <button id="date-prev">◀</button>
-              <input type="date" id="date-input">
-              <span id="date-weekday" class="weekday-badge"></span>
+              <div class="date-picker-wrap">
+                <span class="date-picker-label" id="date-picker-label"></span>
+                <input type="date" id="date-input" aria-label="日付を選択">
+              </div>
               <button id="date-next">▶</button>
             </div>
           </div>
@@ -730,12 +738,12 @@ function shiftDate(delta){
 function updateWeekdayBadge(){
   const d = new Date(selectedDate + "T00:00:00");
   const labels = ["日","月","火","水","木","金","土"];
-  const badge = document.getElementById("date-weekday");
+  const label = document.getElementById("date-picker-label");
   const dow = d.getDay();
-  badge.textContent = labels[dow];
-  badge.classList.remove("weekend-sat","weekend-sun");
-  if(dow===6) badge.classList.add("weekend-sat");
-  if(dow===0) badge.classList.add("weekend-sun");
+  label.textContent = `${selectedDate.replace(/-/g,"/")}(${labels[dow]})`;
+  label.classList.remove("weekend-sat","weekend-sun");
+  if(dow===6) label.classList.add("weekend-sat");
+  if(dow===0) label.classList.add("weekend-sun");
 }
 
 function showTimelinePanel(){
