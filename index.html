@@ -914,7 +914,7 @@ function initNoticesListener(){
   onSnapshot(q, snap=>{
     noticesAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
     renderNotices();
-  }, ()=>{ /* 権限反映前は無視 */ });
+  }, (err)=>{ console.error("[お知らせ取得エラー]", err); });
 }
 
 function renderNotices(){
@@ -986,20 +986,20 @@ function initDepartmentsListener(){
     departmentsAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
     departmentsAll.sort((a,b)=> (a.order??0)-(b.order??0));
     renderWhereabouts();
-  }, ()=>{});
+  }, (err)=>{ console.error("[所属マスタ取得エラー]", err); });
 }
 function initWbStatusesListener(){
   onSnapshot(collection(db,"wb_statuses"), snap=>{
     wbStatusesAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
     wbStatusesAll.sort((a,b)=> (a.order??0)-(b.order??0));
     renderWhereabouts();
-  }, ()=>{});
+  }, (err)=>{ console.error("[行き先ステータス取得エラー]", err); });
 }
 function initEmployeesListener(){
   onSnapshot(collection(db,"employees"), snap=>{
     employeesAll = snap.docs.map(d=>({ email:d.id, ...d.data() }));
     renderWhereabouts();
-  }, ()=>{});
+  }, (err)=>{ console.error("[社員名簿取得エラー]", err); });
 }
 
 function departmentName(id){
@@ -1174,8 +1174,7 @@ function initSafetyCampaignListener(){
       mySafetyResponse = respSnap.exists() ? respSnap.data() : null;
     }catch(e){ mySafetyResponse = null; }
     renderSafety();
-  }, ()=>{});
-}
+  }, (err)=>{ console.error("[安否確認取得エラー]", err); });
 
 function renderSafety(){
   const el = document.getElementById("safety-content");
