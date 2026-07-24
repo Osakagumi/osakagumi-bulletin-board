@@ -1086,12 +1086,14 @@ function wbStatusInfo(id){
   return wbStatusesAll.find(x=>x.id===id) || null;
 }
 function getSortedEmployees(){
-  const deptOrder = new Map(departmentsAll.map((d,i)=>[d.id, d.order ?? i]));
   return employeesAll.slice().sort((a,b)=>{
-    const da = deptOrder.has(a.department) ? deptOrder.get(a.department) : 9999;
-    const dbb = deptOrder.has(b.department) ? deptOrder.get(b.department) : 9999;
-    if(da!==dbb) return da-dbb;
-    if((a.order??0)!==(b.order??0)) return (a.order??0)-(b.order??0);
+    const na = a.employeeNo ? Number(a.employeeNo) : null;
+    const nb = b.employeeNo ? Number(b.employeeNo) : null;
+    const validA = na!==null && !isNaN(na);
+    const validB = nb!==null && !isNaN(nb);
+    if(validA && validB && na!==nb) return na-nb;
+    if(validA && !validB) return -1; // 社員番号ありを先に
+    if(!validA && validB) return 1;
     return (a.name||"").localeCompare(b.name||"","ja");
   });
 }
