@@ -33,11 +33,44 @@ export const SAFETY_STATUSES = [
   { id: "unknown",  label: "わからない・確認中", color: "#E8853F" }
 ];
 
-// 安否確認メール通知（EmailJS）の設定
-// https://www.emailjs.com/ で無料アカウントを作成し、以下3つの値を貼り付けてください。
+// 安否確認・お知らせメール通知（EmailJS）の設定
+// https://www.emailjs.com/ で無料アカウントを作成し、以下の値を貼り付けてください。
 // 未設定（YOUR_で始まる値のまま）の場合は、メール送信をスキップしてシステム内表示のみになります。
+// EmailJSの無料プランはテンプレートを2つまで作成できるので、安否確認用・お知らせ用を分けて登録してください。
 export const EMAILJS_CONFIG = {
   publicKey: "29JtZyFekWscWEfBU",
   serviceId: "service_10htgiq",
-  templateId: "template_7pjv16s"
+  safetyTemplateId: "template_7pjv16s",
+  noticeTemplateId: "YOUR_EMAILJS_NOTICE_TEMPLATE_ID"
 };
+
+// メール送信先の上書き設定（テスト・誤送信防止用）
+// "*" の場合は今まで通り、社員名簿に登録されている全員に送信します。
+// "*" 以外の場合は、ここに書いたメールアドレスにのみ送信します（複数指定はセミコロン区切り）。
+// 例）テスト時: "h.ishikawa@osakagumi.co.jp"
+// 例）複数人でテスト: "h.ishikawa@osakagumi.co.jp;n.kasai@osakagumi.co.jp"
+// 本番で全社員に送る場合は必ず "*" に戻してください。
+export const MAIL_SEND_TARGET = "h.ishikawa@osakagumi.co.jp;zoom@osakagumi.co.jp";
+
+// MAIL_SEND_TARGET の設定内容に応じて、実際の送信先リストを返すヘルパー関数。
+// admin.html・index.html の両方から共通で呼び出します。
+export function resolveMailRecipients(employeesAll){
+  const override = (MAIL_SEND_TARGET || "").trim();
+  if(override === "" || override === "*"){
+    return (employeesAll || [])
+      .filter(e => !!e.email)
+      .map(e => ({ email: e.email, name: e.name || e.email }));
+  }
+  const overrideEmails = override.split(";").map(s=>s.trim()).filter(Boolean);
+  return overrideEmails.map(email=>{
+    const match = (employeesAll || []).find(e=>e.email===email);
+    return { email, name: (match && match.name) || email };
+  });
+}
+
+// MAIL_SEND_TARGET が「全員向け」ではなく、テスト用に上書きされているかどうか
+export function isMailOverrideActive(){
+  const override = (MAIL_SEND_TARGET || "").trim();
+  return override !== "" && override !== "*";
+}
+
