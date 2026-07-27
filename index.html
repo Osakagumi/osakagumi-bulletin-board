@@ -101,6 +101,21 @@
   .eq-card .note{font-size:11.5px;color:var(--muted);line-height:1.4;}
   .eq-card.empty{color:var(--muted);font-size:12.5px;text-align:center;padding:20px 10px;}
 
+  /* checkout mode (測量機器・ドローン) */
+  .checkout-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-bottom:18px;}
+  .checkout-card{background:var(--surface);border:1.5px solid var(--line);border-radius:10px;padding:14px;}
+  .checkout-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;}
+  .checkout-head .name{font-size:14px;font-weight:700;}
+  .checkout-status-badge{font-size:11px;font-weight:700;color:#fff;padding:3px 9px;border-radius:12px;white-space:nowrap;}
+  .checkout-note{font-size:12px;color:var(--muted);margin-bottom:8px;}
+  .checkout-meta-row{font-size:12.5px;color:var(--text);margin-bottom:5px;}
+  .checkout-meta-row.holder-row{color:var(--brand-dark);background:#F4F8FC;padding:6px 8px;border-radius:6px;}
+  .checkout-edit-link{color:var(--brand);font-size:11.5px;margin-left:8px;cursor:pointer;text-decoration:underline;}
+  .checkout-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;}
+  .btn-checkout-action{border:1px solid var(--brand);color:var(--brand);background:#fff;border-radius:7px;padding:6px 10px;font-size:12px;font-weight:600;}
+  .btn-checkout-action:hover{background:var(--brand);color:#fff;}
+  .checkout-locked-note{font-size:11.5px;color:var(--muted);}
+
   /* timeline panel */
   #timeline-panel{background:var(--surface);border:1.5px solid var(--line);border-radius:12px;padding:16px;display:none;}
   #timeline-panel.show{display:block;}
@@ -280,12 +295,13 @@
       <button class="tab-btn active" data-view="notices">お知らせ</button>
       <button class="tab-btn" data-view="whereabouts">行き先</button>
       <button class="tab-btn" data-view="reserve">予約</button>
+      <button class="tab-btn" data-view="checkout">貸出</button>
       <button class="tab-btn" data-view="safety">安否確認</button>
       <button class="tab-reorder-btn" id="tab-reorder-toggle" title="タブの並び替え">並び替え</button>
     </nav>
 
     <main>
-      <!-- ---- 予約（予約する＋マイ予約） ---- -->
+      <!-- ---- 予約（会議室・車輌／予約する＋マイ予約） ---- -->
       <section id="view-reserve" style="display:none;">
         <div class="cat-row" id="cat-row"></div>
         <div class="eq-grid" id="eq-grid"></div>
@@ -329,6 +345,12 @@
 
         <div class="section-divider">マイ予約</div>
         <div class="res-list" id="my-res-list"></div>
+      </section>
+
+      <!-- ---- 貸出（測量機器・ドローン） ---- -->
+      <section id="view-checkout" style="display:none;">
+        <div class="cat-row" id="checkout-cat-row"></div>
+        <div class="checkout-grid" id="checkout-eq-grid"></div>
       </section>
 
       <!-- ---- お知らせ ---- -->
@@ -411,6 +433,38 @@
     </div>
   </div>
 
+  <!-- ============ CHECKOUT MODAL（貸出：返却予定日の任意入力） ============ -->
+  <div class="modal-overlay" id="checkout-modal">
+    <div class="modal">
+      <h3 id="checkout-modal-title">貸出する</h3>
+      <div class="field">
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">返却予定日（任意）</label>
+        <input type="date" id="checkout-return-date" style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;">
+      </div>
+      <div class="modal-err" id="checkout-modal-error"></div>
+      <div class="row-btns">
+        <button class="btn-ghost" id="checkout-modal-cancel" style="border:1px solid var(--line);">キャンセル</button>
+        <button class="btn-primary" id="checkout-modal-confirm">確定する</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ INSPECTION DATE MODAL（前回点検日の編集） ============ -->
+  <div class="modal-overlay" id="inspection-modal">
+    <div class="modal">
+      <h3 id="inspection-modal-title">前回点検日を編集</h3>
+      <div class="field">
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">点検日</label>
+        <input type="date" id="inspection-date-input" style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;">
+      </div>
+      <div class="modal-err" id="inspection-modal-error"></div>
+      <div class="row-btns">
+        <button class="btn-ghost" id="inspection-modal-cancel" style="border:1px solid var(--line);">キャンセル</button>
+        <button class="btn-primary" id="inspection-modal-save">保存する</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ============ RESERVE MODAL ============ -->
   <div class="modal-overlay" id="reserve-modal">
     <div class="modal">
@@ -440,7 +494,7 @@ import {
   getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, addDoc, deleteDoc, query, where,
   onSnapshot, orderBy, limit, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig, BUSINESS_HOURS, CATEGORIES, SAFETY_STATUSES, EMAILJS_CONFIG, resolveMailRecipients, isMailOverrideActive, MAIL_SEND_TARGET } from "./firebase-config.js";
+import { firebaseConfig, BUSINESS_HOURS, CATEGORIES, EQUIPMENT_STATUSES, SAFETY_STATUSES, EMAILJS_CONFIG, resolveMailRecipients, isMailOverrideActive, MAIL_SEND_TARGET } from "./firebase-config.js";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -504,8 +558,10 @@ let currentUser = null;
 let isAdmin = false;
 let isPoster = false;
 let isWhereaboutsEditor = false;
+let isEquipmentManager = false;
 let equipmentAll = [];
-let selectedCategory = CATEGORIES[0]?.id || null;
+let selectedCategory = CATEGORIES.find(c=>c.mode!=="checkout")?.id || null;
+let selectedCheckoutCategory = CATEGORIES.find(c=>c.mode==="checkout")?.id || null;
 let selectedEquipment = null;
 let selectedDate = todayStr();
 let reservationsUnsub = null;
@@ -558,6 +614,10 @@ onAuthStateChanged(auth, async (user)=>{
       const wbEditorDoc = await getDoc(doc(db, "whereabouts_editors", user.email));
       isWhereaboutsEditor = isAdmin || wbEditorDoc.exists();
     }catch(e){ isWhereaboutsEditor = isAdmin; }
+    try{
+      const eqManagerDoc = await getDoc(doc(db, "equipment_managers", user.email));
+      isEquipmentManager = isAdmin || eqManagerDoc.exists();
+    }catch(e){ isEquipmentManager = isAdmin; }
     document.getElementById("admin-link").style.display = isAdmin ? "inline-block" : "none";
     document.getElementById("notice-new-btn").style.display = isPoster ? "inline-block" : "none";
     await ensureEmployeeRecord();
@@ -581,7 +641,7 @@ onAuthStateChanged(auth, async (user)=>{
 });
 
 /* ---------- tabs ---------- */
-const ALL_VIEWS = ["notices","whereabouts","reserve","safety"];
+const ALL_VIEWS = ["notices","whereabouts","reserve","checkout","safety"];
 const TAB_ORDER_KEY = "osakagumi-portal-tab-order";
 function switchToTab(viewName){
   document.querySelectorAll(".tab-btn").forEach(b=>{
@@ -678,7 +738,7 @@ async function ensureEmployeeRecord(){
 function renderCategoryRow(){
   const row = document.getElementById("cat-row");
   row.innerHTML = "";
-  CATEGORIES.forEach(cat=>{
+  CATEGORIES.filter(cat=>cat.mode!=="checkout").forEach(cat=>{
     const pill = document.createElement("button");
     pill.className = "cat-pill" + (cat.id===selectedCategory ? " active":"");
     pill.style.color = cat.color;
@@ -694,6 +754,24 @@ function renderCategoryRow(){
   });
 }
 
+function renderCheckoutCategoryRow(){
+  const row = document.getElementById("checkout-cat-row");
+  if(!row) return;
+  row.innerHTML = "";
+  CATEGORIES.filter(cat=>cat.mode==="checkout").forEach(cat=>{
+    const pill = document.createElement("button");
+    pill.className = "cat-pill" + (cat.id===selectedCheckoutCategory ? " active":"");
+    pill.style.color = cat.color;
+    pill.innerHTML = `<span class="dot" style="background:${cat.color}"></span>${cat.label}`;
+    pill.addEventListener("click", ()=>{
+      selectedCheckoutCategory = cat.id;
+      renderCheckoutCategoryRow();
+      renderCheckoutTab();
+    });
+    row.appendChild(pill);
+  });
+}
+
 function initEquipmentListener(){
   const q = query(collection(db,"equipment"), where("active","==",true));
   onSnapshot(q, snap=>{
@@ -701,6 +779,8 @@ function initEquipmentListener(){
     equipmentAll.sort((a,b)=> (a.order??0)-(b.order??0) || a.name.localeCompare(b.name,"ja"));
     renderCategoryRow();
     renderEquipmentGrid();
+    renderCheckoutCategoryRow();
+    renderCheckoutTab();
   });
 }
 
@@ -708,6 +788,7 @@ function renderEquipmentGrid(){
   const grid = document.getElementById("eq-grid");
   grid.innerHTML = "";
   const items = equipmentAll.filter(e=>e.category===selectedCategory);
+
   if(items.length===0){
     grid.innerHTML = `<div class="eq-card empty">このカテゴリに登録された設備はまだありません。管理画面から追加してください。</div>`;
     return;
@@ -725,6 +806,198 @@ function renderEquipmentGrid(){
     grid.appendChild(card);
   });
 }
+
+function renderCheckoutTab(){
+  const grid = document.getElementById("checkout-eq-grid");
+  if(!grid) return;
+  const items = equipmentAll.filter(e=>e.category===selectedCheckoutCategory);
+  renderCheckoutGrid(grid, items);
+}
+
+/* ---------- 貸出管理（checkoutモード：測量機器・ドローンなど） ---------- */
+function equipmentStatusInfo(id){
+  return EQUIPMENT_STATUSES.find(s=>s.id===id) || EQUIPMENT_STATUSES[0];
+}
+function canOperateEquipment(eq){
+  const status = eq.status || "in_stock";
+  return isEquipmentManager || status==="in_stock" || eq.holderEmail===currentUser.email;
+}
+function formatDateTimeJP(iso){
+  if(!iso) return "";
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+}
+
+function renderCheckoutGrid(grid, items){
+  if(items.length===0){
+    grid.innerHTML = `<div class="eq-card empty">このカテゴリに登録された設備はまだありません。管理画面から追加してください。</div>`;
+    return;
+  }
+  items.forEach(eq=>{
+    const st = equipmentStatusInfo(eq.status || "in_stock");
+    const card = document.createElement("div");
+    card.className = "checkout-card";
+
+    const head = document.createElement("div");
+    head.className = "checkout-head";
+    head.innerHTML = `<div class="name">${escapeHtml(eq.name)}</div>`;
+    const badge = document.createElement("span");
+    badge.className = "checkout-status-badge";
+    badge.style.background = st.color;
+    badge.textContent = st.label;
+    head.appendChild(badge);
+    card.appendChild(head);
+
+    if(eq.note){
+      const noteEl = document.createElement("div");
+      noteEl.className = "checkout-note";
+      noteEl.textContent = eq.note;
+      card.appendChild(noteEl);
+    }
+
+    const inspectRow = document.createElement("div");
+    inspectRow.className = "checkout-meta-row";
+    inspectRow.innerHTML = `前回点検日: <b>${eq.lastInspectionDate || "未設定"}</b>`;
+    if(isEquipmentManager){
+      const editLink = document.createElement("span");
+      editLink.className = "checkout-edit-link";
+      editLink.textContent = "編集";
+      editLink.addEventListener("click", ()=> openInspectionDateModal(eq));
+      inspectRow.appendChild(editLink);
+    }
+    card.appendChild(inspectRow);
+
+    if(eq.status && eq.status!=="in_stock" && eq.holderEmail){
+      const holderRow = document.createElement("div");
+      holderRow.className = "checkout-meta-row holder-row";
+      let text = `借用者: <b>${escapeHtml(eq.holderName||eq.holderEmail)}</b>（${formatDateTimeJP(eq.holderSince)}から）`;
+      if(eq.returnDueDate){
+        text += `　返却予定日: <b>${escapeHtml(eq.returnDueDate)}</b>`;
+      }
+      holderRow.innerHTML = text;
+      card.appendChild(holderRow);
+    }
+
+    const actions = document.createElement("div");
+    actions.className = "checkout-actions";
+    const canOp = canOperateEquipment(eq);
+    const status = eq.status || "in_stock";
+
+    function addBtn(label, targetStatus, needsDateModal){
+      const btn = document.createElement("button");
+      btn.className = "btn-checkout-action";
+      btn.textContent = label;
+      btn.addEventListener("click", ()=>{
+        if(needsDateModal){
+          openCheckoutModal(eq, targetStatus);
+        } else {
+          confirmAndTransition(eq, targetStatus);
+        }
+      });
+      actions.appendChild(btn);
+    }
+
+    if(status==="in_stock"){
+      addBtn("貸出する", "checked_out", true);
+      addBtn("点検に出す", "inspecting", false);
+      if(isEquipmentManager) addBtn("故障として登録", "broken", false);
+    } else if(canOp){
+      if(status==="checked_out"){
+        addBtn("返却する（在庫に戻す）", "in_stock", false);
+        addBtn("点検に出す", "inspecting", false);
+      } else if(status==="inspecting"){
+        addBtn("在庫に戻す（点検完了）", "in_stock", false);
+        addBtn("貸出にする", "checked_out", true);
+      } else if(status==="broken"){
+        addBtn("在庫に戻す", "in_stock", false);
+        addBtn("貸出にする", "checked_out", true);
+        addBtn("点検中にする", "inspecting", false);
+      }
+      if(status!=="broken") addBtn("故障として報告", "broken", false);
+    } else {
+      const note = document.createElement("div");
+      note.className = "checkout-locked-note";
+      note.textContent = "借用者または測量機器管理者のみ操作できます。";
+      actions.appendChild(note);
+    }
+    card.appendChild(actions);
+
+    grid.appendChild(card);
+  });
+}
+
+async function confirmAndTransition(eq, targetStatus, extra){
+  const label = equipmentStatusInfo(targetStatus).label;
+  if(!confirm(`「${eq.name}」を${label}に変更しますか？`)) return;
+  const payload = Object.assign({ status: targetStatus }, extra||{});
+  if(targetStatus === "in_stock"){
+    payload.holderEmail = "";
+    payload.holderName = "";
+    payload.holderSince = null;
+    payload.returnDueDate = "";
+  }
+  try{
+    await updateDoc(doc(db,"equipment", eq.id), payload);
+    toast(`「${eq.name}」を${label}に変更しました。`);
+  }catch(e){
+    toast("更新に失敗しました。権限をご確認ください。");
+  }
+}
+
+let checkoutModalTarget = null;
+function openCheckoutModal(eq, targetStatus){
+  checkoutModalTarget = { eq, targetStatus };
+  document.getElementById("checkout-modal-title").textContent =
+    `「${eq.name}」を${equipmentStatusInfo(targetStatus).label}にする`;
+  document.getElementById("checkout-return-date").value = eq.returnDueDate || "";
+  document.getElementById("checkout-modal-error").textContent = "";
+  document.getElementById("checkout-modal").classList.add("show");
+}
+document.getElementById("checkout-modal-cancel").addEventListener("click", ()=>{
+  document.getElementById("checkout-modal").classList.remove("show");
+});
+document.getElementById("checkout-modal-confirm").addEventListener("click", async ()=>{
+  if(!checkoutModalTarget) return;
+  const { eq, targetStatus } = checkoutModalTarget;
+  const returnDueDate = document.getElementById("checkout-return-date").value;
+  const isNewHolder = (eq.status||"in_stock")==="in_stock";
+  const extra = { returnDueDate };
+  if(isNewHolder){
+    extra.holderEmail = currentUser.email;
+    extra.holderName = currentUser.displayName || currentUser.email;
+    extra.holderSince = new Date().toISOString();
+  }
+  try{
+    await updateDoc(doc(db,"equipment", eq.id), Object.assign({ status: targetStatus }, extra));
+    toast(`「${eq.name}」を${equipmentStatusInfo(targetStatus).label}に変更しました。`);
+    document.getElementById("checkout-modal").classList.remove("show");
+  }catch(e){
+    document.getElementById("checkout-modal-error").textContent = "更新に失敗しました。権限をご確認ください。";
+  }
+});
+
+let inspectionModalTarget = null;
+function openInspectionDateModal(eq){
+  inspectionModalTarget = eq;
+  document.getElementById("inspection-modal-title").textContent = `「${eq.name}」の前回点検日を編集`;
+  document.getElementById("inspection-date-input").value = eq.lastInspectionDate || "";
+  document.getElementById("inspection-modal-error").textContent = "";
+  document.getElementById("inspection-modal").classList.add("show");
+}
+document.getElementById("inspection-modal-cancel").addEventListener("click", ()=>{
+  document.getElementById("inspection-modal").classList.remove("show");
+});
+document.getElementById("inspection-modal-save").addEventListener("click", async ()=>{
+  if(!inspectionModalTarget) return;
+  const dateVal = document.getElementById("inspection-date-input").value;
+  try{
+    await updateDoc(doc(db,"equipment", inspectionModalTarget.id), { lastInspectionDate: dateVal });
+    toast("点検日を更新しました。");
+    document.getElementById("inspection-modal").classList.remove("show");
+  }catch(e){
+    document.getElementById("inspection-modal-error").textContent = "更新に失敗しました。権限をご確認ください。";
+  }
+});
 
 function escapeHtml(s){
   return String(s??"").replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
