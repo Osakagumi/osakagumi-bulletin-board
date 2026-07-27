@@ -17,10 +17,21 @@ export const BUSINESS_HOURS = {
 };
 
 // 設備カテゴリの定義
+// mode: "timeline" = 時間枠を予約する形式（会議室・車輌など）
+//       "checkout" = 貸出管理（在庫中・貸出中・点検中・故障中）形式（測量機器・ドローンなど）
 export const CATEGORIES = [
-  { id: "room",    label: "会議室",       color: "#2E9E8F" },
-  { id: "vehicle", label: "業務共用車輌", color: "#4B5FA3" },
-  { id: "survey",  label: "測量機器",     color: "#E8853F" }
+  { id: "room",    label: "会議室",       color: "#2E9E8F", mode: "timeline" },
+  { id: "vehicle", label: "業務共用車輌", color: "#4B5FA3", mode: "timeline" },
+  { id: "survey",  label: "測量機器",     color: "#E8853F", mode: "checkout" },
+  { id: "drone",   label: "ドローン",     color: "#6B5B95", mode: "checkout" }
+];
+
+// 貸出管理（checkoutモード）の状態定義
+export const EQUIPMENT_STATUSES = [
+  { id: "in_stock",    label: "在庫中", color: "#2E9E8F" },
+  { id: "checked_out", label: "貸出中", color: "#4B5FA3" },
+  { id: "inspecting",  label: "点検中", color: "#8A5FBF" },
+  { id: "broken",      label: "故障中", color: "#C0392B" }
 ];
 
 // 行き先ボードの「所属」「状態」は、管理画面（admin.html）から自由に追加・編集できます。
@@ -73,3 +84,4 @@ export function isMailOverrideActive(){
   const override = (MAIL_SEND_TARGET || "").trim();
   return override !== "" && override !== "*";
 }
+
