@@ -33,6 +33,12 @@ service cloud.firestore {
           exists(/databases/$(database)/documents/whereabouts_editors/$(request.auth.token.email)));
     }
 
+    function isEquipmentManager() {
+      return isAdmin() ||
+        (isSignedIn() &&
+          exists(/databases/$(database)/documents/equipment_managers/$(request.auth.token.email)));
+    }
+
     // 管理者一覧: ログインしていれば読めるが、書き込みは管理者のみ
     match /admins/{email} {
       allow read: if isSignedIn();
@@ -74,10 +80,24 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // 設備マスタ: ログインしていれば読めるが、追加・編集・削除は管理者のみ
-    match /equipment/{equipmentId} {
+    // 測量機器管理者一覧（点検日の編集・貸出状態の管理ができる人）: 全員が読める。書き込みは管理者のみ。
+    match /equipment_managers/{email} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
+    }
+
+    // 設備マスタ: ログインしていれば読める。
+    // 追加・削除・基本情報の編集は管理者のみ。
+    // 状態変更（在庫中・貸出中・点検中・故障中）は、在庫中からの操作は誰でも、
+    // それ以外は測量機器管理者、または現在の借用者本人が可能。
+    match /equipment/{equipmentId} {
+      allow read: if isSignedIn();
+      allow create, delete: if isAdmin();
+      allow update: if isSignedIn() &&
+        (isAdmin() || isEquipmentManager() ||
+          !("status" in resource.data) ||
+          resource.data.status == "in_stock" ||
+          resource.data.holderEmail == request.auth.token.email);
     }
 
     // 予約: ログインしていれば読める。
