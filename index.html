@@ -378,7 +378,12 @@
         <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">本文</label>
         <textarea id="notice-body" style="min-height:110px;"></textarea>
       </div>
+      <div class="field" style="display:flex;align-items:center;gap:6px;">
+        <input type="checkbox" id="notice-send-email" checked style="width:auto;">
+        <label style="margin:0;font-size:12.5px;color:var(--text);">社員全員に同じ内容をメールでも送信する</label>
+      </div>
       <div class="modal-err" id="notice-error"></div>
+      <div id="notice-send-status" style="font-size:12px;color:var(--muted);margin-top:6px;"></div>
       <div class="row-btns">
         <button class="btn-ghost" id="notice-cancel" style="border:1px solid var(--line);">キャンセル</button>
         <button class="btn-primary" id="notice-submit">投稿する</button>
@@ -425,20 +430,29 @@
 
   <div class="toast" id="toast"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  getFirestore, collection, doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, query, where,
+  getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, addDoc, deleteDoc, query, where,
   onSnapshot, orderBy, limit, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig, BUSINESS_HOURS, CATEGORIES, SAFETY_STATUSES } from "./firebase-config.js";
+import { firebaseConfig, BUSINESS_HOURS, CATEGORIES, SAFETY_STATUSES, EMAILJS_CONFIG, resolveMailRecipients, isMailOverrideActive, MAIL_SEND_TARGET } from "./firebase-config.js";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+
+const emailjsReady = !!(window.emailjs && EMAILJS_CONFIG.publicKey && !EMAILJS_CONFIG.publicKey.startsWith("YOUR_"));
+if(emailjsReady){
+  window.emailjs.init(EMAILJS_CONFIG.publicKey);
+}
+function indexPageUrl(){
+  return location.href.split(/[?#]/)[0];
+}
 
 /* ---------- メールリンクからの自動入力・自動選択 ---------- */
 const urlParams = new URLSearchParams(location.search);
@@ -1032,14 +1046,33 @@ document.getElementById("notice-new-btn").addEventListener("click", ()=>{
   document.getElementById("notice-title").value = "";
   document.getElementById("notice-body").value = "";
   document.getElementById("notice-error").textContent = "";
+  document.getElementById("notice-send-status").textContent = "";
   noticeModal.classList.add("show");
 });
 document.getElementById("notice-cancel").addEventListener("click", ()=> noticeModal.classList.remove("show"));
 document.getElementById("notice-submit").addEventListener("click", async ()=>{
   const title = document.getElementById("notice-title").value.trim();
   const body = document.getElementById("notice-body").value.trim();
+  const sendEmail = document.getElementById("notice-send-email").checked;
   const errEl = document.getElementById("notice-error");
+  const statusEl = document.getElementById("notice-send-status");
   if(!title){ errEl.textContent = "タイトルを入力してください。"; return; }
+  errEl.textContent = "";
+  statusEl.textContent = "";
+
+  if(sendEmail){
+    // 送信直前にFirestoreから最新の社員名簿を取得し直してから確認する
+    try{
+      const freshSnap = await getDocs(collection(db,"employees"));
+      employeesAll = freshSnap.docs.map(d=>({email:d.id, ...d.data()}));
+    }catch(e){ /* 取得失敗時はキャッシュのまま表示を続行 */ }
+    const recipients = resolveMailRecipients(employeesAll);
+    const overrideNotice = isMailOverrideActive()
+      ? `\n\n※現在メール送信先が「${MAIL_SEND_TARGET}」に上書き設定されているため、上記の人数・宛先のみに送信されます（全社員には送信されません）。`
+      : "";
+    if(!confirm(`このお知らせを投稿し、${recipients.length} 名にメールも送信します。${overrideNotice}\n\nよろしいですか？`)) return;
+  }
+
   try{
     await addDoc(collection(db,"announcements"), {
       title, body,
@@ -1047,12 +1080,48 @@ document.getElementById("notice-submit").addEventListener("click", async ()=>{
       authorName: currentUser.displayName || currentUser.email,
       createdAt: Timestamp.now()
     });
-    noticeModal.classList.remove("show");
     toast("お知らせを投稿しました。");
+    if(sendEmail){
+      await sendNoticeEmails(title, body);
+    }
+    noticeModal.classList.remove("show");
   }catch(e){
     errEl.textContent = "投稿に失敗しました。権限をご確認ください。";
   }
 });
+
+async function sendNoticeEmails(title, body){
+  const statusEl = document.getElementById("notice-send-status");
+  const noticeTemplateReady = emailjsReady && EMAILJS_CONFIG.noticeTemplateId && !EMAILJS_CONFIG.noticeTemplateId.startsWith("YOUR_");
+  if(!noticeTemplateReady){
+    statusEl.textContent = "（EmailJSのお知らせ用テンプレートが未設定のため、メール送信はスキップされました）";
+    return;
+  }
+  const recipients = resolveMailRecipients(employeesAll);
+  if(recipients.length===0){
+    statusEl.textContent = "送信先の社員データがありません。";
+    return;
+  }
+  let ok = 0, fail = 0;
+  const link = indexPageUrl();
+  for(const emp of recipients){
+    try{
+      await window.emailjs.send(EMAILJS_CONFIG.serviceId, EMAILJS_CONFIG.noticeTemplateId, {
+        to_email: emp.email,
+        to_name: emp.name || emp.email,
+        title, message: body,
+        author_name: currentUser.displayName || currentUser.email,
+        link
+      });
+      ok++;
+    }catch(e){
+      fail++;
+    }
+    statusEl.textContent = `メール送信中… ${ok+fail}/${recipients.length}（成功${ok}・失敗${fail}）`;
+    await new Promise(r=>setTimeout(r, 300));
+  }
+  statusEl.textContent = `メール送信完了：${recipients.length}件中 ${ok}件成功${fail>0 ? `（${fail}件失敗）` : ""}`;
+}
 
 /* =========================================================
    行き先ボード
