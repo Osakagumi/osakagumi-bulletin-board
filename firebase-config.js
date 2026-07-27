@@ -41,7 +41,7 @@ export const EMAILJS_CONFIG = {
   publicKey: "29JtZyFekWscWEfBU",
   serviceId: "service_10htgiq",
   safetyTemplateId: "template_7pjv16s",
-  noticeTemplateId: "YOUR_EMAILJS_NOTICE_TEMPLATE_ID"
+  noticeTemplateId: "template_41c80qr"
 };
 
 // メール送信先の上書き設定（テスト・誤送信防止用）
@@ -73,4 +73,3 @@ export function isMailOverrideActive(){
   const override = (MAIL_SEND_TARGET || "").trim();
   return override !== "" && override !== "*";
 }
-
