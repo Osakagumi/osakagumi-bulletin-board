@@ -360,7 +360,7 @@ import {
   getFirestore, collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, setDoc,
   query, where, onSnapshot, orderBy, limit, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig, CATEGORIES, SAFETY_STATUSES, EMAILJS_CONFIG } from "./firebase-config.js";
+import { firebaseConfig, CATEGORIES, SAFETY_STATUSES, EMAILJS_CONFIG, resolveMailRecipients, isMailOverrideActive, MAIL_SEND_TARGET } from "./firebase-config.js";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -1089,7 +1089,7 @@ async function sendSafetyEmails(campaignId, title, message){
     statusEl.textContent = "（EmailJSが未設定のため、メール送信はスキップされました）";
     return;
   }
-  const recipients = employeesAll.filter(e=> !!e.email);
+  const recipients = resolveMailRecipients(employeesAll);
   if(recipients.length===0){
     statusEl.textContent = "送信先の社員データがありません。";
     return;
@@ -1100,7 +1100,7 @@ async function sendSafetyEmails(campaignId, title, message){
     `${base}?campaign=${encodeURIComponent(campaignId)}&status=${status}&email=${encodeURIComponent(email)}`;
   for(const emp of recipients){
     try{
-      await window.emailjs.send(EMAILJS_CONFIG.serviceId, EMAILJS_CONFIG.templateId, {
+      await window.emailjs.send(EMAILJS_CONFIG.serviceId, EMAILJS_CONFIG.safetyTemplateId, {
         to_email: emp.email,
         to_name: emp.name || emp.email,
         title, message,
@@ -1125,7 +1125,23 @@ document.getElementById("safety-launch-btn").addEventListener("click", async ()=
   const sendEmail = document.getElementById("safety-send-email").checked;
   const statusEl = document.getElementById("safety-launch-status");
   if(!title){ toast("タイトルを入力してください。"); return; }
-  if(!confirm("安否確認を発信します。よろしいですか？")) return;
+
+  // 発信直前に、キャッシュではなくFirestoreから直接最新の社員名簿を取得する
+  // （CSV登録直後などにキャッシュが古いまま確認ダイアログが出るのを防ぐため）
+  try{
+    const freshSnap = await getDocs(collection(db,"employees"));
+    employeesAll = freshSnap.docs.map(d=>({email:d.id, ...d.data()}));
+  }catch(e){ /* 取得失敗時はキャッシュのまま表示を続行 */ }
+
+  const recipients = resolveMailRecipients(employeesAll);
+  const overrideNotice = isMailOverrideActive()
+    ? `\n\n※現在メール送信先が「${MAIL_SEND_TARGET}」に上書き設定されているため、上記の人数・宛先のみに送信されます（全社員には送信されません）。`
+    : "";
+  const confirmMsg = sendEmail
+    ? `この内容で安否確認を発信します。\n\n${recipients.length} 名にメールも送信されます。${overrideNotice}\n\nよろしいですか？`
+    : `この内容で安否確認を発信します（メール送信はチェックが外れているため行いません）。\n\nよろしいですか？`;
+  if(!confirm(confirmMsg)) return;
+
   statusEl.textContent = "";
   try{
     const activeOnes = safetyCampaignsAll.filter(c=>c.active);
