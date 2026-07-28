@@ -202,6 +202,10 @@
   .notice-item .n-actions button:hover{background:var(--danger);color:#fff;}
 
   /* ---------- 行き先 ---------- */
+  .wb-list-columns{display:grid;grid-template-columns:1fr;gap:14px;align-items:start;}
+  @media (min-width:820px){
+    .wb-list-columns{grid-template-columns:1fr 1fr;}
+  }
   .wb-table{width:100%;border-collapse:collapse;font-size:13px;background:var(--surface);border:1.5px solid var(--line);border-radius:10px;overflow:hidden;}
   .wb-table th{text-align:left;padding:9px 10px;background:#F0F3F8;color:var(--muted);font-size:11.5px;font-weight:700;border-bottom:1px solid var(--line);}
   .wb-table td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:middle;}
@@ -371,10 +375,16 @@
           <button class="btn-primary" id="wb-edit-my-btn">自分の行き先を入力</button>
         </div>
         <div id="wb-list-view">
-          <table class="wb-table">
-            <thead><tr><th>所属</th><th>氏名</th><th>状態</th><th>備考</th></tr></thead>
-            <tbody id="wb-table-body"></tbody>
-          </table>
+          <div class="wb-list-columns">
+            <table class="wb-table">
+              <thead><tr><th>所属</th><th>氏名</th><th>状態</th><th>備考</th></tr></thead>
+              <tbody id="wb-table-body-a"></tbody>
+            </table>
+            <table class="wb-table">
+              <thead><tr><th>所属</th><th>氏名</th><th>状態</th><th>備考</th></tr></thead>
+              <tbody id="wb-table-body-b"></tbody>
+            </table>
+          </div>
         </div>
         <div id="wb-board-view" style="display:none;">
           <div class="wb-board" id="wb-board"></div>
@@ -1459,15 +1469,18 @@ function renderWhereabouts(){
 }
 
 function renderWbList(){
-  const body = document.getElementById("wb-table-body");
-  if(!body) return;
-  body.innerHTML = "";
+  const bodyA = document.getElementById("wb-table-body-a");
+  const bodyB = document.getElementById("wb-table-body-b");
+  if(!bodyA || !bodyB) return;
+  bodyA.innerHTML = "";
+  bodyB.innerHTML = "";
   const list = getSortedEmployees();
   if(list.length===0){
-    body.innerHTML = `<tr><td colspan="4" class="empty-state">まだ社員データがありません。ログインすると自動的に登録されます。</td></tr>`;
+    bodyA.innerHTML = `<tr><td colspan="4" class="empty-state">まだ社員データがありません。ログインすると自動的に登録されます。</td></tr>`;
     return;
   }
-  list.forEach(emp=>{
+
+  function buildRow(emp){
     const canEdit = isAdmin || isWhereaboutsEditor || emp.email===currentUser.email;
     const st = wbStatusInfo(emp.status);
     const tr = document.createElement("tr");
@@ -1486,8 +1499,13 @@ function renderWbList(){
     tdNote.className = "wb-note-cell";
     tdNote.textContent = emp.note || "";
     tr.appendChild(tdDept); tr.appendChild(tdName); tr.appendChild(tdStatus); tr.appendChild(tdNote);
-    body.appendChild(tr);
-  });
+    return tr;
+  }
+
+  // 上から読んで、続きが右列（2列目）に入る新聞のような段組
+  const half = Math.ceil(list.length/2);
+  list.slice(0, half).forEach(emp=> bodyA.appendChild(buildRow(emp)));
+  list.slice(half).forEach(emp=> bodyB.appendChild(buildRow(emp)));
 }
 
 function renderWbBoard(){
