@@ -475,6 +475,10 @@
   <div class="modal-overlay" id="checkout-modal">
     <div class="modal">
       <h3 id="checkout-modal-title">貸出する</h3>
+      <div class="field" id="checkout-recipient-field" style="display:none;">
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">貸出先</label>
+        <select id="checkout-recipient-select" style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;"></select>
+      </div>
       <div class="field">
         <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">返却予定日（任意）</label>
         <button type="button" class="date-field-btn placeholder" id="checkout-return-date" data-value=""></button>
@@ -938,22 +942,28 @@ function renderCheckoutGrid(grid, items){
     const canOp = canOperateEquipment(eq);
     const status = eq.status || "in_stock";
 
-    function addBtn(label, targetStatus, needsDateModal){
+    function addBtn(label, targetStatus, needsDateModal, lendMode){
       const btn = document.createElement("button");
       btn.className = "btn-checkout-action";
       btn.textContent = label;
       btn.addEventListener("click", ()=>{
         if(needsDateModal){
-          openCheckoutModal(eq, targetStatus);
+          openCheckoutModal(eq, targetStatus, lendMode ? "lend" : "borrow");
         } else {
           confirmAndTransition(eq, targetStatus);
         }
       });
       actions.appendChild(btn);
     }
+    function addCheckoutButtons(targetStatus){
+      // 借りる：誰でも可能（自分が借用者になる）
+      addBtn("借りる", targetStatus, true, false);
+      // 貸出する：測量機器管理者のみ（貸出先を選択できる）
+      if(isEquipmentManager) addBtn("貸出する", targetStatus, true, true);
+    }
 
     if(status==="in_stock"){
-      addBtn("貸出する", "checked_out", true);
+      addCheckoutButtons("checked_out");
       addBtn("点検に出す", "inspecting", false);
       if(isEquipmentManager) addBtn("故障として登録", "broken", false);
     } else if(canOp){
@@ -962,10 +972,10 @@ function renderCheckoutGrid(grid, items){
         addBtn("点検に出す", "inspecting", false);
       } else if(status==="inspecting"){
         addBtn("在庫に戻す（点検完了）", "in_stock", false);
-        addBtn("貸出にする", "checked_out", true);
+        addCheckoutButtons("checked_out");
       } else if(status==="broken"){
         addBtn("在庫に戻す", "in_stock", false);
-        addBtn("貸出にする", "checked_out", true);
+        addCheckoutButtons("checked_out");
         addBtn("点検中にする", "inspecting", false);
       }
       if(status!=="broken") addBtn("故障として報告", "broken", false);
@@ -1000,10 +1010,29 @@ async function confirmAndTransition(eq, targetStatus, extra){
 }
 
 let checkoutModalTarget = null;
-function openCheckoutModal(eq, targetStatus){
-  checkoutModalTarget = { eq, targetStatus };
-  document.getElementById("checkout-modal-title").textContent =
-    `「${eq.name}」を${equipmentStatusInfo(targetStatus).label}にする`;
+function openCheckoutModal(eq, targetStatus, mode){
+  checkoutModalTarget = { eq, targetStatus, mode: mode||"borrow" };
+  const isLend = checkoutModalTarget.mode === "lend";
+  document.getElementById("checkout-modal-title").textContent = isLend
+    ? `「${eq.name}」を貸し出す`
+    : `「${eq.name}」を借りる`;
+
+  const recipientField = document.getElementById("checkout-recipient-field");
+  recipientField.style.display = isLend ? "block" : "none";
+  if(isLend){
+    const select = document.getElementById("checkout-recipient-select");
+    select.innerHTML = "";
+    const sortedEmployees = employeesAll.slice().filter(e=>!!e.email)
+      .sort((a,b)=> (a.name||a.email).localeCompare(b.name||b.email, "ja"));
+    sortedEmployees.forEach(emp=>{
+      const opt = document.createElement("option");
+      opt.value = emp.email;
+      opt.textContent = emp.name || emp.email;
+      select.appendChild(opt);
+    });
+    // 現在ログイン中の自分をデフォルト選択にしない（誰かに貸し出す想定のため一覧の先頭のまま）
+  }
+
   setDateFieldValue(document.getElementById("checkout-return-date"), eq.returnDueDate || "");
   document.getElementById("checkout-modal-error").textContent = "";
   document.getElementById("checkout-modal").classList.add("show");
@@ -1020,15 +1049,22 @@ document.getElementById("checkout-modal-cancel").addEventListener("click", ()=>{
 });
 document.getElementById("checkout-modal-confirm").addEventListener("click", async ()=>{
   if(!checkoutModalTarget) return;
-  const { eq, targetStatus } = checkoutModalTarget;
+  const { eq, targetStatus, mode } = checkoutModalTarget;
+  const errEl = document.getElementById("checkout-modal-error");
   const returnDueDate = document.getElementById("checkout-return-date").dataset.value || "";
-  const isNewHolder = (eq.status||"in_stock")==="in_stock";
   const extra = { returnDueDate };
-  if(isNewHolder){
+  if(mode==="lend"){
+    const select = document.getElementById("checkout-recipient-select");
+    const recipientEmail = select.value;
+    if(!recipientEmail){ errEl.textContent = "貸出先を選択してください。"; return; }
+    const recipient = employeesAll.find(e=>e.email===recipientEmail);
+    extra.holderEmail = recipientEmail;
+    extra.holderName = (recipient && recipient.name) || recipientEmail;
+  } else {
     extra.holderEmail = currentUser.email;
     extra.holderName = myDisplayName();
-    extra.holderSince = new Date().toISOString();
   }
+  extra.holderSince = new Date().toISOString();
   try{
     await updateDoc(doc(db,"equipment", eq.id), Object.assign({ status: targetStatus }, extra));
     toast(`「${eq.name}」を${equipmentStatusInfo(targetStatus).label}に変更しました。`);
