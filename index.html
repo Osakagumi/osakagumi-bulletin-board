@@ -499,9 +499,9 @@
           本日、時間休を設定する
         </label>
         <div id="wb-timeleave-fields" style="display:none;gap:8px;align-items:center;">
-          <input type="time" id="wb-timeleave-start" style="flex:1;padding:8px;border:1px solid var(--line);border-radius:7px;font-size:13px;">
+          <input type="time" id="wb-timeleave-start" step="1800" style="flex:1;padding:8px;border:1px solid var(--line);border-radius:7px;font-size:13px;">
           <span style="color:var(--muted);">〜</span>
-          <input type="time" id="wb-timeleave-end" style="flex:1;padding:8px;border:1px solid var(--line);border-radius:7px;font-size:13px;">
+          <input type="time" id="wb-timeleave-end" step="1800" style="flex:1;padding:8px;border:1px solid var(--line);border-radius:7px;font-size:13px;">
         </div>
         <p style="font-size:11px;color:var(--muted);margin:6px 0 0;">設定した時間帯だけ、自動的に「休み」表示になります（他の時間帯は通常の状態のままです）。</p>
       </div>
@@ -2188,6 +2188,11 @@ document.getElementById("wb-save").addEventListener("click", async ()=>{
   if(tlChecked){
     if(!tlStart || !tlEnd){
       errEl.textContent = "時間休の開始・終了時刻を入力してください。";
+      return;
+    }
+    const isHalfHour = (t)=> t.endsWith(":00") || t.endsWith(":30");
+    if(!isHalfHour(tlStart) || !isHalfHour(tlEnd)){
+      errEl.textContent = "時間休は30分単位（◯◯:00 または ◯◯:30）で設定してください。";
       return;
     }
     if(tlStart >= tlEnd){
