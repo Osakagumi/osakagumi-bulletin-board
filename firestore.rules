@@ -63,6 +63,12 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // アプリ全体の設定（行き先ビューの列数など）: 全員が読める。書き込みは管理者のみ。
+    match /app_settings/{settingId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
     // 行き先ステータスマスタ（在席・外出・現場・休みなど）: 全員が読める。管理は管理者のみ。
     match /wb_statuses/{statusId} {
       allow read: if isSignedIn();
