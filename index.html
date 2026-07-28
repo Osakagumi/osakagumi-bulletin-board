@@ -1722,7 +1722,8 @@ function initEmployeesListener(){
 }
 
 function myDisplayName(){
-  const me = employeesAll.find(e=>e.email===currentUser.email);
+  const meEmail = (currentUser.email||"").toLowerCase();
+  const me = employeesAll.find(e=>(e.email||"").toLowerCase()===meEmail);
   return (me && me.name) || currentUser.displayName || currentUser.email;
 }
 
@@ -1820,7 +1821,9 @@ function renderWbList(){
 
   // 「列数」は上限として扱い、実際の幅で1列あたり最低260px確保できる数まで自動的に減らす
   const MIN_COL_WIDTH = 260 * (wbFontSizePx/13);
-  const availableWidth = container.clientWidth || container.parentElement?.clientWidth || 960;
+  const availableWidth = isDisplayMode
+    ? (window.innerWidth - 40)
+    : (container.clientWidth || container.parentElement?.clientWidth || 960);
   const maxColsByWidth = Math.max(1, Math.floor(availableWidth / MIN_COL_WIDTH));
   const cols = Math.min(4, Math.max(1, wbListColumns||1), maxColsByWidth);
   container.style.setProperty("--wb-cols", cols);
