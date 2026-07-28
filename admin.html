@@ -286,7 +286,7 @@
     <!-- ============ 行き先管理 ============ -->
     <section id="view-whereabouts" style="display:none;">
       <div class="panel">
-        <h2>行き先ビューの表示設定</h2>
+        <h2>行き先ビューの表示設定（一般画面）</h2>
         <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">社員側の「行き先」タブ・一覧表示（PCなど画面が広い場合）の見た目を設定します。スマホなど狭い画面では常に1列・幅いっぱいで表示されます。</p>
         <div class="form-grid">
           <div class="field">
@@ -308,9 +308,21 @@
       <div class="panel">
         <h2>サイネージ表示（玄関などの大型ディスプレイ用）</h2>
         <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-          専用のURLで開くと、ヘッダーや他のタブを隠し、行き先だけを画面いっぱいに自動縮小して表示します。人数や項目が増えても自動調整されるので、PCの外付けモニターなどでブラウザを開きっぱなしにしてご利用ください（ログイン状態が保たれていれば自動更新されます）。
+          専用のURLで開くと、ヘッダーや他のタブを隠し、行き先だけを画面いっぱいに自動縮小して表示します。ここでの列数・幅・文字サイズは、一般画面とは別に保存されます。PCの外付けモニターなどでブラウザを開きっぱなしにしてご利用ください（ログイン状態が保たれていれば自動更新されます）。
         </p>
         <div class="form-grid">
+          <div class="field">
+            <label>列数（1〜4）</label>
+            <input type="number" id="wb-kiosk-columns-input" min="1" max="4" value="2">
+          </div>
+          <div class="field">
+            <label>表示エリアの最大幅（px、空欄で無制限）</label>
+            <input type="number" id="wb-kiosk-width-input" min="400" placeholder="例）1600">
+          </div>
+          <div class="field">
+            <label>文字サイズ（px、標準13）</label>
+            <input type="number" id="wb-kiosk-fontsize-input" min="10" max="40" value="13">
+          </div>
           <div class="field">
             <label>サイネージ表示の初期ビュー</label>
             <select id="wb-kiosk-default-view">
@@ -766,27 +778,31 @@ document.getElementById("poster-add-btn").addEventListener("click", async ()=>{
 function initWbColumnsListener(){
   onSnapshot(doc(db,"app_settings","whereabouts"), snap=>{
     const data = snap.exists() ? snap.data() : {};
+
+    // 一般画面
     const cols = data.listColumns || 2;
     const widthPx = data.displayWidthPx || "";
     const fontSize = data.fontSizePx || 13;
-    const kioskView = data.kioskDefaultView || "list";
-
     const colsInput = document.getElementById("wb-columns-input");
-    if(colsInput && document.activeElement !== colsInput){
-      colsInput.value = cols;
-    }
+    if(colsInput && document.activeElement !== colsInput){ colsInput.value = cols; }
     const widthInput = document.getElementById("wb-width-input");
-    if(widthInput && document.activeElement !== widthInput){
-      widthInput.value = widthPx;
-    }
+    if(widthInput && document.activeElement !== widthInput){ widthInput.value = widthPx; }
     const fontInput = document.getElementById("wb-fontsize-input");
-    if(fontInput && document.activeElement !== fontInput){
-      fontInput.value = fontSize;
-    }
+    if(fontInput && document.activeElement !== fontInput){ fontInput.value = fontSize; }
+
+    // サイネージ表示
+    const kioskCols = data.kioskListColumns || 2;
+    const kioskWidthPx = data.kioskDisplayWidthPx || "";
+    const kioskFontSize = data.kioskFontSizePx || 13;
+    const kioskView = data.kioskDefaultView || "list";
+    const kioskColsInput = document.getElementById("wb-kiosk-columns-input");
+    if(kioskColsInput && document.activeElement !== kioskColsInput){ kioskColsInput.value = kioskCols; }
+    const kioskWidthInput = document.getElementById("wb-kiosk-width-input");
+    if(kioskWidthInput && document.activeElement !== kioskWidthInput){ kioskWidthInput.value = kioskWidthPx; }
+    const kioskFontInput = document.getElementById("wb-kiosk-fontsize-input");
+    if(kioskFontInput && document.activeElement !== kioskFontInput){ kioskFontInput.value = kioskFontSize; }
     const kioskSelect = document.getElementById("wb-kiosk-default-view");
-    if(kioskSelect && document.activeElement !== kioskSelect){
-      kioskSelect.value = kioskView;
-    }
+    if(kioskSelect && document.activeElement !== kioskSelect){ kioskSelect.value = kioskView; }
   });
 }
 document.getElementById("wb-columns-save-btn").addEventListener("click", async ()=>{
@@ -800,15 +816,28 @@ document.getElementById("wb-columns-save-btn").addEventListener("click", async (
   document.getElementById("wb-fontsize-input").value = fontSize;
   try{
     await setDoc(doc(db,"app_settings","whereabouts"), { listColumns: cols, displayWidthPx: widthPx, fontSizePx: fontSize }, { merge:true });
-    toast("表示設定を保存しました。");
+    toast("一般画面の表示設定を保存しました。");
   }catch(e){
     toast("保存に失敗しました。");
   }
 });
 document.getElementById("wb-kiosk-save-btn").addEventListener("click", async ()=>{
+  let kioskCols = Number(document.getElementById("wb-kiosk-columns-input").value) || 2;
+  kioskCols = Math.min(4, Math.max(1, Math.round(kioskCols)));
+  document.getElementById("wb-kiosk-columns-input").value = kioskCols;
+  const kioskWidthRaw = document.getElementById("wb-kiosk-width-input").value.trim();
+  const kioskWidthPx = kioskWidthRaw ? Math.max(400, Number(kioskWidthRaw)||0) : null;
+  let kioskFontSize = Number(document.getElementById("wb-kiosk-fontsize-input").value) || 13;
+  kioskFontSize = Math.min(40, Math.max(10, Math.round(kioskFontSize)));
+  document.getElementById("wb-kiosk-fontsize-input").value = kioskFontSize;
   const kioskView = document.getElementById("wb-kiosk-default-view").value;
   try{
-    await setDoc(doc(db,"app_settings","whereabouts"), { kioskDefaultView: kioskView }, { merge:true });
+    await setDoc(doc(db,"app_settings","whereabouts"), {
+      kioskListColumns: kioskCols,
+      kioskDisplayWidthPx: kioskWidthPx,
+      kioskFontSizePx: kioskFontSize,
+      kioskDefaultView: kioskView
+    }, { merge:true });
     toast("サイネージ表示の設定を保存しました。");
   }catch(e){
     toast("保存に失敗しました。");
