@@ -602,6 +602,7 @@ onAuthStateChanged(auth, async (user)=>{
     document.getElementById("login-screen").style.display = "none";
     document.getElementById("app").style.display = "flex";
     document.getElementById("user-email").textContent = user.email;
+    updateHeaderUserLabel();
     try{
       const adminDoc = await getDoc(doc(db, "admins", user.email));
       isAdmin = adminDoc.exists();
@@ -965,7 +966,7 @@ document.getElementById("checkout-modal-confirm").addEventListener("click", asyn
   const extra = { returnDueDate };
   if(isNewHolder){
     extra.holderEmail = currentUser.email;
-    extra.holderName = currentUser.displayName || currentUser.email;
+    extra.holderName = myDisplayName();
     extra.holderSince = new Date().toISOString();
   }
   try{
@@ -1208,7 +1209,7 @@ async function confirmReservation(){
       purpose,
       userId: currentUser.uid,
       userEmail: currentUser.email,
-      userName: currentUser.displayName || currentUser.email,
+      userName: myDisplayName(),
       createdAt: Timestamp.now()
     });
     reserveModal.classList.remove("show");
@@ -1351,7 +1352,7 @@ document.getElementById("notice-submit").addEventListener("click", async ()=>{
     await addDoc(collection(db,"announcements"), {
       title, body,
       authorEmail: currentUser.email,
-      authorName: currentUser.displayName || currentUser.email,
+      authorName: myDisplayName(),
       createdAt: Timestamp.now()
     });
     toast("お知らせを投稿しました。");
@@ -1384,7 +1385,7 @@ async function sendNoticeEmails(title, body){
         to_email: emp.email,
         to_name: emp.name || emp.email,
         title, message: body,
-        author_name: currentUser.displayName || currentUser.email,
+        author_name: myDisplayName(),
         link
       });
       ok++;
@@ -1418,7 +1419,18 @@ function initEmployeesListener(){
   onSnapshot(collection(db,"employees"), snap=>{
     employeesAll = snap.docs.map(d=>({ email:d.id, ...d.data() }));
     renderWhereabouts();
+    updateHeaderUserLabel();
   }, (err)=>{ console.error("[社員名簿取得エラー]", err); });
+}
+
+function myDisplayName(){
+  const me = employeesAll.find(e=>e.email===currentUser.email);
+  return (me && me.name) || currentUser.displayName || currentUser.email;
+}
+
+function updateHeaderUserLabel(){
+  if(!currentUser) return;
+  document.getElementById("user-email").textContent = myDisplayName();
 }
 
 function departmentName(id){
@@ -1662,7 +1674,7 @@ function renderSafety(){
         campaignTitle: activeSafetyCampaign.title,
         userId: currentUser.uid,
         userEmail: currentUser.email,
-        userName: currentUser.displayName || currentUser.email,
+        userName: myDisplayName(),
         status: checked.value,
         comment,
         respondedAt: Timestamp.now()
