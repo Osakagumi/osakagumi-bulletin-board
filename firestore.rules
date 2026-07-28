@@ -69,6 +69,13 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // 行き先の事前設定（次の営業日用の下書き・初期状態テンプレート・自動反映済み日付の記録）
+    // 全員が読める。書き込みは行き先の他者設定権限者・管理者のみ。
+    match /wb_presets/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isWhereaboutsEditor();
+    }
+
     // 行き先ステータスマスタ（在席・外出・現場・休みなど）: 全員が読める。管理は管理者のみ。
     match /wb_statuses/{statusId} {
       allow read: if isSignedIn();
