@@ -508,12 +508,12 @@
           本日、時間休を設定する
         </label>
         <div id="wb-timeleave-fields" style="display:none;flex-direction:column;gap:8px;">
-          <div style="display:flex;gap:6px;">
-            <button type="button" class="date-field-btn" id="wb-timeleave-am-btn" style="flex:1;text-align:center;">AM休（0:00〜13:00）</button>
-            <button type="button" class="date-field-btn" id="wb-timeleave-pm-btn" style="flex:1;text-align:center;">PM休（12:00〜23:30）</button>
+          <div class="seg-toggle" id="wb-timeleave-type-toggle" style="width:100%;">
+            <button type="button" class="seg-btn" data-tltype="am" style="flex:1;">AM休</button>
+            <button type="button" class="seg-btn" data-tltype="pm" style="flex:1;">PM休</button>
+            <button type="button" class="seg-btn" data-tltype="custom" style="flex:1;">時間休</button>
           </div>
-          <div style="font-size:11px;color:var(--muted);">または個別に時間を指定：</div>
-          <div style="display:flex;gap:8px;align-items:center;">
+          <div id="wb-timeleave-custom-fields" style="display:none;gap:8px;align-items:center;">
             <button type="button" class="date-field-btn placeholder" id="wb-timeleave-start" data-value="" style="flex:1;"></button>
             <span style="color:var(--muted);">〜</span>
             <button type="button" class="date-field-btn placeholder" id="wb-timeleave-end" data-value="" style="flex:1;"></button>
@@ -2240,30 +2240,42 @@ function openWbModal(email){
   tlFields.style.display = hasTimeLeaveToday ? "flex" : "none";
   setTimeFieldValue(document.getElementById("wb-timeleave-start"), hasTimeLeaveToday ? emp.timeLeaveStart : "");
   setTimeFieldValue(document.getElementById("wb-timeleave-end"), hasTimeLeaveToday ? emp.timeLeaveEnd : "");
-  wbTimeLeaveType = hasTimeLeaveToday ? (emp.timeLeaveType || "custom") : "";
+  selectTlType(hasTimeLeaveToday ? (emp.timeLeaveType || "custom") : "am");
 
   wbModal.classList.add("show");
 }
+
+function selectTlType(type){
+  wbTimeLeaveType = type;
+  document.querySelectorAll("#wb-timeleave-type-toggle .seg-btn").forEach(b=>{
+    b.classList.toggle("active", b.dataset.tltype===type);
+  });
+  document.getElementById("wb-timeleave-custom-fields").style.display = type==="custom" ? "flex" : "none";
+  if(type==="am"){
+    setTimeFieldValue(document.getElementById("wb-timeleave-start"), "00:00");
+    setTimeFieldValue(document.getElementById("wb-timeleave-end"), "13:00");
+  } else if(type==="pm"){
+    setTimeFieldValue(document.getElementById("wb-timeleave-start"), "12:00");
+    setTimeFieldValue(document.getElementById("wb-timeleave-end"), "23:30");
+  }
+}
+
 document.getElementById("wb-timeleave-check").addEventListener("change", (e)=>{
   document.getElementById("wb-timeleave-fields").style.display = e.target.checked ? "flex" : "none";
+  if(e.target.checked && !wbTimeLeaveType){
+    selectTlType("am");
+  }
 });
-document.getElementById("wb-timeleave-am-btn").addEventListener("click", ()=>{
-  setTimeFieldValue(document.getElementById("wb-timeleave-start"), "00:00");
-  setTimeFieldValue(document.getElementById("wb-timeleave-end"), "13:00");
-  wbTimeLeaveType = "am";
-});
-document.getElementById("wb-timeleave-pm-btn").addEventListener("click", ()=>{
-  setTimeFieldValue(document.getElementById("wb-timeleave-start"), "12:00");
-  setTimeFieldValue(document.getElementById("wb-timeleave-end"), "23:30");
-  wbTimeLeaveType = "pm";
+document.querySelectorAll("#wb-timeleave-type-toggle .seg-btn").forEach(btn=>{
+  btn.addEventListener("click", ()=> selectTlType(btn.dataset.tltype));
 });
 document.getElementById("wb-timeleave-start").addEventListener("click", (e)=>{
   const el = e.currentTarget;
-  openTimePicker(el, el.dataset.value, { onSelect: (val)=>{ setTimeFieldValue(el, val); wbTimeLeaveType = "custom"; } });
+  openTimePicker(el, el.dataset.value, { onSelect: (val)=> setTimeFieldValue(el, val) });
 });
 document.getElementById("wb-timeleave-end").addEventListener("click", (e)=>{
   const el = e.currentTarget;
-  openTimePicker(el, el.dataset.value, { onSelect: (val)=>{ setTimeFieldValue(el, val); wbTimeLeaveType = "custom"; } });
+  openTimePicker(el, el.dataset.value, { onSelect: (val)=> setTimeFieldValue(el, val) });
 });
 
 document.getElementById("wb-save").addEventListener("click", async ()=>{
