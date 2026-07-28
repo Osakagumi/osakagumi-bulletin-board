@@ -1451,6 +1451,14 @@ function initWbColumnsListener(){
       wrap.style.marginLeft = wbDisplayWidthPx ? "auto" : "";
       wrap.style.marginRight = wbDisplayWidthPx ? "auto" : "";
     }
+    // 通常表示（サイネージ以外）では main 自体が960pxで頭打ちになるため、
+    // 幅設定がある場合はmainの上限も広げる（スマホ幅では元々960px未満なので影響なし）
+    if(!isDisplayMode){
+      const mainEl = document.querySelector("main");
+      if(mainEl){
+        mainEl.style.maxWidth = wbDisplayWidthPx ? `${Math.max(960, wbDisplayWidthPx)}px` : "";
+      }
+    }
 
     if(isDisplayMode && !kioskDefaultViewApplied){
       kioskDefaultViewApplied = true;
