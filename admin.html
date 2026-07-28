@@ -90,7 +90,7 @@
     <button class="tab-btn active" data-view="equipment">設備管理</button>
     <button class="tab-btn" data-view="reservations">予約状況（全体）</button>
     <button class="tab-btn" data-view="admins">管理者管理</button>
-    <button class="tab-btn" data-view="userimport">ユーザー登録</button>
+    <button class="tab-btn" data-view="userimport">ユーザー管理</button>
     <button class="tab-btn" data-view="notices">お知らせ管理</button>
     <button class="tab-btn" data-view="whereabouts">行き先管理</button>
     <button class="tab-btn" data-view="safety">安否確認管理</button>
@@ -191,7 +191,7 @@
       <div class="panel">
         <h2>現在の管理者一覧</h2>
         <table>
-          <thead><tr><th>メールアドレス</th><th>操作</th></tr></thead>
+          <thead><tr><th>メールアドレス</th><th>氏名</th><th>操作</th></tr></thead>
           <tbody id="admin-table-body"></tbody>
         </table>
       </div>
@@ -230,6 +230,15 @@
         <button class="btn btn-primary" id="userimport-execute-btn" style="margin-top:12px;">この内容で登録を実行する</button>
         <div id="userimport-status" style="font-size:12.5px;color:var(--muted);margin-top:10px;white-space:pre-line;"></div>
       </div>
+
+      <div class="panel">
+        <h2>社員一覧（氏名・所属・並び順・電話番号・備考の編集）</h2>
+        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">ログインすると自動的にここへ追加されます。CSV一括登録した場合は社員番号・電話番号・備考も反映されています。</p>
+        <table>
+          <thead><tr><th>社員番号</th><th>氏名</th><th>メールアドレス</th><th>所属</th><th>並び順</th><th>電話番号</th><th>備考</th><th>操作</th></tr></thead>
+          <tbody id="emp-table-body"></tbody>
+        </table>
+      </div>
     </section>
 
     <!-- ============ お知らせ管理 ============ -->
@@ -248,7 +257,7 @@
       <div class="panel">
         <h2>投稿権限を持つ人一覧（管理者以外）</h2>
         <table>
-          <thead><tr><th>メールアドレス</th><th>操作</th></tr></thead>
+          <thead><tr><th>メールアドレス</th><th>氏名</th><th>操作</th></tr></thead>
           <tbody id="poster-table-body"></tbody>
         </table>
       </div>
@@ -312,17 +321,8 @@
         </div>
         <button class="btn btn-primary" id="wbeditor-add-btn">権限を追加</button>
         <table style="margin-top:14px;">
-          <thead><tr><th>メールアドレス</th><th>操作</th></tr></thead>
+          <thead><tr><th>メールアドレス</th><th>氏名</th><th>操作</th></tr></thead>
           <tbody id="wbeditor-table-body"></tbody>
-        </table>
-      </div>
-
-      <div class="panel">
-        <h2>社員一覧（氏名・所属・並び順・電話番号・備考の編集）</h2>
-        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">ログインすると自動的にここへ追加されます。CSV一括登録した場合は社員番号・電話番号・備考も反映されています。</p>
-        <table>
-          <thead><tr><th>社員番号</th><th>氏名</th><th>メールアドレス</th><th>所属</th><th>並び順</th><th>電話番号</th><th>備考</th><th>操作</th></tr></thead>
-          <tbody id="emp-table-body"></tbody>
         </table>
       </div>
     </section>
@@ -398,6 +398,10 @@ function escapeHtml(s){
   return String(s??"").replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 function catInfo(id){ return CATEGORIES.find(c=>c.id===id) || {label:id, color:"#888"}; }
+function nameForEmail(email){
+  const emp = employeesAll.find(e=>e.email===email);
+  return (emp && emp.name) || "";
+}
 function formatDateJP(dateStr){
   const d = new Date(dateStr + "T00:00:00");
   const labels = ["日","月","火","水","木","金","土"];
@@ -628,22 +632,23 @@ function renderReservationsTable(){
 }
 
 /* ============ 管理者管理 ============ */
+let lastAdminEmails = [];
 function initAdminsListener(){
   onSnapshot(collection(db,"admins"), snap=>{
-    const list = snap.docs.map(d=>d.id);
-    renderAdminsTable(list);
+    lastAdminEmails = snap.docs.map(d=>d.id);
+    renderAdminsTable(lastAdminEmails);
   });
 }
 function renderAdminsTable(list){
   const body = document.getElementById("admin-table-body");
   body.innerHTML = "";
   if(list.length===0){
-    body.innerHTML = `<tr><td colspan="2" class="empty">管理者が登録されていません。</td></tr>`;
+    body.innerHTML = `<tr><td colspan="3" class="empty">管理者が登録されていません。</td></tr>`;
     return;
   }
   list.forEach(email=>{
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${escapeHtml(email)}</td><td class="actions"></td>`;
+    tr.innerHTML = `<td>${escapeHtml(email)}</td><td>${escapeHtml(nameForEmail(email))}</td><td class="actions"></td>`;
     const btn = document.createElement("button");
     btn.className = "btn btn-danger"; btn.textContent = "削除";
     btn.addEventListener("click", async ()=>{
@@ -674,21 +679,23 @@ document.getElementById("admin-add-btn").addEventListener("click", async ()=>{
 /* ============================================================
    お知らせ管理（投稿権限）
 ============================================================ */
+let lastPosterEmails = [];
 function initPostersListener(){
   onSnapshot(collection(db,"announcement_posters"), snap=>{
-    renderPosters(snap.docs.map(d=>d.id));
+    lastPosterEmails = snap.docs.map(d=>d.id);
+    renderPosters(lastPosterEmails);
   });
 }
 function renderPosters(list){
   const body = document.getElementById("poster-table-body");
   body.innerHTML = "";
   if(list.length===0){
-    body.innerHTML = `<tr><td colspan="2" class="empty">管理者以外の投稿権限者はいません。</td></tr>`;
+    body.innerHTML = `<tr><td colspan="3" class="empty">管理者以外の投稿権限者はいません。</td></tr>`;
     return;
   }
   list.forEach(email=>{
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${escapeHtml(email)}</td><td class="actions"></td>`;
+    tr.innerHTML = `<td>${escapeHtml(email)}</td><td>${escapeHtml(nameForEmail(email))}</td><td class="actions"></td>`;
     const btn = document.createElement("button");
     btn.className = "btn btn-danger"; btn.textContent = "削除";
     btn.addEventListener("click", async ()=>{
@@ -877,21 +884,23 @@ document.getElementById("status-seed-btn").addEventListener("click", async ()=>{
 /* ============================================================
    行き先管理：他者設定権限
 ============================================================ */
+let lastWbEditorEmails = [];
 function initWbEditorsListener(){
   onSnapshot(collection(db,"whereabouts_editors"), snap=>{
-    renderWbEditors(snap.docs.map(d=>d.id));
+    lastWbEditorEmails = snap.docs.map(d=>d.id);
+    renderWbEditors(lastWbEditorEmails);
   });
 }
 function renderWbEditors(list){
   const body = document.getElementById("wbeditor-table-body");
   body.innerHTML = "";
   if(list.length===0){
-    body.innerHTML = `<tr><td colspan="2" class="empty">管理者以外の権限者はいません。</td></tr>`;
+    body.innerHTML = `<tr><td colspan="3" class="empty">管理者以外の権限者はいません。</td></tr>`;
     return;
   }
   list.forEach(email=>{
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${escapeHtml(email)}</td><td class="actions"></td>`;
+    tr.innerHTML = `<td>${escapeHtml(email)}</td><td>${escapeHtml(nameForEmail(email))}</td><td class="actions"></td>`;
     const btn = document.createElement("button");
     btn.className = "btn btn-danger"; btn.textContent = "削除";
     btn.addEventListener("click", async ()=>{
@@ -957,7 +966,7 @@ document.getElementById("eqmanager-add-btn").addEventListener("click", async ()=
 });
 
 /* ============================================================
-   行き先管理：社員一覧（氏名・所属・並び順）
+   ユーザー管理：社員一覧（氏名・所属・並び順）
 ============================================================ */
 let employeesAll = [];
 function initEmployeesListener(){
@@ -965,6 +974,9 @@ function initEmployeesListener(){
     employeesAll = snap.docs.map(d=>({email:d.id, ...d.data()}));
     employeesAll.sort((a,b)=> (a.name||"").localeCompare(b.name||"","ja"));
     renderEmployees();
+    renderAdminsTable(lastAdminEmails);
+    renderPosters(lastPosterEmails);
+    renderWbEditors(lastWbEditorEmails);
   });
 }
 function renderEmployees(){
