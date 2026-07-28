@@ -422,6 +422,7 @@
           <div class="seg-toggle" id="wb-view-toggle">
             <button class="seg-btn active" data-wbview="list">一覧</button>
             <button class="seg-btn" data-wbview="board">ボード</button>
+            <button class="seg-btn" data-wbview="preset" id="wb-preset-tab-btn" style="display:none;">事前設定</button>
           </div>
           <div class="header-clock" id="header-clock-kiosk" style="display:none;"></div>
           <button class="btn-primary" id="wb-edit-my-btn">自分の行き先を入力</button>
@@ -431,6 +432,20 @@
         </div>
         <div id="wb-board-view" style="display:none;">
           <div class="wb-board" id="wb-board"></div>
+        </div>
+        <div id="wb-preset-view" style="display:none;">
+          <div class="howto" id="wb-preset-date-label"></div>
+          <table class="wb-table">
+            <thead><tr><th>所属</th><th>氏名</th><th>次の営業日の状態</th><th>備考</th></tr></thead>
+            <tbody id="wb-preset-table-body"></tbody>
+          </table>
+          <div style="margin-top:14px;">
+            <button class="btn-primary" id="wb-preset-save-default-btn">この内容を初期状態として保存</button>
+          </div>
+          <p style="font-size:11.5px;color:var(--muted);margin-top:8px;">
+            「初期状態として保存」しておくと、次にこの事前設定画面を開いたときの初期値として使われます（毎回入力し直す手間を減らせます）。<br>
+            ここで設定した内容は、対象の営業日になったタイミングで、行き先設定権限者または管理者のどなたかがログインすると自動的に反映されます。
+          </p>
         </div>
       </section>
 
@@ -477,6 +492,18 @@
       <div class="field">
         <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">備考（行き先・戻り時間など）</label>
         <textarea id="wb-note" placeholder="例）〇〇現場／〇〇時頃戻ります"></textarea>
+      </div>
+      <div class="field" style="border-top:1px solid var(--line);padding-top:12px;">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text);margin-bottom:8px;">
+          <input type="checkbox" id="wb-timeleave-check" style="width:auto;">
+          本日、時間休を設定する
+        </label>
+        <div id="wb-timeleave-fields" style="display:none;gap:8px;align-items:center;">
+          <input type="time" id="wb-timeleave-start" style="flex:1;padding:8px;border:1px solid var(--line);border-radius:7px;font-size:13px;">
+          <span style="color:var(--muted);">〜</span>
+          <input type="time" id="wb-timeleave-end" style="flex:1;padding:8px;border:1px solid var(--line);border-radius:7px;font-size:13px;">
+        </div>
+        <p style="font-size:11px;color:var(--muted);margin:6px 0 0;">設定した時間帯だけ、自動的に「休み」表示になります（他の時間帯は通常の状態のままです）。</p>
       </div>
       <div class="modal-err" id="wb-error"></div>
       <div class="row-btns">
@@ -657,6 +684,9 @@ let activeSafetyCampaign = null;
 let mySafetyResponse = null;
 let wbEditingEmail = null;
 let wbCurrentView = "list";
+let wbPresetsAll = {};      // email -> {status, note, forDate}
+let wbPresetDefaults = {};  // email -> {status, note}
+let wbPresetsLoaded = false;
 
 /* ---------- auth ---------- */
 document.getElementById("login-btn").addEventListener("click", doLogin);
@@ -701,6 +731,7 @@ onAuthStateChanged(auth, async (user)=>{
     }catch(e){ isEquipmentManager = isAdmin; }
     document.getElementById("admin-link").style.display = isAdmin ? "inline-block" : "none";
     document.getElementById("notice-new-btn").style.display = isPoster ? "inline-block" : "none";
+    document.getElementById("wb-preset-tab-btn").style.display = (isAdmin || isWhereaboutsEditor) ? "inline-block" : "none";
     await ensureEmployeeRecord();
     initEquipmentListener();
     initMyReservationsListener();
@@ -710,6 +741,10 @@ onAuthStateChanged(auth, async (user)=>{
     initWbColumnsListener();
     initEmployeesListener();
     initSafetyCampaignListener();
+    if(isAdmin || isWhereaboutsEditor){
+      initWbPresetsListener();
+      checkAndApplyWbPresets();
+    }
 
     if(urlPreselect.campaign){
       switchToTab("safety");
@@ -1746,6 +1781,28 @@ function departmentName(id){
 function wbStatusInfo(id){
   return wbStatusesAll.find(x=>x.id===id) || null;
 }
+function getEffectiveWbStatus(emp){
+  if(isTimeLeaveActiveNow(emp)){
+    const restStatus = wbStatusesAll.find(s=>s.name==="休み");
+    if(restStatus) return restStatus.id;
+  }
+  return emp.status;
+}
+function isTimeLeaveActiveNow(emp){
+  if(!(emp.timeLeaveDate===todayStr() && emp.timeLeaveStart && emp.timeLeaveEnd)) return false;
+  const now = new Date();
+  const nowMin = now.getHours()*60 + now.getMinutes();
+  const [sh,sm] = emp.timeLeaveStart.split(":").map(Number);
+  const [eh,em] = emp.timeLeaveEnd.split(":").map(Number);
+  return nowMin >= (sh*60+sm) && nowMin <= (eh*60+em);
+}
+function getWbNoteDisplay(emp){
+  if(emp.timeLeaveDate===todayStr() && emp.timeLeaveStart && emp.timeLeaveEnd){
+    const tlText = `時間休 ${emp.timeLeaveStart}〜${emp.timeLeaveEnd}`;
+    return emp.note ? `${tlText} / ${emp.note}` : tlText;
+  }
+  return emp.note || "";
+}
 function getSortedEmployees(){
   return employeesAll.slice().sort((a,b)=>{
     const na = a.employeeNo ? Number(a.employeeNo) : null;
@@ -1790,6 +1847,14 @@ window.addEventListener("resize", ()=>{
   }, 200);
 });
 
+// 時間休の開始・終了時刻をまたいだ際、表示に自動反映されるよう1分ごとに再描画する
+setInterval(()=>{
+  const wbView = document.getElementById("view-whereabouts");
+  if(wbView && wbView.style.display !== "none"){
+    renderWhereabouts();
+  }
+}, 60000);
+
 function renderWbList(){
   const container = document.getElementById("wb-list-columns");
   if(!container) return;
@@ -1798,7 +1863,7 @@ function renderWbList(){
 
   function buildRow(emp){
     const canEdit = isAdmin || isWhereaboutsEditor || emp.email===currentUser.email;
-    const st = wbStatusInfo(emp.status);
+    const st = wbStatusInfo(getEffectiveWbStatus(emp));
     const tr = document.createElement("tr");
     const tdDept = document.createElement("td");
     tdDept.textContent = emp.department ? departmentName(emp.department) : "未所属";
@@ -1813,7 +1878,7 @@ function renderWbList(){
     tdStatus.appendChild(badge);
     const tdNote = document.createElement("td");
     tdNote.className = "wb-note-cell";
-    tdNote.textContent = emp.note || "";
+    tdNote.textContent = getWbNoteDisplay(emp);
     tr.appendChild(tdDept); tr.appendChild(tdName); tr.appendChild(tdStatus); tr.appendChild(tdNote);
     return tr;
   }
@@ -1869,8 +1934,9 @@ function renderWbBoard(){
     const bodyEl = document.createElement("div");
     bodyEl.className = "col-body";
     const members = list.filter(emp=>{
-      if(col.id==="__unset__") return !emp.status || !wbStatusInfo(emp.status);
-      return emp.status === col.id;
+      const effStatus = getEffectiveWbStatus(emp);
+      if(col.id==="__unset__") return !effStatus || !wbStatusInfo(effStatus);
+      return effStatus === col.id;
     });
     if(members.length===0){
       const e = document.createElement("div");
@@ -1890,6 +1956,165 @@ function renderWbBoard(){
   });
 }
 
+/* =========================================================
+   行き先：事前設定（次の営業日）・初期状態
+========================================================= */
+function nextBusinessDayStr(){
+  const d = new Date();
+  d.setDate(d.getDate()+1);
+  while(d.getDay()===0 || d.getDay()===6){ // 日曜=0, 土曜=6 はスキップ
+    d.setDate(d.getDate()+1);
+  }
+  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+}
+
+function initWbPresetsListener(){
+  onSnapshot(collection(db,"wb_presets"), snap=>{
+    wbPresetsAll = {};
+    snap.docs.forEach(d=>{
+      if(d.id==="_defaults" || d.id==="_meta") return;
+      wbPresetsAll[d.id] = d.data();
+    });
+    wbPresetDefaults = {};
+    const defaultsDoc = snap.docs.find(d=>d.id==="_defaults");
+    if(defaultsDoc && defaultsDoc.data().states){
+      wbPresetDefaults = defaultsDoc.data().states;
+    }
+    wbPresetsLoaded = true;
+    if(wbCurrentView==="preset"){ renderWbPresetTable(); }
+  }, (err)=>{ console.error("[行き先事前設定取得エラー]", err); });
+}
+
+function renderWbPresetTable(){
+  const body = document.getElementById("wb-preset-table-body");
+  const dateLabel = document.getElementById("wb-preset-date-label");
+  if(!body || !dateLabel) return;
+  const targetDate = nextBusinessDayStr();
+  dateLabel.innerHTML = `<b>${formatDateJP(targetDate)}</b>（次の営業日）の行き先を事前に設定します。ここでの変更は保存すると即座に反映されます。`;
+
+  body.innerHTML = "";
+  if(!wbPresetsLoaded){
+    body.innerHTML = `<tr><td colspan="4" class="empty-state">読み込み中です…</td></tr>`;
+    return;
+  }
+  const list = getSortedEmployees();
+  if(list.length===0){
+    body.innerHTML = `<tr><td colspan="4" class="empty-state">まだ社員データがありません。</td></tr>`;
+    return;
+  }
+  if(wbStatusesAll.length===0){
+    body.innerHTML = `<tr><td colspan="4" class="empty-state">先に行き先ステータスを登録してください。</td></tr>`;
+    return;
+  }
+
+  list.forEach(emp=>{
+    const preset = (wbPresetsAll[emp.email] && wbPresetsAll[emp.email].forDate===targetDate)
+      ? wbPresetsAll[emp.email]
+      : null;
+    const fallback = wbPresetDefaults[emp.email] || null;
+    const currentStatus = preset ? preset.status : (fallback ? fallback.status : "");
+    const currentNote = preset ? preset.note : (fallback ? fallback.note : "");
+
+    const tr = document.createElement("tr");
+    const tdDept = document.createElement("td");
+    tdDept.textContent = emp.department ? departmentName(emp.department) : "未所属";
+    const tdName = document.createElement("td");
+    tdName.textContent = emp.name || emp.email;
+
+    const tdStatus = document.createElement("td");
+    const sel = document.createElement("select");
+    sel.style.cssText = "padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:12.5px;";
+    const noneOpt = document.createElement("option");
+    noneOpt.value = ""; noneOpt.textContent = "未設定";
+    sel.appendChild(noneOpt);
+    wbStatusesAll.forEach(s=>{
+      const opt = document.createElement("option");
+      opt.value = s.id; opt.textContent = s.name;
+      if(s.id === currentStatus) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    tdStatus.appendChild(sel);
+
+    const tdNote = document.createElement("td");
+    const noteInput = document.createElement("input");
+    noteInput.type = "text";
+    noteInput.value = currentNote || "";
+    noteInput.placeholder = "備考（任意）";
+    noteInput.style.cssText = "width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:12.5px;";
+    tdNote.appendChild(noteInput);
+
+    async function savePreset(){
+      try{
+        await setDoc(doc(db,"wb_presets", emp.email), {
+          status: sel.value,
+          note: noteInput.value.trim(),
+          forDate: targetDate,
+          updatedBy: currentUser.email,
+          updatedAt: new Date().toISOString()
+        });
+      }catch(e){
+        toast("事前設定の保存に失敗しました。");
+      }
+    }
+    sel.addEventListener("change", savePreset);
+    noteInput.addEventListener("blur", savePreset);
+
+    tr.appendChild(tdDept); tr.appendChild(tdName); tr.appendChild(tdStatus); tr.appendChild(tdNote);
+    body.appendChild(tr);
+  });
+}
+
+document.getElementById("wb-preset-save-default-btn").addEventListener("click", async ()=>{
+  const rows = document.querySelectorAll("#wb-preset-table-body tr");
+  const list = getSortedEmployees();
+  if(rows.length !== list.length){ toast("表示の読み込み中です。少し待ってから再度お試しください。"); return; }
+  const states = {};
+  list.forEach((emp, i)=>{
+    const row = rows[i];
+    const sel = row.querySelector("select");
+    const noteInput = row.querySelector("input[type=text]");
+    if(sel && sel.value){
+      states[emp.email] = { status: sel.value, note: noteInput ? noteInput.value.trim() : "" };
+    }
+  });
+  try{
+    await setDoc(doc(db,"wb_presets","_defaults"), { states, updatedBy: currentUser.email, updatedAt: new Date().toISOString() });
+    toast("初期状態として保存しました。");
+  }catch(e){
+    toast("保存に失敗しました。");
+  }
+});
+
+async function checkAndApplyWbPresets(){
+  try{
+    const todayStrVal = todayStr();
+    const metaSnap = await getDoc(doc(db,"wb_presets","_meta"));
+    const appliedDate = metaSnap.exists() ? metaSnap.data().appliedDate : null;
+    if(appliedDate === todayStrVal) return;
+    const presetsSnap = await getDocs(collection(db,"wb_presets"));
+    let appliedCount = 0;
+    for(const d of presetsSnap.docs){
+      if(d.id==="_defaults" || d.id==="_meta") continue;
+      const data = d.data();
+      if(data.forDate === todayStrVal){
+        await updateDoc(doc(db,"employees", d.id), {
+          status: data.status || "",
+          note: data.note || "",
+          statusUpdatedAt: new Date().toISOString(),
+          statusUpdatedBy: "事前設定（自動反映）"
+        });
+        appliedCount++;
+      }
+    }
+    await setDoc(doc(db,"wb_presets","_meta"), { appliedDate: todayStrVal }, { merge:true });
+    if(appliedCount>0){
+      toast(`前日までに設定された行き先を${appliedCount}件反映しました。`);
+    }
+  }catch(e){
+    console.error("[事前設定の自動反映エラー]", e);
+  }
+}
+
 document.querySelectorAll("#wb-view-toggle .seg-btn").forEach(btn=>{
   btn.addEventListener("click", ()=>{
     document.querySelectorAll("#wb-view-toggle .seg-btn").forEach(b=>b.classList.remove("active"));
@@ -1897,11 +2122,14 @@ document.querySelectorAll("#wb-view-toggle .seg-btn").forEach(btn=>{
     wbCurrentView = btn.dataset.wbview;
     document.getElementById("wb-list-view").style.display = wbCurrentView==="list" ? "block":"none";
     document.getElementById("wb-board-view").style.display = wbCurrentView==="board" ? "block":"none";
+    document.getElementById("wb-preset-view").style.display = wbCurrentView==="preset" ? "block":"none";
     // 表示に切り替わった直後は、非表示中に測った幅（0扱い）のままになっている可能性があるため測り直す
     if(wbCurrentView==="list"){
       renderWbList();
-    } else {
+    } else if(wbCurrentView==="board"){
       renderWbBoard();
+    } else if(wbCurrentView==="preset"){
+      renderWbPresetTable();
     }
   });
 });
@@ -1931,8 +2159,20 @@ function openWbModal(email){
   sel.value = emp?.status || (wbStatusesAll[0]?.id || "");
   document.getElementById("wb-note").value = emp?.note || "";
   document.getElementById("wb-error").textContent = "";
+
+  const hasTimeLeaveToday = emp?.timeLeaveDate === todayStr() && emp?.timeLeaveStart && emp?.timeLeaveEnd;
+  const tlCheck = document.getElementById("wb-timeleave-check");
+  const tlFields = document.getElementById("wb-timeleave-fields");
+  tlCheck.checked = !!hasTimeLeaveToday;
+  tlFields.style.display = hasTimeLeaveToday ? "flex" : "none";
+  document.getElementById("wb-timeleave-start").value = hasTimeLeaveToday ? emp.timeLeaveStart : "";
+  document.getElementById("wb-timeleave-end").value = hasTimeLeaveToday ? emp.timeLeaveEnd : "";
+
   wbModal.classList.add("show");
 }
+document.getElementById("wb-timeleave-check").addEventListener("change", (e)=>{
+  document.getElementById("wb-timeleave-fields").style.display = e.target.checked ? "flex" : "none";
+});
 
 document.getElementById("wb-save").addEventListener("click", async ()=>{
   const errEl = document.getElementById("wb-error");
@@ -1942,12 +2182,29 @@ document.getElementById("wb-save").addEventListener("click", async ()=>{
   }
   const status = document.getElementById("wb-status-select").value;
   const note = document.getElementById("wb-note").value.trim();
+  const tlChecked = document.getElementById("wb-timeleave-check").checked;
+  const tlStart = document.getElementById("wb-timeleave-start").value;
+  const tlEnd = document.getElementById("wb-timeleave-end").value;
+  if(tlChecked){
+    if(!tlStart || !tlEnd){
+      errEl.textContent = "時間休の開始・終了時刻を入力してください。";
+      return;
+    }
+    if(tlStart >= tlEnd){
+      errEl.textContent = "時間休の終了時刻は開始時刻より後にしてください。";
+      return;
+    }
+  }
+  const payload = {
+    status, note,
+    statusUpdatedAt: new Date().toISOString(),
+    statusUpdatedBy: currentUser.email,
+    timeLeaveDate: tlChecked ? todayStr() : "",
+    timeLeaveStart: tlChecked ? tlStart : "",
+    timeLeaveEnd: tlChecked ? tlEnd : ""
+  };
   try{
-    await updateDoc(doc(db,"employees", wbEditingEmail), {
-      status, note,
-      statusUpdatedAt: new Date().toISOString(),
-      statusUpdatedBy: currentUser.email
-    });
+    await updateDoc(doc(db,"employees", wbEditingEmail), payload);
     wbModal.classList.remove("show");
     toast("行き先を更新しました。");
   }catch(e){
