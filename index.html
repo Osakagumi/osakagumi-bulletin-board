@@ -509,9 +509,9 @@
         </label>
         <div id="wb-timeleave-fields" style="display:none;flex-direction:column;gap:8px;">
           <div class="seg-toggle" id="wb-timeleave-type-toggle" style="width:100%;">
+            <button type="button" class="seg-btn" data-tltype="custom" style="flex:1;">時間休</button>
             <button type="button" class="seg-btn" data-tltype="am" style="flex:1;">AM休</button>
             <button type="button" class="seg-btn" data-tltype="pm" style="flex:1;">PM休</button>
-            <button type="button" class="seg-btn" data-tltype="custom" style="flex:1;">時間休</button>
           </div>
           <div id="wb-timeleave-custom-fields" style="display:none;gap:8px;align-items:center;">
             <button type="button" class="date-field-btn placeholder" id="wb-timeleave-start" data-value="" style="flex:1;"></button>
@@ -2240,7 +2240,7 @@ function openWbModal(email){
   tlFields.style.display = hasTimeLeaveToday ? "flex" : "none";
   setTimeFieldValue(document.getElementById("wb-timeleave-start"), hasTimeLeaveToday ? emp.timeLeaveStart : "");
   setTimeFieldValue(document.getElementById("wb-timeleave-end"), hasTimeLeaveToday ? emp.timeLeaveEnd : "");
-  selectTlType(hasTimeLeaveToday ? (emp.timeLeaveType || "custom") : "am");
+  selectTlType(hasTimeLeaveToday ? (emp.timeLeaveType || "custom") : "custom");
 
   wbModal.classList.add("show");
 }
@@ -2263,7 +2263,7 @@ function selectTlType(type){
 document.getElementById("wb-timeleave-check").addEventListener("change", (e)=>{
   document.getElementById("wb-timeleave-fields").style.display = e.target.checked ? "flex" : "none";
   if(e.target.checked && !wbTimeLeaveType){
-    selectTlType("am");
+    selectTlType("custom");
   }
 });
 document.querySelectorAll("#wb-timeleave-type-toggle .seg-btn").forEach(btn=>{
