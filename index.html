@@ -183,6 +183,15 @@
   .cal-today-btn:hover{background:#F4F8FC;}
   .cal-clear-btn:hover{background:#FDF2F2;color:var(--danger);border-color:var(--danger);}
 
+  .time-popup{padding:6px;}
+  .time-list{display:flex;flex-direction:column;gap:2px;}
+  .time-slot{
+    border:none;background:none;border-radius:6px;padding:8px 10px;font-size:13px;text-align:left;
+    cursor:pointer;font-family:var(--mono);color:var(--text);
+  }
+  .time-slot:hover{background:#F0F3F8;}
+  .time-slot.selected{background:var(--brand);color:#fff;}
+
   .howto{
     background:#F4F8FC;border:1px solid #DCE8F5;border-radius:8px;padding:9px 12px;font-size:12.5px;color:#2C4A6B;
     margin-bottom:12px;line-height:1.6;
@@ -499,9 +508,9 @@
           本日、時間休を設定する
         </label>
         <div id="wb-timeleave-fields" style="display:none;gap:8px;align-items:center;">
-          <input type="time" id="wb-timeleave-start" step="1800" style="flex:1;padding:8px;border:1px solid var(--line);border-radius:7px;font-size:13px;">
+          <button type="button" class="date-field-btn placeholder" id="wb-timeleave-start" data-value="" style="flex:1;"></button>
           <span style="color:var(--muted);">〜</span>
-          <input type="time" id="wb-timeleave-end" step="1800" style="flex:1;padding:8px;border:1px solid var(--line);border-radius:7px;font-size:13px;">
+          <button type="button" class="date-field-btn placeholder" id="wb-timeleave-end" data-value="" style="flex:1;"></button>
         </div>
         <p style="font-size:11px;color:var(--muted);margin:6px 0 0;">設定した時間帯だけ、自動的に「休み」表示になります（他の時間帯は通常の状態のままです）。</p>
       </div>
@@ -1278,10 +1287,63 @@ function openCalendarPicker(anchorEl, initialDateStr, opts){
   setTimeout(()=>{ document.addEventListener("mousedown", onOutsideClickForCalendar, true); }, 0);
 }
 
+function openTimePicker(anchorEl, currentValue, opts){
+  closeCalendarPopup();
+  const onSelect = opts?.onSelect || (()=>{});
+
+  const popup = document.createElement("div");
+  popup.className = "calendar-popup time-popup";
+  document.body.appendChild(popup);
+  calendarPopupEl = popup;
+
+  const list = document.createElement("div");
+  list.className = "time-list";
+  for(let h=0; h<24; h++){
+    [0,30].forEach(m=>{
+      const val = `${pad2(h)}:${pad2(m)}`;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "time-slot" + (val===currentValue ? " selected" : "");
+      btn.textContent = val;
+      btn.addEventListener("click", ()=>{ onSelect(val); closeCalendarPopup(); });
+      list.appendChild(btn);
+    });
+  }
+  popup.appendChild(list);
+
+  const popupWidth = 140;
+  const rect = anchorEl.getBoundingClientRect();
+  let left = rect.left;
+  if(left + popupWidth > window.innerWidth - 8){ left = window.innerWidth - popupWidth - 8; }
+  popup.style.top = `${rect.bottom + 6}px`;
+  popup.style.left = `${Math.max(8,left)}px`;
+  popup.style.width = `${popupWidth}px`;
+  popup.style.maxHeight = "260px";
+  popup.style.overflowY = "auto";
+
+  requestAnimationFrame(()=>{
+    const sel = popup.querySelector(".time-slot.selected");
+    if(sel) sel.scrollIntoView({ block: "center" });
+  });
+
+  setTimeout(()=>{ document.addEventListener("mousedown", onOutsideClickForCalendar, true); }, 0);
+}
+
 function setDateFieldValue(el, dateStr){
   el.dataset.value = dateStr || "";
   if(dateStr){
     el.textContent = formatDateJP(dateStr);
+    el.classList.remove("placeholder");
+  } else {
+    el.textContent = "未設定（タップして選択）";
+    el.classList.add("placeholder");
+  }
+}
+
+function setTimeFieldValue(el, timeStr){
+  el.dataset.value = timeStr || "";
+  if(timeStr){
+    el.textContent = timeStr;
     el.classList.remove("placeholder");
   } else {
     el.textContent = "未設定（タップして選択）";
@@ -2165,13 +2227,21 @@ function openWbModal(email){
   const tlFields = document.getElementById("wb-timeleave-fields");
   tlCheck.checked = !!hasTimeLeaveToday;
   tlFields.style.display = hasTimeLeaveToday ? "flex" : "none";
-  document.getElementById("wb-timeleave-start").value = hasTimeLeaveToday ? emp.timeLeaveStart : "";
-  document.getElementById("wb-timeleave-end").value = hasTimeLeaveToday ? emp.timeLeaveEnd : "";
+  setTimeFieldValue(document.getElementById("wb-timeleave-start"), hasTimeLeaveToday ? emp.timeLeaveStart : "");
+  setTimeFieldValue(document.getElementById("wb-timeleave-end"), hasTimeLeaveToday ? emp.timeLeaveEnd : "");
 
   wbModal.classList.add("show");
 }
 document.getElementById("wb-timeleave-check").addEventListener("change", (e)=>{
   document.getElementById("wb-timeleave-fields").style.display = e.target.checked ? "flex" : "none";
+});
+document.getElementById("wb-timeleave-start").addEventListener("click", (e)=>{
+  const el = e.currentTarget;
+  openTimePicker(el, el.dataset.value, { onSelect: (val)=> setTimeFieldValue(el, val) });
+});
+document.getElementById("wb-timeleave-end").addEventListener("click", (e)=>{
+  const el = e.currentTarget;
+  openTimePicker(el, el.dataset.value, { onSelect: (val)=> setTimeFieldValue(el, val) });
 });
 
 document.getElementById("wb-save").addEventListener("click", async ()=>{
@@ -2183,16 +2253,11 @@ document.getElementById("wb-save").addEventListener("click", async ()=>{
   const status = document.getElementById("wb-status-select").value;
   const note = document.getElementById("wb-note").value.trim();
   const tlChecked = document.getElementById("wb-timeleave-check").checked;
-  const tlStart = document.getElementById("wb-timeleave-start").value;
-  const tlEnd = document.getElementById("wb-timeleave-end").value;
+  const tlStart = document.getElementById("wb-timeleave-start").dataset.value || "";
+  const tlEnd = document.getElementById("wb-timeleave-end").dataset.value || "";
   if(tlChecked){
     if(!tlStart || !tlEnd){
-      errEl.textContent = "時間休の開始・終了時刻を入力してください。";
-      return;
-    }
-    const isHalfHour = (t)=> t.endsWith(":00") || t.endsWith(":30");
-    if(!isHalfHour(tlStart) || !isHalfHour(tlEnd)){
-      errEl.textContent = "時間休は30分単位（◯◯:00 または ◯◯:30）で設定してください。";
+      errEl.textContent = "時間休の開始・終了時刻を選択してください。";
       return;
     }
     if(tlStart >= tlEnd){
