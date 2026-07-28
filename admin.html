@@ -297,6 +297,10 @@
             <label>表示エリアの最大幅（px、空欄で無制限）</label>
             <input type="number" id="wb-width-input" min="400" placeholder="例）1600">
           </div>
+          <div class="field">
+            <label>文字サイズ（px、標準13）</label>
+            <input type="number" id="wb-fontsize-input" min="10" max="40" value="13">
+          </div>
         </div>
         <button class="btn btn-primary" id="wb-columns-save-btn">保存する</button>
       </div>
@@ -764,6 +768,7 @@ function initWbColumnsListener(){
     const data = snap.exists() ? snap.data() : {};
     const cols = data.listColumns || 2;
     const widthPx = data.displayWidthPx || "";
+    const fontSize = data.fontSizePx || 13;
     const kioskView = data.kioskDefaultView || "list";
 
     const colsInput = document.getElementById("wb-columns-input");
@@ -773,6 +778,10 @@ function initWbColumnsListener(){
     const widthInput = document.getElementById("wb-width-input");
     if(widthInput && document.activeElement !== widthInput){
       widthInput.value = widthPx;
+    }
+    const fontInput = document.getElementById("wb-fontsize-input");
+    if(fontInput && document.activeElement !== fontInput){
+      fontInput.value = fontSize;
     }
     const kioskSelect = document.getElementById("wb-kiosk-default-view");
     if(kioskSelect && document.activeElement !== kioskSelect){
@@ -786,8 +795,11 @@ document.getElementById("wb-columns-save-btn").addEventListener("click", async (
   document.getElementById("wb-columns-input").value = cols;
   const widthRaw = document.getElementById("wb-width-input").value.trim();
   const widthPx = widthRaw ? Math.max(400, Number(widthRaw)||0) : null;
+  let fontSize = Number(document.getElementById("wb-fontsize-input").value) || 13;
+  fontSize = Math.min(40, Math.max(10, Math.round(fontSize)));
+  document.getElementById("wb-fontsize-input").value = fontSize;
   try{
-    await setDoc(doc(db,"app_settings","whereabouts"), { listColumns: cols, displayWidthPx: widthPx }, { merge:true });
+    await setDoc(doc(db,"app_settings","whereabouts"), { listColumns: cols, displayWidthPx: widthPx, fontSizePx: fontSize }, { merge:true });
     toast("表示設定を保存しました。");
   }catch(e){
     toast("保存に失敗しました。");
