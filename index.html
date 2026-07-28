@@ -507,10 +507,17 @@
           <input type="checkbox" id="wb-timeleave-check" style="width:auto;">
           本日、時間休を設定する
         </label>
-        <div id="wb-timeleave-fields" style="display:none;gap:8px;align-items:center;">
-          <button type="button" class="date-field-btn placeholder" id="wb-timeleave-start" data-value="" style="flex:1;"></button>
-          <span style="color:var(--muted);">〜</span>
-          <button type="button" class="date-field-btn placeholder" id="wb-timeleave-end" data-value="" style="flex:1;"></button>
+        <div id="wb-timeleave-fields" style="display:none;flex-direction:column;gap:8px;">
+          <div style="display:flex;gap:6px;">
+            <button type="button" class="date-field-btn" id="wb-timeleave-am-btn" style="flex:1;text-align:center;">AM休（0:00〜13:00）</button>
+            <button type="button" class="date-field-btn" id="wb-timeleave-pm-btn" style="flex:1;text-align:center;">PM休（12:00〜23:30）</button>
+          </div>
+          <div style="font-size:11px;color:var(--muted);">または個別に時間を指定：</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button type="button" class="date-field-btn placeholder" id="wb-timeleave-start" data-value="" style="flex:1;"></button>
+            <span style="color:var(--muted);">〜</span>
+            <button type="button" class="date-field-btn placeholder" id="wb-timeleave-end" data-value="" style="flex:1;"></button>
+          </div>
         </div>
         <p style="font-size:11px;color:var(--muted);margin:6px 0 0;">設定した時間帯だけ、自動的に「休み」表示になります（他の時間帯は通常の状態のままです）。</p>
       </div>
@@ -692,6 +699,7 @@ let noticesAll = [];
 let activeSafetyCampaign = null;
 let mySafetyResponse = null;
 let wbEditingEmail = null;
+let wbTimeLeaveType = "";
 let wbCurrentView = "list";
 let wbPresetsAll = {};      // email -> {status, note, forDate}
 let wbPresetDefaults = {};  // email -> {status, note}
@@ -1860,7 +1868,10 @@ function isTimeLeaveActiveNow(emp){
 }
 function getWbNoteDisplay(emp){
   if(emp.timeLeaveDate===todayStr() && emp.timeLeaveStart && emp.timeLeaveEnd){
-    const tlText = `時間休 ${emp.timeLeaveStart}〜${emp.timeLeaveEnd}`;
+    let tlText;
+    if(emp.timeLeaveType==="am") tlText = "AM休";
+    else if(emp.timeLeaveType==="pm") tlText = "PM休";
+    else tlText = `時間休 ${emp.timeLeaveStart}〜${emp.timeLeaveEnd}`;
     return emp.note ? `${tlText} / ${emp.note}` : tlText;
   }
   return emp.note || "";
@@ -2229,19 +2240,30 @@ function openWbModal(email){
   tlFields.style.display = hasTimeLeaveToday ? "flex" : "none";
   setTimeFieldValue(document.getElementById("wb-timeleave-start"), hasTimeLeaveToday ? emp.timeLeaveStart : "");
   setTimeFieldValue(document.getElementById("wb-timeleave-end"), hasTimeLeaveToday ? emp.timeLeaveEnd : "");
+  wbTimeLeaveType = hasTimeLeaveToday ? (emp.timeLeaveType || "custom") : "";
 
   wbModal.classList.add("show");
 }
 document.getElementById("wb-timeleave-check").addEventListener("change", (e)=>{
   document.getElementById("wb-timeleave-fields").style.display = e.target.checked ? "flex" : "none";
 });
+document.getElementById("wb-timeleave-am-btn").addEventListener("click", ()=>{
+  setTimeFieldValue(document.getElementById("wb-timeleave-start"), "00:00");
+  setTimeFieldValue(document.getElementById("wb-timeleave-end"), "13:00");
+  wbTimeLeaveType = "am";
+});
+document.getElementById("wb-timeleave-pm-btn").addEventListener("click", ()=>{
+  setTimeFieldValue(document.getElementById("wb-timeleave-start"), "12:00");
+  setTimeFieldValue(document.getElementById("wb-timeleave-end"), "23:30");
+  wbTimeLeaveType = "pm";
+});
 document.getElementById("wb-timeleave-start").addEventListener("click", (e)=>{
   const el = e.currentTarget;
-  openTimePicker(el, el.dataset.value, { onSelect: (val)=> setTimeFieldValue(el, val) });
+  openTimePicker(el, el.dataset.value, { onSelect: (val)=>{ setTimeFieldValue(el, val); wbTimeLeaveType = "custom"; } });
 });
 document.getElementById("wb-timeleave-end").addEventListener("click", (e)=>{
   const el = e.currentTarget;
-  openTimePicker(el, el.dataset.value, { onSelect: (val)=> setTimeFieldValue(el, val) });
+  openTimePicker(el, el.dataset.value, { onSelect: (val)=>{ setTimeFieldValue(el, val); wbTimeLeaveType = "custom"; } });
 });
 
 document.getElementById("wb-save").addEventListener("click", async ()=>{
@@ -2271,7 +2293,8 @@ document.getElementById("wb-save").addEventListener("click", async ()=>{
     statusUpdatedBy: currentUser.email,
     timeLeaveDate: tlChecked ? todayStr() : "",
     timeLeaveStart: tlChecked ? tlStart : "",
-    timeLeaveEnd: tlChecked ? tlEnd : ""
+    timeLeaveEnd: tlChecked ? tlEnd : "",
+    timeLeaveType: tlChecked ? (wbTimeLeaveType || "custom") : ""
   };
   try{
     await updateDoc(doc(db,"employees", wbEditingEmail), payload);
