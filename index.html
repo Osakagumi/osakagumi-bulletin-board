@@ -1663,6 +1663,12 @@ document.querySelectorAll("#wb-view-toggle .seg-btn").forEach(btn=>{
     wbCurrentView = btn.dataset.wbview;
     document.getElementById("wb-list-view").style.display = wbCurrentView==="list" ? "block":"none";
     document.getElementById("wb-board-view").style.display = wbCurrentView==="board" ? "block":"none";
+    // 表示に切り替わった直後は、非表示中に測った幅（0扱い）のままになっている可能性があるため測り直す
+    if(wbCurrentView==="list"){
+      renderWbList();
+    } else {
+      renderWbBoard();
+    }
   });
 });
 
