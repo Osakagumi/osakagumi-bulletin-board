@@ -200,13 +200,33 @@
     <!-- ============ ユーザー登録（CSV一括） ============ -->
     <section id="view-userimport" style="display:none;">
       <div class="panel">
+        <h2>所属（部署）</h2>
+        <div class="form-grid">
+          <div class="field">
+            <label>部署名</label>
+            <input type="text" id="dept-name" placeholder="例）工務部">
+          </div>
+          <div class="field">
+            <label>表示順（小さいほど上）</label>
+            <input type="number" id="dept-order" value="0">
+          </div>
+        </div>
+        <button class="btn btn-primary" id="dept-save-btn">追加する</button>
+        <button class="btn btn-ghost" id="dept-cancel-edit" style="display:none;">編集をやめる</button>
+        <table style="margin-top:14px;">
+          <thead><tr><th>部署名</th><th>表示順</th><th>操作</th></tr></thead>
+          <tbody id="dept-table-body"></tbody>
+        </table>
+      </div>
+
+      <div class="panel">
         <h2>CSVで一括登録</h2>
         <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
           1行目はヘッダー行として無視されます。2行目以降を1人ずつ登録します。<br>
           列の順番：<b>社員番号, 氏名, 所属, 管理者フラグ, お知らせ投稿フラグ, メールアドレス, パスワード, 電話番号, 備考</b><br>
           必須は「メールアドレス」「パスワード」のみで、他は省略可です。<br>
           管理者フラグ・お知らせ投稿フラグは <code>1</code> / <code>TRUE</code> / <code>○</code> / <code>はい</code> のいずれかを入れると有効になります（空欄は無効）。<br>
-          所属欄には「行き先管理」タブで登録済みの部署名をそのまま入力してください（一致しない場合は未所属として登録されます）。
+          所属欄には「ユーザー管理」タブで登録済みの部署名をそのまま入力してください（一致しない場合は未所属として登録されます）。
         </p>
         <div class="field full" style="margin-bottom:12px;">
           <label>サンプル</label>
@@ -265,26 +285,6 @@
 
     <!-- ============ 行き先管理 ============ -->
     <section id="view-whereabouts" style="display:none;">
-      <div class="panel">
-        <h2>所属（部署）</h2>
-        <div class="form-grid">
-          <div class="field">
-            <label>部署名</label>
-            <input type="text" id="dept-name" placeholder="例）工務部">
-          </div>
-          <div class="field">
-            <label>表示順（小さいほど上）</label>
-            <input type="number" id="dept-order" value="0">
-          </div>
-        </div>
-        <button class="btn btn-primary" id="dept-save-btn">追加する</button>
-        <button class="btn btn-ghost" id="dept-cancel-edit" style="display:none;">編集をやめる</button>
-        <table style="margin-top:14px;">
-          <thead><tr><th>部署名</th><th>表示順</th><th>操作</th></tr></thead>
-          <tbody id="dept-table-body"></tbody>
-        </table>
-      </div>
-
       <div class="panel">
         <h2>行き先ステータス</h2>
         <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">まだ何も登録されていない場合は、下のボタンで「在席・外出・現場・休み」を一括作成できます。</p>
@@ -720,7 +720,7 @@ document.getElementById("poster-add-btn").addEventListener("click", async ()=>{
 });
 
 /* ============================================================
-   行き先管理：所属（部署）
+   ユーザー管理：所属（部署）
 ============================================================ */
 let departmentsAll = [];
 let editingDeptId = null;
