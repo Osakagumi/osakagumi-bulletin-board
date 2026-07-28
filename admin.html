@@ -286,15 +286,39 @@
     <!-- ============ 行き先管理 ============ -->
     <section id="view-whereabouts" style="display:none;">
       <div class="panel">
-        <h2>行き先ビューの表示列数</h2>
-        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">社員側の「行き先」タブ・一覧表示（PCなど画面が広い場合）を何列にするか設定します。スマホなど狭い画面では常に1列で表示されます。</p>
+        <h2>行き先ビューの表示設定</h2>
+        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">社員側の「行き先」タブ・一覧表示（PCなど画面が広い場合）の見た目を設定します。スマホなど狭い画面では常に1列・幅いっぱいで表示されます。</p>
         <div class="form-grid">
           <div class="field">
             <label>列数（1〜4）</label>
             <input type="number" id="wb-columns-input" min="1" max="4" value="2">
           </div>
+          <div class="field">
+            <label>表示エリアの最大幅（px、空欄で無制限）</label>
+            <input type="number" id="wb-width-input" min="400" placeholder="例）1600">
+          </div>
         </div>
         <button class="btn btn-primary" id="wb-columns-save-btn">保存する</button>
+      </div>
+
+      <div class="panel">
+        <h2>サイネージ表示（玄関などの大型ディスプレイ用）</h2>
+        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
+          専用のURLで開くと、ヘッダーや他のタブを隠し、行き先だけを画面いっぱいに自動縮小して表示します。人数や項目が増えても自動調整されるので、PCの外付けモニターなどでブラウザを開きっぱなしにしてご利用ください（ログイン状態が保たれていれば自動更新されます）。
+        </p>
+        <div class="form-grid">
+          <div class="field">
+            <label>サイネージ表示の初期ビュー</label>
+            <select id="wb-kiosk-default-view">
+              <option value="list">一覧表示</option>
+              <option value="board">ボード表示</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="wb-kiosk-save-btn">保存する</button>
+        <div style="margin-top:12px;">
+          <a class="btn btn-ghost" id="wb-kiosk-open-link" href="index.html?display=1" target="_blank" style="text-decoration:none;display:inline-block;">サイネージ表示を開く（新しいタブ）</a>
+        </div>
       </div>
 
       <div class="panel">
@@ -737,10 +761,22 @@ document.getElementById("poster-add-btn").addEventListener("click", async ()=>{
 ============================================================ */
 function initWbColumnsListener(){
   onSnapshot(doc(db,"app_settings","whereabouts"), snap=>{
-    const cols = (snap.exists() && snap.data().listColumns) || 2;
-    const input = document.getElementById("wb-columns-input");
-    if(input && document.activeElement !== input){
-      input.value = cols;
+    const data = snap.exists() ? snap.data() : {};
+    const cols = data.listColumns || 2;
+    const widthPx = data.displayWidthPx || "";
+    const kioskView = data.kioskDefaultView || "list";
+
+    const colsInput = document.getElementById("wb-columns-input");
+    if(colsInput && document.activeElement !== colsInput){
+      colsInput.value = cols;
+    }
+    const widthInput = document.getElementById("wb-width-input");
+    if(widthInput && document.activeElement !== widthInput){
+      widthInput.value = widthPx;
+    }
+    const kioskSelect = document.getElementById("wb-kiosk-default-view");
+    if(kioskSelect && document.activeElement !== kioskSelect){
+      kioskSelect.value = kioskView;
     }
   });
 }
@@ -748,9 +784,20 @@ document.getElementById("wb-columns-save-btn").addEventListener("click", async (
   let cols = Number(document.getElementById("wb-columns-input").value) || 2;
   cols = Math.min(4, Math.max(1, Math.round(cols)));
   document.getElementById("wb-columns-input").value = cols;
+  const widthRaw = document.getElementById("wb-width-input").value.trim();
+  const widthPx = widthRaw ? Math.max(400, Number(widthRaw)||0) : null;
   try{
-    await setDoc(doc(db,"app_settings","whereabouts"), { listColumns: cols });
-    toast("列数を保存しました。");
+    await setDoc(doc(db,"app_settings","whereabouts"), { listColumns: cols, displayWidthPx: widthPx }, { merge:true });
+    toast("表示設定を保存しました。");
+  }catch(e){
+    toast("保存に失敗しました。");
+  }
+});
+document.getElementById("wb-kiosk-save-btn").addEventListener("click", async ()=>{
+  const kioskView = document.getElementById("wb-kiosk-default-view").value;
+  try{
+    await setDoc(doc(db,"app_settings","whereabouts"), { kioskDefaultView: kioskView }, { merge:true });
+    toast("サイネージ表示の設定を保存しました。");
   }catch(e){
     toast("保存に失敗しました。");
   }
