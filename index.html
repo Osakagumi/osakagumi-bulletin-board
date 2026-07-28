@@ -673,6 +673,9 @@ function switchToTab(viewName){
   ALL_VIEWS.forEach(name=>{
     document.getElementById("view-"+name).style.display = (name===viewName) ? "block":"none";
   });
+  if(viewName==="whereabouts"){
+    renderWhereabouts();
+  }
 }
 document.querySelectorAll(".tab-btn").forEach(btn=>{
   btn.addEventListener("click", ()=>{
@@ -1531,12 +1534,21 @@ function applyKioskScale(){
   const scale = Math.min(availW/rect.width, availH/rect.height, 1);
   el.style.transform = `scale(${scale})`;
 }
-window.addEventListener("resize", ()=>{ if(isDisplayMode) applyKioskScale(); });
+let wbResizeTimer = null;
+window.addEventListener("resize", ()=>{
+  if(isDisplayMode) applyKioskScale();
+  clearTimeout(wbResizeTimer);
+  wbResizeTimer = setTimeout(()=>{
+    const wbView = document.getElementById("view-whereabouts");
+    if(wbView && wbView.style.display !== "none"){
+      renderWbList();
+    }
+  }, 200);
+});
 
 function renderWbList(){
   const container = document.getElementById("wb-list-columns");
   if(!container) return;
-  container.style.setProperty("--wb-cols", wbListColumns);
   container.innerHTML = "";
   const list = getSortedEmployees();
 
@@ -1570,8 +1582,14 @@ function renderWbList(){
     return;
   }
 
+  // 「列数」は上限として扱い、実際の幅で1列あたり最低260px確保できる数まで自動的に減らす
+  const MIN_COL_WIDTH = 260;
+  const availableWidth = container.clientWidth || container.parentElement?.clientWidth || 960;
+  const maxColsByWidth = Math.max(1, Math.floor(availableWidth / MIN_COL_WIDTH));
+  const cols = Math.min(4, Math.max(1, wbListColumns||1), maxColsByWidth);
+  container.style.setProperty("--wb-cols", cols);
+
   // 上から読んで、続きが次の列に入る新聞のような段組
-  const cols = Math.min(4, Math.max(1, wbListColumns||1));
   const perCol = Math.ceil(list.length / cols);
   for(let i=0;i<cols;i++){
     const chunk = list.slice(i*perCol, (i+1)*perCol);
