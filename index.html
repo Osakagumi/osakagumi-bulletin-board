@@ -134,16 +134,45 @@
   .tl-head .eq-title .cat-tag{font-size:10.5px;font-weight:600;font-family:var(--mono);padding:2px 6px;border-radius:4px;margin-left:6px;color:#fff;}
   .date-nav{display:flex;align-items:center;gap:6px;}
   .date-nav button{border:1px solid var(--line);background:#fff;border-radius:6px;width:30px;height:30px;font-size:14px;}
-  .date-picker-wrap{position:relative;display:inline-flex;align-items:center;}
-  .date-picker-wrap input[type=date]{
-    position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:none;padding:0;margin:0;
-  }
   .date-picker-label{
     border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:13px;font-weight:700;
-    color:var(--brand-dark);background:#fff;white-space:nowrap;pointer-events:none;font-family:var(--mono);
+    color:var(--brand-dark);background:#fff;white-space:nowrap;font-family:var(--mono);cursor:pointer;
   }
+  .date-picker-label:hover{border-color:var(--brand);}
   .date-picker-label.weekend-sat{color:#2E6FA3;}
   .date-picker-label.weekend-sun{color:var(--danger);}
+  .date-field-btn{
+    width:100%;text-align:left;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;
+    background:#fff;color:var(--text);cursor:pointer;font-family:inherit;
+  }
+  .date-field-btn:hover{border-color:var(--brand);}
+  .date-field-btn.placeholder{color:var(--muted);}
+
+  /* ---------- カレンダーポップアップ ---------- */
+  .calendar-popup{
+    position:fixed;background:#fff;border:1px solid var(--line);border-radius:10px;
+    box-shadow:0 10px 30px rgba(15,25,40,.18);padding:12px;z-index:300;width:260px;
+  }
+  .cal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+  .cal-header .cal-label{font-size:13.5px;font-weight:700;font-family:var(--mono);}
+  .cal-nav{border:1px solid var(--line);background:#fff;border-radius:6px;width:26px;height:26px;font-size:12px;}
+  .cal-nav:hover{background:#F4F8FC;}
+  .cal-weekdays{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-size:11px;color:var(--muted);margin-bottom:4px;}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;}
+  .cal-day{
+    border:none;background:none;border-radius:6px;padding:6px 0;font-size:12.5px;cursor:pointer;font-family:inherit;
+  }
+  .cal-day:hover{background:#F0F3F8;}
+  .cal-day.empty{cursor:default;}
+  .cal-day.today{font-weight:700;color:var(--brand);}
+  .cal-day.selected{background:var(--brand);color:#fff;}
+  .cal-footer{display:flex;gap:8px;margin-top:10px;border-top:1px solid var(--line);padding-top:10px;}
+  .cal-today-btn,.cal-clear-btn{
+    flex:1;border:1px solid var(--line);background:#fff;border-radius:7px;padding:6px 0;font-size:12px;
+  }
+  .cal-today-btn:hover{background:#F4F8FC;}
+  .cal-clear-btn:hover{background:#FDF2F2;color:var(--danger);border-color:var(--danger);}
+
   .howto{
     background:#F4F8FC;border:1px solid #DCE8F5;border-radius:8px;padding:9px 12px;font-size:12.5px;color:#2C4A6B;
     margin-bottom:12px;line-height:1.6;
@@ -326,10 +355,7 @@
             <div class="eq-title" id="tl-eq-title"></div>
             <div class="date-nav">
               <button id="date-prev">◀</button>
-              <div class="date-picker-wrap">
-                <span class="date-picker-label" id="date-picker-label"></span>
-                <input type="date" id="date-input" aria-label="日付を選択">
-              </div>
+              <span class="date-picker-label" id="date-picker-label"></span>
               <button id="date-next">▶</button>
             </div>
           </div>
@@ -451,7 +477,7 @@
       <h3 id="checkout-modal-title">貸出する</h3>
       <div class="field">
         <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">返却予定日（任意）</label>
-        <input type="date" id="checkout-return-date" style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;">
+        <button type="button" class="date-field-btn placeholder" id="checkout-return-date" data-value=""></button>
       </div>
       <div class="modal-err" id="checkout-modal-error"></div>
       <div class="row-btns">
@@ -467,7 +493,7 @@
       <h3 id="inspection-modal-title">前回点検日を編集</h3>
       <div class="field">
         <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">点検日</label>
-        <input type="date" id="inspection-date-input" style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;">
+        <button type="button" class="date-field-btn placeholder" id="inspection-date-input" data-value=""></button>
       </div>
       <div class="modal-err" id="inspection-modal-error"></div>
       <div class="row-btns">
@@ -978,17 +1004,24 @@ function openCheckoutModal(eq, targetStatus){
   checkoutModalTarget = { eq, targetStatus };
   document.getElementById("checkout-modal-title").textContent =
     `「${eq.name}」を${equipmentStatusInfo(targetStatus).label}にする`;
-  document.getElementById("checkout-return-date").value = eq.returnDueDate || "";
+  setDateFieldValue(document.getElementById("checkout-return-date"), eq.returnDueDate || "");
   document.getElementById("checkout-modal-error").textContent = "";
   document.getElementById("checkout-modal").classList.add("show");
 }
+document.getElementById("checkout-return-date").addEventListener("click", (e)=>{
+  const el = e.currentTarget;
+  openCalendarPicker(el, el.dataset.value, {
+    allowClear: true,
+    onSelect: (dateStr)=> setDateFieldValue(el, dateStr)
+  });
+});
 document.getElementById("checkout-modal-cancel").addEventListener("click", ()=>{
   document.getElementById("checkout-modal").classList.remove("show");
 });
 document.getElementById("checkout-modal-confirm").addEventListener("click", async ()=>{
   if(!checkoutModalTarget) return;
   const { eq, targetStatus } = checkoutModalTarget;
-  const returnDueDate = document.getElementById("checkout-return-date").value;
+  const returnDueDate = document.getElementById("checkout-return-date").dataset.value || "";
   const isNewHolder = (eq.status||"in_stock")==="in_stock";
   const extra = { returnDueDate };
   if(isNewHolder){
@@ -1009,16 +1042,23 @@ let inspectionModalTarget = null;
 function openInspectionDateModal(eq){
   inspectionModalTarget = eq;
   document.getElementById("inspection-modal-title").textContent = `「${eq.name}」の前回点検日を編集`;
-  document.getElementById("inspection-date-input").value = eq.lastInspectionDate || "";
+  setDateFieldValue(document.getElementById("inspection-date-input"), eq.lastInspectionDate || "");
   document.getElementById("inspection-modal-error").textContent = "";
   document.getElementById("inspection-modal").classList.add("show");
 }
+document.getElementById("inspection-date-input").addEventListener("click", (e)=>{
+  const el = e.currentTarget;
+  openCalendarPicker(el, el.dataset.value, {
+    allowClear: true,
+    onSelect: (dateStr)=> setDateFieldValue(el, dateStr)
+  });
+});
 document.getElementById("inspection-modal-cancel").addEventListener("click", ()=>{
   document.getElementById("inspection-modal").classList.remove("show");
 });
 document.getElementById("inspection-modal-save").addEventListener("click", async ()=>{
   if(!inspectionModalTarget) return;
-  const dateVal = document.getElementById("inspection-date-input").value;
+  const dateVal = document.getElementById("inspection-date-input").dataset.value || "";
   try{
     await updateDoc(doc(db,"equipment", inspectionModalTarget.id), { lastInspectionDate: dateVal });
     toast("点検日を更新しました。");
@@ -1032,14 +1072,132 @@ function escapeHtml(s){
   return String(s??"").replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+/* ---------- 共通カレンダーポップアップ ---------- */
+let calendarPopupEl = null;
+function closeCalendarPopup(){
+  if(calendarPopupEl){
+    calendarPopupEl.remove();
+    calendarPopupEl = null;
+    document.removeEventListener("mousedown", onOutsideClickForCalendar, true);
+  }
+}
+function onOutsideClickForCalendar(e){
+  if(calendarPopupEl && !calendarPopupEl.contains(e.target)){
+    closeCalendarPopup();
+  }
+}
+function openCalendarPicker(anchorEl, initialDateStr, opts){
+  closeCalendarPopup();
+  const onSelect = opts?.onSelect || (()=>{});
+  const allowClear = !!opts?.allowClear;
+  const base = initialDateStr ? new Date(initialDateStr+"T00:00:00") : new Date();
+  let viewYear = base.getFullYear();
+  let viewMonth = base.getMonth();
+  const selectedStr = initialDateStr || "";
+
+  const popup = document.createElement("div");
+  popup.className = "calendar-popup";
+  document.body.appendChild(popup);
+  calendarPopupEl = popup;
+
+  function render(){
+    popup.innerHTML = "";
+    const header = document.createElement("div");
+    header.className = "cal-header";
+    const prevBtn = document.createElement("button");
+    prevBtn.type = "button"; prevBtn.className = "cal-nav"; prevBtn.textContent = "◀";
+    prevBtn.addEventListener("click", ()=>{ viewMonth--; if(viewMonth<0){viewMonth=11;viewYear--;} render(); });
+    const label = document.createElement("div");
+    label.className = "cal-label";
+    label.textContent = `${viewYear}年 ${viewMonth+1}月`;
+    const nextBtn = document.createElement("button");
+    nextBtn.type = "button"; nextBtn.className = "cal-nav"; nextBtn.textContent = "▶";
+    nextBtn.addEventListener("click", ()=>{ viewMonth++; if(viewMonth>11){viewMonth=0;viewYear++;} render(); });
+    header.appendChild(prevBtn); header.appendChild(label); header.appendChild(nextBtn);
+    popup.appendChild(header);
+
+    const weekdaysRow = document.createElement("div");
+    weekdaysRow.className = "cal-weekdays";
+    ["日","月","火","水","木","金","土"].forEach(w=>{
+      const c = document.createElement("div"); c.textContent = w; weekdaysRow.appendChild(c);
+    });
+    popup.appendChild(weekdaysRow);
+
+    const grid = document.createElement("div");
+    grid.className = "cal-grid";
+    const firstDay = new Date(viewYear, viewMonth, 1);
+    const startOffset = firstDay.getDay();
+    const daysInMonth = new Date(viewYear, viewMonth+1, 0).getDate();
+    const todayStrVal = todayStr();
+    for(let i=0;i<startOffset;i++){
+      const blank = document.createElement("div");
+      blank.className = "cal-day empty";
+      grid.appendChild(blank);
+    }
+    for(let d=1; d<=daysInMonth; d++){
+      const dStr = `${viewYear}-${pad2(viewMonth+1)}-${pad2(d)}`;
+      const cell = document.createElement("button");
+      cell.type = "button";
+      cell.className = "cal-day";
+      if(dStr === todayStrVal) cell.classList.add("today");
+      if(dStr === selectedStr) cell.classList.add("selected");
+      cell.textContent = d;
+      cell.addEventListener("click", ()=>{
+        onSelect(dStr);
+        closeCalendarPopup();
+      });
+      grid.appendChild(cell);
+    }
+    popup.appendChild(grid);
+
+    const footer = document.createElement("div");
+    footer.className = "cal-footer";
+    const todayBtn = document.createElement("button");
+    todayBtn.type = "button"; todayBtn.className = "cal-today-btn"; todayBtn.textContent = "今日";
+    todayBtn.addEventListener("click", ()=>{ onSelect(todayStrVal); closeCalendarPopup(); });
+    footer.appendChild(todayBtn);
+    if(allowClear){
+      const clearBtn = document.createElement("button");
+      clearBtn.type = "button"; clearBtn.className = "cal-clear-btn"; clearBtn.textContent = "クリア";
+      clearBtn.addEventListener("click", ()=>{ onSelect(""); closeCalendarPopup(); });
+      footer.appendChild(clearBtn);
+    }
+    popup.appendChild(footer);
+  }
+  render();
+
+  const rect = anchorEl.getBoundingClientRect();
+  const popupWidth = 260;
+  let left = rect.left;
+  if(left + popupWidth > window.innerWidth - 8){ left = window.innerWidth - popupWidth - 8; }
+  popup.style.top = `${rect.bottom + 6}px`;
+  popup.style.left = `${Math.max(8,left)}px`;
+
+  setTimeout(()=>{ document.addEventListener("mousedown", onOutsideClickForCalendar, true); }, 0);
+}
+
+function setDateFieldValue(el, dateStr){
+  el.dataset.value = dateStr || "";
+  if(dateStr){
+    el.textContent = formatDateJP(dateStr);
+    el.classList.remove("placeholder");
+  } else {
+    el.textContent = "未設定（タップして選択）";
+    el.classList.add("placeholder");
+  }
+}
+
 /* ---------- timeline ---------- */
-document.getElementById("date-input").value = selectedDate;
 updateWeekdayBadge();
-document.getElementById("date-input").addEventListener("change", e=>{
-  selectedDate = e.target.value || todayStr();
-  pendingStart = pendingEnd = null;
-  updateWeekdayBadge();
-  loadReservationsForDay();
+document.getElementById("date-picker-label").addEventListener("click", (e)=>{
+  openCalendarPicker(e.currentTarget, selectedDate, {
+    onSelect: (dateStr)=>{
+      selectedDate = dateStr || todayStr();
+      pendingStart = pendingEnd = null;
+      updateWeekdayBadge();
+      loadReservationsForDay();
+    }
+  });
 });
 document.getElementById("date-prev").addEventListener("click", ()=> shiftDate(-1));
 document.getElementById("date-next").addEventListener("click", ()=> shiftDate(1));
@@ -1047,7 +1205,6 @@ function shiftDate(delta){
   const d = new Date(selectedDate + "T00:00:00");
   d.setDate(d.getDate()+delta);
   selectedDate = `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
-  document.getElementById("date-input").value = selectedDate;
   pendingStart = pendingEnd = null;
   updateWeekdayBadge();
   loadReservationsForDay();
