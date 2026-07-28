@@ -204,7 +204,7 @@
   /* ---------- 行き先 ---------- */
   .wb-list-columns{display:grid;grid-template-columns:1fr;gap:14px;align-items:start;}
   @media (min-width:820px){
-    .wb-list-columns{grid-template-columns:1fr 1fr;}
+    .wb-list-columns{grid-template-columns:repeat(var(--wb-cols, 2), 1fr);}
   }
   .wb-table{width:100%;border-collapse:collapse;font-size:13px;background:var(--surface);border:1.5px solid var(--line);border-radius:10px;overflow:hidden;}
   .wb-table th{text-align:left;padding:9px 10px;background:#F0F3F8;color:var(--muted);font-size:11.5px;font-weight:700;border-bottom:1px solid var(--line);}
@@ -375,16 +375,7 @@
           <button class="btn-primary" id="wb-edit-my-btn">自分の行き先を入力</button>
         </div>
         <div id="wb-list-view">
-          <div class="wb-list-columns">
-            <table class="wb-table">
-              <thead><tr><th>所属</th><th>氏名</th><th>状態</th><th>備考</th></tr></thead>
-              <tbody id="wb-table-body-a"></tbody>
-            </table>
-            <table class="wb-table">
-              <thead><tr><th>所属</th><th>氏名</th><th>状態</th><th>備考</th></tr></thead>
-              <tbody id="wb-table-body-b"></tbody>
-            </table>
-          </div>
+          <div class="wb-list-columns" id="wb-list-columns"></div>
         </div>
         <div id="wb-board-view" style="display:none;">
           <div class="wb-board" id="wb-board"></div>
@@ -582,6 +573,7 @@ let myResUnsub = null;
 let employeesAll = [];
 let departmentsAll = [];
 let wbStatusesAll = [];
+let wbListColumns = 2;
 let noticesAll = [];
 let activeSafetyCampaign = null;
 let mySafetyResponse = null;
@@ -637,6 +629,7 @@ onAuthStateChanged(auth, async (user)=>{
     initNoticesListener();
     initDepartmentsListener();
     initWbStatusesListener();
+    initWbColumnsListener();
     initEmployeesListener();
     initSafetyCampaignListener();
 
@@ -1425,6 +1418,12 @@ function initWbStatusesListener(){
     renderWhereabouts();
   }, (err)=>{ console.error("[行き先ステータス取得エラー]", err); });
 }
+function initWbColumnsListener(){
+  onSnapshot(doc(db,"app_settings","whereabouts"), snap=>{
+    wbListColumns = (snap.exists() && snap.data().listColumns) || 2;
+    renderWhereabouts();
+  }, (err)=>{ console.error("[行き先列数設定取得エラー]", err); });
+}
 function initEmployeesListener(){
   onSnapshot(collection(db,"employees"), snap=>{
     employeesAll = snap.docs.map(d=>({ email:d.id, ...d.data() }));
@@ -1469,16 +1468,11 @@ function renderWhereabouts(){
 }
 
 function renderWbList(){
-  const bodyA = document.getElementById("wb-table-body-a");
-  const bodyB = document.getElementById("wb-table-body-b");
-  if(!bodyA || !bodyB) return;
-  bodyA.innerHTML = "";
-  bodyB.innerHTML = "";
+  const container = document.getElementById("wb-list-columns");
+  if(!container) return;
+  container.style.setProperty("--wb-cols", wbListColumns);
+  container.innerHTML = "";
   const list = getSortedEmployees();
-  if(list.length===0){
-    bodyA.innerHTML = `<tr><td colspan="4" class="empty-state">まだ社員データがありません。ログインすると自動的に登録されます。</td></tr>`;
-    return;
-  }
 
   function buildRow(emp){
     const canEdit = isAdmin || isWhereaboutsEditor || emp.email===currentUser.email;
@@ -1502,10 +1496,29 @@ function renderWbList(){
     return tr;
   }
 
-  // 上から読んで、続きが右列（2列目）に入る新聞のような段組
-  const half = Math.ceil(list.length/2);
-  list.slice(0, half).forEach(emp=> bodyA.appendChild(buildRow(emp)));
-  list.slice(half).forEach(emp=> bodyB.appendChild(buildRow(emp)));
+  if(list.length===0){
+    const table = document.createElement("table");
+    table.className = "wb-table";
+    table.innerHTML = `<tbody><tr><td class="empty-state">まだ社員データがありません。ログインすると自動的に登録されます。</td></tr></tbody>`;
+    container.appendChild(table);
+    return;
+  }
+
+  // 上から読んで、続きが次の列に入る新聞のような段組
+  const cols = Math.min(4, Math.max(1, wbListColumns||1));
+  const perCol = Math.ceil(list.length / cols);
+  for(let i=0;i<cols;i++){
+    const chunk = list.slice(i*perCol, (i+1)*perCol);
+    if(chunk.length===0 && i>0) continue;
+    const table = document.createElement("table");
+    table.className = "wb-table";
+    const thead = document.createElement("thead");
+    thead.innerHTML = `<tr><th>所属</th><th>氏名</th><th>状態</th><th>備考</th></tr>`;
+    const tbody = document.createElement("tbody");
+    chunk.forEach(emp=> tbody.appendChild(buildRow(emp)));
+    table.appendChild(thead); table.appendChild(tbody);
+    container.appendChild(table);
+  }
 }
 
 function renderWbBoard(){
