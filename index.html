@@ -49,6 +49,16 @@
 
   /* ---------- App shell ---------- */
   #app{display:none;min-height:100vh;flex-direction:column;}
+
+  /* ---------- サイネージ表示モード ---------- */
+  body.kiosk-mode header,
+  body.kiosk-mode nav.tabs{ display:none !important; }
+  body.kiosk-mode #app{ height:100vh; overflow:hidden; }
+  body.kiosk-mode main{ max-width:none; padding:18px; height:100vh; box-sizing:border-box;
+    display:flex; align-items:flex-start; justify-content:center; }
+  body.kiosk-mode #view-whereabouts{ width:100%; transform-origin: top center; }
+  body.kiosk-mode .section-toolbar{ margin-bottom:20px; }
+
   header{
     background:var(--surface);border-bottom:1px solid var(--line);
     padding:12px 18px;display:flex;align-items:center;justify-content:space-between;
@@ -521,6 +531,12 @@ if(urlPreselect.email){
   if(emailInput) emailInput.value = urlPreselect.email;
 }
 
+/* ---------- サイネージ表示モード ---------- */
+const isDisplayMode = urlParams.get("display") === "1";
+if(isDisplayMode){
+  document.body.classList.add("kiosk-mode");
+}
+
 /* ---------- helpers ---------- */
 const pad2 = n => String(n).padStart(2,"0");
 const todayStr = () => {
@@ -636,6 +652,9 @@ onAuthStateChanged(auth, async (user)=>{
     if(urlPreselect.campaign){
       switchToTab("safety");
       history.replaceState(null, "", location.pathname);
+    }
+    if(isDisplayMode){
+      switchToTab("whereabouts");
     }
   }else{
     currentUser = null;
@@ -1418,9 +1437,32 @@ function initWbStatusesListener(){
     renderWhereabouts();
   }, (err)=>{ console.error("[行き先ステータス取得エラー]", err); });
 }
+let wbDisplayWidthPx = null;
+let kioskDefaultViewApplied = false;
 function initWbColumnsListener(){
   onSnapshot(doc(db,"app_settings","whereabouts"), snap=>{
-    wbListColumns = (snap.exists() && snap.data().listColumns) || 2;
+    const data = snap.exists() ? snap.data() : {};
+    wbListColumns = data.listColumns || 2;
+    wbDisplayWidthPx = data.displayWidthPx || null;
+
+    const wrap = document.getElementById("view-whereabouts");
+    if(wrap){
+      wrap.style.maxWidth = wbDisplayWidthPx ? `${wbDisplayWidthPx}px` : "";
+      wrap.style.marginLeft = wbDisplayWidthPx ? "auto" : "";
+      wrap.style.marginRight = wbDisplayWidthPx ? "auto" : "";
+    }
+
+    if(isDisplayMode && !kioskDefaultViewApplied){
+      kioskDefaultViewApplied = true;
+      const defaultView = data.kioskDefaultView === "board" ? "board" : "list";
+      wbCurrentView = defaultView;
+      document.querySelectorAll("#wb-view-toggle .seg-btn").forEach(b=>{
+        b.classList.toggle("active", b.dataset.wbview===defaultView);
+      });
+      document.getElementById("wb-list-view").style.display = defaultView==="list" ? "block":"none";
+      document.getElementById("wb-board-view").style.display = defaultView==="board" ? "block":"none";
+    }
+
     renderWhereabouts();
   }, (err)=>{ console.error("[行き先列数設定取得エラー]", err); });
 }
@@ -1465,7 +1507,23 @@ function getSortedEmployees(){
 function renderWhereabouts(){
   renderWbList();
   renderWbBoard();
+  if(isDisplayMode){
+    requestAnimationFrame(applyKioskScale);
+  }
 }
+
+function applyKioskScale(){
+  const el = document.getElementById("view-whereabouts");
+  if(!el) return;
+  el.style.transform = "none";
+  const availW = window.innerWidth - 36;
+  const availH = window.innerHeight - 36;
+  const rect = el.getBoundingClientRect();
+  if(rect.width===0 || rect.height===0) return;
+  const scale = Math.min(availW/rect.width, availH/rect.height, 1);
+  el.style.transform = `scale(${scale})`;
+}
+window.addEventListener("resize", ()=>{ if(isDisplayMode) applyKioskScale(); });
 
 function renderWbList(){
   const container = document.getElementById("wb-list-columns");
