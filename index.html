@@ -216,21 +216,22 @@
   @media (min-width:820px){
     .wb-list-columns{grid-template-columns:repeat(var(--wb-cols, 2), 1fr);}
   }
-  .wb-table{width:100%;border-collapse:collapse;font-size:13px;background:var(--surface);border:1.5px solid var(--line);border-radius:10px;overflow:hidden;}
-  .wb-table th{text-align:left;padding:9px 10px;background:#F0F3F8;color:var(--muted);font-size:11.5px;font-weight:700;border-bottom:1px solid var(--line);}
+  #view-whereabouts{ --wb-font-size: 13px; }
+  .wb-table{width:100%;border-collapse:collapse;font-size:var(--wb-font-size);background:var(--surface);border:1.5px solid var(--line);border-radius:10px;overflow:hidden;}
+  .wb-table th{text-align:left;padding:9px 10px;background:#F0F3F8;color:var(--muted);font-size:calc(var(--wb-font-size) * 0.885);font-weight:700;border-bottom:1px solid var(--line);}
   .wb-table td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:middle;}
-  .wb-table tr.dept-row td{background:#FAFBFC;font-size:11px;font-weight:700;color:var(--brand-dark);letter-spacing:.03em;padding:6px 10px;}
+  .wb-table tr.dept-row td{background:#FAFBFC;font-size:calc(var(--wb-font-size) * 0.846);font-weight:700;color:var(--brand-dark);letter-spacing:.03em;padding:6px 10px;}
   .wb-table tr:last-child td{border-bottom:none;}
-  .wb-status-badge{display:inline-block;padding:4px 10px;border-radius:14px;font-size:12px;font-weight:700;color:#fff;white-space:nowrap;}
-  .wb-note-cell{color:var(--muted);font-size:12.5px;}
+  .wb-status-badge{display:inline-block;padding:4px 10px;border-radius:14px;font-size:calc(var(--wb-font-size) * 0.923);font-weight:700;color:#fff;white-space:nowrap;}
+  .wb-note-cell{color:var(--muted);font-size:calc(var(--wb-font-size) * 0.962);}
   .wb-editable{cursor:pointer;}
   .wb-editable:hover{text-decoration:underline;}
   .wb-board{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;}
   .wb-board-col{background:var(--surface);border:1.5px solid var(--line);border-radius:10px;overflow:hidden;}
-  .wb-board-col .col-head{padding:9px 12px;font-size:13px;font-weight:700;color:#fff;}
+  .wb-board-col .col-head{padding:9px 12px;font-size:var(--wb-font-size);font-weight:700;color:#fff;}
   .wb-board-col .col-body{padding:10px 12px;display:flex;flex-direction:column;gap:6px;min-height:40px;}
-  .wb-board-col .name-chip{font-size:13px;color:var(--text);}
-  .wb-board-col .empty-col{font-size:11.5px;color:var(--muted);}
+  .wb-board-col .name-chip{font-size:var(--wb-font-size);color:var(--text);}
+  .wb-board-col .empty-col{font-size:calc(var(--wb-font-size) * 0.885);color:var(--muted);}
 
   /* ---------- 安否確認 ---------- */
   .safety-banner{background:linear-gradient(180deg,#1C5AA5,#124079);color:#fff;border-radius:12px;padding:20px;margin-bottom:16px;}
@@ -1442,6 +1443,7 @@ function initWbStatusesListener(){
   }, (err)=>{ console.error("[行き先ステータス取得エラー]", err); });
 }
 let wbDisplayWidthPx = null;
+let wbFontSizePx = 13;
 let kioskDefaultViewApplied = false;
 function applyMainWidthForCurrentTab(){
   if(isDisplayMode) return; // サイネージモードはCSS側でmax-width:noneを常に適用済み
@@ -1462,12 +1464,14 @@ function initWbColumnsListener(){
     const data = snap.exists() ? snap.data() : {};
     wbListColumns = data.listColumns || 2;
     wbDisplayWidthPx = data.displayWidthPx || null;
+    wbFontSizePx = data.fontSizePx || 13;
 
     const wrap = document.getElementById("view-whereabouts");
     if(wrap){
       wrap.style.maxWidth = wbDisplayWidthPx ? `${wbDisplayWidthPx}px` : "";
       wrap.style.marginLeft = wbDisplayWidthPx ? "auto" : "";
       wrap.style.marginRight = wbDisplayWidthPx ? "auto" : "";
+      wrap.style.setProperty("--wb-font-size", `${data.fontSizePx || 13}px`);
     }
     applyMainWidthForCurrentTab();
 
@@ -1591,7 +1595,7 @@ function renderWbList(){
   }
 
   // 「列数」は上限として扱い、実際の幅で1列あたり最低260px確保できる数まで自動的に減らす
-  const MIN_COL_WIDTH = 260;
+  const MIN_COL_WIDTH = 260 * (wbFontSizePx/13);
   const availableWidth = container.clientWidth || container.parentElement?.clientWidth || 960;
   const maxColsByWidth = Math.max(1, Math.floor(availableWidth / MIN_COL_WIDTH));
   const cols = Math.min(4, Math.max(1, wbListColumns||1), maxColsByWidth);
