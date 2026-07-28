@@ -363,7 +363,7 @@
       <button class="tab-btn" data-view="whereabouts">行き先</button>
       <button class="tab-btn" data-view="reserve">予約</button>
       <button class="tab-btn" data-view="checkout">貸出</button>
-      <button class="tab-btn" data-view="safety">安否確認</button>
+      <button class="tab-btn" data-view="safety" style="display:none;">安否確認</button>
       <button class="tab-reorder-btn" id="tab-reorder-toggle" title="タブの並び替え">並び替え</button>
     </nav>
 
@@ -2326,6 +2326,7 @@ function initSafetyCampaignListener(){
     if(snap.empty){
       activeSafetyCampaign = null;
       mySafetyResponse = null;
+      updateSafetyTabVisibility();
       renderSafety();
       return;
     }
@@ -2335,8 +2336,20 @@ function initSafetyCampaignListener(){
       const respSnap = await getDoc(doc(db,"safety_responses", `${activeSafetyCampaign.id}_${currentUser.uid}`));
       mySafetyResponse = respSnap.exists() ? respSnap.data() : null;
     }catch(e){ mySafetyResponse = null; }
+    updateSafetyTabVisibility();
     renderSafety();
   }, (err)=>{ console.error("[安否確認取得エラー]", err); });
+}
+
+function updateSafetyTabVisibility(){
+  const btn = document.querySelector('.tab-btn[data-view="safety"]');
+  if(!btn) return;
+  const hasActive = !!activeSafetyCampaign;
+  btn.style.display = hasActive ? "inline-block" : "none";
+  // 表示中に安否確認タブを見ていた場合、発信が終了したら他のタブへ切り替える
+  if(!hasActive && btn.classList.contains("active")){
+    switchToTab("notices");
+  }
 }
 
 function renderSafety(){
