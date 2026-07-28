@@ -673,6 +673,7 @@ function switchToTab(viewName){
   ALL_VIEWS.forEach(name=>{
     document.getElementById("view-"+name).style.display = (name===viewName) ? "block":"none";
   });
+  applyMainWidthForCurrentTab();
   if(viewName==="whereabouts"){
     renderWhereabouts();
   }
@@ -1442,6 +1443,20 @@ function initWbStatusesListener(){
 }
 let wbDisplayWidthPx = null;
 let kioskDefaultViewApplied = false;
+function applyMainWidthForCurrentTab(){
+  if(isDisplayMode) return; // サイネージモードはCSS側でmax-width:noneを常に適用済み
+  const mainEl = document.querySelector("main");
+  if(!mainEl) return;
+  const wbSection = document.getElementById("view-whereabouts");
+  const isWbActive = wbSection && wbSection.style.display !== "none";
+  if(isWbActive){
+    // 「行き先」タブ表示中は、幅設定に応じてmainの960px上限を広げる／解除する
+    mainEl.style.maxWidth = wbDisplayWidthPx ? `${Math.max(960, wbDisplayWidthPx)}px` : "none";
+  } else {
+    // 他のタブでは今まで通り960pxで読みやすさを保つ
+    mainEl.style.maxWidth = "";
+  }
+}
 function initWbColumnsListener(){
   onSnapshot(doc(db,"app_settings","whereabouts"), snap=>{
     const data = snap.exists() ? snap.data() : {};
@@ -1454,14 +1469,7 @@ function initWbColumnsListener(){
       wrap.style.marginLeft = wbDisplayWidthPx ? "auto" : "";
       wrap.style.marginRight = wbDisplayWidthPx ? "auto" : "";
     }
-    // 通常表示（サイネージ以外）では main 自体が960pxで頭打ちになるため、
-    // 幅設定がある場合はmainの上限も広げる（スマホ幅では元々960px未満なので影響なし）
-    if(!isDisplayMode){
-      const mainEl = document.querySelector("main");
-      if(mainEl){
-        mainEl.style.maxWidth = wbDisplayWidthPx ? `${Math.max(960, wbDisplayWidthPx)}px` : "";
-      }
-    }
+    applyMainWidthForCurrentTab();
 
     if(isDisplayMode && !kioskDefaultViewApplied){
       kioskDefaultViewApplied = true;
