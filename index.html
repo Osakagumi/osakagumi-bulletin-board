@@ -829,6 +829,7 @@ function formatDateTimeJP(iso){
 }
 
 function renderCheckoutGrid(grid, items){
+  grid.innerHTML = "";
   if(items.length===0){
     grid.innerHTML = `<div class="eq-card empty">このカテゴリに登録された設備はまだありません。管理画面から追加してください。</div>`;
     return;
