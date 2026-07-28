@@ -1686,16 +1686,23 @@ function applyMainWidthForCurrentTab(){
 function initWbColumnsListener(){
   onSnapshot(doc(db,"app_settings","whereabouts"), snap=>{
     const data = snap.exists() ? snap.data() : {};
-    wbListColumns = data.listColumns || 2;
-    wbDisplayWidthPx = data.displayWidthPx || null;
-    wbFontSizePx = data.fontSizePx || 13;
+
+    if(isDisplayMode){
+      wbListColumns = data.kioskListColumns || 2;
+      wbDisplayWidthPx = data.kioskDisplayWidthPx || null;
+      wbFontSizePx = data.kioskFontSizePx || 13;
+    } else {
+      wbListColumns = data.listColumns || 2;
+      wbDisplayWidthPx = data.displayWidthPx || null;
+      wbFontSizePx = data.fontSizePx || 13;
+    }
 
     const wrap = document.getElementById("view-whereabouts");
     if(wrap){
       wrap.style.maxWidth = wbDisplayWidthPx ? `${wbDisplayWidthPx}px` : "";
       wrap.style.marginLeft = wbDisplayWidthPx ? "auto" : "";
       wrap.style.marginRight = wbDisplayWidthPx ? "auto" : "";
-      wrap.style.setProperty("--wb-font-size", `${data.fontSizePx || 13}px`);
+      wrap.style.setProperty("--wb-font-size", `${wbFontSizePx}px`);
     }
     applyMainWidthForCurrentTab();
 
