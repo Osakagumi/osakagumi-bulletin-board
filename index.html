@@ -111,6 +111,18 @@
   .cat-pill .dot{width:8px;height:8px;border-radius:50%;}
   .cat-pill.active{border-color:currentColor;background:rgba(0,0,0,0.02);}
 
+  /* 事前設定：保存済み日付一覧 */
+  .wb-preset-date-pill{
+    display:flex;align-items:center;gap:6px;border-radius:20px;border:1.5px solid var(--line);
+    background:#fff;padding:6px 6px 6px 12px;font-size:12.5px;
+  }
+  .wb-preset-date-pill.active{border-color:var(--brand);background:#F4F8FC;color:var(--brand-dark);font-weight:700;}
+  .wb-preset-date-pill .wb-preset-date-text{cursor:pointer;}
+  .wb-preset-date-pill .wb-preset-date-del{
+    border:none;background:none;color:var(--muted);font-size:14px;line-height:1;padding:3px 6px;border-radius:50%;cursor:pointer;
+  }
+  .wb-preset-date-pill .wb-preset-date-del:hover{background:#FDF2F2;color:var(--danger);}
+
   /* equipment grid */
   .eq-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:18px;}
   .eq-card{
@@ -495,12 +507,17 @@
               <span style="font-size:12.5px;color:var(--muted);">対象日：</span>
               <span class="date-picker-label" id="wb-preset-date-picker"></span>
             </div>
-            <button class="btn-primary" id="wb-preset-save-default-btn">この内容を初期状態として保存</button>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button class="btn-primary" id="wb-preset-save-btn">この日の内容を保存する</button>
+              <button class="btn-ghost" id="wb-preset-save-default-btn" style="border:1px solid var(--line);">この内容を初期状態として保存</button>
+            </div>
           </div>
+          <div id="wb-preset-dates-list" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;"></div>
           <div class="howto" id="wb-preset-date-label"></div>
           <div class="wb-list-columns" id="wb-preset-columns"></div>
           <p style="font-size:11.5px;color:var(--muted);margin-top:10px;">
             指定できるのは、カレンダー上で休日になっていない日のみです。事前設定は最大7日分まで保持されます（過去の日付は自動的に削除されます）。<br>
+            「この日の内容を保存する」を押すと、個別に変更していない社員も含めて、今表示されている内容がこの日の事前設定として保存されます。<br>
             「初期状態として保存」しておくと、事前設定していない日を開いたときの初期値として使われます。<br>
             当日、本人が「自分の行き先を入力」でその場で変更した場合は、その内容が優先して表示されます。
           </p>
@@ -2377,6 +2394,7 @@ function renderWbPresetTable(){
 
   const storedDates = wbPresetStoredDates();
   dateLabel.innerHTML = `<b>${formatDateJP(wbPresetSelectedDate)}</b> の行き先を事前設定します。保存中の日付：${storedDates.length}/7件`;
+  renderWbPresetDatesList();
 
   columnsWrap.innerHTML = "";
   if(!wbPresetsLoaded){
@@ -2585,6 +2603,71 @@ document.getElementById("wb-preset-modal-save").addEventListener("click", async 
     errEl.textContent = "保存に失敗しました。権限をご確認ください。";
   }
 });
+
+document.getElementById("wb-preset-save-btn").addEventListener("click", async ()=>{
+  const dateStr = wbPresetSelectedDate;
+  const storedDates = wbPresetStoredDates();
+  if(!storedDates.includes(dateStr) && storedDates.length >= 7){
+    const oldest = storedDates[0];
+    if(!confirm(`事前設定は最大7日分までです。最も古い ${formatDateJP(oldest)} を削除して、${formatDateJP(dateStr)} を保存しますか？`)){
+      return;
+    }
+    await deleteWbPresetsForDate(oldest);
+  }
+  const list = getSortedEmployees();
+  const dayPresets = wbPresetsByDate[dateStr] || {};
+  let count = 0;
+  for(const emp of list){
+    if(dayPresets[emp.email]) continue; // 既に個別設定済みの人はそのまま
+    const fallback = wbPresetDefaults[emp.email] || null;
+    if(!fallback || !fallback.status) continue; // 初期状態も無い（未設定のまま）の人はスキップ
+    try{
+      await setDoc(doc(db,"wb_presets", `${dateStr}_${emp.email}`), {
+        date: dateStr, email: emp.email,
+        status: fallback.status, note: fallback.note||"",
+        timeLeaveType: "", timeLeaveStart: "", timeLeaveEnd: "",
+        updatedBy: currentUser.email, updatedAt: new Date().toISOString()
+      });
+      count++;
+    }catch(e){ /* 無視して続行 */ }
+  }
+  toast(`${formatDateJP(dateStr)}の内容を保存しました（${count}件を初期状態から反映）。`);
+});
+
+function renderWbPresetDatesList(){
+  const wrap = document.getElementById("wb-preset-dates-list");
+  if(!wrap) return;
+  const storedDates = wbPresetStoredDates();
+  wrap.innerHTML = "";
+  if(storedDates.length===0){
+    wrap.innerHTML = `<span style="font-size:11.5px;color:var(--muted);">保存済みの日付はまだありません。</span>`;
+    return;
+  }
+  storedDates.forEach(dateStr=>{
+    const pill = document.createElement("div");
+    pill.className = "wb-preset-date-pill" + (dateStr===wbPresetSelectedDate ? " active" : "");
+    const textSpan = document.createElement("span");
+    textSpan.className = "wb-preset-date-text";
+    textSpan.textContent = formatDateJP(dateStr);
+    textSpan.addEventListener("click", ()=>{
+      wbPresetSelectedDate = dateStr;
+      renderWbPresetTable();
+    });
+    const delBtn = document.createElement("button");
+    delBtn.type = "button";
+    delBtn.className = "wb-preset-date-del";
+    delBtn.textContent = "×";
+    delBtn.addEventListener("click", async (e)=>{
+      e.stopPropagation();
+      if(!confirm(`${formatDateJP(dateStr)}の事前設定を削除しますか？`)) return;
+      await deleteWbPresetsForDate(dateStr);
+      toast(`${formatDateJP(dateStr)}の事前設定を削除しました。`);
+    });
+    pill.appendChild(textSpan);
+    pill.appendChild(delBtn);
+    wrap.appendChild(pill);
+  });
+}
 
 document.getElementById("wb-preset-save-default-btn").addEventListener("click", async ()=>{
   const dayPresets = wbPresetsByDate[wbPresetSelectedDate] || {};
