@@ -603,6 +603,25 @@
         <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">備考（任意）</label>
         <textarea id="wb-preset-note"></textarea>
       </div>
+      <div class="field" style="border-top:1px solid var(--line);padding-top:12px;">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text);margin-bottom:8px;">
+          <input type="checkbox" id="wb-preset-tl-check" style="width:auto;">
+          この日、時間休を設定する
+        </label>
+        <div id="wb-preset-tl-fields" style="display:none;flex-direction:column;gap:8px;">
+          <div class="seg-toggle" id="wb-preset-tl-type-toggle" style="width:100%;">
+            <button type="button" class="seg-btn" data-tltype="custom" style="flex:1;">時間休</button>
+            <button type="button" class="seg-btn" data-tltype="am" style="flex:1;">AM休</button>
+            <button type="button" class="seg-btn" data-tltype="pm" style="flex:1;">PM休</button>
+          </div>
+          <div id="wb-preset-tl-custom-fields" style="display:none;gap:8px;align-items:center;">
+            <button type="button" class="date-field-btn placeholder" id="wb-preset-tl-start" data-value="" style="flex:1;"></button>
+            <span style="color:var(--muted);">〜</span>
+            <button type="button" class="date-field-btn placeholder" id="wb-preset-tl-end" data-value="" style="flex:1;"></button>
+          </div>
+        </div>
+        <p style="font-size:11px;color:var(--muted);margin:6px 0 0;">当日、この時間帯だけ自動的に「休み」表示になります。</p>
+      </div>
       <div class="modal-err" id="wb-preset-modal-error"></div>
       <div class="row-btns">
         <button class="btn-ghost" id="wb-preset-modal-cancel" style="border:1px solid var(--line);">キャンセル</button>
@@ -1966,20 +1985,34 @@ function isNowInWorkWindow(){
   return nowMin >= win.windowStartMin && nowMin <= win.windowEndMin;
 }
 
+// 本人が今日その場で時間休を設定していればそれを、なければ今日分の事前設定の時間休を返す
+function getEffectiveTimeLeave(emp){
+  if(emp.timeLeaveDate===todayStr() && emp.timeLeaveType){
+    return { type: emp.timeLeaveType, start: emp.timeLeaveStart, end: emp.timeLeaveEnd };
+  }
+  const todayPresets = wbPresetsByDate[todayStr()] || {};
+  const preset = todayPresets[emp.email];
+  if(preset && preset.timeLeaveType){
+    return { type: preset.timeLeaveType, start: preset.timeLeaveStart, end: preset.timeLeaveEnd };
+  }
+  return null;
+}
+
 function isTimeLeaveActiveNow(emp){
-  if(!(emp.timeLeaveDate===todayStr() && emp.timeLeaveType)) return false;
+  const tl = getEffectiveTimeLeave(emp);
+  if(!tl) return false;
   const now = new Date();
   const nowMin = now.getHours()*60 + now.getMinutes();
   const win = getWorkWindow();
-  if(emp.timeLeaveType==="am"){
+  if(tl.type==="am"){
     return nowMin >= win.windowStartMin && nowMin <= 13*60;
   }
-  if(emp.timeLeaveType==="pm"){
+  if(tl.type==="pm"){
     return nowMin >= 12*60 && nowMin <= win.windowEndMin;
   }
-  if(!emp.timeLeaveStart || !emp.timeLeaveEnd) return false;
-  const [sh,sm] = emp.timeLeaveStart.split(":").map(Number);
-  const [eh,em] = emp.timeLeaveEnd.split(":").map(Number);
+  if(!tl.start || !tl.end) return false;
+  const [sh,sm] = tl.start.split(":").map(Number);
+  const [eh,em] = tl.end.split(":").map(Number);
   return nowMin >= (sh*60+sm) && nowMin <= (eh*60+em);
 }
 
@@ -2015,13 +2048,19 @@ function getWbNoteDisplay(emp){
   if(!isNowInWorkWindow()){
     return "";
   }
-  if(emp.timeLeaveDate===todayStr() && emp.timeLeaveType){
+  const baseNote = getBaseWbNote(emp);
+  const tl = getEffectiveTimeLeave(emp);
+  if(tl){
     let tlText;
-    if(emp.timeLeaveType==="am") tlText = "AM休";
-    else if(emp.timeLeaveType==="pm") tlText = "PM休";
-    else tlText = `時間休 ${emp.timeLeaveStart}〜${emp.timeLeaveEnd}`;
-    return emp.note ? `${tlText} / ${emp.note}` : tlText;
+    if(tl.type==="am") tlText = "AM休";
+    else if(tl.type==="pm") tlText = "PM休";
+    else tlText = `時間休 ${tl.start}〜${tl.end}`;
+    return baseNote ? `${tlText} / ${baseNote}` : tlText;
   }
+  return baseNote;
+}
+
+function getBaseWbNote(emp){
   const updatedToday = emp.statusUpdatedAt && String(emp.statusUpdatedAt).slice(0,10) === todayStr();
   if(updatedToday){
     return emp.note || "";
@@ -2216,7 +2255,10 @@ function initWbPresetsListener(){
       const data = d.data();
       if(!data.date || !data.email) return;
       if(!wbPresetsByDate[data.date]) wbPresetsByDate[data.date] = {};
-      wbPresetsByDate[data.date][data.email] = { status: data.status||"", note: data.note||"" };
+      wbPresetsByDate[data.date][data.email] = {
+        status: data.status||"", note: data.note||"",
+        timeLeaveType: data.timeLeaveType||"", timeLeaveStart: data.timeLeaveStart||"", timeLeaveEnd: data.timeLeaveEnd||""
+      };
     });
     wbPresetDefaults = {};
     const defaultsDoc = snap.docs.find(d=>d.id==="_defaults");
@@ -2295,12 +2337,16 @@ document.getElementById("wb-preset-bulk-done-btn").addEventListener("click", ()=
 });
 
 async function applyWbPresetBulkStatus(email){
+  const existing = (wbPresetsByDate[wbPresetSelectedDate] && wbPresetsByDate[wbPresetSelectedDate][email]) || {};
   try{
     await setDoc(doc(db,"wb_presets", `${wbPresetSelectedDate}_${email}`), {
       date: wbPresetSelectedDate,
       email,
       status: wbPresetBulkStatus,
-      note: (wbPresetsByDate[wbPresetSelectedDate] && wbPresetsByDate[wbPresetSelectedDate][email] && wbPresetsByDate[wbPresetSelectedDate][email].note) || "",
+      note: existing.note || "",
+      timeLeaveType: existing.timeLeaveType || "",
+      timeLeaveStart: existing.timeLeaveStart || "",
+      timeLeaveEnd: existing.timeLeaveEnd || "",
       updatedBy: currentUser.email,
       updatedAt: new Date().toISOString()
     });
@@ -2415,6 +2461,7 @@ document.getElementById("wb-preset-date-picker").addEventListener("click", (e)=>
 });
 
 let wbPresetEditingEmail = null;
+let wbPresetTlType = "";
 function openWbPresetModal(email){
   wbPresetEditingEmail = email;
   const emp = employeesAll.find(e=>e.email===email);
@@ -2435,27 +2482,91 @@ function openWbPresetModal(email){
   sel.value = preset ? preset.status||"" : "";
   document.getElementById("wb-preset-note").value = preset ? preset.note||"" : "";
   document.getElementById("wb-preset-modal-error").textContent = "";
+
+  const hasTl = !!(preset && preset.timeLeaveType);
+  document.getElementById("wb-preset-tl-check").checked = hasTl;
+  document.getElementById("wb-preset-tl-fields").style.display = hasTl ? "flex" : "none";
+  setTimeFieldValue(document.getElementById("wb-preset-tl-start"), hasTl ? preset.timeLeaveStart||"" : "");
+  setTimeFieldValue(document.getElementById("wb-preset-tl-end"), hasTl ? preset.timeLeaveEnd||"" : "");
+  selectPresetTlType(hasTl ? preset.timeLeaveType : "custom");
+
   document.getElementById("wb-preset-modal").classList.add("show");
 }
+
+function selectPresetTlType(type){
+  wbPresetTlType = type;
+  document.querySelectorAll("#wb-preset-tl-type-toggle .seg-btn").forEach(b=>{
+    b.classList.toggle("active", b.dataset.tltype===type);
+  });
+  document.getElementById("wb-preset-tl-custom-fields").style.display = type==="custom" ? "flex" : "none";
+  if(type==="am"){
+    setTimeFieldValue(document.getElementById("wb-preset-tl-start"), "00:00");
+    setTimeFieldValue(document.getElementById("wb-preset-tl-end"), "13:00");
+  } else if(type==="pm"){
+    setTimeFieldValue(document.getElementById("wb-preset-tl-start"), "12:00");
+    setTimeFieldValue(document.getElementById("wb-preset-tl-end"), "23:30");
+  }
+}
+document.getElementById("wb-preset-tl-check").addEventListener("change", (e)=>{
+  document.getElementById("wb-preset-tl-fields").style.display = e.target.checked ? "flex" : "none";
+  if(e.target.checked && !wbPresetTlType){
+    selectPresetTlType("custom");
+  }
+});
+document.querySelectorAll("#wb-preset-tl-type-toggle .seg-btn").forEach(btn=>{
+  btn.addEventListener("click", ()=> selectPresetTlType(btn.dataset.tltype));
+});
+document.getElementById("wb-preset-tl-start").addEventListener("click", (e)=>{
+  const el = e.currentTarget;
+  openTimePicker(el, el.dataset.value, {
+    minTime: calWorkStartTime, maxTime: calWorkEndTime,
+    onSelect: (val)=> setTimeFieldValue(el, val)
+  });
+});
+document.getElementById("wb-preset-tl-end").addEventListener("click", (e)=>{
+  const el = e.currentTarget;
+  openTimePicker(el, el.dataset.value, {
+    minTime: calWorkStartTime, maxTime: calWorkEndTime,
+    onSelect: (val)=> setTimeFieldValue(el, val)
+  });
+});
+
 document.getElementById("wb-preset-modal-cancel").addEventListener("click", ()=>{
   document.getElementById("wb-preset-modal").classList.remove("show");
 });
 document.getElementById("wb-preset-modal-save").addEventListener("click", async ()=>{
   if(!wbPresetEditingEmail) return;
+  const errEl = document.getElementById("wb-preset-modal-error");
   const status = document.getElementById("wb-preset-status-select").value;
   const note = document.getElementById("wb-preset-note").value.trim();
+  const tlChecked = document.getElementById("wb-preset-tl-check").checked;
+  const tlStart = document.getElementById("wb-preset-tl-start").dataset.value || "";
+  const tlEnd = document.getElementById("wb-preset-tl-end").dataset.value || "";
+  if(tlChecked){
+    if(!tlStart || !tlEnd){
+      errEl.textContent = "時間休の開始・終了時刻を選択してください。";
+      return;
+    }
+    if(tlStart >= tlEnd){
+      errEl.textContent = "時間休の終了時刻は開始時刻より後にしてください。";
+      return;
+    }
+  }
   try{
     await setDoc(doc(db,"wb_presets", `${wbPresetSelectedDate}_${wbPresetEditingEmail}`), {
       date: wbPresetSelectedDate,
       email: wbPresetEditingEmail,
       status, note,
+      timeLeaveType: tlChecked ? wbPresetTlType : "",
+      timeLeaveStart: tlChecked ? tlStart : "",
+      timeLeaveEnd: tlChecked ? tlEnd : "",
       updatedBy: currentUser.email,
       updatedAt: new Date().toISOString()
     });
     document.getElementById("wb-preset-modal").classList.remove("show");
     toast("事前設定を保存しました。");
   }catch(e){
-    document.getElementById("wb-preset-modal-error").textContent = "保存に失敗しました。権限をご確認ください。";
+    errEl.textContent = "保存に失敗しました。権限をご確認ください。";
   }
 });
 
