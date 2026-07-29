@@ -1901,11 +1901,17 @@ function applyKioskScale(){
   const el = document.getElementById("view-whereabouts");
   if(!el) return;
   el.style.transform = "none";
-  const availW = window.innerWidth - 36;
+  el.style.width = "";
   const availH = window.innerHeight - 36;
   const rect = el.getBoundingClientRect();
   if(rect.width===0 || rect.height===0) return;
-  const scale = Math.min(availW/rect.width, availH/rect.height, 1);
+  // 高さだけを基準に縮小率を決める（横幅は画面いっぱいのまま保つ）
+  const scale = Math.min(availH/rect.height, 1);
+  if(scale < 1){
+    // 縮小後も横幅が画面いっぱいのままになるよう、縮小前の幅を広げておく
+    el.style.width = `${rect.width/scale}px`;
+  }
+  el.style.transformOrigin = "top center";
   el.style.transform = `scale(${scale})`;
 }
 let wbResizeTimer = null;
