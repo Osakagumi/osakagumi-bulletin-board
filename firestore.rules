@@ -94,6 +94,12 @@ service cloud.firestore {
       allow write: if isCalendarEditor();
     }
 
+    // 年間休日カレンダーの年度一覧（最大3年度分の管理用）: 全員が読める。編集はカレンダー編集権限者・管理者のみ。
+    match /calendar_years/{yearId} {
+      allow read: if isSignedIn();
+      allow write: if isCalendarEditor();
+    }
+
     // 行き先ステータスマスタ（在席・外出・現場・休みなど）: 全員が読める。管理は管理者のみ。
     match /wb_statuses/{statusId} {
       allow read: if isSignedIn();
