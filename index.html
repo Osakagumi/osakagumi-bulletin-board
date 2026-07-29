@@ -509,7 +509,7 @@
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
               <button class="btn-primary" id="wb-preset-save-btn">この日の内容を保存する</button>
-              <button class="btn-ghost" id="wb-preset-save-default-btn" style="border:1px solid var(--line);">この内容を初期状態として保存</button>
+              <button class="btn-primary" id="wb-preset-save-default-btn">この内容を初期状態として保存</button>
             </div>
           </div>
           <div id="wb-preset-dates-list" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;"></div>
@@ -2327,6 +2327,8 @@ async function isDateHoliday(dateStr){
 function renderWbPresetBulkToggle(){
   const wrap = document.getElementById("wb-preset-bulk-status-toggle");
   const doneBtn = document.getElementById("wb-preset-bulk-done-btn");
+  const editMyBtn = document.getElementById("wb-edit-my-btn");
+  if(editMyBtn) editMyBtn.style.display = (wbCurrentView==="preset") ? "none" : "inline-block";
   if(!wrap) return;
   if(wbCurrentView!=="preset"){
     wrap.style.display = "none";
