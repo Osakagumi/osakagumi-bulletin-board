@@ -2355,6 +2355,18 @@ async function applyWbPresetBulkStatus(email){
   }
 }
 
+function presetNoteDisplay(preset){
+  if(!preset) return "";
+  if(preset.timeLeaveType){
+    let tlText;
+    if(preset.timeLeaveType==="am") tlText = "AM休";
+    else if(preset.timeLeaveType==="pm") tlText = "PM休";
+    else tlText = `時間休 ${preset.timeLeaveStart}〜${preset.timeLeaveEnd}`;
+    return preset.note ? `${tlText} / ${preset.note}` : tlText;
+  }
+  return preset.note || "";
+}
+
 function renderWbPresetTable(){
   const columnsWrap = document.getElementById("wb-preset-columns");
   const dateLabel = document.getElementById("wb-preset-date-label");
@@ -2424,7 +2436,7 @@ function renderWbPresetTable(){
       tdStatus.appendChild(badge);
       const tdNote = document.createElement("td");
       tdNote.className = "wb-note-cell";
-      tdNote.textContent = preset ? (preset.note||"") : "";
+      tdNote.textContent = presetNoteDisplay(preset);
       tr.appendChild(tdDept); tr.appendChild(tdName); tr.appendChild(tdStatus); tr.appendChild(tdNote);
       tbody.appendChild(tr);
     });
