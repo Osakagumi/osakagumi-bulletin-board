@@ -287,6 +287,24 @@
     <!-- ============ 行き先管理 ============ -->
     <section id="view-whereabouts" style="display:none;">
       <div class="panel">
+        <h2>定時（就業時間）の設定</h2>
+        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
+          行き先の表示は、定時の15分前〜15分後の間だけ通常表示され、それ以外の時間は全員「時間外」と表示されます。時間休（AM休・PM休・時間休）の範囲もこの定時を基準に計算されます。
+        </p>
+        <div class="form-grid">
+          <div class="field">
+            <label>始業時刻</label>
+            <input type="time" id="cal-work-start-input" value="08:00">
+          </div>
+          <div class="field">
+            <label>終業時刻</label>
+            <input type="time" id="cal-work-end-input" value="17:00">
+          </div>
+        </div>
+        <button class="btn btn-primary" id="cal-work-save-btn">保存する</button>
+      </div>
+
+      <div class="panel">
         <h2>行き先ビューの表示設定（一般画面）</h2>
         <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">社員側の「行き先」タブ・一覧表示（PCなど画面が広い場合）の見た目を設定します。スマホなど狭い画面では常に1列・幅いっぱいで表示されます。</p>
         <div class="form-grid">
@@ -858,8 +876,27 @@ function initWbColumnsListener(){
     if(kioskFontInput && document.activeElement !== kioskFontInput){ kioskFontInput.value = kioskFontSize; }
     const kioskSelect = document.getElementById("wb-kiosk-default-view");
     if(kioskSelect && document.activeElement !== kioskSelect){ kioskSelect.value = kioskView; }
+
+    // 定時
+    const workStart = data.workStartTime || "08:00";
+    const workEnd = data.workEndTime || "17:00";
+    const workStartInput = document.getElementById("cal-work-start-input");
+    if(workStartInput && document.activeElement !== workStartInput){ workStartInput.value = workStart; }
+    const workEndInput = document.getElementById("cal-work-end-input");
+    if(workEndInput && document.activeElement !== workEndInput){ workEndInput.value = workEnd; }
   });
 }
+document.getElementById("cal-work-save-btn").addEventListener("click", async ()=>{
+  const workStart = document.getElementById("cal-work-start-input").value || "08:00";
+  const workEnd = document.getElementById("cal-work-end-input").value || "17:00";
+  if(workStart >= workEnd){ toast("終業時刻は始業時刻より後にしてください。"); return; }
+  try{
+    await setDoc(doc(db,"app_settings","whereabouts"), { workStartTime: workStart, workEndTime: workEnd }, { merge:true });
+    toast("定時を保存しました。");
+  }catch(e){
+    toast("保存に失敗しました。");
+  }
+});
 document.getElementById("wb-columns-save-btn").addEventListener("click", async ()=>{
   let cols = Number(document.getElementById("wb-columns-input").value) || 2;
   cols = Math.min(4, Math.max(1, Math.round(cols)));
