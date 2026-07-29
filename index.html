@@ -192,6 +192,36 @@
   .time-slot:hover{background:#F0F3F8;}
   .time-slot.selected{background:var(--brand);color:#fff;}
 
+  /* ---------- カレンダー ---------- */
+  .date-nav-btn{border:1px solid var(--line);background:#fff;border-radius:6px;width:30px;height:30px;font-size:14px;}
+  .cal-grid-wrap{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  @media (max-width:900px){
+    .cal-grid-wrap{grid-template-columns:1fr;}
+  }
+  .cal-month-block{background:var(--surface);border:1.5px solid var(--line);border-radius:10px;padding:10px;}
+  .cal-month-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px;padding:0 2px;}
+  .cal-month-head .cal-month-name{font-size:14px;font-weight:700;color:var(--brand-dark);}
+  .cal-month-head .cal-month-count{font-size:11px;color:var(--muted);font-family:var(--mono);}
+  .cal-table{width:100%;border-collapse:collapse;table-layout:fixed;}
+  .cal-table th{font-size:10.5px;color:var(--muted);font-weight:600;padding:3px 0;text-align:center;}
+  .cal-table th.cal-sun{color:var(--danger);}
+  .cal-table th.cal-sat{color:#2E6FA3;}
+  .cal-day-cell{
+    height:44px;vertical-align:top;text-align:center;padding:2px 1px;border-radius:6px;position:relative;
+  }
+  .cal-day-cell.cal-clickable{cursor:pointer;}
+  .cal-day-cell.cal-clickable:hover{background:#F0F3F8;}
+  .cal-day-cell.cal-holiday{background:#FDECEA;}
+  .cal-day-cell .cal-day-num{font-size:12px;font-weight:700;color:var(--text);}
+  .cal-day-cell.cal-holiday .cal-day-num{color:var(--danger);}
+  .cal-day-cell.cal-sun-col .cal-day-num{color:var(--danger);}
+  .cal-day-cell.cal-sat-col .cal-day-num{color:#2E6FA3;}
+  .cal-day-cell .cal-day-label{
+    font-size:8.5px;color:var(--muted);line-height:1.15;display:block;overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap;padding:0 1px;
+  }
+  .cal-day-cell.cal-holiday .cal-day-label{color:var(--danger);}
+
   .howto{
     background:#F4F8FC;border:1px solid #DCE8F5;border-radius:8px;padding:9px 12px;font-size:12.5px;color:#2C4A6B;
     margin-bottom:12px;line-height:1.6;
@@ -364,6 +394,7 @@
       <button class="tab-btn" data-view="reserve">予約</button>
       <button class="tab-btn" data-view="checkout">貸出</button>
       <button class="tab-btn" data-view="safety" style="display:none;">安否確認</button>
+      <button class="tab-btn" data-view="calendar">カレンダー</button>
       <button class="tab-reorder-btn" id="tab-reorder-toggle" title="タブの並び替え">並び替え</button>
     </nav>
 
@@ -461,6 +492,19 @@
       <!-- ---- 安否確認 ---- -->
       <section id="view-safety" style="display:none;">
         <div id="safety-content"></div>
+      </section>
+
+      <!-- ---- カレンダー ---- -->
+      <section id="view-calendar" style="display:none;">
+        <div class="section-toolbar">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button id="cal-prev-year" class="date-nav-btn">◀</button>
+            <div id="cal-year-label" style="font-weight:700;font-size:14.5px;"></div>
+            <button id="cal-next-year" class="date-nav-btn">▶</button>
+          </div>
+          <div id="cal-edit-hint" style="font-size:11.5px;color:var(--muted);"></div>
+        </div>
+        <div class="cal-grid-wrap" id="cal-grid-wrap"></div>
       </section>
     </main>
   </div>
@@ -592,7 +636,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, addDoc, deleteDoc, query, where,
-  onSnapshot, orderBy, limit, Timestamp
+  onSnapshot, orderBy, limit, documentId, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig, BUSINESS_HOURS, CATEGORIES, EQUIPMENT_STATUSES, SAFETY_STATUSES, EMAILJS_CONFIG, resolveMailRecipients, isMailOverrideActive, MAIL_SEND_TARGET } from "./firebase-config.js";
 
@@ -681,6 +725,7 @@ let isAdmin = false;
 let isPoster = false;
 let isWhereaboutsEditor = false;
 let isEquipmentManager = false;
+let isCalendarEditor = false;
 let equipmentAll = [];
 let selectedCategory = CATEGORIES.find(c=>c.mode!=="checkout")?.id || null;
 let selectedCheckoutCategory = CATEGORIES.find(c=>c.mode==="checkout")?.id || null;
@@ -746,6 +791,10 @@ onAuthStateChanged(auth, async (user)=>{
       const eqManagerDoc = await getDoc(doc(db, "equipment_managers", user.email));
       isEquipmentManager = isAdmin || eqManagerDoc.exists();
     }catch(e){ isEquipmentManager = isAdmin; }
+    try{
+      const calEditorDoc = await getDoc(doc(db, "calendar_editors", user.email));
+      isCalendarEditor = isAdmin || calEditorDoc.exists();
+    }catch(e){ isCalendarEditor = isAdmin; }
     document.getElementById("admin-link").style.display = isAdmin ? "inline-block" : "none";
     document.getElementById("notice-new-btn").style.display = isPoster ? "inline-block" : "none";
     document.getElementById("wb-preset-tab-btn").style.display = (isAdmin || isWhereaboutsEditor) ? "inline-block" : "none";
@@ -758,6 +807,7 @@ onAuthStateChanged(auth, async (user)=>{
     initWbColumnsListener();
     initEmployeesListener();
     initSafetyCampaignListener();
+    initCalendarTab();
     if(isAdmin || isWhereaboutsEditor){
       initWbPresetsListener();
       checkAndApplyWbPresets();
@@ -778,7 +828,7 @@ onAuthStateChanged(auth, async (user)=>{
 });
 
 /* ---------- tabs ---------- */
-const ALL_VIEWS = ["notices","whereabouts","reserve","checkout","safety"];
+const ALL_VIEWS = ["notices","whereabouts","reserve","checkout","safety","calendar"];
 const TAB_ORDER_KEY = "osakagumi-portal-tab-order";
 function switchToTab(viewName){
   document.querySelectorAll(".tab-btn").forEach(b=>{
@@ -2446,6 +2496,181 @@ function renderSafety(){
 
   el.appendChild(form);
 }
+
+/* =========================================================
+   カレンダー（年間休日カレンダー）
+========================================================= */
+let calFiscalYearStart = null; // 例: 2026 → 2026/4〜2027/3
+let calDaysData = {};          // "YYYY-MM-DD" -> {isHoliday, label}
+let calDaysUnsub = null;
+
+function defaultFiscalYearStart(){
+  const now = new Date();
+  const y = now.getFullYear();
+  return now.getMonth() >= 3 ? y : y - 1; // getMonth()==3は4月（0始まり）
+}
+
+function initCalendarTab(){
+  if(calFiscalYearStart === null){
+    calFiscalYearStart = defaultFiscalYearStart();
+  }
+  document.getElementById("cal-edit-hint").textContent = isCalendarEditor
+    ? "日付をクリックすると休日のON/OFFを切り替えられます。備考の文字部分をクリックすると名称を編集できます。"
+    : "";
+  loadCalendarYear(calFiscalYearStart);
+}
+
+document.getElementById("cal-prev-year").addEventListener("click", ()=>{
+  calFiscalYearStart--;
+  loadCalendarYear(calFiscalYearStart);
+});
+document.getElementById("cal-next-year").addEventListener("click", ()=>{
+  calFiscalYearStart++;
+  loadCalendarYear(calFiscalYearStart);
+});
+
+function loadCalendarYear(year){
+  if(calDaysUnsub){ calDaysUnsub(); calDaysUnsub = null; }
+  document.getElementById("cal-year-label").textContent = `${year}年度（${year}/4〜${year+1}/3）`;
+  const startId = `${year}-04-01`;
+  const endId = `${year+1}-03-31`;
+  const q = query(collection(db,"calendar_days"), where(documentId(), ">=", startId), where(documentId(), "<=", endId));
+  calDaysUnsub = onSnapshot(q, snap=>{
+    calDaysData = {};
+    snap.docs.forEach(d=>{ calDaysData[d.id] = d.data(); });
+    renderCalendar();
+  }, (err)=>{ console.error("[カレンダー取得エラー]", err); });
+}
+
+function calMonthList(year){
+  // 表示順：4,10 / 5,11 / 6,12 / 7,1(翌年) / 8,2(翌年) / 9,3(翌年)
+  const pairs = [];
+  for(let i=0;i<6;i++){
+    const leftMonth = 4+i;
+    const rightMonth = 10+i;
+    if(rightMonth<=12){
+      pairs.push([{y:year, m:leftMonth}, {y:year, m:rightMonth}]);
+    } else {
+      pairs.push([{y:year, m:leftMonth}, {y:year+1, m:rightMonth-12}]);
+    }
+  }
+  return pairs;
+}
+
+function renderCalendar(){
+  const wrap = document.getElementById("cal-grid-wrap");
+  if(!wrap) return;
+  wrap.innerHTML = "";
+  const pairs = calMonthList(calFiscalYearStart);
+  pairs.forEach(pair=>{
+    pair.forEach(({y,m})=>{
+      wrap.appendChild(buildCalMonthBlock(y,m));
+    });
+  });
+}
+
+function buildCalMonthBlock(y, m){
+  const block = document.createElement("div");
+  block.className = "cal-month-block";
+
+  const head = document.createElement("div");
+  head.className = "cal-month-head";
+  const nameEl = document.createElement("div");
+  nameEl.className = "cal-month-name";
+  nameEl.textContent = `${y}年${m}月`;
+  const countEl = document.createElement("div");
+  countEl.className = "cal-month-count";
+  head.appendChild(nameEl); head.appendChild(countEl);
+  block.appendChild(head);
+
+  const table = document.createElement("table");
+  table.className = "cal-table";
+  const thead = document.createElement("thead");
+  const trh = document.createElement("tr");
+  ["日","月","火","水","木","金","土"].forEach((w,i)=>{
+    const th = document.createElement("th");
+    th.textContent = w;
+    if(i===0) th.classList.add("cal-sun");
+    if(i===6) th.classList.add("cal-sat");
+    trh.appendChild(th);
+  });
+  thead.appendChild(trh);
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  const firstDow = new Date(y, m-1, 1).getDay();
+  const daysInMonth = new Date(y, m, 0).getDate();
+  let holidayCount = 0;
+  let dayNum = 1 - firstDow;
+  while(dayNum <= daysInMonth){
+    const tr = document.createElement("tr");
+    for(let col=0; col<7; col++, dayNum++){
+      const td = document.createElement("td");
+      if(dayNum < 1 || dayNum > daysInMonth){
+        td.className = "cal-day-cell";
+      } else {
+        const dateStr = `${y}-${pad2(m)}-${pad2(dayNum)}`;
+        const info = calDaysData[dateStr] || {};
+        td.className = "cal-day-cell" + (info.isHoliday ? " cal-holiday" : "") + (isCalendarEditor ? " cal-clickable" : "");
+        if(col===0) td.classList.add("cal-sun-col");
+        if(col===6) td.classList.add("cal-sat-col");
+        if(info.isHoliday) holidayCount++;
+
+        const numEl = document.createElement("div");
+        numEl.className = "cal-day-num";
+        numEl.textContent = dayNum;
+        td.appendChild(numEl);
+
+        const labelEl = document.createElement("div");
+        labelEl.className = "cal-day-label";
+        labelEl.textContent = info.label || "";
+        td.appendChild(labelEl);
+
+        if(isCalendarEditor){
+          numEl.addEventListener("click", (e)=>{ e.stopPropagation(); toggleCalHoliday(dateStr); });
+          labelEl.addEventListener("click", (e)=>{ e.stopPropagation(); editCalLabel(dateStr); });
+          td.addEventListener("click", ()=> toggleCalHoliday(dateStr));
+        }
+      }
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  block.appendChild(table);
+  countEl.textContent = `休日 ${holidayCount}日`;
+
+  return block;
+}
+
+async function toggleCalHoliday(dateStr){
+  if(!isCalendarEditor) return;
+  const current = calDaysData[dateStr] || {};
+  try{
+    await setDoc(doc(db,"calendar_days", dateStr), {
+      isHoliday: !current.isHoliday,
+      label: current.label || ""
+    });
+  }catch(e){
+    toast("更新に失敗しました。権限をご確認ください。");
+  }
+}
+
+async function editCalLabel(dateStr){
+  if(!isCalendarEditor) return;
+  const current = calDaysData[dateStr] || {};
+  const input = prompt("この日の名称・備考を入力してください（空欄で削除）", current.label || "");
+  if(input === null) return; // キャンセル
+  try{
+    await setDoc(doc(db,"calendar_days", dateStr), {
+      isHoliday: !!current.isHoliday,
+      label: input.trim()
+    });
+  }catch(e){
+    toast("更新に失敗しました。権限をご確認ください。");
+  }
+}
+
 </script>
 </body>
 </html>
