@@ -830,6 +830,7 @@ let wbPresetsByDate = {};    // "YYYY-MM-DD" -> { email: {status, note} }
 let wbPresetDefaults = {};   // email -> {status, note}
 let wbPresetsLoaded = false;
 let wbPresetSelectedDate = null;
+let wbPresetEditingDefaults = false;
 let wbPresetBulkStatus = null;
 let calWorkStartTime = "08:00";
 let calWorkEndTime = "17:00";
@@ -2409,7 +2410,7 @@ function renderWbPresetTable(){
   if(!columnsWrap || !dateLabel) return;
   if(!wbPresetSelectedDate) wbPresetSelectedDate = todayStr();
   const editingDefaults = isEditingWbDefaults();
-  pickerLabel.textContent = editingDefaults ? "初期状態" : formatDateJP(wbPresetSelectedDate);
+  pickerLabel.textContent = formatDateJP(wbPresetSelectedDate);
 
   const storedDates = wbPresetStoredDates();
   const saveBtn = document.getElementById("wb-preset-save-btn");
@@ -2516,6 +2517,7 @@ document.getElementById("wb-preset-date-picker").addEventListener("click", (e)=>
         await deleteWbPresetsForDate(oldest);
       }
       wbPresetSelectedDate = dateStr;
+      wbPresetEditingDefaults = false;
       renderWbPresetTable();
     }
   });
@@ -2694,7 +2696,7 @@ document.getElementById("wb-preset-save-btn").addEventListener("click", async ()
 
 const WB_DEFAULTS_KEY = "_defaults";
 function isEditingWbDefaults(){
-  return wbPresetSelectedDate === WB_DEFAULTS_KEY;
+  return wbPresetEditingDefaults;
 }
 
 function renderWbPresetDatesList(){
@@ -2711,7 +2713,7 @@ function renderWbPresetDatesList(){
     textSpan.className = "wb-preset-date-text";
     textSpan.textContent = "初期状態";
     textSpan.addEventListener("click", ()=>{
-      wbPresetSelectedDate = WB_DEFAULTS_KEY;
+      wbPresetEditingDefaults = true;
       renderWbPresetTable();
     });
     const delBtn = document.createElement("button");
@@ -2724,7 +2726,7 @@ function renderWbPresetDatesList(){
       try{
         await deleteDoc(doc(db,"wb_presets", WB_DEFAULTS_KEY));
         if(isEditingWbDefaults()){
-          wbPresetSelectedDate = todayStr();
+          wbPresetEditingDefaults = false;
           renderWbPresetTable();
         }
         toast("初期状態を削除しました。");
@@ -2743,12 +2745,13 @@ function renderWbPresetDatesList(){
   }
   storedDates.forEach(dateStr=>{
     const pill = document.createElement("div");
-    pill.className = "wb-preset-date-pill" + (dateStr===wbPresetSelectedDate ? " active" : "");
+    pill.className = "wb-preset-date-pill" + (dateStr===wbPresetSelectedDate && !isEditingWbDefaults() ? " active" : "");
     const textSpan = document.createElement("span");
     textSpan.className = "wb-preset-date-text";
     textSpan.textContent = formatDateJP(dateStr);
     textSpan.addEventListener("click", ()=>{
       wbPresetSelectedDate = dateStr;
+      wbPresetEditingDefaults = false;
       renderWbPresetTable();
     });
     const delBtn = document.createElement("button");
