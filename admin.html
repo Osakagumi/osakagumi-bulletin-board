@@ -438,16 +438,36 @@
       </div>
 
       <div class="panel">
-        <h2>2026年度（令和8年度）の初期データを作成</h2>
+        <h2>初期データの作成</h2>
         <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-          2026年4月1日〜2027年3月31日分について、以下のルールで初期データを一括作成します。既存のデータがあれば上書きされます。<br>
+          指定した年度（4月始まり）分について、以下のルールで初期データを一括作成します。既存のデータがあれば上書きされます。<br>
           ・土日：休日<br>
-          ・国民の祝日：休日（祝日名を自動入力）<br>
+          ・国民の祝日：休日（<b>2026年度のみ</b>祝日名を自動入力。他の年度は祝日名なしで休日のみ設定されます）<br>
           ・各月の第1土曜日：出勤（備考「地下道清掃」）<br>
-          作成後は、「カレンダー」タブから日付ごとに自由に調整できます。
+          作成後は、「カレンダー」タブから日付ごとに自由に調整できます。カレンダーは<b>最大3年度分</b>まで保存できます。
         </p>
-        <button class="btn btn-primary" id="cal-seed-btn">初期データを作成する</button>
-        <div id="cal-seed-status" style="font-size:12.5px;color:var(--muted);margin-top:10px;"></div>
+        <div class="form-grid">
+          <div class="field">
+            <label>年度（4月始まり、西暦）</label>
+            <input type="number" id="cal-seed-year-input" min="2000" max="2100" value="2026">
+          </div>
+        </div>
+        <button class="btn btn-primary" id="cal-seed-btn">この年度の初期データを作成する</button>
+        <div id="cal-seed-status" style="font-size:12.5px;color:var(--muted);margin-top:10px;white-space:pre-line;"></div>
+
+        <div id="cal-seed-limit-panel" style="display:none;margin-top:14px;padding:12px;border:1px dashed var(--danger);border-radius:8px;">
+          <p style="font-size:13px;color:var(--danger);font-weight:600;margin:0 0 10px;">カレンダーは最大3年度分まで保存できます。どの年度を削除しますか？</p>
+          <div id="cal-seed-limit-years" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;"></div>
+          <button class="btn btn-ghost" id="cal-seed-limit-cancel">キャンセル</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>保存されている年度</h2>
+        <table>
+          <thead><tr><th>年度</th><th>作成日時</th><th>操作</th></tr></thead>
+          <tbody id="cal-years-table-body"></tbody>
+        </table>
       </div>
     </section>
   </main>
@@ -528,6 +548,7 @@ onAuthStateChanged(auth, async (user)=>{
   initWbEditorsListener();
   initEquipmentManagersListener();
   initCalendarEditorsListener();
+  initCalendarYearsListener();
   initEmployeesListener();
   initSafetyCampaignsListener();
 });
@@ -1193,17 +1214,98 @@ const CAL_NATIONAL_HOLIDAYS_FY2026 = {
   "2027-03-21": "春分の日",
   "2027-03-22": "振替休日"
 };
+const CAL_MAX_YEARS = 3;
+const cal_p2 = n => String(n).padStart(2,"0");
+
+let calYearsAll = [];
+function initCalendarYearsListener(){
+  onSnapshot(collection(db,"calendar_years"), snap=>{
+    calYearsAll = snap.docs.map(d=>({year:d.id, ...d.data()})).sort((a,b)=> a.year.localeCompare(b.year));
+    renderCalendarYearsTable();
+  });
+}
+function renderCalendarYearsTable(){
+  const body = document.getElementById("cal-years-table-body");
+  if(!body) return;
+  body.innerHTML = "";
+  if(calYearsAll.length===0){
+    body.innerHTML = `<tr><td colspan="3" class="empty">まだ作成された年度はありません。</td></tr>`;
+    return;
+  }
+  calYearsAll.forEach(y=>{
+    const tr = document.createElement("tr");
+    const createdLabel = y.createdAt ? y.createdAt.slice(0,16).replace("T"," ") : "";
+    tr.innerHTML = `<td>${escapeHtml(y.year)}年度</td><td style="color:var(--muted);font-size:12px;">${escapeHtml(createdLabel)}</td><td class="actions"></td>`;
+    const btn = document.createElement("button");
+    btn.className = "btn btn-danger"; btn.textContent = "削除";
+    btn.addEventListener("click", async ()=>{
+      if(!confirm(`${y.year}年度のカレンダーデータを削除しますか？この操作は元に戻せません。`)) return;
+      await deleteCalendarYear(y.year);
+      toast(`${y.year}年度を削除しました。`);
+    });
+    tr.querySelector(".actions").appendChild(btn);
+    body.appendChild(tr);
+  });
+}
+
+async function deleteCalendarYear(yearStr){
+  const year = Number(yearStr);
+  const start = new Date(year,3,1);
+  const end = new Date(year+1,2,31);
+  for(let d=new Date(start); d<=end; d.setDate(d.getDate()+1)){
+    const dateStr = `${d.getFullYear()}-${cal_p2(d.getMonth()+1)}-${cal_p2(d.getDate())}`;
+    try{ await deleteDoc(doc(db,"calendar_days", dateStr)); }catch(e){ /* 無視して続行 */ }
+  }
+  await deleteDoc(doc(db,"calendar_years", yearStr));
+}
+
+function showCalSeedLimitPanel(){
+  const panel = document.getElementById("cal-seed-limit-panel");
+  const yearsWrap = document.getElementById("cal-seed-limit-years");
+  yearsWrap.innerHTML = "";
+  calYearsAll.forEach(y=>{
+    const btn = document.createElement("button");
+    btn.className = "btn btn-danger";
+    btn.textContent = `${y.year}年度を削除`;
+    btn.addEventListener("click", async ()=>{
+      if(!confirm(`${y.year}年度のカレンダーデータを削除しますか？この操作は元に戻せません。`)) return;
+      await deleteCalendarYear(y.year);
+      panel.style.display = "none";
+      document.getElementById("cal-seed-status").textContent = `${y.year}年度を削除しました。続けて作成する場合は、もう一度「この年度の初期データを作成する」を押してください。`;
+    });
+    yearsWrap.appendChild(btn);
+  });
+  panel.style.display = "block";
+  document.getElementById("cal-seed-status").textContent = "";
+}
+document.getElementById("cal-seed-limit-cancel").addEventListener("click", ()=>{
+  document.getElementById("cal-seed-limit-panel").style.display = "none";
+  document.getElementById("cal-seed-status").textContent = "";
+});
+
 document.getElementById("cal-seed-btn").addEventListener("click", async ()=>{
-  if(!confirm("2026年度（2026/4/1〜2027/3/31）の初期データを作成します。既存のデータは上書きされます。よろしいですか？")) return;
+  const yearInput = document.getElementById("cal-seed-year-input");
+  const year = Math.round(Number(yearInput.value));
+  if(!year || year < 2000 || year > 2100){ toast("年度を正しく入力してください。"); return; }
+  const yearStr = String(year);
+  document.getElementById("cal-seed-limit-panel").style.display = "none";
+
+  const alreadyExists = calYearsAll.some(y=>y.year===yearStr);
+  if(!alreadyExists && calYearsAll.length >= CAL_MAX_YEARS){
+    showCalSeedLimitPanel();
+    return;
+  }
+
+  if(!confirm(`${year}年度（${year}/4/1〜${year+1}/3/31）の初期データを作成します。既存のデータは上書きされます。よろしいですか？`)) return;
   const statusEl = document.getElementById("cal-seed-status");
-  const p2 = n => String(n).padStart(2,"0");
-  const start = new Date(2026,3,1);
-  const end = new Date(2027,2,31);
+  const start = new Date(year,3,1);
+  const end = new Date(year+1,2,31);
   const totalDays = Math.round((end-start)/86400000)+1;
+  const holidaysMap = (year===2026) ? CAL_NATIONAL_HOLIDAYS_FY2026 : {};
   let count = 0;
   for(let d=new Date(start); d<=end; d.setDate(d.getDate()+1)){
     const y=d.getFullYear(), m=d.getMonth()+1, day=d.getDate();
-    const dateStr = `${y}-${p2(m)}-${p2(day)}`;
+    const dateStr = `${y}-${cal_p2(m)}-${cal_p2(day)}`;
     const dow = d.getDay(); // 0=日〜6=土
     let isHoliday = (dow===0 || dow===6);
     let label = "";
@@ -1214,9 +1316,9 @@ document.getElementById("cal-seed-btn").addEventListener("click", async ()=>{
         label = "地下道清掃";
       }
     }
-    if(CAL_NATIONAL_HOLIDAYS_FY2026[dateStr]){
+    if(holidaysMap[dateStr]){
       isHoliday = true;
-      label = CAL_NATIONAL_HOLIDAYS_FY2026[dateStr];
+      label = holidaysMap[dateStr];
     }
     try{
       await setDoc(doc(db,"calendar_days", dateStr), { isHoliday, label });
@@ -1227,8 +1329,14 @@ document.getElementById("cal-seed-btn").addEventListener("click", async ()=>{
     count++;
     statusEl.textContent = `作成中… ${count}/${totalDays}`;
   }
+  try{
+    await setDoc(doc(db,"calendar_years", yearStr), {
+      createdAt: new Date().toISOString(),
+      createdBy: currentUser.email
+    });
+  }catch(e){ /* 年度一覧への登録に失敗しても日付データ自体は作成済み */ }
   statusEl.textContent = `完了：${count}件作成しました。`;
-  toast("初期データを作成しました。");
+  toast(`${year}年度の初期データを作成しました。`);
 });
 
 /* ============================================================
