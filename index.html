@@ -478,6 +478,8 @@
             <button class="seg-btn" data-wbview="board">ボード</button>
             <button class="seg-btn" data-wbview="preset" id="wb-preset-tab-btn" style="display:none;">事前設定</button>
           </div>
+          <div class="seg-toggle" id="wb-preset-bulk-status-toggle" style="display:none;"></div>
+          <button class="btn-primary" id="wb-preset-bulk-done-btn" style="display:none;">完了</button>
           <div class="header-clock" id="header-clock-kiosk" style="display:none;"></div>
           <button class="btn-primary" id="wb-edit-my-btn">自分の行き先を入力</button>
         </div>
@@ -786,6 +788,7 @@ let wbPresetsByDate = {};    // "YYYY-MM-DD" -> { email: {status, note} }
 let wbPresetDefaults = {};   // email -> {status, note}
 let wbPresetsLoaded = false;
 let wbPresetSelectedDate = null;
+let wbPresetBulkStatus = null;
 let calWorkStartTime = "08:00";
 let calWorkEndTime = "17:00";
 
@@ -1858,6 +1861,7 @@ function initWbStatusesListener(){
     wbStatusesAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
     wbStatusesAll.sort((a,b)=> (a.order??0)-(b.order??0));
     renderWhereabouts();
+    renderWbPresetBulkToggle();
   }, (err)=>{ console.error("[行き先ステータス取得エラー]", err); });
 }
 let wbDisplayWidthPx = null;
@@ -2261,6 +2265,50 @@ async function isDateHoliday(dateStr){
   }
 }
 
+function renderWbPresetBulkToggle(){
+  const wrap = document.getElementById("wb-preset-bulk-status-toggle");
+  const doneBtn = document.getElementById("wb-preset-bulk-done-btn");
+  if(!wrap) return;
+  if(wbCurrentView!=="preset"){
+    wrap.style.display = "none";
+    doneBtn.style.display = "none";
+    return;
+  }
+  wrap.style.display = "inline-flex";
+  wrap.innerHTML = "";
+  wbStatusesAll.forEach(s=>{
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "seg-btn" + (wbPresetBulkStatus===s.id ? " active" : "");
+    btn.textContent = s.name;
+    btn.addEventListener("click", ()=>{
+      wbPresetBulkStatus = (wbPresetBulkStatus===s.id) ? null : s.id;
+      renderWbPresetBulkToggle();
+    });
+    wrap.appendChild(btn);
+  });
+  doneBtn.style.display = wbPresetBulkStatus ? "inline-block" : "none";
+}
+document.getElementById("wb-preset-bulk-done-btn").addEventListener("click", ()=>{
+  wbPresetBulkStatus = null;
+  renderWbPresetBulkToggle();
+});
+
+async function applyWbPresetBulkStatus(email){
+  try{
+    await setDoc(doc(db,"wb_presets", `${wbPresetSelectedDate}_${email}`), {
+      date: wbPresetSelectedDate,
+      email,
+      status: wbPresetBulkStatus,
+      note: (wbPresetsByDate[wbPresetSelectedDate] && wbPresetsByDate[wbPresetSelectedDate][email] && wbPresetsByDate[wbPresetSelectedDate][email].note) || "",
+      updatedBy: currentUser.email,
+      updatedAt: new Date().toISOString()
+    });
+  }catch(e){
+    toast("更新に失敗しました。権限をご確認ください。");
+  }
+}
+
 function renderWbPresetTable(){
   const columnsWrap = document.getElementById("wb-preset-columns");
   const dateLabel = document.getElementById("wb-preset-date-label");
@@ -2320,7 +2368,13 @@ function renderWbPresetTable(){
       badge.className = "wb-status-badge wb-editable";
       badge.style.background = st ? st.color : "#9CA3AF";
       badge.textContent = st ? st.name : "未設定";
-      badge.addEventListener("click", ()=> openWbPresetModal(emp.email));
+      badge.addEventListener("click", ()=>{
+        if(wbPresetBulkStatus){
+          applyWbPresetBulkStatus(emp.email);
+        } else {
+          openWbPresetModal(emp.email);
+        }
+      });
       tdStatus.appendChild(badge);
       const tdNote = document.createElement("td");
       tdNote.className = "wb-note-cell";
@@ -2434,6 +2488,10 @@ document.querySelectorAll("#wb-view-toggle .seg-btn").forEach(btn=>{
     document.getElementById("wb-list-view").style.display = wbCurrentView==="list" ? "block":"none";
     document.getElementById("wb-board-view").style.display = wbCurrentView==="board" ? "block":"none";
     document.getElementById("wb-preset-view").style.display = wbCurrentView==="preset" ? "block":"none";
+    if(wbCurrentView!=="preset"){
+      wbPresetBulkStatus = null;
+    }
+    renderWbPresetBulkToggle();
     // 表示に切り替わった直後は、非表示中に測った幅（0扱い）のままになっている可能性があるため測り直す
     if(wbCurrentView==="list"){
       renderWbList();
