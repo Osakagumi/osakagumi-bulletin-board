@@ -2415,7 +2415,9 @@ function renderWbPresetTable(){
     const tbody = document.createElement("tbody");
     chunk.forEach(emp=>{
       const preset = dayPresets[emp.email] || null;
-      const st = preset && preset.status ? wbStatusInfo(preset.status) : null;
+      const fallback = wbPresetDefaults[emp.email] || null;
+      const effective = (preset && preset.status) ? preset : ((fallback && fallback.status) ? fallback : null);
+      const st = effective ? wbStatusInfo(effective.status) : null;
       const tr = document.createElement("tr");
       const tdDept = document.createElement("td");
       tdDept.textContent = emp.department ? departmentName(emp.department) : "未所属";
@@ -2436,7 +2438,7 @@ function renderWbPresetTable(){
       tdStatus.appendChild(badge);
       const tdNote = document.createElement("td");
       tdNote.className = "wb-note-cell";
-      tdNote.textContent = presetNoteDisplay(preset);
+      tdNote.textContent = presetNoteDisplay(effective);
       tr.appendChild(tdDept); tr.appendChild(tdName); tr.appendChild(tdStatus); tr.appendChild(tdNote);
       tbody.appendChild(tr);
     });
@@ -2491,8 +2493,10 @@ function openWbPresetModal(email){
   });
   const dayPresets = wbPresetsByDate[wbPresetSelectedDate] || {};
   const preset = dayPresets[email] || null;
-  sel.value = preset ? preset.status||"" : "";
-  document.getElementById("wb-preset-note").value = preset ? preset.note||"" : "";
+  const fallback = wbPresetDefaults[email] || null;
+  const effective = (preset && preset.status) ? preset : ((fallback && fallback.status) ? fallback : null);
+  sel.value = effective ? effective.status||"" : "";
+  document.getElementById("wb-preset-note").value = effective ? effective.note||"" : "";
   document.getElementById("wb-preset-modal-error").textContent = "";
 
   const hasTl = !!(preset && preset.timeLeaveType);
