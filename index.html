@@ -488,17 +488,19 @@
           <div class="wb-board" id="wb-board"></div>
         </div>
         <div id="wb-preset-view" style="display:none;">
-          <div class="howto" id="wb-preset-date-label"></div>
-          <table class="wb-table">
-            <thead><tr><th>所属</th><th>氏名</th><th>次の営業日の状態</th><th>備考</th></tr></thead>
-            <tbody id="wb-preset-table-body"></tbody>
-          </table>
-          <div style="margin-top:14px;">
+          <div class="section-toolbar" style="margin-bottom:10px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="font-size:12.5px;color:var(--muted);">対象日：</span>
+              <span class="date-picker-label" id="wb-preset-date-picker"></span>
+            </div>
             <button class="btn-primary" id="wb-preset-save-default-btn">この内容を初期状態として保存</button>
           </div>
-          <p style="font-size:11.5px;color:var(--muted);margin-top:8px;">
-            「初期状態として保存」しておくと、次にこの事前設定画面を開いたときの初期値として使われます（毎回入力し直す手間を減らせます）。<br>
-            ここで設定した内容は、対象の営業日になったタイミングで、行き先設定権限者または管理者のどなたかがログインすると自動的に反映されます。
+          <div class="howto" id="wb-preset-date-label"></div>
+          <div class="wb-list-columns" id="wb-preset-columns"></div>
+          <p style="font-size:11.5px;color:var(--muted);margin-top:10px;">
+            指定できるのは、カレンダー上で休日になっていない日のみです。事前設定は最大7日分まで保持されます（過去の日付は自動的に削除されます）。<br>
+            「初期状態として保存」しておくと、事前設定していない日を開いたときの初期値として使われます。<br>
+            当日、本人が「自分の行き先を入力」でその場で変更した場合は、その内容が優先して表示されます。
           </p>
         </div>
       </section>
@@ -583,6 +585,26 @@
       <div class="row-btns">
         <button class="btn-ghost" id="wb-cancel" style="border:1px solid var(--line);">キャンセル</button>
         <button class="btn-primary" id="wb-save">保存する</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 事前設定 編集モーダル ============ -->
+  <div class="modal-overlay" id="wb-preset-modal">
+    <div class="modal">
+      <h3 id="wb-preset-modal-title">事前設定を入力</h3>
+      <div class="field">
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">状態</label>
+        <select id="wb-preset-status-select" style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;"></select>
+      </div>
+      <div class="field">
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">備考（任意）</label>
+        <textarea id="wb-preset-note"></textarea>
+      </div>
+      <div class="modal-err" id="wb-preset-modal-error"></div>
+      <div class="row-btns">
+        <button class="btn-ghost" id="wb-preset-modal-cancel" style="border:1px solid var(--line);">キャンセル</button>
+        <button class="btn-primary" id="wb-preset-modal-save">保存する</button>
       </div>
     </div>
   </div>
@@ -760,9 +782,12 @@ let mySafetyResponse = null;
 let wbEditingEmail = null;
 let wbTimeLeaveType = "";
 let wbCurrentView = "list";
-let wbPresetsAll = {};      // email -> {status, note, forDate}
-let wbPresetDefaults = {};  // email -> {status, note}
+let wbPresetsByDate = {};    // "YYYY-MM-DD" -> { email: {status, note} }
+let wbPresetDefaults = {};   // email -> {status, note}
 let wbPresetsLoaded = false;
+let wbPresetSelectedDate = null;
+let calWorkStartTime = "08:00";
+let calWorkEndTime = "17:00";
 
 /* ---------- auth ---------- */
 document.getElementById("login-btn").addEventListener("click", doLogin);
@@ -822,10 +847,7 @@ onAuthStateChanged(auth, async (user)=>{
     initEmployeesListener();
     initSafetyCampaignListener();
     initCalendarTab();
-    if(isAdmin || isWhereaboutsEditor){
-      initWbPresetsListener();
-      checkAndApplyWbPresets();
-    }
+    initWbPresetsListener();
 
     if(urlPreselect.campaign){
       switchToTab("safety");
@@ -1362,6 +1384,8 @@ function openCalendarPicker(anchorEl, initialDateStr, opts){
 function openTimePicker(anchorEl, currentValue, opts){
   closeCalendarPopup();
   const onSelect = opts?.onSelect || (()=>{});
+  const minTime = opts?.minTime || "00:00";
+  const maxTime = opts?.maxTime || "23:30";
 
   const popup = document.createElement("div");
   popup.className = "calendar-popup time-popup";
@@ -1373,6 +1397,7 @@ function openTimePicker(anchorEl, currentValue, opts){
   for(let h=0; h<24; h++){
     [0,30].forEach(m=>{
       const val = `${pad2(h)}:${pad2(m)}`;
+      if(val < minTime || val > maxTime) return;
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "time-slot" + (val===currentValue ? " selected" : "");
@@ -1886,6 +1911,9 @@ function initWbColumnsListener(){
       document.getElementById("wb-board-view").style.display = defaultView==="board" ? "block":"none";
     }
 
+    calWorkStartTime = data.workStartTime || "08:00";
+    calWorkEndTime = data.workEndTime || "17:00";
+
     renderWhereabouts();
   }, (err)=>{ console.error("[行き先列数設定取得エラー]", err); });
 }
@@ -1915,28 +1943,93 @@ function departmentName(id){
 function wbStatusInfo(id){
   return wbStatusesAll.find(x=>x.id===id) || null;
 }
-function getEffectiveWbStatus(emp){
-  if(isTimeLeaveActiveNow(emp)){
-    const restStatus = wbStatusesAll.find(s=>s.name==="休み");
-    if(restStatus) return restStatus.id;
-  }
-  return emp.status;
+
+function getWorkWindow(){
+  const [sh,sm] = (calWorkStartTime||"08:00").split(":").map(Number);
+  const [eh,em] = (calWorkEndTime||"17:00").split(":").map(Number);
+  const workStartMin = sh*60+sm, workEndMin = eh*60+em;
+  return {
+    workStartMin, workEndMin,
+    windowStartMin: workStartMin - 15,
+    windowEndMin: workEndMin + 15
+  };
 }
-function isTimeLeaveActiveNow(emp){
-  if(!(emp.timeLeaveDate===todayStr() && emp.timeLeaveStart && emp.timeLeaveEnd)) return false;
+
+function isNowInWorkWindow(){
   const now = new Date();
   const nowMin = now.getHours()*60 + now.getMinutes();
+  const win = getWorkWindow();
+  return nowMin >= win.windowStartMin && nowMin <= win.windowEndMin;
+}
+
+function isTimeLeaveActiveNow(emp){
+  if(!(emp.timeLeaveDate===todayStr() && emp.timeLeaveType)) return false;
+  const now = new Date();
+  const nowMin = now.getHours()*60 + now.getMinutes();
+  const win = getWorkWindow();
+  if(emp.timeLeaveType==="am"){
+    return nowMin >= win.windowStartMin && nowMin <= 13*60;
+  }
+  if(emp.timeLeaveType==="pm"){
+    return nowMin >= 12*60 && nowMin <= win.windowEndMin;
+  }
+  if(!emp.timeLeaveStart || !emp.timeLeaveEnd) return false;
   const [sh,sm] = emp.timeLeaveStart.split(":").map(Number);
   const [eh,em] = emp.timeLeaveEnd.split(":").map(Number);
   return nowMin >= (sh*60+sm) && nowMin <= (eh*60+em);
 }
+
+// 実際に表示するステータスIDを返す。定時外の場合は特別な文字列 "OFFHOURS" を返す。
+function getEffectiveWbStatus(emp){
+  if(!isNowInWorkWindow()){
+    return "OFFHOURS";
+  }
+  if(isTimeLeaveActiveNow(emp)){
+    const restStatus = wbStatusesAll.find(s=>s.name==="休み");
+    if(restStatus) return restStatus.id;
+  }
+  // 本人が今日その場で変更していれば最優先
+  const updatedToday = emp.statusUpdatedAt && String(emp.statusUpdatedAt).slice(0,10) === todayStr();
+  if(updatedToday && emp.status){
+    return emp.status;
+  }
+  // 当日分の事前設定
+  const todayPresets = wbPresetsByDate[todayStr()] || {};
+  const preset = todayPresets[emp.email];
+  if(preset && preset.status){
+    return preset.status;
+  }
+  // 初期状態（デフォルトテンプレート）
+  const def = wbPresetDefaults[emp.email];
+  if(def && def.status){
+    return def.status;
+  }
+  return ""; // 未設定
+}
+
 function getWbNoteDisplay(emp){
-  if(emp.timeLeaveDate===todayStr() && emp.timeLeaveStart && emp.timeLeaveEnd){
+  if(!isNowInWorkWindow()){
+    return "";
+  }
+  if(emp.timeLeaveDate===todayStr() && emp.timeLeaveType){
     let tlText;
     if(emp.timeLeaveType==="am") tlText = "AM休";
     else if(emp.timeLeaveType==="pm") tlText = "PM休";
     else tlText = `時間休 ${emp.timeLeaveStart}〜${emp.timeLeaveEnd}`;
     return emp.note ? `${tlText} / ${emp.note}` : tlText;
+  }
+  const updatedToday = emp.statusUpdatedAt && String(emp.statusUpdatedAt).slice(0,10) === todayStr();
+  if(updatedToday){
+    return emp.note || "";
+  }
+  const todayPresets = wbPresetsByDate[todayStr()] || {};
+  const preset = todayPresets[emp.email];
+  if(preset){
+    return preset.note || "";
+  }
+  const def = wbPresetDefaults[emp.email];
+  if(def){
+    return def.note || "";
   }
   return emp.note || "";
 }
@@ -1985,7 +2078,11 @@ window.addEventListener("resize", ()=>{
   wbResizeTimer = setTimeout(()=>{
     const wbView = document.getElementById("view-whereabouts");
     if(wbView && wbView.style.display !== "none"){
-      renderWbList();
+      if(wbCurrentView==="preset"){
+        renderWbPresetTable();
+      } else {
+        renderWbList();
+      }
     }
   }, 200);
 });
@@ -2006,7 +2103,8 @@ function renderWbList(){
 
   function buildRow(emp){
     const canEdit = isAdmin || isWhereaboutsEditor || emp.email===currentUser.email;
-    const st = wbStatusInfo(getEffectiveWbStatus(emp));
+    const effStatus = getEffectiveWbStatus(emp);
+    const st = effStatus==="OFFHOURS" ? { name:"時間外", color:"#8A8F98" } : wbStatusInfo(effStatus);
     const tr = document.createElement("tr");
     const tdDept = document.createElement("td");
     tdDept.textContent = emp.department ? departmentName(emp.department) : "未所属";
@@ -2066,6 +2164,7 @@ function renderWbBoard(){
   const list = getSortedEmployees();
   const columns = wbStatusesAll.slice();
   columns.push({ id: "__unset__", name: "未設定", color: "#9CA3AF" });
+  columns.push({ id: "OFFHOURS", name: "時間外", color: "#8A8F98" });
 
   columns.forEach(col=>{
     const colEl = document.createElement("div");
@@ -2078,7 +2177,8 @@ function renderWbBoard(){
     bodyEl.className = "col-body";
     const members = list.filter(emp=>{
       const effStatus = getEffectiveWbStatus(emp);
-      if(col.id==="__unset__") return !effStatus || !wbStatusInfo(effStatus);
+      if(col.id==="OFFHOURS") return effStatus==="OFFHOURS";
+      if(col.id==="__unset__") return effStatus!=="OFFHOURS" && (!effStatus || !wbStatusInfo(effStatus));
       return effStatus === col.id;
     });
     if(members.length===0){
@@ -2100,23 +2200,19 @@ function renderWbBoard(){
 }
 
 /* =========================================================
-   行き先：事前設定（次の営業日）・初期状態
+   行き先：事前設定（日付指定・最大7日分）・初期状態
 ========================================================= */
-function nextBusinessDayStr(){
-  const d = new Date();
-  d.setDate(d.getDate()+1);
-  while(d.getDay()===0 || d.getDay()===6){ // 日曜=0, 土曜=6 はスキップ
-    d.setDate(d.getDate()+1);
-  }
-  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
-}
+let wbPresetCleanupDone = false;
 
 function initWbPresetsListener(){
   onSnapshot(collection(db,"wb_presets"), snap=>{
-    wbPresetsAll = {};
+    wbPresetsByDate = {};
     snap.docs.forEach(d=>{
-      if(d.id==="_defaults" || d.id==="_meta") return;
-      wbPresetsAll[d.id] = d.data();
+      if(d.id==="_defaults") return;
+      const data = d.data();
+      if(!data.date || !data.email) return;
+      if(!wbPresetsByDate[data.date]) wbPresetsByDate[data.date] = {};
+      wbPresetsByDate[data.date][data.email] = { status: data.status||"", note: data.note||"" };
     });
     wbPresetDefaults = {};
     const defaultsDoc = snap.docs.find(d=>d.id==="_defaults");
@@ -2124,102 +2220,203 @@ function initWbPresetsListener(){
       wbPresetDefaults = defaultsDoc.data().states;
     }
     wbPresetsLoaded = true;
+
+    if(!wbPresetSelectedDate){
+      wbPresetSelectedDate = todayStr();
+    }
+    if((isAdmin || isWhereaboutsEditor) && !wbPresetCleanupDone){
+      wbPresetCleanupDone = true;
+      cleanupPastWbPresets();
+    }
+    renderWhereabouts();
     if(wbCurrentView==="preset"){ renderWbPresetTable(); }
   }, (err)=>{ console.error("[行き先事前設定取得エラー]", err); });
 }
 
-function renderWbPresetTable(){
-  const body = document.getElementById("wb-preset-table-body");
-  const dateLabel = document.getElementById("wb-preset-date-label");
-  if(!body || !dateLabel) return;
-  const targetDate = nextBusinessDayStr();
-  dateLabel.innerHTML = `<b>${formatDateJP(targetDate)}</b>（次の営業日）の行き先を事前に設定します。ここでの変更は保存すると即座に反映されます。`;
+function wbPresetStoredDates(){
+  return Object.keys(wbPresetsByDate).sort();
+}
 
-  body.innerHTML = "";
+async function cleanupPastWbPresets(){
+  const todayStrVal = todayStr();
+  const pastDates = wbPresetStoredDates().filter(d=> d < todayStrVal);
+  for(const d of pastDates){
+    await deleteWbPresetsForDate(d);
+  }
+}
+
+async function deleteWbPresetsForDate(dateStr){
+  const entries = wbPresetsByDate[dateStr] || {};
+  for(const email of Object.keys(entries)){
+    try{ await deleteDoc(doc(db,"wb_presets", `${dateStr}_${email}`)); }catch(e){ /* 無視して続行 */ }
+  }
+}
+
+async function isDateHoliday(dateStr){
+  try{
+    const snap = await getDoc(doc(db,"calendar_days", dateStr));
+    return snap.exists() && !!snap.data().isHoliday;
+  }catch(e){
+    return false;
+  }
+}
+
+function renderWbPresetTable(){
+  const columnsWrap = document.getElementById("wb-preset-columns");
+  const dateLabel = document.getElementById("wb-preset-date-label");
+  const pickerLabel = document.getElementById("wb-preset-date-picker");
+  if(!columnsWrap || !dateLabel) return;
+  if(!wbPresetSelectedDate) wbPresetSelectedDate = todayStr();
+  pickerLabel.textContent = formatDateJP(wbPresetSelectedDate);
+
+  const storedDates = wbPresetStoredDates();
+  dateLabel.innerHTML = `<b>${formatDateJP(wbPresetSelectedDate)}</b> の行き先を事前設定します。保存中の日付：${storedDates.length}/7件`;
+
+  columnsWrap.innerHTML = "";
   if(!wbPresetsLoaded){
-    body.innerHTML = `<tr><td colspan="4" class="empty-state">読み込み中です…</td></tr>`;
+    columnsWrap.innerHTML = `<div class="empty-state">読み込み中です…</div>`;
     return;
   }
   const list = getSortedEmployees();
   if(list.length===0){
-    body.innerHTML = `<tr><td colspan="4" class="empty-state">まだ社員データがありません。</td></tr>`;
+    columnsWrap.innerHTML = `<div class="empty-state">まだ社員データがありません。</div>`;
     return;
   }
   if(wbStatusesAll.length===0){
-    body.innerHTML = `<tr><td colspan="4" class="empty-state">先に行き先ステータスを登録してください。</td></tr>`;
+    columnsWrap.innerHTML = `<div class="empty-state">先に行き先ステータスを登録してください。</div>`;
     return;
   }
 
-  list.forEach(emp=>{
-    const preset = (wbPresetsAll[emp.email] && wbPresetsAll[emp.email].forDate===targetDate)
-      ? wbPresetsAll[emp.email]
-      : null;
-    const fallback = wbPresetDefaults[emp.email] || null;
-    const currentStatus = preset ? preset.status : (fallback ? fallback.status : "");
-    const currentNote = preset ? preset.note : (fallback ? fallback.note : "");
+  const dayPresets = wbPresetsByDate[wbPresetSelectedDate] || {};
 
-    const tr = document.createElement("tr");
-    const tdDept = document.createElement("td");
-    tdDept.textContent = emp.department ? departmentName(emp.department) : "未所属";
-    const tdName = document.createElement("td");
-    tdName.textContent = emp.name || emp.email;
+  // 一般画面の一覧と同じ計算式：列数は上限として扱い、実際の幅で1列あたり最低260px確保できる数まで自動的に減らす
+  const MIN_COL_WIDTH = 260 * (wbFontSizePx/13);
+  const availableWidth = isDisplayMode
+    ? (window.innerWidth - 40)
+    : (columnsWrap.clientWidth || columnsWrap.parentElement?.clientWidth || 960);
+  const maxColsByWidth = Math.max(1, Math.floor(availableWidth / MIN_COL_WIDTH));
+  const cols = Math.min(4, Math.max(1, wbListColumns||1), maxColsByWidth);
+  columnsWrap.style.setProperty("--wb-cols", cols);
 
-    const tdStatus = document.createElement("td");
-    const sel = document.createElement("select");
-    sel.style.cssText = "padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:12.5px;";
-    const noneOpt = document.createElement("option");
-    noneOpt.value = ""; noneOpt.textContent = "未設定";
-    sel.appendChild(noneOpt);
-    wbStatusesAll.forEach(s=>{
-      const opt = document.createElement("option");
-      opt.value = s.id; opt.textContent = s.name;
-      if(s.id === currentStatus) opt.selected = true;
-      sel.appendChild(opt);
+  const perCol = Math.ceil(list.length / cols);
+  for(let i=0;i<cols;i++){
+    const chunk = list.slice(i*perCol, (i+1)*perCol);
+    if(chunk.length===0 && i>0) continue;
+    const table = document.createElement("table");
+    table.className = "wb-table";
+    const thead = document.createElement("thead");
+    thead.innerHTML = `<tr><th>所属</th><th>氏名</th><th>状態</th><th>備考</th></tr>`;
+    const tbody = document.createElement("tbody");
+    chunk.forEach(emp=>{
+      const preset = dayPresets[emp.email] || null;
+      const st = preset && preset.status ? wbStatusInfo(preset.status) : null;
+      const tr = document.createElement("tr");
+      const tdDept = document.createElement("td");
+      tdDept.textContent = emp.department ? departmentName(emp.department) : "未所属";
+      const tdName = document.createElement("td");
+      tdName.textContent = emp.name || emp.email;
+      const tdStatus = document.createElement("td");
+      const badge = document.createElement("span");
+      badge.className = "wb-status-badge wb-editable";
+      badge.style.background = st ? st.color : "#9CA3AF";
+      badge.textContent = st ? st.name : "未設定";
+      badge.addEventListener("click", ()=> openWbPresetModal(emp.email));
+      tdStatus.appendChild(badge);
+      const tdNote = document.createElement("td");
+      tdNote.className = "wb-note-cell";
+      tdNote.textContent = preset ? (preset.note||"") : "";
+      tr.appendChild(tdDept); tr.appendChild(tdName); tr.appendChild(tdStatus); tr.appendChild(tdNote);
+      tbody.appendChild(tr);
     });
-    tdStatus.appendChild(sel);
-
-    const tdNote = document.createElement("td");
-    const noteInput = document.createElement("input");
-    noteInput.type = "text";
-    noteInput.value = currentNote || "";
-    noteInput.placeholder = "備考（任意）";
-    noteInput.style.cssText = "width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:12.5px;";
-    tdNote.appendChild(noteInput);
-
-    async function savePreset(){
-      try{
-        await setDoc(doc(db,"wb_presets", emp.email), {
-          status: sel.value,
-          note: noteInput.value.trim(),
-          forDate: targetDate,
-          updatedBy: currentUser.email,
-          updatedAt: new Date().toISOString()
-        });
-      }catch(e){
-        toast("事前設定の保存に失敗しました。");
-      }
-    }
-    sel.addEventListener("change", savePreset);
-    noteInput.addEventListener("blur", savePreset);
-
-    tr.appendChild(tdDept); tr.appendChild(tdName); tr.appendChild(tdStatus); tr.appendChild(tdNote);
-    body.appendChild(tr);
-  });
+    table.appendChild(thead); table.appendChild(tbody);
+    columnsWrap.appendChild(table);
+  }
 }
 
-document.getElementById("wb-preset-save-default-btn").addEventListener("click", async ()=>{
-  const rows = document.querySelectorAll("#wb-preset-table-body tr");
-  const list = getSortedEmployees();
-  if(rows.length !== list.length){ toast("表示の読み込み中です。少し待ってから再度お試しください。"); return; }
-  const states = {};
-  list.forEach((emp, i)=>{
-    const row = rows[i];
-    const sel = row.querySelector("select");
-    const noteInput = row.querySelector("input[type=text]");
-    if(sel && sel.value){
-      states[emp.email] = { status: sel.value, note: noteInput ? noteInput.value.trim() : "" };
+document.getElementById("wb-preset-date-picker").addEventListener("click", (e)=>{
+  openCalendarPicker(e.currentTarget, wbPresetSelectedDate, {
+    onSelect: async (dateStr)=>{
+      if(!dateStr) return;
+      if(dateStr < todayStr()){
+        toast("過去の日付は選択できません。");
+        return;
+      }
+      const isHoliday = await isDateHoliday(dateStr);
+      if(isHoliday){
+        toast("休日には事前設定できません。カレンダーで休日ではない日を選んでください。");
+        return;
+      }
+      const storedDates = wbPresetStoredDates();
+      if(!storedDates.includes(dateStr) && storedDates.length >= 7){
+        const oldest = storedDates[0];
+        if(!confirm(`事前設定は最大7日分までです。最も古い ${formatDateJP(oldest)} を削除して、${formatDateJP(dateStr)} を追加しますか？`)){
+          return;
+        }
+        await deleteWbPresetsForDate(oldest);
+      }
+      wbPresetSelectedDate = dateStr;
+      renderWbPresetTable();
     }
   });
+});
+
+let wbPresetEditingEmail = null;
+function openWbPresetModal(email){
+  wbPresetEditingEmail = email;
+  const emp = employeesAll.find(e=>e.email===email);
+  document.getElementById("wb-preset-modal-title").textContent =
+    `${emp?.name || email} さんの ${formatDateJP(wbPresetSelectedDate)} の事前設定`;
+  const sel = document.getElementById("wb-preset-status-select");
+  sel.innerHTML = "";
+  const noneOpt = document.createElement("option");
+  noneOpt.value = ""; noneOpt.textContent = "未設定";
+  sel.appendChild(noneOpt);
+  wbStatusesAll.forEach(s=>{
+    const opt = document.createElement("option");
+    opt.value = s.id; opt.textContent = s.name;
+    sel.appendChild(opt);
+  });
+  const dayPresets = wbPresetsByDate[wbPresetSelectedDate] || {};
+  const preset = dayPresets[email] || null;
+  sel.value = preset ? preset.status||"" : "";
+  document.getElementById("wb-preset-note").value = preset ? preset.note||"" : "";
+  document.getElementById("wb-preset-modal-error").textContent = "";
+  document.getElementById("wb-preset-modal").classList.add("show");
+}
+document.getElementById("wb-preset-modal-cancel").addEventListener("click", ()=>{
+  document.getElementById("wb-preset-modal").classList.remove("show");
+});
+document.getElementById("wb-preset-modal-save").addEventListener("click", async ()=>{
+  if(!wbPresetEditingEmail) return;
+  const status = document.getElementById("wb-preset-status-select").value;
+  const note = document.getElementById("wb-preset-note").value.trim();
+  try{
+    await setDoc(doc(db,"wb_presets", `${wbPresetSelectedDate}_${wbPresetEditingEmail}`), {
+      date: wbPresetSelectedDate,
+      email: wbPresetEditingEmail,
+      status, note,
+      updatedBy: currentUser.email,
+      updatedAt: new Date().toISOString()
+    });
+    document.getElementById("wb-preset-modal").classList.remove("show");
+    toast("事前設定を保存しました。");
+  }catch(e){
+    document.getElementById("wb-preset-modal-error").textContent = "保存に失敗しました。権限をご確認ください。";
+  }
+});
+
+document.getElementById("wb-preset-save-default-btn").addEventListener("click", async ()=>{
+  const dayPresets = wbPresetsByDate[wbPresetSelectedDate] || {};
+  const states = {};
+  Object.keys(dayPresets).forEach(email=>{
+    if(dayPresets[email].status){
+      states[email] = { status: dayPresets[email].status, note: dayPresets[email].note||"" };
+    }
+  });
+  if(Object.keys(states).length===0){
+    toast("この日に設定されている内容がありません。先に状態を設定してください。");
+    return;
+  }
   try{
     await setDoc(doc(db,"wb_presets","_defaults"), { states, updatedBy: currentUser.email, updatedAt: new Date().toISOString() });
     toast("初期状態として保存しました。");
@@ -2228,35 +2425,6 @@ document.getElementById("wb-preset-save-default-btn").addEventListener("click", 
   }
 });
 
-async function checkAndApplyWbPresets(){
-  try{
-    const todayStrVal = todayStr();
-    const metaSnap = await getDoc(doc(db,"wb_presets","_meta"));
-    const appliedDate = metaSnap.exists() ? metaSnap.data().appliedDate : null;
-    if(appliedDate === todayStrVal) return;
-    const presetsSnap = await getDocs(collection(db,"wb_presets"));
-    let appliedCount = 0;
-    for(const d of presetsSnap.docs){
-      if(d.id==="_defaults" || d.id==="_meta") continue;
-      const data = d.data();
-      if(data.forDate === todayStrVal){
-        await updateDoc(doc(db,"employees", d.id), {
-          status: data.status || "",
-          note: data.note || "",
-          statusUpdatedAt: new Date().toISOString(),
-          statusUpdatedBy: "事前設定（自動反映）"
-        });
-        appliedCount++;
-      }
-    }
-    await setDoc(doc(db,"wb_presets","_meta"), { appliedDate: todayStrVal }, { merge:true });
-    if(appliedCount>0){
-      toast(`前日までに設定された行き先を${appliedCount}件反映しました。`);
-    }
-  }catch(e){
-    console.error("[事前設定の自動反映エラー]", e);
-  }
-}
 
 document.querySelectorAll("#wb-view-toggle .seg-btn").forEach(btn=>{
   btn.addEventListener("click", ()=>{
@@ -2341,11 +2509,17 @@ document.querySelectorAll("#wb-timeleave-type-toggle .seg-btn").forEach(btn=>{
 });
 document.getElementById("wb-timeleave-start").addEventListener("click", (e)=>{
   const el = e.currentTarget;
-  openTimePicker(el, el.dataset.value, { onSelect: (val)=> setTimeFieldValue(el, val) });
+  openTimePicker(el, el.dataset.value, {
+    minTime: calWorkStartTime, maxTime: calWorkEndTime,
+    onSelect: (val)=> setTimeFieldValue(el, val)
+  });
 });
 document.getElementById("wb-timeleave-end").addEventListener("click", (e)=>{
   const el = e.currentTarget;
-  openTimePicker(el, el.dataset.value, { onSelect: (val)=> setTimeFieldValue(el, val) });
+  openTimePicker(el, el.dataset.value, {
+    minTime: calWorkStartTime, maxTime: calWorkEndTime,
+    onSelect: (val)=> setTimeFieldValue(el, val)
+  });
 });
 
 document.getElementById("wb-save").addEventListener("click", async ()=>{
