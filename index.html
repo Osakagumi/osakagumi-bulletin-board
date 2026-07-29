@@ -2363,6 +2363,15 @@ document.getElementById("wb-preset-bulk-done-btn").addEventListener("click", ()=
 });
 
 async function applyWbPresetBulkStatus(email){
+  if(isEditingWbDefaults()){
+    const existing = wbPresetDefaults[email] || {};
+    try{
+      await saveWbDefaultForEmployee(email, wbPresetBulkStatus, existing.note || "");
+    }catch(e){
+      toast("更新に失敗しました。権限をご確認ください。");
+    }
+    return;
+  }
   const existing = (wbPresetsByDate[wbPresetSelectedDate] && wbPresetsByDate[wbPresetSelectedDate][email]) || {};
   try{
     await setDoc(doc(db,"wb_presets", `${wbPresetSelectedDate}_${email}`), {
@@ -2399,10 +2408,21 @@ function renderWbPresetTable(){
   const pickerLabel = document.getElementById("wb-preset-date-picker");
   if(!columnsWrap || !dateLabel) return;
   if(!wbPresetSelectedDate) wbPresetSelectedDate = todayStr();
-  pickerLabel.textContent = formatDateJP(wbPresetSelectedDate);
+  const editingDefaults = isEditingWbDefaults();
+  pickerLabel.textContent = editingDefaults ? "初期状態" : formatDateJP(wbPresetSelectedDate);
 
   const storedDates = wbPresetStoredDates();
-  dateLabel.innerHTML = `<b>${formatDateJP(wbPresetSelectedDate)}</b> の行き先を事前設定します。保存中の日付：${storedDates.length}/7件`;
+  const saveBtn = document.getElementById("wb-preset-save-btn");
+  const saveDefaultBtn = document.getElementById("wb-preset-save-default-btn");
+  if(editingDefaults){
+    dateLabel.innerHTML = `<b>初期状態</b>を編集しています。ここで設定した内容が、事前設定していない日を開いたときの初期値として使われます。`;
+    if(saveBtn) saveBtn.style.display = "none";
+    if(saveDefaultBtn) saveDefaultBtn.style.display = "none";
+  } else {
+    dateLabel.innerHTML = `<b>${formatDateJP(wbPresetSelectedDate)}</b> の行き先を事前設定します。保存中の日付：${storedDates.length}/7件`;
+    if(saveBtn) saveBtn.style.display = "inline-block";
+    if(saveDefaultBtn) saveDefaultBtn.style.display = "inline-block";
+  }
   renderWbPresetDatesList();
 
   columnsWrap.innerHTML = "";
@@ -2420,7 +2440,7 @@ function renderWbPresetTable(){
     return;
   }
 
-  const dayPresets = wbPresetsByDate[wbPresetSelectedDate] || {};
+  const dayPresets = editingDefaults ? {} : (wbPresetsByDate[wbPresetSelectedDate] || {});
 
   // 一般画面の一覧と同じ計算式：列数は上限として扱い、実際の幅で1列あたり最低260px確保できる数まで自動的に減らす
   const MIN_COL_WIDTH = 260 * (wbFontSizePx/13);
@@ -2441,8 +2461,8 @@ function renderWbPresetTable(){
     thead.innerHTML = `<tr><th>所属</th><th>氏名</th><th>状態</th><th>備考</th></tr>`;
     const tbody = document.createElement("tbody");
     chunk.forEach(emp=>{
-      const preset = dayPresets[emp.email] || null;
-      const fallback = wbPresetDefaults[emp.email] || null;
+      const preset = editingDefaults ? (wbPresetDefaults[emp.email] || null) : (dayPresets[emp.email] || null);
+      const fallback = editingDefaults ? null : (wbPresetDefaults[emp.email] || null);
       const effective = (preset && preset.status) ? preset : ((fallback && fallback.status) ? fallback : null);
       const st = effective ? wbStatusInfo(effective.status) : null;
       const tr = document.createElement("tr");
@@ -2465,7 +2485,7 @@ function renderWbPresetTable(){
       tdStatus.appendChild(badge);
       const tdNote = document.createElement("td");
       tdNote.className = "wb-note-cell";
-      tdNote.textContent = presetNoteDisplay(effective);
+      tdNote.textContent = editingDefaults ? (preset ? (preset.note||"") : "") : presetNoteDisplay(effective);
       tr.appendChild(tdDept); tr.appendChild(tdName); tr.appendChild(tdStatus); tr.appendChild(tdNote);
       tbody.appendChild(tr);
     });
@@ -2506,8 +2526,10 @@ let wbPresetTlType = "";
 function openWbPresetModal(email){
   wbPresetEditingEmail = email;
   const emp = employeesAll.find(e=>e.email===email);
-  document.getElementById("wb-preset-modal-title").textContent =
-    `${emp?.name || email} さんの ${formatDateJP(wbPresetSelectedDate)} の事前設定`;
+  const editingDefaults = isEditingWbDefaults();
+  document.getElementById("wb-preset-modal-title").textContent = editingDefaults
+    ? `${emp?.name || email} さんの初期状態`
+    : `${emp?.name || email} さんの ${formatDateJP(wbPresetSelectedDate)} の事前設定`;
   const sel = document.getElementById("wb-preset-status-select");
   sel.innerHTML = "";
   const noneOpt = document.createElement("option");
@@ -2518,15 +2540,17 @@ function openWbPresetModal(email){
     opt.value = s.id; opt.textContent = s.name;
     sel.appendChild(opt);
   });
-  const dayPresets = wbPresetsByDate[wbPresetSelectedDate] || {};
-  const preset = dayPresets[email] || null;
-  const fallback = wbPresetDefaults[email] || null;
+  const dayPresets = editingDefaults ? {} : (wbPresetsByDate[wbPresetSelectedDate] || {});
+  const preset = editingDefaults ? (wbPresetDefaults[email] || null) : (dayPresets[email] || null);
+  const fallback = editingDefaults ? null : (wbPresetDefaults[email] || null);
   const effective = (preset && preset.status) ? preset : ((fallback && fallback.status) ? fallback : null);
   sel.value = effective ? effective.status||"" : "";
   document.getElementById("wb-preset-note").value = effective ? effective.note||"" : "";
   document.getElementById("wb-preset-modal-error").textContent = "";
 
-  const hasTl = !!(preset && preset.timeLeaveType);
+  const tlSection = document.getElementById("wb-preset-tl-check").closest(".field");
+  if(tlSection) tlSection.style.display = editingDefaults ? "none" : "block";
+  const hasTl = !editingDefaults && !!(preset && preset.timeLeaveType);
   document.getElementById("wb-preset-tl-check").checked = hasTl;
   document.getElementById("wb-preset-tl-fields").style.display = hasTl ? "flex" : "none";
   setTimeFieldValue(document.getElementById("wb-preset-tl-start"), hasTl ? preset.timeLeaveStart||"" : "");
@@ -2582,6 +2606,18 @@ document.getElementById("wb-preset-modal-save").addEventListener("click", async 
   const errEl = document.getElementById("wb-preset-modal-error");
   const status = document.getElementById("wb-preset-status-select").value;
   const note = document.getElementById("wb-preset-note").value.trim();
+
+  if(isEditingWbDefaults()){
+    try{
+      await saveWbDefaultForEmployee(wbPresetEditingEmail, status, note);
+      document.getElementById("wb-preset-modal").classList.remove("show");
+      toast("初期状態を保存しました。");
+    }catch(e){
+      errEl.textContent = "保存に失敗しました。権限をご確認ください。";
+    }
+    return;
+  }
+
   const tlChecked = document.getElementById("wb-preset-tl-check").checked;
   const tlStart = document.getElementById("wb-preset-tl-start").dataset.value || "";
   const tlEnd = document.getElementById("wb-preset-tl-end").dataset.value || "";
@@ -2613,6 +2649,19 @@ document.getElementById("wb-preset-modal-save").addEventListener("click", async 
   }
 });
 
+async function saveWbDefaultForEmployee(email, status, note){
+  const snap = await getDoc(doc(db,"wb_presets", WB_DEFAULTS_KEY));
+  const states = (snap.exists() && snap.data().states) || {};
+  if(status){
+    states[email] = { status, note: note||"" };
+  } else {
+    delete states[email];
+  }
+  await setDoc(doc(db,"wb_presets", WB_DEFAULTS_KEY), {
+    states, updatedBy: currentUser.email, updatedAt: new Date().toISOString()
+  });
+}
+
 document.getElementById("wb-preset-save-btn").addEventListener("click", async ()=>{
   const dateStr = wbPresetSelectedDate;
   const storedDates = wbPresetStoredDates();
@@ -2643,12 +2692,52 @@ document.getElementById("wb-preset-save-btn").addEventListener("click", async ()
   toast(`${formatDateJP(dateStr)}の内容を保存しました（${count}件を初期状態から反映）。`);
 });
 
+const WB_DEFAULTS_KEY = "_defaults";
+function isEditingWbDefaults(){
+  return wbPresetSelectedDate === WB_DEFAULTS_KEY;
+}
+
 function renderWbPresetDatesList(){
   const wrap = document.getElementById("wb-preset-dates-list");
   if(!wrap) return;
   const storedDates = wbPresetStoredDates();
+  const hasDefaults = Object.keys(wbPresetDefaults||{}).length > 0;
   wrap.innerHTML = "";
-  if(storedDates.length===0){
+
+  if(hasDefaults){
+    const pill = document.createElement("div");
+    pill.className = "wb-preset-date-pill" + (isEditingWbDefaults() ? " active" : "");
+    const textSpan = document.createElement("span");
+    textSpan.className = "wb-preset-date-text";
+    textSpan.textContent = "初期状態";
+    textSpan.addEventListener("click", ()=>{
+      wbPresetSelectedDate = WB_DEFAULTS_KEY;
+      renderWbPresetTable();
+    });
+    const delBtn = document.createElement("button");
+    delBtn.type = "button";
+    delBtn.className = "wb-preset-date-del";
+    delBtn.textContent = "×";
+    delBtn.addEventListener("click", async (e)=>{
+      e.stopPropagation();
+      if(!confirm("初期状態を削除しますか？")) return;
+      try{
+        await deleteDoc(doc(db,"wb_presets", WB_DEFAULTS_KEY));
+        if(isEditingWbDefaults()){
+          wbPresetSelectedDate = todayStr();
+          renderWbPresetTable();
+        }
+        toast("初期状態を削除しました。");
+      }catch(e2){
+        toast("削除に失敗しました。");
+      }
+    });
+    pill.appendChild(textSpan);
+    pill.appendChild(delBtn);
+    wrap.appendChild(pill);
+  }
+
+  if(storedDates.length===0 && !hasDefaults){
     wrap.innerHTML = `<span style="font-size:11.5px;color:var(--muted);">保存済みの日付はまだありません。</span>`;
     return;
   }
