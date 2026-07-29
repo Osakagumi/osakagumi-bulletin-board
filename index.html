@@ -208,8 +208,8 @@
   .cal-table th.cal-sat{color:#2E6FA3;}
   .cal-day-cell{
     height:44px;vertical-align:top;text-align:center;padding:2px 1px;border-radius:6px;position:relative;
-    display:flex;flex-direction:column;
   }
+  .cal-day-cell-inner{ display:flex; flex-direction:column; height:100%; }
   .cal-day-cell.cal-clickable{cursor:pointer;}
   .cal-day-cell.cal-clickable:hover{background:#F0F3F8;}
   .cal-day-cell.cal-holiday{background:#FDECEA;}
@@ -2619,15 +2619,19 @@ function buildCalMonthBlock(y, m){
         if(col===6) td.classList.add("cal-sat-col");
         if(info.isHoliday) holidayCount++;
 
+        const inner = document.createElement("div");
+        inner.className = "cal-day-cell-inner";
+        td.appendChild(inner);
+
         const numEl = document.createElement("div");
         numEl.className = "cal-day-num";
         numEl.textContent = dayNum;
-        td.appendChild(numEl);
+        inner.appendChild(numEl);
 
         const labelEl = document.createElement("div");
         labelEl.className = "cal-day-label";
         labelEl.textContent = info.label || "";
-        td.appendChild(labelEl);
+        inner.appendChild(labelEl);
 
         if(isCalendarEditor){
           numEl.addEventListener("click", (e)=>{ e.stopPropagation(); toggleCalHoliday(dateStr); });
