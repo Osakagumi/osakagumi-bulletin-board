@@ -39,6 +39,12 @@ service cloud.firestore {
           exists(/databases/$(database)/documents/equipment_managers/$(request.auth.token.email)));
     }
 
+    function isCalendarEditor() {
+      return isAdmin() ||
+        (isSignedIn() &&
+          exists(/databases/$(database)/documents/calendar_editors/$(request.auth.token.email)));
+    }
+
     // 管理者一覧: ログインしていれば読めるが、書き込みは管理者のみ
     match /admins/{email} {
       allow read: if isSignedIn();
@@ -74,6 +80,18 @@ service cloud.firestore {
     match /wb_presets/{docId} {
       allow read: if isSignedIn();
       allow write: if isWhereaboutsEditor();
+    }
+
+    // カレンダー編集権限一覧: 全員が読める。書き込みは管理者のみ。
+    match /calendar_editors/{email} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // 年間休日カレンダー（日付ごとの休日ON/OFF・名称）: 全員が読める。編集はカレンダー編集権限者・管理者のみ。
+    match /calendar_days/{dateId} {
+      allow read: if isSignedIn();
+      allow write: if isCalendarEditor();
     }
 
     // 行き先ステータスマスタ（在席・外出・現場・休みなど）: 全員が読める。管理は管理者のみ。
