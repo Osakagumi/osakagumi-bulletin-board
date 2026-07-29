@@ -442,7 +442,7 @@
         <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
           指定した年度（4月始まり）分について、以下のルールで初期データを一括作成します。既存のデータがあれば上書きされます。<br>
           ・土日：休日<br>
-          ・国民の祝日：休日（<b>2026年度のみ</b>祝日名を自動入力。他の年度は祝日名なしで休日のみ設定されます）<br>
+          ・国民の祝日：休日（インターネット上の祝日API から祝日名を自動取得・入力します。取得できない年度は休日のみ設定され、祝日名は手動入力になります）<br>
           ・各月の第1土曜日：出勤（備考「地下道清掃」）<br>
           作成後は、「カレンダー」タブから日付ごとに自由に調整できます。カレンダーは<b>最大3年度分</b>まで保存できます。
         </p>
@@ -1190,30 +1190,28 @@ document.getElementById("cal-editor-add-btn").addEventListener("click", async ()
 });
 
 /* ============================================================
-   カレンダー：2026年度 初期データ作成
+   カレンダー：初期データ作成
 ============================================================ */
-const CAL_NATIONAL_HOLIDAYS_FY2026 = {
-  "2026-04-29": "昭和の日",
-  "2026-05-03": "憲法記念日",
-  "2026-05-04": "みどりの日",
-  "2026-05-05": "こどもの日",
-  "2026-05-06": "振替休日",
-  "2026-07-20": "海の日",
-  "2026-08-11": "山の日",
-  "2026-08-12": "振替休日",
-  "2026-09-21": "敬老の日",
-  "2026-09-22": "国民の休日",
-  "2026-09-23": "秋分の日",
-  "2026-10-12": "スポーツの日",
-  "2026-11-03": "文化の日",
-  "2026-11-23": "勤労感謝の日",
-  "2027-01-01": "元日",
-  "2027-01-11": "成人の日",
-  "2027-02-11": "建国記念の日",
-  "2027-02-23": "天皇誕生日",
-  "2027-03-21": "春分の日",
-  "2027-03-22": "振替休日"
-};
+// 日本の祝日API（holidays-jp、認証不要・無料）から祝日名を取得する
+// https://holidays-jp.github.io/
+async function fetchNationalHolidays(fiscalYearStart){
+  try{
+    const res = await fetch("https://holidays-jp.github.io/api/v1/date.json");
+    if(!res.ok) throw new Error("fetch failed");
+    const allHolidays = await res.json(); // { "2026-01-01": "元日", ... }
+    const startId = `${fiscalYearStart}-04-01`;
+    const endId = `${fiscalYearStart+1}-03-31`;
+    const map = {};
+    Object.keys(allHolidays).forEach(dateStr=>{
+      if(dateStr >= startId && dateStr <= endId){
+        map[dateStr] = allHolidays[dateStr];
+      }
+    });
+    return { map, ok: true };
+  }catch(e){
+    return { map: {}, ok: false };
+  }
+}
 const CAL_MAX_YEARS = 3;
 const cal_p2 = n => String(n).padStart(2,"0");
 
@@ -1298,10 +1296,11 @@ document.getElementById("cal-seed-btn").addEventListener("click", async ()=>{
 
   if(!confirm(`${year}年度（${year}/4/1〜${year+1}/3/31）の初期データを作成します。既存のデータは上書きされます。よろしいですか？`)) return;
   const statusEl = document.getElementById("cal-seed-status");
+  statusEl.textContent = "祝日情報を取得中…";
+  const { map: holidaysMap, ok: holidaysOk } = await fetchNationalHolidays(year);
   const start = new Date(year,3,1);
   const end = new Date(year+1,2,31);
   const totalDays = Math.round((end-start)/86400000)+1;
-  const holidaysMap = (year===2026) ? CAL_NATIONAL_HOLIDAYS_FY2026 : {};
   let count = 0;
   for(let d=new Date(start); d<=end; d.setDate(d.getDate()+1)){
     const y=d.getFullYear(), m=d.getMonth()+1, day=d.getDate();
@@ -1335,7 +1334,11 @@ document.getElementById("cal-seed-btn").addEventListener("click", async ()=>{
       createdBy: currentUser.email
     });
   }catch(e){ /* 年度一覧への登録に失敗しても日付データ自体は作成済み */ }
-  statusEl.textContent = `完了：${count}件作成しました。`;
+  const holidayCount = Object.keys(holidaysMap).length;
+  const holidayNote = holidaysOk
+    ? `（祝日名を${holidayCount}件自動入力しました）`
+    : "（祝日情報の取得に失敗したため、祝日名は入力されていません。手動で入力してください）";
+  statusEl.textContent = `完了：${count}件作成しました。${holidayNote}`;
   toast(`${year}年度の初期データを作成しました。`);
 });
 
