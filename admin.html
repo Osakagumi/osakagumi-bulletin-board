@@ -503,12 +503,13 @@
 <div class="toast" id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signOut, inMemoryPersistence, setPersistence } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, setDoc,
-  query, where, onSnapshot, orderBy, limit, Timestamp
+  query, where, onSnapshot, orderBy, limit, documentId, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig, CATEGORIES, EQUIPMENT_STATUSES, SAFETY_STATUSES, EMAILJS_CONFIG, resolveMailRecipients, isMailOverrideActive, MAIL_SEND_TARGET } from "./firebase-config.js";
 
@@ -1335,6 +1336,9 @@ function renderCalendarYearsTable(){
     const tr = document.createElement("tr");
     const createdLabel = y.createdAt ? y.createdAt.slice(0,16).replace("T"," ") : "";
     tr.innerHTML = `<td>${escapeHtml(y.year)}年度</td><td style="color:var(--muted);font-size:12px;">${escapeHtml(createdLabel)}</td><td class="actions"></td>`;
+    const exportBtn = document.createElement("button");
+    exportBtn.className = "btn btn-ghost"; exportBtn.textContent = "Excel出力";
+    exportBtn.addEventListener("click", ()=> exportCalendarYearToExcel(Number(y.year)));
     const btn = document.createElement("button");
     btn.className = "btn btn-danger"; btn.textContent = "削除";
     btn.addEventListener("click", async ()=>{
@@ -1342,6 +1346,7 @@ function renderCalendarYearsTable(){
       await deleteCalendarYear(y.year);
       toast(`${y.year}年度を削除しました。`);
     });
+    tr.querySelector(".actions").appendChild(exportBtn);
     tr.querySelector(".actions").appendChild(btn);
     body.appendChild(tr);
   });
@@ -1356,6 +1361,161 @@ async function deleteCalendarYear(yearStr){
     try{ await deleteDoc(doc(db,"calendar_days", dateStr)); }catch(e){ /* 無視して続行 */ }
   }
   await deleteDoc(doc(db,"calendar_years", yearStr));
+}
+
+/* ============================================================
+   カレンダー：Excel出力（アップロードされたサンプルと同じ様式）
+============================================================ */
+function calMonthListForExport(yearStart){
+  const pairs = [];
+  for(let i=0;i<6;i++){
+    const leftMonth = 4+i;
+    const rightMonth = 10+i;
+    if(rightMonth<=12){
+      pairs.push([{y:yearStart,m:leftMonth}, {y:yearStart,m:rightMonth}]);
+    } else {
+      pairs.push([{y:yearStart,m:leftMonth}, {y:yearStart+1,m:rightMonth-12}]);
+    }
+  }
+  return pairs;
+}
+function calBuildWeeksForExport(y,m){
+  const firstDow = new Date(y, m-1, 1).getDay();
+  const daysInMonth = new Date(y, m, 0).getDate();
+  let dayNum = 1 - firstDow;
+  const weeks = [];
+  while(dayNum <= daysInMonth){
+    const week = [];
+    for(let col=0; col<7; col++, dayNum++){
+      week.push((dayNum>=1 && dayNum<=daysInMonth) ? dayNum : null);
+    }
+    weeks.push(week);
+  }
+  return weeks;
+}
+function calWriteMonthBlockForExport(ws, startRow, cols, y, m, dataMap){
+  const HOLIDAY_FILL = { type:"pattern", pattern:"solid", fgColor:{argb:"FFFDECEA"} };
+  const HOLIDAY_FONT_COLOR = "FFC0392B";
+  const HEADER_FILL = { type:"pattern", pattern:"solid", fgColor:{argb:"FFF0F3F8"} };
+  const SUN_COLOR = "FFC0392B";
+  const SAT_COLOR = "FF2E6FA3";
+  const THIN = { style:"thin", color:{argb:"FFDDDDDD"} };
+  const BORDER_ALL = { top:THIN, left:THIN, bottom:THIN, right:THIN };
+  const WEEKDAY_NAMES = ["日","月","火","水","木","金","土"];
+
+  const weeks = calBuildWeeksForExport(y,m);
+  const daysInMonth = new Date(y, m, 0).getDate();
+  let holidayCount = 0;
+  for(let day=1; day<=daysInMonth; day++){
+    const dateStr = `${y}-${cal_p2(m)}-${cal_p2(day)}`;
+    if(dataMap[dateStr] && dataMap[dateStr].isHoliday) holidayCount++;
+  }
+  const workingCount = daysInMonth - holidayCount;
+
+  ws.getCell(`${cols[0]}${startRow}`).value = workingCount;
+  ws.mergeCells(`${cols[1]}${startRow}:${cols[5]}${startRow}`);
+  const nameCell = ws.getCell(`${cols[1]}${startRow}`);
+  nameCell.value = `${y}年${m}月`;
+  nameCell.font = { bold:true };
+  nameCell.alignment = { horizontal:"center" };
+  ws.getCell(`${cols[6]}${startRow}`).value = holidayCount;
+  cols.forEach(c=>{ ws.getCell(`${c}${startRow}`).border = BORDER_ALL; });
+
+  const wdRow = startRow+1;
+  cols.forEach((c,i)=>{
+    const cell = ws.getCell(`${c}${wdRow}`);
+    cell.value = WEEKDAY_NAMES[i];
+    cell.fill = HEADER_FILL;
+    cell.alignment = { horizontal:"center" };
+    cell.border = BORDER_ALL;
+    if(i===0) cell.font = { color:{argb:SUN_COLOR}, bold:true };
+    if(i===6) cell.font = { color:{argb:SAT_COLOR}, bold:true };
+  });
+
+  let r = wdRow+1;
+  weeks.forEach(week=>{
+    week.forEach((day, i)=>{
+      const col = cols[i];
+      const numCell = ws.getCell(`${col}${r}`);
+      const noteCell = ws.getCell(`${col}${r+1}`);
+      numCell.border = BORDER_ALL;
+      noteCell.border = BORDER_ALL;
+      if(day===null) return;
+      const dateStr = `${y}-${cal_p2(m)}-${cal_p2(day)}`;
+      const info = dataMap[dateStr] || {};
+      numCell.value = day;
+      numCell.alignment = { horizontal:"center" };
+      if(info.isHoliday){
+        numCell.fill = HOLIDAY_FILL;
+        numCell.font = { color:{argb:HOLIDAY_FONT_COLOR}, bold:true };
+        noteCell.fill = HOLIDAY_FILL;
+      }
+      if(info.label){
+        noteCell.value = info.label;
+        noteCell.alignment = { horizontal:"center", wrapText:true };
+        noteCell.font = { size:9, color: info.isHoliday ? {argb:HOLIDAY_FONT_COLOR} : {argb:"FF888888"} };
+      }
+    });
+    r += 2;
+  });
+  return (r - startRow);
+}
+async function exportCalendarYearToExcel(yearStart){
+  if(!window.ExcelJS){
+    toast("Excel出力の準備ができていません。少し待ってから再度お試しください。");
+    return;
+  }
+  toast("Excelファイルを作成中です…");
+  try{
+    const startId = `${yearStart}-04-01`;
+    const endId = `${yearStart+1}-03-31`;
+    const q = query(collection(db,"calendar_days"), where(documentId(), ">=", startId), where(documentId(), "<=", endId));
+    const snap = await getDocs(q);
+    const dataMap = {};
+    snap.docs.forEach(d=>{ dataMap[d.id] = d.data(); });
+
+    const wb = new window.ExcelJS.Workbook();
+    const ws = wb.addWorksheet(`${yearStart}年度`);
+    const leftCols = ["B","C","D","E","F","G","H"];
+    const rightCols = ["J","K","L","M","N","O","P"];
+    [...leftCols, ...rightCols].forEach(col=>{ ws.getColumn(col).width = 9; });
+    ws.getColumn("A").width = 2;
+    ws.getColumn("I").width = 3;
+
+    ws.mergeCells("B1:P1");
+    const titleCell = ws.getCell("B1");
+    titleCell.value = `${yearStart}年度　年間カレンダー`;
+    titleCell.font = { bold:true, size:14 };
+    titleCell.alignment = { horizontal:"center" };
+
+    let rowCursor = 3;
+    const pairs = calMonthListForExport(yearStart);
+    pairs.forEach(pair=>{
+      const blockStartRow = rowCursor;
+      let maxSpan = 0;
+      pair.forEach((info, idx)=>{
+        const cols = idx===0 ? leftCols : rightCols;
+        const span = calWriteMonthBlockForExport(ws, blockStartRow, cols, info.y, info.m, dataMap);
+        maxSpan = Math.max(maxSpan, span);
+      });
+      rowCursor = blockStartRow + maxSpan + 2;
+    });
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${yearStart}年度_年間カレンダー.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    toast("Excelファイルを出力しました。");
+  }catch(e){
+    console.error("[カレンダーExcel出力エラー]", e);
+    toast("Excel出力に失敗しました。");
+  }
 }
 
 function showCalSeedLimitPanel(){
