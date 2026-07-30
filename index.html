@@ -1249,7 +1249,7 @@ function openCheckoutModal(eq, targetStatus, mode){
   if(isLend){
     const select = document.getElementById("checkout-recipient-select");
     select.innerHTML = "";
-    const sortedEmployees = employeesAll.slice().filter(e=>!!e.email)
+    const sortedEmployees = employeesAll.slice().filter(e=>!!e.email && !e.hidden)
       .sort((a,b)=> (a.name||a.email).localeCompare(b.name||b.email, "ja"));
     sortedEmployees.forEach(emp=>{
       const opt = document.createElement("option");
@@ -2170,7 +2170,7 @@ function getBaseWbNote(emp){
   return emp.note || "";
 }
 function getSortedEmployees(){
-  return employeesAll.slice().sort((a,b)=>{
+  return employeesAll.filter(e=>!e.hidden).slice().sort((a,b)=>{
     const na = a.employeeNo ? Number(a.employeeNo) : null;
     const nb = b.employeeNo ? Number(b.employeeNo) : null;
     const validA = na!==null && !isNaN(na);

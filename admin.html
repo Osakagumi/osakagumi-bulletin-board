@@ -1735,6 +1735,7 @@ function renderEmployees(){
   }
   employeesAll.forEach(emp=>{
     const tr = document.createElement("tr");
+    if(emp.hidden) tr.style.opacity = "0.45";
 
     const tdNo = document.createElement("td");
     const noInput = document.createElement("input");
@@ -1798,18 +1799,24 @@ function renderEmployees(){
       }
     });
     tdActions.appendChild(saveBtn);
-    const delBtn = document.createElement("button");
-    delBtn.className = "btn btn-danger"; delBtn.textContent = "削除";
-    delBtn.addEventListener("click", async ()=>{
-      if(!confirm(`${emp.name || emp.email}（${emp.email}）を社員一覧から削除しますか？\n※ログイン用のアカウント自体は削除されません。次回ログインすると自動的に再登録されます。`)) return;
+    const hideBtn = document.createElement("button");
+    hideBtn.className = emp.hidden ? "btn btn-ghost" : "btn btn-danger";
+    hideBtn.style.border = emp.hidden ? "1px solid var(--line)" : "";
+    hideBtn.textContent = emp.hidden ? "表示に戻す" : "非表示";
+    hideBtn.addEventListener("click", async ()=>{
+      const willHide = !emp.hidden;
+      const msg = willHide
+        ? `${emp.name || emp.email}（${emp.email}）を非表示にしますか？\n行き先など、社内システム上では存在しない扱いになります。\n※ログイン用のアカウント自体は削除されません。`
+        : `${emp.name || emp.email}（${emp.email}）の非表示を解除しますか？`;
+      if(!confirm(msg)) return;
       try{
-        await deleteDoc(doc(db,"employees", emp.email));
-        toast("社員情報を削除しました。");
+        await updateDoc(doc(db,"employees", emp.email), { hidden: willHide });
+        toast(willHide ? "非表示にしました。" : "表示に戻しました。");
       }catch(e){
-        toast("削除に失敗しました。");
+        toast("更新に失敗しました。");
       }
     });
-    tdActions.appendChild(delBtn);
+    tdActions.appendChild(hideBtn);
 
     tr.appendChild(tdNo); tr.appendChild(tdName); tr.appendChild(tdEmail); tr.appendChild(tdDept); tr.appendChild(tdOrder); tr.appendChild(tdPhone); tr.appendChild(tdMemo); tr.appendChild(tdActions);
     body.appendChild(tr);
