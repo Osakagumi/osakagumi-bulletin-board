@@ -558,7 +558,7 @@
   <!-- ============ NOTICE MODAL ============ -->
   <div class="modal-overlay" id="notice-modal">
     <div class="modal">
-      <h3>お知らせを投稿</h3>
+      <h3 id="notice-modal-title">お知らせを投稿</h3>
       <div class="field">
         <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">タイトル</label>
         <input type="text" id="notice-title" style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;">
@@ -571,7 +571,7 @@
         <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">リンク（任意。Googleドライブなどの共有リンクを貼り付けてください）</label>
         <input type="url" id="notice-attachment-url" placeholder="https://drive.google.com/..." style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;">
       </div>
-      <div class="field" style="display:flex;align-items:center;gap:6px;">
+      <div class="field" id="notice-send-email-row" style="display:flex;align-items:center;gap:6px;">
         <input type="checkbox" id="notice-send-email" checked style="width:auto;">
         <label style="margin:0;font-size:12.5px;color:var(--text);">社員全員に同じ内容をメールでも送信する</label>
       </div>
@@ -831,6 +831,7 @@ let wbStatusesAll = [];
 let wbListColumns = 2;
 let noticesAll = [];
 let myReadNoticeIds = [];
+let editingNoticeId = null;
 let activeSafetyCampaign = null;
 let mySafetyResponse = null;
 let wbEditingEmail = null;
@@ -1823,6 +1824,10 @@ function renderNotices(){
     });
     actions.appendChild(readBtn);
     if(isAdmin || n.authorEmail===currentUser.email){
+      const editBtn = document.createElement("button");
+      editBtn.textContent = "編集";
+      editBtn.addEventListener("click", ()=> openNoticeEditModal(n));
+      actions.appendChild(editBtn);
       const delBtn = document.createElement("button");
       delBtn.textContent = "削除";
       delBtn.addEventListener("click", async ()=>{
@@ -1839,6 +1844,10 @@ function renderNotices(){
 
 const noticeModal = document.getElementById("notice-modal");
 document.getElementById("notice-new-btn").addEventListener("click", ()=>{
+  editingNoticeId = null;
+  document.getElementById("notice-modal-title").textContent = "お知らせを投稿";
+  document.getElementById("notice-send-email-row").style.display = "flex";
+  document.getElementById("notice-send-email").checked = true;
   document.getElementById("notice-title").value = "";
   document.getElementById("notice-body").value = "";
   document.getElementById("notice-attachment-url").value = "";
@@ -1846,18 +1855,44 @@ document.getElementById("notice-new-btn").addEventListener("click", ()=>{
   document.getElementById("notice-send-status").textContent = "";
   noticeModal.classList.add("show");
 });
+
+function openNoticeEditModal(n){
+  editingNoticeId = n.id;
+  document.getElementById("notice-modal-title").textContent = "お知らせを編集";
+  document.getElementById("notice-send-email-row").style.display = "none";
+  document.getElementById("notice-title").value = n.title || "";
+  document.getElementById("notice-body").value = n.body || "";
+  document.getElementById("notice-attachment-url").value = n.attachmentUrl || "";
+  document.getElementById("notice-error").textContent = "";
+  document.getElementById("notice-send-status").textContent = "";
+  noticeModal.classList.add("show");
+}
 document.getElementById("notice-cancel").addEventListener("click", ()=> noticeModal.classList.remove("show"));
 document.getElementById("notice-submit").addEventListener("click", async ()=>{
   const title = document.getElementById("notice-title").value.trim();
   const body = document.getElementById("notice-body").value.trim();
   const attachmentUrl = document.getElementById("notice-attachment-url").value.trim();
-  const sendEmail = document.getElementById("notice-send-email").checked;
   const errEl = document.getElementById("notice-error");
   const statusEl = document.getElementById("notice-send-status");
   if(!title){ errEl.textContent = "タイトルを入力してください。"; return; }
   errEl.textContent = "";
   statusEl.textContent = "";
 
+  if(editingNoticeId){
+    try{
+      await updateDoc(doc(db,"announcements", editingNoticeId), {
+        title, body, attachmentUrl,
+        updatedAt: Timestamp.now()
+      });
+      toast("お知らせを更新しました。");
+      noticeModal.classList.remove("show");
+    }catch(e){
+      errEl.textContent = "更新に失敗しました。権限をご確認ください。";
+    }
+    return;
+  }
+
+  const sendEmail = document.getElementById("notice-send-email").checked;
   if(sendEmail){
     // 送信直前にFirestoreから最新の社員名簿を取得し直してから確認する
     try{

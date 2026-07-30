@@ -291,6 +291,14 @@
           <tbody id="poster-table-body"></tbody>
         </table>
       </div>
+      <div class="panel">
+        <h2>掲示中のお知らせ一覧</h2>
+        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">個人ごとの「既読」状態に関わらず、現在掲示されている全てのお知らせを確認・削除できます。</p>
+        <table>
+          <thead><tr><th>タイトル</th><th>本文</th><th>投稿者</th><th>投稿日時</th><th>操作</th></tr></thead>
+          <tbody id="notices-admin-table-body"></tbody>
+        </table>
+      </div>
     </section>
 
     <!-- ============ 行き先管理 ============ -->
@@ -570,6 +578,7 @@ onAuthStateChanged(auth, async (user)=>{
   initReservationsListener();
   initAdminsListener();
   initPostersListener();
+  initNoticesAdminListener();
   initDepartmentsListener();
   initWbColumnsListener();
   initWbStatusesListener();
@@ -875,6 +884,43 @@ function initPostersListener(){
   onSnapshot(collection(db,"announcement_posters"), snap=>{
     lastPosterEmails = snap.docs.map(d=>d.id);
     renderPosters(lastPosterEmails);
+  });
+}
+
+function initNoticesAdminListener(){
+  const q = query(collection(db,"announcements"), orderBy("createdAt","desc"));
+  onSnapshot(q, snap=>{
+    const notices = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    renderNoticesAdminTable(notices);
+  }, (err)=>{ console.error("[お知らせ取得エラー]", err); });
+}
+function renderNoticesAdminTable(notices){
+  const body = document.getElementById("notices-admin-table-body");
+  if(!body) return;
+  body.innerHTML = "";
+  if(notices.length===0){
+    body.innerHTML = `<tr><td colspan="5" class="empty">掲示中のお知らせはありません。</td></tr>`;
+    return;
+  }
+  notices.forEach(n=>{
+    const tr = document.createElement("tr");
+    const bodyPreview = (n.body||"").length > 40 ? n.body.slice(0,40)+"…" : (n.body||"");
+    tr.innerHTML = `
+      <td>${escapeHtml(n.title||"")}</td>
+      <td style="color:var(--muted);max-width:260px;">${escapeHtml(bodyPreview)}</td>
+      <td>${escapeHtml(n.authorName||n.authorEmail||"")}</td>
+      <td style="font-size:12px;color:var(--muted);">${escapeHtml(tsToStr(n.createdAt))}</td>
+      <td class="actions"></td>
+    `;
+    const btn = document.createElement("button");
+    btn.className = "btn btn-danger"; btn.textContent = "削除";
+    btn.addEventListener("click", async ()=>{
+      if(!confirm(`「${n.title}」を削除しますか？`)) return;
+      await deleteDoc(doc(db,"announcements", n.id));
+      toast("お知らせを削除しました。");
+    });
+    tr.querySelector(".actions").appendChild(btn);
+    body.appendChild(tr);
   });
 }
 function renderPosters(list){
