@@ -367,6 +367,16 @@
   .modal .row-btns{display:flex;gap:8px;margin-top:6px;}
   .modal .row-btns button{flex:1;padding:10px;border-radius:8px;border:none;font-size:13.5px;font-weight:600;}
   .modal-err{color:var(--danger);font-size:12px;margin-top:8px;min-height:16px;}
+  #notice-dropzone{
+    border:2px dashed var(--line);border-radius:10px;padding:28px 14px;text-align:center;color:var(--muted);
+    cursor:pointer;transition:border-color .15s,background .15s;
+  }
+  #notice-dropzone.drag-over{border-color:var(--brand);background:#F4F8FC;color:var(--brand-dark);}
+  .spinner{
+    width:26px;height:26px;border:3px solid var(--line);border-top-color:var(--brand);border-radius:50%;
+    margin:0 auto;animation:spin 0.8s linear infinite;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
 
   .toast{
     position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1F2937;color:#fff;padding:10px 18px;
@@ -568,8 +578,11 @@
         <textarea id="notice-body" style="min-height:110px;"></textarea>
       </div>
       <div class="field">
-        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">リンク（任意。Googleドライブなどの共有リンクを貼り付けてください）</label>
-        <input type="url" id="notice-attachment-url" placeholder="https://drive.google.com/..." style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;">
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">リンク（任意。ファイルを添付するか、Googleドライブなどの共有リンクを直接貼り付けてください）</label>
+        <div style="display:flex;gap:8px;">
+          <input type="url" id="notice-attachment-url" placeholder="https://drive.google.com/..." style="flex:1;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;">
+          <button type="button" class="btn-ghost" id="notice-attach-btn" style="border:1px solid var(--line);white-space:nowrap;">ファイル添付</button>
+        </div>
       </div>
       <div class="field" id="notice-send-email-row" style="display:flex;align-items:center;gap:6px;">
         <input type="checkbox" id="notice-send-email" checked style="width:auto;">
@@ -580,6 +593,32 @@
       <div class="row-btns">
         <button class="btn-ghost" id="notice-cancel" style="border:1px solid var(--line);">キャンセル</button>
         <button class="btn-primary" id="notice-submit">投稿する</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ ファイル添付（Googleドライブへアップロード） ============ -->
+  <div class="modal-overlay" id="notice-attach-modal">
+    <div class="modal">
+      <h3>ファイルを添付</h3>
+      <p style="font-size:12px;color:var(--muted);margin:-6px 0 12px;">
+        ファイルをドロップすると、Googleドライブへアップロードしてリンクを自動で取得します。初回・時間経過後はGoogleアカウントへのログインを求められます（<b>osakagumi.sys@gmail.com</b>でログインしてください）。
+      </p>
+      <div id="notice-dropzone">
+        <div id="notice-dropzone-idle">
+          <div style="font-size:28px;margin-bottom:8px;">📎</div>
+          <div>ここにファイルをドラッグ＆ドロップ</div>
+          <div style="font-size:11.5px;color:var(--muted);margin-top:6px;">またはクリックしてファイルを選択</div>
+          <input type="file" id="notice-file-input" style="display:none;">
+        </div>
+        <div id="notice-dropzone-busy" style="display:none;">
+          <div class="spinner"></div>
+          <div id="notice-dropzone-status" style="margin-top:10px;font-size:12.5px;color:var(--muted);"></div>
+        </div>
+      </div>
+      <div class="modal-err" id="notice-attach-error"></div>
+      <div class="row-btns">
+        <button class="btn-ghost" id="notice-attach-cancel" style="border:1px solid var(--line);">閉じる</button>
       </div>
     </div>
   </div>
@@ -718,6 +757,7 @@
   <div class="toast" id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
@@ -727,7 +767,7 @@ import {
   getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, addDoc, deleteDoc, query, where,
   onSnapshot, orderBy, limit, documentId, arrayUnion, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig, BUSINESS_HOURS, CATEGORIES, EQUIPMENT_STATUSES, SAFETY_STATUSES, EMAILJS_CONFIG, resolveMailRecipients, isMailOverrideActive, MAIL_SEND_TARGET } from "./firebase-config.js";
+import { firebaseConfig, BUSINESS_HOURS, CATEGORIES, EQUIPMENT_STATUSES, SAFETY_STATUSES, EMAILJS_CONFIG, GOOGLE_DRIVE_CONFIG, resolveMailRecipients, isMailOverrideActive, MAIL_SEND_TARGET } from "./firebase-config.js";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -1957,6 +1997,146 @@ async function sendNoticeEmails(title, body, attachmentUrl){
   }
   statusEl.textContent = `メール送信完了：${recipients.length}件中 ${ok}件成功${fail>0 ? `（${fail}件失敗）` : ""}`;
 }
+
+/* =========================================================
+   お知らせ：ファイル添付（Googleドライブへアップロード）
+========================================================= */
+let gisTokenClient = null;
+function ensureGisTokenClient(){
+  if(gisTokenClient) return gisTokenClient;
+  if(!window.google || !google.accounts || !google.accounts.oauth2){
+    return null;
+  }
+  gisTokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: GOOGLE_DRIVE_CONFIG.clientId,
+    scope: "https://www.googleapis.com/auth/drive.file",
+    callback: ()=>{} // 実際の処理はrequestAccessToken呼び出し時にその場でcallbackを差し替える
+  });
+  return gisTokenClient;
+}
+function requestGoogleAccessToken(){
+  return new Promise((resolve, reject)=>{
+    const client = ensureGisTokenClient();
+    if(!client){
+      reject(new Error("Googleログイン機能の読み込みに失敗しました。時間をおいて再度お試しください。"));
+      return;
+    }
+    client.callback = (resp)=>{
+      if(resp && resp.access_token){ resolve(resp.access_token); }
+      else{ reject(new Error("Googleへのログインに失敗しました。")); }
+    };
+    client.error_callback = ()=>{ reject(new Error("Googleへのログインがキャンセルされました。")); };
+    client.requestAccessToken({ prompt: "" });
+  });
+}
+function fileToBase64(file){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = ()=> resolve(reader.result.split(",")[1]);
+    reader.onerror = ()=> reject(new Error("ファイルの読み込みに失敗しました。"));
+    reader.readAsDataURL(file);
+  });
+}
+async function uploadFileToGoogleDrive(file){
+  const statusEl = document.getElementById("notice-dropzone-status");
+  const errEl = document.getElementById("notice-attach-error");
+  const idleEl = document.getElementById("notice-dropzone-idle");
+  const busyEl = document.getElementById("notice-dropzone-busy");
+  errEl.textContent = "";
+
+  if(!GOOGLE_DRIVE_CONFIG.clientId || GOOGLE_DRIVE_CONFIG.clientId.startsWith("YOUR_") ||
+     !GOOGLE_DRIVE_CONFIG.folderId || GOOGLE_DRIVE_CONFIG.folderId.startsWith("YOUR_")){
+    errEl.textContent = "Googleドライブ連携が未設定です（firebase-config.jsのGOOGLE_DRIVE_CONFIGを設定してください）。";
+    return;
+  }
+
+  idleEl.style.display = "none";
+  busyEl.style.display = "block";
+  try{
+    statusEl.textContent = "Googleアカウントへのログインを確認しています…";
+    const token = await requestGoogleAccessToken();
+
+    statusEl.textContent = `アップロード中… (${file.name})`;
+    const base64Data = await fileToBase64(file);
+    const metadata = { name: file.name, parents: [GOOGLE_DRIVE_CONFIG.folderId] };
+    const boundary = "osakagumi_boundary_" + Date.now();
+    const delimiter = `\r\n--${boundary}\r\n`;
+    const closeDelim = `\r\n--${boundary}--`;
+    const multipartBody =
+      delimiter + "Content-Type: application/json; charset=UTF-8\r\n\r\n" + JSON.stringify(metadata) +
+      delimiter + `Content-Type: ${file.type || "application/octet-stream"}\r\nContent-Transfer-Encoding: base64\r\n\r\n` + base64Data +
+      closeDelim;
+
+    const uploadRes = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": `multipart/related; boundary="${boundary}"`
+      },
+      body: multipartBody
+    });
+    if(!uploadRes.ok) throw new Error("アップロードに失敗しました（" + uploadRes.status + "）。");
+    const uploadJson = await uploadRes.json();
+    const fileId = uploadJson.id;
+
+    statusEl.textContent = "共有リンクを設定しています…";
+    await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`, {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ role: "reader", type: "anyone" })
+    });
+
+    const linkRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=webViewLink`, {
+      headers: { "Authorization": `Bearer ${token}` }
+    });
+    const linkJson = await linkRes.json();
+
+    document.getElementById("notice-attachment-url").value = linkJson.webViewLink || "";
+    toast("ファイルをアップロードし、リンクを取得しました。");
+    document.getElementById("notice-attach-modal").classList.remove("show");
+  }catch(e){
+    errEl.textContent = e.message || "アップロードに失敗しました。";
+  }finally{
+    idleEl.style.display = "block";
+    busyEl.style.display = "none";
+    statusEl.textContent = "";
+  }
+}
+
+document.getElementById("notice-attach-btn").addEventListener("click", ()=>{
+  document.getElementById("notice-attach-error").textContent = "";
+  document.getElementById("notice-dropzone-idle").style.display = "block";
+  document.getElementById("notice-dropzone-busy").style.display = "none";
+  document.getElementById("notice-attach-modal").classList.add("show");
+});
+document.getElementById("notice-attach-cancel").addEventListener("click", ()=>{
+  document.getElementById("notice-attach-modal").classList.remove("show");
+});
+const noticeDropzone = document.getElementById("notice-dropzone");
+noticeDropzone.addEventListener("click", ()=>{
+  document.getElementById("notice-file-input").click();
+});
+document.getElementById("notice-file-input").addEventListener("change", (e)=>{
+  const file = e.target.files[0];
+  if(file) uploadFileToGoogleDrive(file);
+  e.target.value = "";
+});
+["dragenter","dragover"].forEach(evt=>{
+  noticeDropzone.addEventListener(evt, (e)=>{
+    e.preventDefault(); e.stopPropagation();
+    noticeDropzone.classList.add("drag-over");
+  });
+});
+["dragleave","drop"].forEach(evt=>{
+  noticeDropzone.addEventListener(evt, (e)=>{
+    e.preventDefault(); e.stopPropagation();
+    noticeDropzone.classList.remove("drag-over");
+  });
+});
+noticeDropzone.addEventListener("drop", (e)=>{
+  const file = e.dataTransfer.files && e.dataTransfer.files[0];
+  if(file) uploadFileToGoogleDrive(file);
+});
 
 /* =========================================================
    行き先ボード
