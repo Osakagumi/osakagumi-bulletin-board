@@ -1509,6 +1509,7 @@ async function exportCalendarYearToExcel(yearStart){
     const wb = new window.ExcelJS.Workbook();
     await wb.xlsx.load(templateBuffer);
     const ws = wb.worksheets[0];
+    ws.name = `${yearStart}年度(令和${yearStart-2018}年度)`;
 
     // A1に年度の基準日（1月1日）を設定。4月・1月の見出しはA1を参照する数式が計算する。
     const a1Cell = ws.getCell("A1");
