@@ -725,7 +725,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, addDoc, deleteDoc, query, where,
-  onSnapshot, orderBy, limit, documentId, Timestamp
+  onSnapshot, orderBy, limit, documentId, arrayUnion, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig, BUSINESS_HOURS, CATEGORIES, EQUIPMENT_STATUSES, SAFETY_STATUSES, EMAILJS_CONFIG, resolveMailRecipients, isMailOverrideActive, MAIL_SEND_TARGET } from "./firebase-config.js";
 
@@ -830,6 +830,7 @@ let departmentsAll = [];
 let wbStatusesAll = [];
 let wbListColumns = 2;
 let noticesAll = [];
+let myReadNoticeIds = [];
 let activeSafetyCampaign = null;
 let mySafetyResponse = null;
 let wbEditingEmail = null;
@@ -896,6 +897,7 @@ onAuthStateChanged(auth, async (user)=>{
     initEquipmentListener();
     initMyReservationsListener();
     initNoticesListener();
+    initNoticeReadsListener();
     initDepartmentsListener();
     initWbStatusesListener();
     initWbColumnsListener();
@@ -1782,14 +1784,22 @@ function initNoticesListener(){
   }, (err)=>{ console.error("[お知らせ取得エラー]", err); });
 }
 
+function initNoticeReadsListener(){
+  onSnapshot(doc(db,"notice_reads", currentUser.email), snap=>{
+    myReadNoticeIds = (snap.exists() && snap.data().readIds) || [];
+    renderNotices();
+  }, (err)=>{ console.error("[お知らせ既読状態取得エラー]", err); });
+}
+
 function renderNotices(){
   const el = document.getElementById("notice-list");
   el.innerHTML = "";
-  if(noticesAll.length===0){
-    el.innerHTML = `<div class="empty-state">お知らせはまだありません。</div>`;
+  const visibleNotices = noticesAll.filter(n => !myReadNoticeIds.includes(n.id));
+  if(visibleNotices.length===0){
+    el.innerHTML = `<div class="empty-state">${noticesAll.length===0 ? "お知らせはまだありません。" : "未読のお知らせはありません。"}</div>`;
     return;
   }
-  noticesAll.forEach(n=>{
+  visibleNotices.forEach(n=>{
     const item = document.createElement("div");
     item.className = "notice-item";
     item.innerHTML = `
@@ -1800,9 +1810,19 @@ function renderNotices(){
       <div class="n-body">${escapeHtml(n.body||"")}</div>
       ${n.attachmentUrl ? `<div class="n-attachment"><a href="${escapeHtml(n.attachmentUrl)}" target="_blank" rel="noopener noreferrer">🔗 リンクを開く</a></div>` : ""}
     `;
+    const actions = document.createElement("div");
+    actions.className = "n-actions";
+    const readBtn = document.createElement("button");
+    readBtn.textContent = "既読にする";
+    readBtn.addEventListener("click", async ()=>{
+      try{
+        await setDoc(doc(db,"notice_reads", currentUser.email), { readIds: arrayUnion(n.id) }, { merge:true });
+      }catch(e){
+        toast("既読にできませんでした。");
+      }
+    });
+    actions.appendChild(readBtn);
     if(isAdmin || n.authorEmail===currentUser.email){
-      const actions = document.createElement("div");
-      actions.className = "n-actions";
       const delBtn = document.createElement("button");
       delBtn.textContent = "削除";
       delBtn.addEventListener("click", async ()=>{
@@ -1811,8 +1831,8 @@ function renderNotices(){
         toast("お知らせを削除しました。");
       });
       actions.appendChild(delBtn);
-      item.appendChild(actions);
     }
+    item.appendChild(actions);
     el.appendChild(item);
   });
 }
