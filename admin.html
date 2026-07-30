@@ -1393,14 +1393,24 @@ function calBuildWeeksForExport(y,m){
   }
   return weeks;
 }
+const CAL_FONT_NAME = "HG丸ｺﾞｼｯｸM-PRO";
+const CAL_HOLIDAY_FILL = { type:"pattern", pattern:"solid", fgColor:{argb:"FFFFCCFF"} };
+const CAL_HOLIDAY_FONT_COLOR = "FFFF0000";
+const CAL_SUN_COLOR = "FFFF0000";
+const CAL_SAT_COLOR = "FF0070C0";
+const CAL_THIN = { style:"thin" };
+const CAL_HAIR = { style:"hair" };
+
+function calBorderFor(rowIsFirst, rowIsLast, colIsFirst, colIsLast){
+  return {
+    top: rowIsFirst ? CAL_THIN : CAL_HAIR,
+    bottom: rowIsLast ? CAL_THIN : CAL_HAIR,
+    left: colIsFirst ? CAL_THIN : CAL_HAIR,
+    right: colIsLast ? CAL_THIN : CAL_HAIR
+  };
+}
+
 function calWriteMonthBlockForExport(ws, startRow, cols, y, m, dataMap){
-  const HOLIDAY_FILL = { type:"pattern", pattern:"solid", fgColor:{argb:"FFFDECEA"} };
-  const HOLIDAY_FONT_COLOR = "FFC0392B";
-  const HEADER_FILL = { type:"pattern", pattern:"solid", fgColor:{argb:"FFF0F3F8"} };
-  const SUN_COLOR = "FFC0392B";
-  const SAT_COLOR = "FF2E6FA3";
-  const THIN = { style:"thin", color:{argb:"FFDDDDDD"} };
-  const BORDER_ALL = { top:THIN, left:THIN, bottom:THIN, right:THIN };
   const WEEKDAY_NAMES = ["日","月","火","水","木","金","土"];
 
   const weeks = calBuildWeeksForExport(y,m);
@@ -1411,49 +1421,75 @@ function calWriteMonthBlockForExport(ws, startRow, cols, y, m, dataMap){
     if(dataMap[dateStr] && dataMap[dateStr].isHoliday) holidayCount++;
   }
   const workingCount = daysInMonth - holidayCount;
+  const lastRow = startRow + 1 + weeks.length*2 - 1;
 
-  ws.getCell(`${cols[0]}${startRow}`).value = workingCount;
+  // ヘッダー行（労働日数／月名／休日数）
+  ws.getRow(startRow).height = 18.75;
+  const workCell = ws.getCell(`${cols[0]}${startRow}`);
+  workCell.value = workingCount;
+  workCell.font = { name:CAL_FONT_NAME, size:8, bold:true };
+  workCell.alignment = { horizontal:"center", vertical:"center" };
   ws.mergeCells(`${cols[1]}${startRow}:${cols[5]}${startRow}`);
   const nameCell = ws.getCell(`${cols[1]}${startRow}`);
   nameCell.value = `${y}年${m}月`;
-  nameCell.font = { bold:true };
-  nameCell.alignment = { horizontal:"center" };
-  ws.getCell(`${cols[6]}${startRow}`).value = holidayCount;
-  cols.forEach(c=>{ ws.getCell(`${c}${startRow}`).border = BORDER_ALL; });
+  nameCell.font = { name:CAL_FONT_NAME, size:11 };
+  nameCell.alignment = { horizontal:"center", vertical:"center" };
+  const holCell = ws.getCell(`${cols[6]}${startRow}`);
+  holCell.value = holidayCount;
+  holCell.font = { name:CAL_FONT_NAME, size:8, bold:true };
+  holCell.alignment = { horizontal:"center", vertical:"center" };
+  cols.forEach(c=>{
+    ws.getCell(`${c}${startRow}`).border = calBorderFor(true,false, c===cols[0], c===cols[6]);
+  });
 
+  // 曜日ヘッダー行
   const wdRow = startRow+1;
+  ws.getRow(wdRow).height = 15.0;
   cols.forEach((c,i)=>{
     const cell = ws.getCell(`${c}${wdRow}`);
     cell.value = WEEKDAY_NAMES[i];
-    cell.fill = HEADER_FILL;
-    cell.alignment = { horizontal:"center" };
-    cell.border = BORDER_ALL;
-    if(i===0) cell.font = { color:{argb:SUN_COLOR}, bold:true };
-    if(i===6) cell.font = { color:{argb:SAT_COLOR}, bold:true };
+    cell.alignment = { horizontal:"center", vertical:"center" };
+    cell.border = calBorderFor(false,false, i===0, i===6);
+    let color = null;
+    if(i===0) color = CAL_SUN_COLOR;
+    if(i===6) color = CAL_SAT_COLOR;
+    cell.font = { name:CAL_FONT_NAME, size:10, color: color ? {argb:color} : undefined };
   });
 
+  // 週ごとの日付行・備考行
   let r = wdRow+1;
-  weeks.forEach(week=>{
+  weeks.forEach((week, wi)=>{
+    ws.getRow(r).height = 15.95;
+    ws.getRow(r+1).height = 9.0;
+    const isLastWeek = (r+1 === lastRow);
     week.forEach((day, i)=>{
       const col = cols[i];
       const numCell = ws.getCell(`${col}${r}`);
       const noteCell = ws.getCell(`${col}${r+1}`);
-      numCell.border = BORDER_ALL;
-      noteCell.border = BORDER_ALL;
+      numCell.border = calBorderFor(false,false, i===0, i===6);
+      noteCell.border = calBorderFor(false, isLastWeek, i===0, i===6);
+      numCell.alignment = { horizontal:"center", vertical:"center" };
+      noteCell.alignment = { horizontal:"center", vertical:"center", wrapText:true };
       if(day===null) return;
       const dateStr = `${y}-${cal_p2(m)}-${cal_p2(day)}`;
       const info = dataMap[dateStr] || {};
       numCell.value = day;
-      numCell.alignment = { horizontal:"center" };
+
+      let dateColor = undefined;
+      if(i===0) dateColor = CAL_SUN_COLOR;
+      if(i===6) dateColor = CAL_SAT_COLOR;
       if(info.isHoliday){
-        numCell.fill = HOLIDAY_FILL;
-        numCell.font = { color:{argb:HOLIDAY_FONT_COLOR}, bold:true };
-        noteCell.fill = HOLIDAY_FILL;
+        numCell.fill = CAL_HOLIDAY_FILL;
+        noteCell.fill = CAL_HOLIDAY_FILL;
+        dateColor = CAL_HOLIDAY_FONT_COLOR;
       }
+      numCell.font = { name:CAL_FONT_NAME, size:10, color: dateColor ? {argb:dateColor} : undefined };
+
       if(info.label){
         noteCell.value = info.label;
-        noteCell.alignment = { horizontal:"center", wrapText:true };
-        noteCell.font = { size:9, color: info.isHoliday ? {argb:HOLIDAY_FONT_COLOR} : {argb:"FF888888"} };
+        let noteColor = i===6 ? CAL_SAT_COLOR : undefined;
+        if(info.isHoliday) noteColor = CAL_HOLIDAY_FONT_COLOR;
+        noteCell.font = { name:CAL_FONT_NAME, size:6, bold: !!info.isHoliday, color: noteColor ? {argb:noteColor} : undefined };
       }
     });
     r += 2;
@@ -1478,15 +1514,17 @@ async function exportCalendarYearToExcel(yearStart){
     const ws = wb.addWorksheet(`${yearStart}年度`);
     const leftCols = ["B","C","D","E","F","G","H"];
     const rightCols = ["J","K","L","M","N","O","P"];
-    [...leftCols, ...rightCols].forEach(col=>{ ws.getColumn(col).width = 9; });
-    ws.getColumn("A").width = 2;
-    ws.getColumn("I").width = 3;
+    [...leftCols, ...rightCols].forEach(col=>{ ws.getColumn(col).width = 8.13; });
+    ws.getColumn("A").width = 2.63;
+    ws.getColumn("I").width = 4.63;
 
+    ws.getRow(1).height = 21.95;
     ws.mergeCells("B1:P1");
     const titleCell = ws.getCell("B1");
     titleCell.value = `${yearStart}年度　年間カレンダー`;
-    titleCell.font = { bold:true, size:14 };
-    titleCell.alignment = { horizontal:"center" };
+    titleCell.font = { name:CAL_FONT_NAME, size:16 };
+    titleCell.alignment = { horizontal:"center", vertical:"center" };
+    ws.getRow(2).height = 11.25;
 
     let rowCursor = 3;
     const pairs = calMonthListForExport(yearStart);
@@ -1498,7 +1536,9 @@ async function exportCalendarYearToExcel(yearStart){
         const span = calWriteMonthBlockForExport(ws, blockStartRow, cols, info.y, info.m, dataMap);
         maxSpan = Math.max(maxSpan, span);
       });
-      rowCursor = blockStartRow + maxSpan + 2;
+      rowCursor = blockStartRow + maxSpan + 1;
+      ws.getRow(rowCursor).height = 15.0;
+      rowCursor += 1;
     });
 
     const buffer = await wb.xlsx.writeBuffer();
