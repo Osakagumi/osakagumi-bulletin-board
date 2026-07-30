@@ -1393,27 +1393,18 @@ function calBuildWeeksForExport(y,m){
   }
   return weeks;
 }
+
 const CAL_FONT_NAME = "HG丸ｺﾞｼｯｸM-PRO";
 const CAL_HOLIDAY_FILL = { type:"pattern", pattern:"solid", fgColor:{argb:"FFFFCCFF"} };
 const CAL_HOLIDAY_FONT_COLOR = "FFFF0000";
 const CAL_SUN_COLOR = "FFFF0000";
 const CAL_SAT_COLOR = "FF0070C0";
-const CAL_THIN = { style:"thin" };
-const CAL_HAIR = { style:"hair" };
+const CAL_TEMPLATE_URL = "./calendar_template_master.xlsx";
+const CAL_TEMPLATE_BLOCK_STARTS = [3,17,31,45,59,73];
 
-function calBorderFor(rowIsFirst, rowIsLast, colIsFirst, colIsLast){
-  return {
-    top: rowIsFirst ? CAL_THIN : CAL_HAIR,
-    bottom: rowIsLast ? CAL_THIN : CAL_HAIR,
-    left: colIsFirst ? CAL_THIN : CAL_HAIR,
-    right: colIsLast ? CAL_THIN : CAL_HAIR
-  };
-}
-
-function calWriteMonthBlockForExport(ws, startRow, cols, y, m, dataMap){
-  const WEEKDAY_NAMES = ["日","月","火","水","木","金","土"];
-
-  const weeks = calBuildWeeksForExport(y,m);
+// 雛形（実物のExcelを6週分の枠に統一したマスターテンプレート）の1ブロック分に
+// 値・色を書き込む。罫線・列幅・行高さなど、値以外の書式は雛形のものをそのまま使う。
+function calFillBlockFromTemplate(ws, startRow, cols, y, m, dataMap, pairIndex, sideIdx){
   const daysInMonth = new Date(y, m, 0).getDate();
   let holidayCount = 0;
   for(let day=1; day<=daysInMonth; day++){
@@ -1421,81 +1412,67 @@ function calWriteMonthBlockForExport(ws, startRow, cols, y, m, dataMap){
     if(dataMap[dateStr] && dataMap[dateStr].isHoliday) holidayCount++;
   }
   const workingCount = daysInMonth - holidayCount;
-  const lastRow = startRow + 1 + weeks.length*2 - 1;
 
-  // ヘッダー行（労働日数／月名／休日数）
-  ws.getRow(startRow).height = 18.75;
-  const workCell = ws.getCell(`${cols[0]}${startRow}`);
-  workCell.value = workingCount;
-  workCell.font = { name:CAL_FONT_NAME, size:8, bold:true };
-  workCell.alignment = { horizontal:"center", vertical:"center" };
-  ws.mergeCells(`${cols[1]}${startRow}:${cols[5]}${startRow}`);
-  const nameCell = ws.getCell(`${cols[1]}${startRow}`);
-  nameCell.value = `${y}年${m}月`;
-  nameCell.font = { name:CAL_FONT_NAME, size:11 };
-  nameCell.alignment = { horizontal:"center", vertical:"center" };
-  const holCell = ws.getCell(`${cols[6]}${startRow}`);
-  holCell.value = holidayCount;
-  holCell.font = { name:CAL_FONT_NAME, size:8, bold:true };
-  holCell.alignment = { horizontal:"center", vertical:"center" };
-  cols.forEach(c=>{
-    ws.getCell(`${c}${startRow}`).border = calBorderFor(true,false, c===cols[0], c===cols[6]);
-  });
+  // 労働日数・休日数（雛形の数式は年度をまたぐと参照がずれるため、実値で上書きする）
+  ws.getCell(`${cols[0]}${startRow}`).value = workingCount;
+  ws.getCell(`${cols[6]}${startRow}`).value = holidayCount;
 
-  // 曜日ヘッダー行
-  const wdRow = startRow+1;
-  ws.getRow(wdRow).height = 15.0;
-  cols.forEach((c,i)=>{
-    const cell = ws.getCell(`${c}${wdRow}`);
-    cell.value = WEEKDAY_NAMES[i];
-    cell.alignment = { horizontal:"center", vertical:"center" };
-    cell.border = calBorderFor(false,false, i===0, i===6);
-    let color = null;
-    if(i===0) color = CAL_SUN_COLOR;
-    if(i===6) color = CAL_SAT_COLOR;
-    cell.font = { name:CAL_FONT_NAME, size:10, color: color ? {argb:color} : undefined };
-  });
+  // 月名見出し（4月・1月だけ「年（令和）」付きの特別な書式）
+  const isSpecial = (pairIndex===0 && sideIdx===0) || (pairIndex===3 && sideIdx===1);
+  const headerCol = isSpecial ? (sideIdx===0 ? "C" : "K") : (sideIdx===0 ? "E" : "M");
+  const headerCell = ws.getCell(`${headerCol}${startRow}`);
+  if(isSpecial){
+    headerCell.value = `${y}年（令和${y-2018}年）/${m}月`;
+  } else {
+    const zenkaku = "０１２３４５６７８９";
+    const toZ = n => String(n).split("").map(d=>zenkaku[d]).join("");
+    headerCell.value = `${toZ(m)}月`;
+  }
 
-  // 週ごとの日付行・備考行
-  let r = wdRow+1;
-  weeks.forEach((week, wi)=>{
-    ws.getRow(r).height = 15.95;
-    ws.getRow(r+1).height = 9.0;
-    const isLastWeek = (r+1 === lastRow);
-    week.forEach((day, i)=>{
-      const col = cols[i];
-      const numCell = ws.getCell(`${col}${r}`);
-      const noteCell = ws.getCell(`${col}${r+1}`);
-      numCell.border = calBorderFor(false,false, i===0, i===6);
-      noteCell.border = calBorderFor(false, isLastWeek, i===0, i===6);
-      numCell.alignment = { horizontal:"center", vertical:"center" };
-      noteCell.alignment = { horizontal:"center", vertical:"center", wrapText:true };
-      if(day===null) return;
-      const dateStr = `${y}-${cal_p2(m)}-${cal_p2(day)}`;
-      const info = dataMap[dateStr] || {};
-      numCell.value = day;
+  // 日付・備考の枠（6週分）をいったんクリアしてから、必要な週だけ書き込む
+  const wdRow = startRow + 1;
+  const weeks = calBuildWeeksForExport(y, m);
+  for(let wi=0; wi<6; wi++){
+    const dateRow = wdRow + 1 + wi*2;
+    const noteRow = dateRow + 1;
+    cols.forEach((col, i)=>{
+      const numCell = ws.getCell(`${col}${dateRow}`);
+      const noteCell = ws.getCell(`${col}${noteRow}`);
+      numCell.value = null;
+      noteCell.value = null;
+      numCell.fill = { type:"pattern", pattern:"none" };
+      noteCell.fill = { type:"pattern", pattern:"none" };
+      let baseColor;
+      if(i===0) baseColor = CAL_SUN_COLOR;
+      if(i===6) baseColor = CAL_SAT_COLOR;
+      numCell.font = { name:CAL_FONT_NAME, size:10, color: baseColor?{argb:baseColor}:undefined };
+      noteCell.font = { name:CAL_FONT_NAME, size:6 };
 
-      let dateColor = undefined;
-      if(i===0) dateColor = CAL_SUN_COLOR;
-      if(i===6) dateColor = CAL_SAT_COLOR;
-      if(info.isHoliday){
-        numCell.fill = CAL_HOLIDAY_FILL;
-        noteCell.fill = CAL_HOLIDAY_FILL;
-        dateColor = CAL_HOLIDAY_FONT_COLOR;
-      }
-      numCell.font = { name:CAL_FONT_NAME, size:10, color: dateColor ? {argb:dateColor} : undefined };
-
-      if(info.label){
-        noteCell.value = info.label;
-        let noteColor = i===6 ? CAL_SAT_COLOR : undefined;
-        if(info.isHoliday) noteColor = CAL_HOLIDAY_FONT_COLOR;
-        noteCell.font = { name:CAL_FONT_NAME, size:6, bold: !!info.isHoliday, color: noteColor ? {argb:noteColor} : undefined };
+      if(wi < weeks.length){
+        const day = weeks[wi][i];
+        if(day!==null){
+          const dateStr = `${y}-${cal_p2(m)}-${cal_p2(day)}`;
+          const info = dataMap[dateStr] || {};
+          numCell.value = day;
+          let dateColor = baseColor;
+          if(info.isHoliday){
+            numCell.fill = CAL_HOLIDAY_FILL;
+            noteCell.fill = CAL_HOLIDAY_FILL;
+            dateColor = CAL_HOLIDAY_FONT_COLOR;
+          }
+          numCell.font = { name:CAL_FONT_NAME, size:10, color: dateColor?{argb:dateColor}:undefined };
+          if(info.label){
+            noteCell.value = info.label;
+            let noteColor = i===6 ? CAL_SAT_COLOR : undefined;
+            if(info.isHoliday) noteColor = CAL_HOLIDAY_FONT_COLOR;
+            noteCell.font = { name:CAL_FONT_NAME, size:6, bold: !!info.isHoliday, color: noteColor?{argb:noteColor}:undefined };
+          }
+        }
       }
     });
-    r += 2;
-  });
-  return (r - startRow);
+  }
 }
+
 async function exportCalendarYearToExcel(yearStart){
   if(!window.ExcelJS){
     toast("Excel出力の準備ができていません。少し待ってから再度お試しください。");
@@ -1503,6 +1480,10 @@ async function exportCalendarYearToExcel(yearStart){
   }
   toast("Excelファイルを作成中です…");
   try{
+    const templateRes = await fetch(CAL_TEMPLATE_URL);
+    if(!templateRes.ok) throw new Error("テンプレートの取得に失敗しました: " + templateRes.status);
+    const templateBuffer = await templateRes.arrayBuffer();
+
     const startId = `${yearStart}-04-01`;
     const endId = `${yearStart+1}-03-31`;
     const q = query(collection(db,"calendar_days"), where(documentId(), ">=", startId), where(documentId(), "<=", endId));
@@ -1511,38 +1492,20 @@ async function exportCalendarYearToExcel(yearStart){
     snap.docs.forEach(d=>{ dataMap[d.id] = d.data(); });
 
     const wb = new window.ExcelJS.Workbook();
-    const ws = wb.addWorksheet(`${yearStart}年度`);
-    const leftCols = ["B","C","D","E","F","G","H"];
-    const rightCols = ["J","K","L","M","N","O","P"];
-    [...leftCols, ...rightCols].forEach(col=>{ ws.getColumn(col).width = 8.13; });
-    ws.getColumn("A").width = 2.63;
-    ws.getColumn("I").width = 4.63;
+    await wb.xlsx.load(templateBuffer);
+    const ws = wb.worksheets[0];
 
-    ws.getRow(1).height = 21.95;
-    ws.mergeCells("B1:P1");
-    const titleCell = ws.getCell("B1");
-    titleCell.value = `${yearStart}年度　年間カレンダー`;
-    titleCell.font = { name:CAL_FONT_NAME, size:16 };
-    titleCell.alignment = { horizontal:"center", vertical:"center" };
-    ws.getRow(2).height = 11.25;
-
-    let rowCursor = 3;
     const pairs = calMonthListForExport(yearStart);
-    pairs.forEach(pair=>{
-      const blockStartRow = rowCursor;
-      let maxSpan = 0;
-      pair.forEach((info, idx)=>{
-        const cols = idx===0 ? leftCols : rightCols;
-        const span = calWriteMonthBlockForExport(ws, blockStartRow, cols, info.y, info.m, dataMap);
-        maxSpan = Math.max(maxSpan, span);
+    pairs.forEach((pair, pairIndex)=>{
+      const startRow = CAL_TEMPLATE_BLOCK_STARTS[pairIndex];
+      pair.forEach((info, sideIdx)=>{
+        const cols = sideIdx===0 ? ["B","C","D","E","F","G","H"] : ["J","K","L","M","N","O","P"];
+        calFillBlockFromTemplate(ws, startRow, cols, info.y, info.m, dataMap, pairIndex, sideIdx);
       });
-      rowCursor = blockStartRow + maxSpan + 1;
-      ws.getRow(rowCursor).height = 15.0;
-      rowCursor += 1;
     });
 
-    const buffer = await wb.xlsx.writeBuffer();
-    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const outBuffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([outBuffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -1554,9 +1517,10 @@ async function exportCalendarYearToExcel(yearStart){
     toast("Excelファイルを出力しました。");
   }catch(e){
     console.error("[カレンダーExcel出力エラー]", e);
-    toast("Excel出力に失敗しました。");
+    toast("Excel出力に失敗しました。テンプレートファイルがリポジトリに配置されているかご確認ください。");
   }
 }
+
 
 function showCalSeedLimitPanel(){
   const panel = document.getElementById("cal-seed-limit-panel");
