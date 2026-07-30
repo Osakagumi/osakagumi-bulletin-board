@@ -1412,7 +1412,6 @@ function calFillBlockFromTemplate(ws, startRow, cols, y, m, dataMap, pairIndex, 
     if(dataMap[dateStr] && dataMap[dateStr].isHoliday) holidayCount++;
   }
   const workingCount = daysInMonth - holidayCount;
-
   // 労働日数・休日数（雛形の数式は年度をまたぐと参照がずれるため、実値で上書きする）
   ws.getCell(`${cols[0]}${startRow}`).value = workingCount;
   ws.getCell(`${cols[6]}${startRow}`).value = holidayCount;
@@ -1469,6 +1468,7 @@ function calFillBlockFromTemplate(ws, startRow, cols, y, m, dataMap, pairIndex, 
       }
     });
   }
+  return { workingCount, holidayCount };
 }
 
 async function exportCalendarYearToExcel(yearStart){
@@ -1495,17 +1495,53 @@ async function exportCalendarYearToExcel(yearStart){
 
     // A1に年度の基準日（1月1日）を設定。4月・1月の見出しはA1を参照する数式が計算する。
     const a1Cell = ws.getCell("A1");
-    a1Cell.value = new Date(yearStart, 0, 1);
+    a1Cell.value = new Date(Date.UTC(yearStart, 0, 1));
     a1Cell.numFmt = "yyyy/m/d";
 
     const pairs = calMonthListForExport(yearStart);
+    let leftWorkingSum = 0, leftHolidaySum = 0, rightWorkingSum = 0, rightHolidaySum = 0;
     pairs.forEach((pair, pairIndex)=>{
       const startRow = CAL_TEMPLATE_BLOCK_STARTS[pairIndex];
       pair.forEach((info, sideIdx)=>{
         const cols = sideIdx===0 ? ["B","C","D","E","F","G","H"] : ["J","K","L","M","N","O","P"];
-        calFillBlockFromTemplate(ws, startRow, cols, info.y, info.m, dataMap, pairIndex, sideIdx);
+        const { workingCount, holidayCount } = calFillBlockFromTemplate(ws, startRow, cols, info.y, info.m, dataMap, pairIndex, sideIdx);
+        if(sideIdx===0){ leftWorkingSum += workingCount; leftHolidaySum += holidayCount; }
+        else { rightWorkingSum += workingCount; rightHolidaySum += holidayCount; }
       });
     });
+
+    // A1参照の数式セル（タイトル・4月見出し・1月見出し・労働日数集計）は、
+    // ExcelJSで読み書きすると再計算されずキャッシュが古いままになることがあるため、
+    // 数式は残しつつ、正しい計算結果をこちらで明示的にセットし直す。
+    const eraYear = y => y - 2018; // 令和年 = 西暦 - 2018（このアプリの対象期間内では常に令和として扱う）
+    const yearlyWorking = leftWorkingSum + rightWorkingSum;
+    const yearlyHoliday = leftHolidaySum + rightHolidaySum;
+
+    ws.getCell("B1").value = {
+      formula: 'TEXT(A1,"[$-ja-JP-x-gannen]ggge年度") & "（" & YEAR(A1) & "年度）"',
+      result: `令和${eraYear(yearStart)}年度（${yearStart}年度）`
+    };
+    ws.getCell("L1").value = {
+      formula: '"（労働日数" & L88 & "日/年：休日数" & P88 & "日/年）"',
+      result: `（労働日数${yearlyWorking}日/年：休日数${yearlyHoliday}日/年）`
+    };
+    ws.getCell("C3").value = {
+      formula: 'TEXT(A1,"[$-ja-JP-x-gannen]ggge年") & "（" & YEAR(A1) & "年）/ ４月"',
+      result: `令和${eraYear(yearStart)}年（${yearStart}年）/ ４月`
+    };
+    ws.getCell("K45").value = {
+      formula: 'TEXT(A1+365,"[$-ja-JP-x-gannen]ggge年") & "（" & YEAR(A1+365) & "年）/ １月"',
+      result: `令和${eraYear(yearStart+1)}年（${yearStart+1}年）/ １月`
+    };
+    ws.getCell("D87").value = { formula: "B3+B17+B31+B45+B59+B73", result: leftWorkingSum };
+    ws.getCell("H87").value = { formula: "H3+H17+H31+H45+H59+H73", result: leftHolidaySum };
+    ws.getCell("L87").value = { formula: "J3+J17+J31+J45+J59+J73", result: rightWorkingSum };
+    ws.getCell("P87").value = { formula: "P3+P17+P31+P45+P59+P73", result: rightHolidaySum };
+    ws.getCell("L88").value = { formula: "D87+L87", result: yearlyWorking };
+    ws.getCell("P88").value = { formula: "H87+P87", result: yearlyHoliday };
+    ws.getCell("N91").value = { formula: "L88", result: yearlyWorking };
+    const monthlyAvg = Math.floor((yearlyWorking/12)*100)/100;
+    ws.getCell("P91").value = { formula: "ROUNDDOWN(N91/O91,2)", result: monthlyAvg };
 
     const outBuffer = await wb.xlsx.writeBuffer();
     const blob = new Blob([outBuffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
