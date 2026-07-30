@@ -100,6 +100,11 @@ service cloud.firestore {
       allow write: if isCalendarEditor();
     }
 
+    // お知らせの既読管理（本人の既読状態のみ、本人だけが読み書きできる）
+    match /notice_reads/{email} {
+      allow read, write: if isSignedIn() && request.auth.token.email == email;
+    }
+
     // 行き先ステータスマスタ（在席・外出・現場・休みなど）: 全員が読める。管理は管理者のみ。
     match /wb_statuses/{statusId} {
       allow read: if isSignedIn();
