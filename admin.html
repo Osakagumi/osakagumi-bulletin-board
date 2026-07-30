@@ -1798,6 +1798,18 @@ function renderEmployees(){
       }
     });
     tdActions.appendChild(saveBtn);
+    const delBtn = document.createElement("button");
+    delBtn.className = "btn btn-danger"; delBtn.textContent = "削除";
+    delBtn.addEventListener("click", async ()=>{
+      if(!confirm(`${emp.name || emp.email}（${emp.email}）を社員一覧から削除しますか？\n※ログイン用のアカウント自体は削除されません。次回ログインすると自動的に再登録されます。`)) return;
+      try{
+        await deleteDoc(doc(db,"employees", emp.email));
+        toast("社員情報を削除しました。");
+      }catch(e){
+        toast("削除に失敗しました。");
+      }
+    });
+    tdActions.appendChild(delBtn);
 
     tr.appendChild(tdNo); tr.appendChild(tdName); tr.appendChild(tdEmail); tr.appendChild(tdDept); tr.appendChild(tdOrder); tr.appendChild(tdPhone); tr.appendChild(tdMemo); tr.appendChild(tdActions);
     body.appendChild(tr);
