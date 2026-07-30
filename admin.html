@@ -1435,6 +1435,11 @@ function calFillBlockFromTemplate(ws, startRow, cols, y, m, dataMap, pairIndex, 
     cols.forEach((col, i)=>{
       const numCell = ws.getCell(`${col}${dateRow}`);
       const noteCell = ws.getCell(`${col}${noteRow}`);
+      // ExcelJSは、雛形読み込み時に同じ書式のセル同士で内部的にスタイルオブジェクトを共有しているため、
+      // そのまま.fill/.fontを変更すると他の同じ書式のセルまで巻き込まれてしまう。
+      // セルごとに複製してから変更することで、他のセルへの影響を断ち切る。
+      numCell.style = Object.assign({}, numCell.style);
+      noteCell.style = Object.assign({}, noteCell.style);
       numCell.value = null;
       noteCell.value = null;
       numCell.fill = { type:"pattern", pattern:"none" };
@@ -1455,7 +1460,12 @@ function calFillBlockFromTemplate(ws, startRow, cols, y, m, dataMap, pairIndex, 
           if(info.isHoliday){
             numCell.fill = CAL_HOLIDAY_FILL;
             noteCell.fill = CAL_HOLIDAY_FILL;
-            dateColor = CAL_HOLIDAY_FONT_COLOR;
+            if(i===6){
+              // 土曜日：休みでも数字は原則青字。文字列がある場合のみ赤字にする
+              dateColor = info.label ? CAL_HOLIDAY_FONT_COLOR : CAL_SAT_COLOR;
+            } else {
+              dateColor = CAL_HOLIDAY_FONT_COLOR;
+            }
           }
           numCell.font = { name:CAL_FONT_NAME, size:10, color: dateColor?{argb:dateColor}:undefined };
           if(info.label){
@@ -1463,6 +1473,13 @@ function calFillBlockFromTemplate(ws, startRow, cols, y, m, dataMap, pairIndex, 
             let noteColor = i===6 ? CAL_SAT_COLOR : undefined;
             if(info.isHoliday) noteColor = CAL_HOLIDAY_FONT_COLOR;
             noteCell.font = { name:CAL_FONT_NAME, size:6, bold: !!info.isHoliday, color: noteColor?{argb:noteColor}:undefined };
+
+            // 休日ではないが文字列が入っている日（地下道清掃など）は、青の太枠で囲む
+            if(!info.isHoliday){
+              const blueBorder = { style:"medium", color:{argb:CAL_SAT_COLOR} };
+              numCell.border = { top:blueBorder, left:blueBorder, right:blueBorder, bottom:{style:"none"} };
+              noteCell.border = { top:{style:"none"}, left:blueBorder, right:blueBorder, bottom:blueBorder };
+            }
           }
         }
       }
