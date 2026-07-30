@@ -1417,13 +1417,11 @@ function calFillBlockFromTemplate(ws, startRow, cols, y, m, dataMap, pairIndex, 
   ws.getCell(`${cols[0]}${startRow}`).value = workingCount;
   ws.getCell(`${cols[6]}${startRow}`).value = holidayCount;
 
-  // 月名見出し（4月・1月だけ「年（令和）」付きの特別な書式）
+  // 月名見出し（4月・1月は「A1」参照の数式に任せるため、ここでは書き換えない）
   const isSpecial = (pairIndex===0 && sideIdx===0) || (pairIndex===3 && sideIdx===1);
-  const headerCol = isSpecial ? (sideIdx===0 ? "C" : "K") : (sideIdx===0 ? "E" : "M");
-  const headerCell = ws.getCell(`${headerCol}${startRow}`);
-  if(isSpecial){
-    headerCell.value = `${y}年（令和${y-2018}年）/${m}月`;
-  } else {
+  if(!isSpecial){
+    const headerCol = sideIdx===0 ? "E" : "M";
+    const headerCell = ws.getCell(`${headerCol}${startRow}`);
     const zenkaku = "０１２３４５６７８９";
     const toZ = n => String(n).split("").map(d=>zenkaku[d]).join("");
     headerCell.value = `${toZ(m)}月`;
@@ -1494,6 +1492,11 @@ async function exportCalendarYearToExcel(yearStart){
     const wb = new window.ExcelJS.Workbook();
     await wb.xlsx.load(templateBuffer);
     const ws = wb.worksheets[0];
+
+    // A1に年度の基準日（1月1日）を設定。4月・1月の見出しはA1を参照する数式が計算する。
+    const a1Cell = ws.getCell("A1");
+    a1Cell.value = new Date(yearStart, 0, 1);
+    a1Cell.numFmt = "yyyy/m/d";
 
     const pairs = calMonthListForExport(yearStart);
     pairs.forEach((pair, pairIndex)=>{
