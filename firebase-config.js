@@ -74,8 +74,8 @@ export const MAIL_SEND_TARGET = "h.ishikawa@osakagumi.co.jp;zoom@osakagumi.co.jp
 // 6. osakagumi.sys@gmail.comのGoogleドライブに「お知らせ添付」などのフォルダを作成し、
 //    フォルダを開いたときのURL（.../folders/フォルダID）からフォルダIDを取得して、下のGDRIVE_UPLOAD_FOLDER_IDに貼り付け
 export const GOOGLE_DRIVE_CONFIG = {
-  clientId: "YOUR_GOOGLE_OAUTH_CLIENT_ID",   // 例）123456789-abcxyz.apps.googleusercontent.com
-  folderId: "YOUR_GDRIVE_FOLDER_ID"          // 例）1a2B3c4D5e6F7g8H9iJ0kLmNoPQRstuv
+  clientId: "416929871112-ts7g3b38idqt4dmc7nsso7ankk1qfa84.apps.googleusercontent.com",
+  folderId: "17CbbKVmhGDCohqg88VRmFcSEvDoq68Ju"          // 例）1a2B3c4D5e6F7g8H9iJ0kLmNoPQRstuv
 };
 
 // MAIL_SEND_TARGET の設定内容に応じて、実際の送信先リストを返すヘルパー関数。
