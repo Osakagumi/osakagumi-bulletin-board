@@ -1480,7 +1480,7 @@ async function exportCalendarYearToExcel(yearStart){
   }
   toast("Excelファイルを作成中です…");
   try{
-    const templateRes = await fetch(CAL_TEMPLATE_URL);
+    const templateRes = await fetch(`${CAL_TEMPLATE_URL}?v=${Date.now()}`, { cache: "no-store" });
     if(!templateRes.ok) throw new Error("テンプレートの取得に失敗しました: " + templateRes.status);
     const templateBuffer = await templateRes.arrayBuffer();
 
