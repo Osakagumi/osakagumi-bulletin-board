@@ -314,6 +314,8 @@
   .notice-item .n-title{font-size:14.5px;font-weight:700;}
   .notice-item .n-meta{font-size:11.5px;color:var(--muted);font-family:var(--mono);white-space:nowrap;}
   .notice-item .n-body{font-size:13.5px;line-height:1.7;white-space:pre-wrap;color:var(--text);}
+  .notice-item .n-attachment{margin-top:8px;}
+  .notice-item .n-attachment a{font-size:13px;color:var(--brand);text-decoration:underline;}
   .notice-item .n-actions{margin-top:8px;}
   .notice-item .n-actions button{border:1px solid var(--danger);color:var(--danger);background:#fff;border-radius:7px;padding:5px 11px;font-size:11.5px;}
   .notice-item .n-actions button:hover{background:var(--danger);color:#fff;}
@@ -564,6 +566,10 @@
       <div class="field">
         <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">本文</label>
         <textarea id="notice-body" style="min-height:110px;"></textarea>
+      </div>
+      <div class="field">
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">リンク（任意。Googleドライブなどの共有リンクを貼り付けてください）</label>
+        <input type="url" id="notice-attachment-url" placeholder="https://drive.google.com/..." style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;">
       </div>
       <div class="field" style="display:flex;align-items:center;gap:6px;">
         <input type="checkbox" id="notice-send-email" checked style="width:auto;">
@@ -1792,6 +1798,7 @@ function renderNotices(){
         <div class="n-meta">${escapeHtml(n.authorName||n.authorEmail||"")} ・ ${tsToStr(n.createdAt)}</div>
       </div>
       <div class="n-body">${escapeHtml(n.body||"")}</div>
+      ${n.attachmentUrl ? `<div class="n-attachment"><a href="${escapeHtml(n.attachmentUrl)}" target="_blank" rel="noopener noreferrer">🔗 リンクを開く</a></div>` : ""}
     `;
     if(isAdmin || n.authorEmail===currentUser.email){
       const actions = document.createElement("div");
@@ -1814,6 +1821,7 @@ const noticeModal = document.getElementById("notice-modal");
 document.getElementById("notice-new-btn").addEventListener("click", ()=>{
   document.getElementById("notice-title").value = "";
   document.getElementById("notice-body").value = "";
+  document.getElementById("notice-attachment-url").value = "";
   document.getElementById("notice-error").textContent = "";
   document.getElementById("notice-send-status").textContent = "";
   noticeModal.classList.add("show");
@@ -1822,6 +1830,7 @@ document.getElementById("notice-cancel").addEventListener("click", ()=> noticeMo
 document.getElementById("notice-submit").addEventListener("click", async ()=>{
   const title = document.getElementById("notice-title").value.trim();
   const body = document.getElementById("notice-body").value.trim();
+  const attachmentUrl = document.getElementById("notice-attachment-url").value.trim();
   const sendEmail = document.getElementById("notice-send-email").checked;
   const errEl = document.getElementById("notice-error");
   const statusEl = document.getElementById("notice-send-status");
@@ -1845,13 +1854,14 @@ document.getElementById("notice-submit").addEventListener("click", async ()=>{
   try{
     await addDoc(collection(db,"announcements"), {
       title, body,
+      attachmentUrl,
       authorEmail: currentUser.email,
       authorName: myDisplayName(),
       createdAt: Timestamp.now()
     });
     toast("お知らせを投稿しました。");
     if(sendEmail){
-      await sendNoticeEmails(title, body);
+      await sendNoticeEmails(title, body, attachmentUrl);
     }
     noticeModal.classList.remove("show");
   }catch(e){
@@ -1859,7 +1869,7 @@ document.getElementById("notice-submit").addEventListener("click", async ()=>{
   }
 });
 
-async function sendNoticeEmails(title, body){
+async function sendNoticeEmails(title, body, attachmentUrl){
   const statusEl = document.getElementById("notice-send-status");
   const noticeTemplateReady = emailjsReady && EMAILJS_CONFIG.noticeTemplateId && !EMAILJS_CONFIG.noticeTemplateId.startsWith("YOUR_");
   if(!noticeTemplateReady){
@@ -1873,12 +1883,13 @@ async function sendNoticeEmails(title, body){
   }
   let ok = 0, fail = 0;
   const link = indexPageUrl();
+  const mailBody = attachmentUrl ? `${body}\n\n【リンク】\n${attachmentUrl}` : body;
   for(const emp of recipients){
     try{
       await window.emailjs.send(EMAILJS_CONFIG.serviceId, EMAILJS_CONFIG.noticeTemplateId, {
         to_email: emp.email,
         to_name: emp.name || emp.email,
-        title, message: body,
+        title, message: mailBody,
         author_name: myDisplayName(),
         link
       });
