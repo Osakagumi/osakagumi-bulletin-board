@@ -60,6 +60,16 @@
   .btn-danger{background:none;border:1px solid var(--danger);color:var(--danger);}
   .btn-danger:hover{background:var(--danger);color:#fff;}
   .btn-ghost{background:none;color:var(--muted);border:1px solid var(--line);}
+  .modal-overlay{
+    display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;align-items:center;justify-content:center;
+  }
+  .modal-overlay.show{display:flex;}
+  .modal-overlay .modal{
+    background:var(--surface);border-radius:12px;padding:20px 22px;width:360px;max-width:90vw;max-height:80vh;overflow-y:auto;
+  }
+  .modal-overlay .modal h3{margin:0 0 14px;font-size:15px;}
+  .modal-overlay .row-btns{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;}
+  .modal-overlay .row-btns button{padding:8px 16px;border-radius:8px;font-size:13px;}
 
   table{width:100%;border-collapse:collapse;font-size:13px;}
   th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top;}
@@ -526,6 +536,16 @@
 
 <div class="toast" id="toast"></div>
 
+<div class="modal-overlay" id="notices-readby-modal">
+  <div class="modal">
+    <h3 id="notices-readby-title">既読者一覧</h3>
+    <div id="notices-readby-list" style="max-height:320px;overflow-y:auto;"></div>
+    <div class="row-btns">
+      <button class="btn btn-ghost" id="notices-readby-close" style="border:1px solid var(--line);">閉じる</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
@@ -913,6 +933,26 @@ function initNoticesAdminListener(){
     renderNoticesAdminTable(notices);
   }, (err)=>{ console.error("[お知らせ取得エラー]", err); });
 }
+function openNoticesReadByModal(n){
+  const listEl = document.getElementById("notices-readby-list");
+  const titleEl = document.getElementById("notices-readby-title");
+  const readBy = n.readBy || [];
+  titleEl.textContent = `既読者一覧（${readBy.length}名）`;
+  if(readBy.length===0){
+    listEl.innerHTML = `<div class="empty" style="padding:8px 0;color:var(--muted);font-size:13px;">まだ誰も既読にしていません。</div>`;
+  } else {
+    const names = readBy.map(email=>{
+      const emp = employeesAll.find(e=>(e.email||"").toLowerCase()===email.toLowerCase());
+      return emp?.name || email;
+    }).sort((a,b)=> a.localeCompare(b,"ja"));
+    listEl.innerHTML = names.map(name=>`<div style="padding:7px 2px;border-bottom:1px solid var(--line);font-size:13px;">${escapeHtml(name)}</div>`).join("");
+  }
+  document.getElementById("notices-readby-modal").classList.add("show");
+}
+document.getElementById("notices-readby-close").addEventListener("click", ()=>{
+  document.getElementById("notices-readby-modal").classList.remove("show");
+});
+
 function renderNoticesAdminTable(notices){
   const body = document.getElementById("notices-admin-table-body");
   if(!body) return;
@@ -931,6 +971,10 @@ function renderNoticesAdminTable(notices){
       <td style="font-size:12px;color:var(--muted);">${escapeHtml(tsToStr(n.createdAt))}</td>
       <td class="actions"></td>
     `;
+    const readByBtn = document.createElement("button");
+    readByBtn.className = "btn btn-ghost"; readByBtn.textContent = "既読を確認";
+    readByBtn.addEventListener("click", ()=> openNoticesReadByModal(n));
+    tr.querySelector(".actions").appendChild(readByBtn);
     const btn = document.createElement("button");
     btn.className = "btn btn-danger"; btn.textContent = "削除";
     btn.addEventListener("click", async ()=>{
