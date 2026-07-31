@@ -559,32 +559,7 @@
       <div style="font-weight:700;font-size:14.5px;margin-bottom:4px;" id="notice-detail-title-text"></div>
       <div style="font-size:11.5px;color:var(--muted);margin-bottom:10px;" id="notice-detail-meta"></div>
       <div style="font-size:13.5px;line-height:1.7;white-space:pre-wrap;color:var(--text);margin-bottom:10px;" id="notice-detail-body"></div>
-      <div id="notice-detail-attachment" style="margin-bottom:12px;font-size:13px;"></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
-        <button class="btn btn-ghost" id="notice-detail-read-btn" style="border:1px solid var(--line);">既読にする</button>
-        <button class="btn btn-ghost" id="notice-detail-readby-btn" style="border:1px solid var(--line);">既読を確認</button>
-        <button class="btn btn-ghost" id="notice-detail-edit-btn" style="border:1px solid var(--line);">編集</button>
-        <button class="btn btn-danger" id="notice-detail-delete-btn">削除</button>
-      </div>
-    </div>
-    <div id="notice-detail-edit-form" style="display:none;">
-      <div style="margin-bottom:10px;">
-        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">タイトル</label>
-        <input type="text" id="notice-detail-edit-title" style="width:100%;padding:8px 9px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;">
-      </div>
-      <div style="margin-bottom:10px;">
-        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">本文</label>
-        <textarea id="notice-detail-edit-body" style="width:100%;min-height:100px;padding:8px 9px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;"></textarea>
-      </div>
-      <div style="margin-bottom:6px;">
-        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">リンク</label>
-        <input type="url" id="notice-detail-edit-url" style="width:100%;padding:8px 9px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;">
-      </div>
-      <div style="color:var(--danger);font-size:12px;min-height:16px;" id="notice-detail-edit-error"></div>
-      <div class="row-btns">
-        <button class="btn btn-ghost" id="notice-detail-edit-cancel" style="border:1px solid var(--line);">キャンセル</button>
-        <button class="btn btn-primary" id="notice-detail-edit-save">保存する</button>
-      </div>
+      <div id="notice-detail-attachment" style="margin-bottom:4px;font-size:13px;"></div>
     </div>
     <div class="row-btns">
       <button class="btn btn-ghost" id="notice-detail-close" style="border:1px solid var(--line);">閉じる</button>
@@ -1022,11 +997,6 @@ function openNoticesReadByModal(n){
 }
 document.getElementById("notices-readby-close").addEventListener("click", ()=>{
   document.getElementById("notices-readby-modal").classList.remove("show");
-  if(reopenDetailAfterReadBy && noticeDetailCurrent){
-    renderNoticeDetailView(noticeDetailCurrent);
-    document.getElementById("notice-detail-modal").classList.add("show");
-  }
-  reopenDetailAfterReadBy = false;
 });
 
 let noticesAllAdmin = [];
@@ -1108,15 +1078,15 @@ document.getElementById("notices-bulk-delete-btn").addEventListener("click", asy
 let noticeDetailCurrent = null;
 function renderNoticeDetailView(n){
   document.getElementById("notice-detail-title-text").textContent = n.title || "";
-  document.getElementById("notice-detail-meta").textContent =
-    `${n.authorName || n.authorEmail || ""} ・ ${tsToStr(n.createdAt)}`;
+  const authorHtml = n.authorEmail
+    ? `<a href="mailto:${escapeHtml(n.authorEmail)}" style="color:var(--muted);">${escapeHtml(n.authorName||n.authorEmail)}</a>`
+    : escapeHtml(n.authorName||"");
+  document.getElementById("notice-detail-meta").innerHTML = `${authorHtml} ・ ${escapeHtml(tsToStr(n.createdAt))}`;
   document.getElementById("notice-detail-body").textContent = n.body || "";
   const attEl = document.getElementById("notice-detail-attachment");
   attEl.innerHTML = n.attachmentUrl
     ? `<a href="${escapeHtml(n.attachmentUrl)}" target="_blank" rel="noopener noreferrer" style="color:var(--brand);">📎 添付ファイル</a>`
     : "";
-  document.getElementById("notice-detail-view").style.display = "block";
-  document.getElementById("notice-detail-edit-form").style.display = "none";
 }
 function openNoticeDetailModal(n){
   noticeDetailCurrent = n;
@@ -1125,73 +1095,6 @@ function openNoticeDetailModal(n){
 }
 document.getElementById("notice-detail-close").addEventListener("click", ()=>{
   document.getElementById("notice-detail-modal").classList.remove("show");
-});
-document.getElementById("notice-detail-read-btn").addEventListener("click", async ()=>{
-  if(!noticeDetailCurrent) return;
-  try{
-    await updateDoc(doc(db,"announcements", noticeDetailCurrent.id), {
-      [`readByAt.${currentUser.email}`]: new Date().toISOString()
-    });
-    toast("既読にしました。");
-  }catch(e){
-    toast("既読にできませんでした。");
-  }
-});
-let reopenDetailAfterReadBy = false;
-document.getElementById("notice-detail-readby-btn").addEventListener("click", ()=>{
-  if(!noticeDetailCurrent) return;
-  document.getElementById("notice-detail-modal").classList.remove("show");
-  reopenDetailAfterReadBy = true;
-  openNoticesReadByModal(noticeDetailCurrent);
-});
-document.getElementById("notice-detail-delete-btn").addEventListener("click", async ()=>{
-  if(!noticeDetailCurrent) return;
-  if(!confirm(`「${noticeDetailCurrent.title}」を削除しますか？`)) return;
-  await deleteOneNotice(noticeDetailCurrent);
-  toast("お知らせを削除しました。");
-  document.getElementById("notice-detail-modal").classList.remove("show");
-});
-document.getElementById("notice-detail-edit-btn").addEventListener("click", ()=>{
-  if(!noticeDetailCurrent) return;
-  document.getElementById("notice-detail-edit-title").value = noticeDetailCurrent.title || "";
-  document.getElementById("notice-detail-edit-body").value = noticeDetailCurrent.body || "";
-  document.getElementById("notice-detail-edit-url").value = noticeDetailCurrent.attachmentUrl || "";
-  document.getElementById("notice-detail-edit-error").textContent = "";
-  document.getElementById("notice-detail-view").style.display = "none";
-  document.getElementById("notice-detail-edit-form").style.display = "block";
-});
-document.getElementById("notice-detail-edit-cancel").addEventListener("click", ()=>{
-  if(noticeDetailCurrent) renderNoticeDetailView(noticeDetailCurrent);
-});
-document.getElementById("notice-detail-edit-save").addEventListener("click", async ()=>{
-  if(!noticeDetailCurrent) return;
-  const title = document.getElementById("notice-detail-edit-title").value.trim();
-  const bodyText = document.getElementById("notice-detail-edit-body").value.trim();
-  const attachmentUrl = document.getElementById("notice-detail-edit-url").value.trim();
-  const errEl = document.getElementById("notice-detail-edit-error");
-  if(!title){ errEl.textContent = "タイトルを入力してください。"; return; }
-  const oldFileId = noticeDetailCurrent.attachmentFileId || "";
-  const urlChanged = (noticeDetailCurrent.attachmentUrl || "") !== attachmentUrl;
-  try{
-    await updateDoc(doc(db,"announcements", noticeDetailCurrent.id), {
-      title, body: bodyText, attachmentUrl,
-      attachmentFileId: urlChanged ? "" : oldFileId,
-      updatedAt: Timestamp.now()
-    });
-    if(urlChanged && oldFileId){
-      try{
-        await setDoc(doc(db,"pending_drive_deletes", oldFileId), {
-          noticeTitle: noticeDetailCurrent.title || "",
-          queuedAt: new Date().toISOString()
-        });
-      }catch(e){ /* 失敗しても更新自体は成功として扱う */ }
-    }
-    toast("お知らせを更新しました。");
-    noticeDetailCurrent = { ...noticeDetailCurrent, title, body: bodyText, attachmentUrl, attachmentFileId: urlChanged ? "" : oldFileId };
-    renderNoticeDetailView(noticeDetailCurrent);
-  }catch(e){
-    errEl.textContent = "更新に失敗しました。権限をご確認ください。";
-  }
 });
 
 let pendingDriveDeletesAll = [];
