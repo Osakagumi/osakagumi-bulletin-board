@@ -511,6 +511,7 @@
 <div class="toast" id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -520,6 +521,7 @@ import {
   query, where, onSnapshot, orderBy, limit, documentId, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig, CATEGORIES, EQUIPMENT_STATUSES, SAFETY_STATUSES, EMAILJS_CONFIG, resolveMailRecipients, isMailOverrideActive, MAIL_SEND_TARGET } from "./firebase-config.js";
+import { deleteDriveFile } from "./gdrive-helper.js";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -917,6 +919,9 @@ function renderNoticesAdminTable(notices){
     btn.addEventListener("click", async ()=>{
       if(!confirm(`「${n.title}」を削除しますか？`)) return;
       await deleteDoc(doc(db,"announcements", n.id));
+      if(n.attachmentFileId){
+        try{ await deleteDriveFile(n.attachmentFileId); }catch(e){ /* 削除に失敗しても致命的ではない */ }
+      }
       toast("お知らせを削除しました。");
     });
     tr.querySelector(".actions").appendChild(btn);
