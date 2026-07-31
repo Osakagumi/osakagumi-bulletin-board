@@ -367,6 +367,15 @@
   .modal .row-btns{display:flex;gap:8px;margin-top:6px;}
   .modal .row-btns button{flex:1;padding:10px;border-radius:8px;border:none;font-size:13.5px;font-weight:600;}
   .modal-err{color:var(--danger);font-size:12px;margin-top:8px;min-height:16px;}
+  #notice-drive-quota-bar-track{
+    width:100%;height:8px;border-radius:5px;background:#EEF1F5;overflow:hidden;
+  }
+  #notice-drive-quota-bar-fill{
+    height:100%;border-radius:5px;background:var(--brand);width:0%;
+    transition:width .3s ease, background .3s ease;
+  }
+  #notice-drive-quota-bar-fill.warn{background:#E8A33D;}
+  #notice-drive-quota-bar-fill.danger{background:var(--danger);}
   #notice-dropzone{
     border:2px dashed var(--line);border-radius:10px;padding:28px 14px;text-align:center;color:var(--muted);
     cursor:pointer;transition:border-color .15s,background .15s;
@@ -604,7 +613,12 @@
       <p style="font-size:12px;color:var(--muted);margin:-6px 0 12px;">
         ファイルをドロップすると、Googleドライブへアップロードしてリンクを自動で取得します。初回・時間経過後はGoogleアカウントへのログインを求められます（<b>osakagumi.sys@gmail.com</b>でログインしてください）。
       </p>
-      <div id="notice-drive-quota" style="font-size:11.5px;color:var(--muted);margin-bottom:10px;"></div>
+      <div id="notice-drive-quota-wrap" style="display:none;margin-bottom:14px;">
+        <div id="notice-drive-quota-bar-track">
+          <div id="notice-drive-quota-bar-fill"></div>
+        </div>
+        <div id="notice-drive-quota-label" style="font-size:11.5px;color:var(--muted);margin-top:5px;"></div>
+      </div>
       <div id="notice-dropzone">
         <div id="notice-dropzone-idle">
           <div style="font-size:28px;margin-bottom:8px;">📎</div>
@@ -2114,14 +2128,23 @@ document.getElementById("notice-attach-btn").addEventListener("click", ()=>{
   document.getElementById("notice-attach-error").textContent = "";
   resetNoticeDropzone();
   document.getElementById("notice-attach-modal").classList.add("show");
-  const quotaEl = document.getElementById("notice-drive-quota");
-  quotaEl.textContent = "";
+  const quotaWrap = document.getElementById("notice-drive-quota-wrap");
+  const quotaFill = document.getElementById("notice-drive-quota-bar-fill");
+  const quotaLabel = document.getElementById("notice-drive-quota-label");
+  quotaWrap.style.display = "none";
   if(isGoogleDriveConfigured()){
     getDriveStorageQuota().then(q=>{
       if(q.limit){
-        quotaEl.textContent = `Googleドライブの空き容量：${formatBytes(q.limit - q.usage)} / ${formatBytes(q.limit)}`;
+        const usedPct = Math.min(100, (q.usage / q.limit) * 100);
+        quotaFill.style.width = `${usedPct}%`;
+        quotaFill.className = usedPct>=90 ? "danger" : (usedPct>=70 ? "warn" : "");
+        quotaLabel.textContent = `使用量 ${formatBytes(q.usage)} / ${formatBytes(q.limit)}（空き ${formatBytes(q.limit - q.usage)}）`;
+        quotaWrap.style.display = "block";
       } else if(q.usage!==undefined){
-        quotaEl.textContent = `Googleドライブの使用量：${formatBytes(q.usage)}（上限なし）`;
+        quotaFill.style.width = "0%";
+        quotaFill.className = "";
+        quotaLabel.textContent = `使用量 ${formatBytes(q.usage)}（上限なし）`;
+        quotaWrap.style.display = "block";
       }
     }).catch(()=>{ /* 取得できなくても添付機能自体は使えるので無視 */ });
   }
