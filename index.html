@@ -237,6 +237,7 @@
   .cal-day-cell.cal-clickable{cursor:pointer;}
   .cal-day-cell.cal-clickable:hover{background:#F0F3F8;}
   .cal-day-cell.cal-holiday{background:#FDECEA;}
+  .cal-day-cell.cal-today{background:#FFF6C4;}
   .cal-day-cell.cal-has-note{box-shadow:inset 0 0 0 1.5px var(--brand);}
   .cal-day-cell .cal-day-num{font-size:12px;font-weight:700;color:var(--text);flex:0 0 auto;}
   .cal-day-cell.cal-holiday .cal-day-num{color:var(--danger);}
@@ -571,6 +572,7 @@
             <button id="cal-prev-year" class="date-nav-btn">◀</button>
             <div id="cal-year-label" style="font-weight:700;font-size:14.5px;"></div>
             <button id="cal-next-year" class="date-nav-btn">▶</button>
+            <button id="cal-today-btn" class="btn-ghost" style="border:1px solid var(--line);">今日</button>
           </div>
           <div id="cal-edit-hint" style="font-size:11.5px;color:var(--muted);"></div>
         </div>
@@ -3473,6 +3475,23 @@ document.getElementById("cal-next-year").addEventListener("click", ()=>{
   calFiscalYearStart++;
   loadCalendarYear(calFiscalYearStart);
 });
+function scrollToCalMonth(ym, attemptsLeft=20){
+  const block = document.querySelector(`.cal-month-block[data-cal-ym="${ym}"]`);
+  if(block){
+    block.scrollIntoView({ behavior:"smooth", block:"center" });
+  } else if(attemptsLeft>0){
+    setTimeout(()=> scrollToCalMonth(ym, attemptsLeft-1), 100);
+  }
+}
+document.getElementById("cal-today-btn").addEventListener("click", ()=>{
+  const targetYear = defaultFiscalYearStart();
+  const todayYm = todayStr().slice(0,7);
+  if(calFiscalYearStart !== targetYear){
+    calFiscalYearStart = targetYear;
+    loadCalendarYear(calFiscalYearStart);
+  }
+  scrollToCalMonth(todayYm);
+});
 
 function loadCalendarYear(year){
   if(calDaysUnsub){ calDaysUnsub(); calDaysUnsub = null; }
@@ -3520,6 +3539,7 @@ function renderCalendar(){
 function buildCalMonthBlock(y, m){
   const block = document.createElement("div");
   block.className = "cal-month-block";
+  block.dataset.calYm = `${y}-${pad2(m)}`;
 
   const head = document.createElement("div");
   head.className = "cal-month-head";
@@ -3561,7 +3581,8 @@ function buildCalMonthBlock(y, m){
         const info = calDaysData[dateStr] || {};
         const hasNote = !info.isHoliday && !!(info.label && info.label.trim());
         const isSatHolidayNote = (col===6) && info.isHoliday && !!(info.label && info.label.trim());
-        td.className = "cal-day-cell" + (info.isHoliday ? " cal-holiday" : "") + (hasNote ? " cal-has-note" : "") + (isSatHolidayNote ? " cal-sat-holiday-note" : "") + (isCalendarEditor ? " cal-clickable" : "");
+        const isToday = dateStr === todayStr();
+        td.className = "cal-day-cell" + (info.isHoliday ? " cal-holiday" : "") + (hasNote ? " cal-has-note" : "") + (isSatHolidayNote ? " cal-sat-holiday-note" : "") + (isToday ? " cal-today" : "") + (isCalendarEditor ? " cal-clickable" : "");
         if(col===0) td.classList.add("cal-sun-col");
         if(col===6) td.classList.add("cal-sat-col");
         if(info.isHoliday) holidayCount++;
