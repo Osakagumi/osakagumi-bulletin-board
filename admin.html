@@ -32,6 +32,10 @@
   nav.tabs{display:flex;gap:4px;padding:8px 14px 0;background:var(--surface);border-bottom:1px solid var(--line);overflow-x:auto;}
   nav.tabs button{background:none;border:none;padding:10px 14px;font-size:13.5px;color:var(--muted);border-bottom:2.5px solid transparent;font-weight:600;white-space:nowrap;}
   nav.tabs button.active{color:var(--brand);border-color:var(--brand);}
+  .tab-badge{
+    display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;padding:0 4px;
+    margin-left:5px;border-radius:8px;background:var(--danger);color:#fff;font-size:10px;font-weight:700;vertical-align:middle;
+  }
   .tab-reorder-btn{
     margin-left:auto;background:none;border:1px solid var(--line);border-radius:7px;padding:5px 11px;font-size:11.5px;color:var(--muted);white-space:nowrap;
   }
@@ -99,7 +103,7 @@
     <button class="tab-btn" data-view="reservations">予約状況（全体）</button>
     <button class="tab-btn" data-view="admins">管理者管理</button>
     <button class="tab-btn" data-view="userimport">ユーザー管理</button>
-    <button class="tab-btn" data-view="notices">お知らせ管理</button>
+    <button class="tab-btn" data-view="notices">お知らせ管理<span id="notices-tab-badge" class="tab-badge" style="display:none;"></span></button>
     <button class="tab-btn" data-view="whereabouts">行き先管理</button>
     <button class="tab-btn" data-view="safety">安否確認管理</button>
     <button class="tab-btn" data-view="calendar">カレンダー管理</button>
@@ -293,11 +297,23 @@
       </div>
       <div class="panel">
         <h2>掲示中のお知らせ一覧</h2>
-        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">個人ごとの「既読」状態に関わらず、現在掲示されている全てのお知らせを確認・削除できます。</p>
+        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">個人ごとの「既読」状態に関わらず、現在掲示されている全てのお知らせを確認・削除できます。投稿から1ヶ月経過したお知らせは、いずれかの管理者がログインした際に自動的に削除されます。</p>
         <table>
           <thead><tr><th>タイトル</th><th>本文</th><th>投稿者</th><th>投稿日時</th><th>操作</th></tr></thead>
           <tbody id="notices-admin-table-body"></tbody>
         </table>
+      </div>
+      <div class="panel">
+        <h2>削除待ちの添付ファイル（Googleドライブ）</h2>
+        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
+          自動削除されたお知らせに添付ファイルがあった場合、ここに一覧されます。ドライブ上のファイルの削除にはGoogleへのログイン確認が必要なため、自動では削除されません。下のボタンからまとめて削除してください。
+        </p>
+        <table>
+          <thead><tr><th>お知らせタイトル</th><th>削除待ちになった日時</th></tr></thead>
+          <tbody id="pending-drive-deletes-body"></tbody>
+        </table>
+        <button class="btn btn-primary" id="pending-drive-deletes-run-btn" style="margin-top:12px;">今すぐGoogleドライブから削除する</button>
+        <div id="pending-drive-deletes-status" style="font-size:12.5px;color:var(--muted);margin-top:10px;"></div>
       </div>
     </section>
 
@@ -581,6 +597,7 @@ onAuthStateChanged(auth, async (user)=>{
   initAdminsListener();
   initPostersListener();
   initNoticesAdminListener();
+  initPendingDriveDeletesListener();
   initDepartmentsListener();
   initWbColumnsListener();
   initWbStatusesListener();
@@ -928,6 +945,57 @@ function renderNoticesAdminTable(notices){
     body.appendChild(tr);
   });
 }
+
+let pendingDriveDeletesAll = [];
+function initPendingDriveDeletesListener(){
+  onSnapshot(collection(db,"pending_drive_deletes"), snap=>{
+    pendingDriveDeletesAll = snap.docs.map(d=>({fileId:d.id, ...d.data()}));
+    renderPendingDriveDeletes();
+  }, (err)=>{ console.error("[削除待ちファイル取得エラー]", err); });
+}
+function renderPendingDriveDeletes(){
+  const body = document.getElementById("pending-drive-deletes-body");
+  const badge = document.getElementById("notices-tab-badge");
+  if(badge){
+    if(pendingDriveDeletesAll.length > 0){
+      badge.textContent = pendingDriveDeletesAll.length;
+      badge.style.display = "inline-flex";
+    } else {
+      badge.style.display = "none";
+    }
+  }
+  if(!body) return;
+  body.innerHTML = "";
+  if(pendingDriveDeletesAll.length===0){
+    body.innerHTML = `<tr><td colspan="2" class="empty">削除待ちの添付ファイルはありません。</td></tr>`;
+    return;
+  }
+  pendingDriveDeletesAll.forEach(p=>{
+    const tr = document.createElement("tr");
+    const queuedLabel = p.queuedAt ? p.queuedAt.slice(0,16).replace("T"," ") : "";
+    tr.innerHTML = `<td>${escapeHtml(p.noticeTitle||"（タイトル不明）")}</td><td style="font-size:12px;color:var(--muted);">${escapeHtml(queuedLabel)}</td>`;
+    body.appendChild(tr);
+  });
+}
+document.getElementById("pending-drive-deletes-run-btn").addEventListener("click", async ()=>{
+  if(pendingDriveDeletesAll.length===0){ toast("削除待ちの添付ファイルはありません。"); return; }
+  if(!confirm(`${pendingDriveDeletesAll.length}件の添付ファイルをGoogleドライブから完全に削除します。よろしいですか？`)) return;
+  const statusEl = document.getElementById("pending-drive-deletes-status");
+  let ok = 0, fail = 0;
+  for(const p of pendingDriveDeletesAll){
+    try{
+      await deleteDriveFile(p.fileId);
+      await deleteDoc(doc(db,"pending_drive_deletes", p.fileId));
+      ok++;
+    }catch(e){
+      fail++;
+    }
+    statusEl.textContent = `削除中… ${ok+fail}/${pendingDriveDeletesAll.length}（成功${ok}・失敗${fail}）`;
+  }
+  statusEl.textContent = `完了：${ok}件削除しました${fail>0 ? `（${fail}件失敗）` : ""}。`;
+  toast("処理が完了しました。");
+});
+
 function renderPosters(list){
   const body = document.getElementById("poster-table-body");
   body.innerHTML = "";

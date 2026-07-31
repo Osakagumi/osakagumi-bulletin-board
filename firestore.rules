@@ -105,6 +105,11 @@ service cloud.firestore {
       allow read, write: if isSignedIn() && request.auth.token.email == email;
     }
 
+    // お知らせ自動削除に伴う、Googleドライブ添付ファイルの削除待ちリスト（管理者のみ）
+    match /pending_drive_deletes/{fileId} {
+      allow read, write: if isAdmin();
+    }
+
     // 行き先ステータスマスタ（在席・外出・現場・休みなど）: 全員が読める。管理は管理者のみ。
     match /wb_statuses/{statusId} {
       allow read: if isSignedIn();

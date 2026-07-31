@@ -946,6 +946,7 @@ onAuthStateChanged(auth, async (user)=>{
     initEquipmentListener();
     initMyReservationsListener();
     initNoticesListener();
+    cleanupOldNotices();
     initNoticeReadsListener();
     initDepartmentsListener();
     initWbStatusesListener();
@@ -1833,6 +1834,44 @@ function initNoticesListener(){
   }, (err)=>{ console.error("[お知らせ取得エラー]", err); });
 }
 
+let noticeCleanupRunning = false;
+async function cleanupOldNotices(){
+  if(noticeCleanupRunning) return;
+  noticeCleanupRunning = true;
+  try{
+    const oneMonthAgo = Timestamp.fromMillis(Date.now() - 30*24*60*60*1000);
+    // 複合インデックスを避けるため、日付だけで取得してから権限に応じてJS側で絞り込む
+    const snap = await getDocs(query(collection(db,"announcements"), where("createdAt","<", oneMonthAgo)));
+    if(snap.empty) return;
+    const targets = isAdmin
+      ? snap.docs
+      : snap.docs.filter(d => d.data().authorEmail === currentUser.email);
+    if(targets.length===0) return;
+    let count = 0;
+    for(const d of targets){
+      const data = d.data();
+      try{
+        await deleteDoc(doc(db,"announcements", d.id));
+        if(data.attachmentFileId){
+          // ドライブ側の削除はGoogleへのログインが必要なため、この場では削除待ちリストに記録するだけにする
+          await setDoc(doc(db,"pending_drive_deletes", data.attachmentFileId), {
+            noticeTitle: data.title || "",
+            queuedAt: new Date().toISOString()
+          });
+        }
+        count++;
+      }catch(e){ /* 1件失敗しても他の削除は続行 */ }
+    }
+    if(count>0){
+      toast(`1ヶ月以上前のお知らせを${count}件、自動的に削除しました。`);
+    }
+  }catch(e){
+    console.error("[お知らせ自動削除エラー]", e);
+  }finally{
+    noticeCleanupRunning = false;
+  }
+}
+
 function initNoticeReadsListener(){
   onSnapshot(doc(db,"notice_reads", currentUser.email), snap=>{
     myReadNoticeIds = (snap.exists() && snap.data().readIds) || [];
@@ -1979,6 +2018,7 @@ document.getElementById("notice-submit").addEventListener("click", async ()=>{
       createdAt: Timestamp.now()
     });
     toast("お知らせを投稿しました。");
+    cleanupOldNotices();
     if(sendEmail){
       await sendNoticeEmails(title, body, attachmentUrl);
     }
