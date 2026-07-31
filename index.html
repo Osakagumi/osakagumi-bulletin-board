@@ -894,6 +894,7 @@ let noticesAll = [];
 let myReadNoticeIds = [];
 let editingNoticeId = null;
 let originalAttachmentFileId = null;
+let attachmentUploadFailed = false;
 let activeSafetyCampaign = null;
 let mySafetyResponse = null;
 let wbEditingEmail = null;
@@ -1957,6 +1958,7 @@ document.getElementById("notice-new-btn").addEventListener("click", ()=>{
   document.getElementById("notice-body").value = "";
   document.getElementById("notice-attachment-url").value = "";
   document.getElementById("notice-attachment-url").dataset.fileId = "";
+  attachmentUploadFailed = false;
   document.getElementById("notice-error").textContent = "";
   document.getElementById("notice-send-status").textContent = "";
   noticeModal.classList.add("show");
@@ -1965,6 +1967,7 @@ document.getElementById("notice-new-btn").addEventListener("click", ()=>{
 function openNoticeEditModal(n){
   editingNoticeId = n.id;
   originalAttachmentFileId = n.attachmentFileId || null;
+  attachmentUploadFailed = false;
   document.getElementById("notice-modal-title").textContent = "お知らせを編集";
   document.getElementById("notice-send-email-row").style.display = "none";
   document.getElementById("notice-title").value = n.title || "";
@@ -1978,6 +1981,7 @@ function openNoticeEditModal(n){
 // リンク欄を手動で書き換えた場合は、添付ファイルIDとの対応が取れなくなるため紐付けを解除する
 document.getElementById("notice-attachment-url").addEventListener("input", (e)=>{
   e.target.dataset.fileId = "";
+  attachmentUploadFailed = false;
 });
 document.getElementById("notice-cancel").addEventListener("click", ()=> noticeModal.classList.remove("show"));
 document.getElementById("notice-submit").addEventListener("click", async ()=>{
@@ -1988,6 +1992,10 @@ document.getElementById("notice-submit").addEventListener("click", async ()=>{
   const errEl = document.getElementById("notice-error");
   const statusEl = document.getElementById("notice-send-status");
   if(!title){ errEl.textContent = "タイトルを入力してください。"; return; }
+  if(attachmentUploadFailed){
+    errEl.textContent = "添付ファイルのアップロードに失敗した状態です。もう一度アップロードするか、リンク欄を空にしてから投稿してください。";
+    return;
+  }
   errEl.textContent = "";
   statusEl.textContent = "";
 
@@ -2090,10 +2098,12 @@ async function uploadFileToGoogleDrive(file){
 
     document.getElementById("notice-attachment-url").value = webViewLink;
     document.getElementById("notice-attachment-url").dataset.fileId = fileId;
+    attachmentUploadFailed = false;
     toast("ファイルをアップロードし、リンクを取得しました。");
     document.getElementById("notice-attach-modal").classList.remove("show");
     resetNoticeDropzone();
   }catch(e){
+    attachmentUploadFailed = true;
     errEl.textContent = e.message || "アップロードに失敗しました。";
     busyEl.style.display = "none";
     document.getElementById("notice-dropzone-selected").style.display = "block";

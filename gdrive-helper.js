@@ -73,7 +73,14 @@ export async function uploadFileToDrive(file, onStatus){
     },
     body: multipartBody
   });
-  if(!uploadRes.ok) throw new Error("アップロードに失敗しました（" + uploadRes.status + "）。");
+  if(!uploadRes.ok){
+    let reason = "";
+    try{ reason = ((await uploadRes.json()).error?.errors?.[0]?.reason) || ""; }catch(e){ /* 無視 */ }
+    if(reason === "storageQuotaExceeded"){
+      throw new Error("Googleドライブの空き容量が不足しているため、アップロードに失敗しました。不要なファイルを削除するなどしてから、もう一度お試しください。");
+    }
+    throw new Error("アップロードに失敗しました（" + uploadRes.status + (reason ? "："+reason : "") + "）。");
+  }
   const uploadJson = await uploadRes.json();
   const fileId = uploadJson.id;
 
