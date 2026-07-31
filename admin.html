@@ -562,6 +562,7 @@
       <div id="notice-detail-attachment" style="margin-bottom:4px;font-size:13px;"></div>
     </div>
     <div class="row-btns">
+      <button class="btn btn-ghost" id="notice-detail-readby-btn" style="border:1px solid var(--line);">既読を確認</button>
       <button class="btn btn-ghost" id="notice-detail-close" style="border:1px solid var(--line);">閉じる</button>
     </div>
   </div>
@@ -997,6 +998,11 @@ function openNoticesReadByModal(n){
 }
 document.getElementById("notices-readby-close").addEventListener("click", ()=>{
   document.getElementById("notices-readby-modal").classList.remove("show");
+  if(reopenDetailAfterReadBy && noticeDetailCurrent){
+    renderNoticeDetailView(noticeDetailCurrent);
+    document.getElementById("notice-detail-modal").classList.add("show");
+  }
+  reopenDetailAfterReadBy = false;
 });
 
 let noticesAllAdmin = [];
@@ -1033,25 +1039,10 @@ function renderNoticesAdminTable(notices){
       if(e.target.checked) selectedNoticeIds.add(n.id); else selectedNoticeIds.delete(n.id);
       document.getElementById("notices-select-all").checked = selectedNoticeIds.size===notices.length;
     });
-    const readByBtn = document.createElement("button");
-    readByBtn.className = "btn btn-ghost"; readByBtn.textContent = "既読を確認";
-    readByBtn.addEventListener("click", ()=> openNoticesReadByModal(n));
-    tr.querySelector(".actions").appendChild(readByBtn);
-    const btn = document.createElement("button");
-    btn.className = "btn btn-danger"; btn.textContent = "削除";
-    btn.addEventListener("click", async ()=>{
-      if(!confirm(`「${n.title}」を削除しますか？`)) return;
-      await deleteOneNotice(n);
-      toast("お知らせを削除しました。");
-    });
-    tr.querySelector(".actions").appendChild(btn);
     const detailBtn = document.createElement("button");
     detailBtn.className = "btn btn-ghost"; detailBtn.textContent = "詳細";
-    detailBtn.style.marginLeft = "auto";
     detailBtn.addEventListener("click", ()=> openNoticeDetailModal(n));
     tr.querySelector(".actions").appendChild(detailBtn);
-    tr.querySelector(".actions").style.display = "flex";
-    tr.querySelector(".actions").style.gap = "6px";
     body.appendChild(tr);
   });
   document.getElementById("notices-select-all").checked = notices.length>0 && selectedNoticeIds.size===notices.length;
@@ -1095,6 +1086,13 @@ function openNoticeDetailModal(n){
 }
 document.getElementById("notice-detail-close").addEventListener("click", ()=>{
   document.getElementById("notice-detail-modal").classList.remove("show");
+});
+let reopenDetailAfterReadBy = false;
+document.getElementById("notice-detail-readby-btn").addEventListener("click", ()=>{
+  if(!noticeDetailCurrent) return;
+  document.getElementById("notice-detail-modal").classList.remove("show");
+  reopenDetailAfterReadBy = true;
+  openNoticesReadByModal(noticeDetailCurrent);
 });
 
 let pendingDriveDeletesAll = [];
