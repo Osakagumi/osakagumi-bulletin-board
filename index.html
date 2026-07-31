@@ -2162,7 +2162,7 @@ document.getElementById("notice-file-input").addEventListener("change", (e)=>{
 });
 noticeDropzone.addEventListener("drop", (e)=>{
   const file = e.dataTransfer.files && e.dataTransfer.files[0];
-  if(file) selectFileForUpload(file);
+  if(file) uploadFileToGoogleDrive(file);
 });
 document.getElementById("notice-upload-confirm-btn").addEventListener("click", ()=>{
   if(!pendingUploadFile) return;
