@@ -313,12 +313,17 @@
   .notice-item .n-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:6px;flex-wrap:wrap;}
   .notice-item .n-title{font-size:14.5px;font-weight:700;}
   .notice-item .n-meta{font-size:11.5px;color:var(--muted);font-family:var(--mono);white-space:nowrap;}
+  .notice-item .n-author-link{color:var(--muted);text-decoration:underline;}
+  .notice-item .n-author-link:hover{color:var(--brand);}
   .notice-item .n-body{font-size:13.5px;line-height:1.7;white-space:pre-wrap;color:var(--text);}
   .notice-item .n-attachment{margin-top:8px;}
   .notice-item .n-attachment a{font-size:13px;color:var(--brand);text-decoration:underline;}
-  .notice-item .n-actions{margin-top:8px;}
-  .notice-item .n-actions button{border:1px solid var(--danger);color:var(--danger);background:#fff;border-radius:7px;padding:5px 11px;font-size:11.5px;}
-  .notice-item .n-actions button:hover{background:var(--danger);color:#fff;}
+  .notice-item .n-actions{margin-top:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;}
+  .notice-item .n-actions-left{display:flex;gap:6px;flex-wrap:wrap;}
+  .notice-item .n-actions-left button{border:1px solid var(--danger);color:var(--danger);background:#fff;border-radius:7px;padding:5px 11px;font-size:11.5px;}
+  .notice-item .n-actions-left button:hover{background:var(--danger);color:#fff;}
+  .notice-item .n-readby-btn{border:1px solid var(--line);color:var(--muted);background:#fff;border-radius:7px;padding:5px 11px;font-size:11.5px;margin-left:auto;}
+  .notice-item .n-readby-btn:hover{border-color:var(--brand);color:var(--brand);}
 
   /* ---------- 行き先 ---------- */
   .wb-list-columns{display:grid;grid-template-columns:1fr;gap:14px;align-items:start;}
@@ -639,6 +644,17 @@
       <div class="modal-err" id="notice-attach-error"></div>
       <div class="row-btns">
         <button class="btn-ghost" id="notice-attach-cancel" style="border:1px solid var(--line);">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 既読者一覧 ============ -->
+  <div class="modal-overlay" id="notice-readby-modal">
+    <div class="modal">
+      <h3 id="notice-readby-title">既読者一覧</h3>
+      <div id="notice-readby-list" style="max-height:320px;overflow-y:auto;"></div>
+      <div class="row-btns">
+        <button class="btn-ghost" id="notice-readby-close" style="border:1px solid var(--line);">閉じる</button>
       </div>
     </div>
   </div>
@@ -1905,31 +1921,37 @@ function renderNotices(){
   visibleNotices.forEach(n=>{
     const item = document.createElement("div");
     item.className = "notice-item";
+    const authorNameHtml = n.authorEmail
+      ? `<a href="mailto:${escapeHtml(n.authorEmail)}" class="n-author-link">${escapeHtml(n.authorName||n.authorEmail)}</a>`
+      : escapeHtml(n.authorName||"");
     item.innerHTML = `
       <div class="n-head">
         <div class="n-title">${escapeHtml(n.title)}</div>
-        <div class="n-meta">${escapeHtml(n.authorName||n.authorEmail||"")} ・ ${tsToStr(n.createdAt)}</div>
+        <div class="n-meta">${authorNameHtml} ・ ${tsToStr(n.createdAt)}</div>
       </div>
       <div class="n-body">${escapeHtml(n.body||"")}</div>
-      ${n.attachmentUrl ? `<div class="n-attachment"><a href="${escapeHtml(n.attachmentUrl)}" target="_blank" rel="noopener noreferrer">🔗 リンクを開く</a></div>` : ""}
+      ${n.attachmentUrl ? `<div class="n-attachment"><a href="${escapeHtml(n.attachmentUrl)}" target="_blank" rel="noopener noreferrer">📎 添付ファイル</a></div>` : ""}
     `;
     const actions = document.createElement("div");
     actions.className = "n-actions";
+    const leftGroup = document.createElement("div");
+    leftGroup.className = "n-actions-left";
     const readBtn = document.createElement("button");
     readBtn.textContent = "既読にする";
     readBtn.addEventListener("click", async ()=>{
       try{
         await setDoc(doc(db,"notice_reads", currentUser.email), { readIds: arrayUnion(n.id) }, { merge:true });
+        await updateDoc(doc(db,"announcements", n.id), { readBy: arrayUnion(currentUser.email) });
       }catch(e){
         toast("既読にできませんでした。");
       }
     });
-    actions.appendChild(readBtn);
+    leftGroup.appendChild(readBtn);
     if(isAdmin || n.authorEmail===currentUser.email){
       const editBtn = document.createElement("button");
       editBtn.textContent = "編集";
       editBtn.addEventListener("click", ()=> openNoticeEditModal(n));
-      actions.appendChild(editBtn);
+      leftGroup.appendChild(editBtn);
       const delBtn = document.createElement("button");
       delBtn.textContent = "削除";
       delBtn.addEventListener("click", async ()=>{
@@ -1940,14 +1962,40 @@ function renderNotices(){
         }
         toast("お知らせを削除しました。");
       });
-      actions.appendChild(delBtn);
+      leftGroup.appendChild(delBtn);
     }
+    actions.appendChild(leftGroup);
+    const readByBtn = document.createElement("button");
+    readByBtn.textContent = "既読を確認";
+    readByBtn.className = "n-readby-btn";
+    readByBtn.addEventListener("click", ()=> openNoticeReadByModal(n));
+    actions.appendChild(readByBtn);
     item.appendChild(actions);
     el.appendChild(item);
   });
 }
 
 const noticeModal = document.getElementById("notice-modal");
+function openNoticeReadByModal(n){
+  const listEl = document.getElementById("notice-readby-list");
+  const titleEl = document.getElementById("notice-readby-title");
+  const readBy = n.readBy || [];
+  titleEl.textContent = `既読者一覧（${readBy.length}名）`;
+  if(readBy.length===0){
+    listEl.innerHTML = `<div class="empty-state">まだ誰も既読にしていません。</div>`;
+  } else {
+    const names = readBy.map(email=>{
+      const emp = employeesAll.find(e=>(e.email||"").toLowerCase()===email.toLowerCase());
+      return emp?.name || email;
+    }).sort((a,b)=> a.localeCompare(b,"ja"));
+    listEl.innerHTML = names.map(name=>`<div style="padding:7px 2px;border-bottom:1px solid var(--line);font-size:13px;">${escapeHtml(name)}</div>`).join("");
+  }
+  document.getElementById("notice-readby-modal").classList.add("show");
+}
+document.getElementById("notice-readby-close").addEventListener("click", ()=>{
+  document.getElementById("notice-readby-modal").classList.remove("show");
+});
+
 document.getElementById("notice-new-btn").addEventListener("click", ()=>{
   editingNoticeId = null;
   originalAttachmentFileId = null;

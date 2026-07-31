@@ -162,7 +162,10 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isPoster() &&
         request.resource.data.authorEmail == request.auth.token.email;
-      allow update, delete: if isSignedIn() &&
+      allow update: if isSignedIn() &&
+        (resource.data.authorEmail == request.auth.token.email || isAdmin() ||
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(["readBy"]));
+      allow delete: if isSignedIn() &&
         (resource.data.authorEmail == request.auth.token.email || isAdmin());
     }
 
