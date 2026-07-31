@@ -2064,14 +2064,15 @@ async function sendNoticeEmails(title, body, attachmentUrl){
   }
   let ok = 0, fail = 0;
   const link = indexPageUrl();
-  const mailBody = attachmentUrl ? `${body}\n\n【リンク】\n${attachmentUrl}` : body;
   for(const emp of recipients){
     try{
       await window.emailjs.send(EMAILJS_CONFIG.serviceId, EMAILJS_CONFIG.noticeTemplateId, {
         to_email: emp.email,
         to_name: emp.name || emp.email,
-        title, message: mailBody,
+        title, message: body,
         author_name: myDisplayName(),
+        author_email: currentUser.email,
+        attachment_link: attachmentUrl || "",
         link
       });
       ok++;
