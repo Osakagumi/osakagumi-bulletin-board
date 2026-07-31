@@ -595,7 +595,7 @@
       </div>
       <div class="field" id="notice-send-email-row" style="display:flex;align-items:center;gap:6px;">
         <input type="checkbox" id="notice-send-email" checked style="width:auto;">
-        <label style="margin:0;font-size:12.5px;color:var(--text);">社員全員に同じ内容をメールでも送信する</label>
+        <label id="notice-send-email-label" style="margin:0;font-size:12.5px;color:var(--text);">社員全員に同じ内容をメールでも送信する</label>
       </div>
       <div class="modal-err" id="notice-error"></div>
       <div id="notice-send-status" style="font-size:12px;color:var(--muted);margin-top:6px;"></div>
@@ -1954,6 +1954,7 @@ document.getElementById("notice-new-btn").addEventListener("click", ()=>{
   document.getElementById("notice-modal-title").textContent = "お知らせを投稿";
   document.getElementById("notice-send-email-row").style.display = "flex";
   document.getElementById("notice-send-email").checked = true;
+  document.getElementById("notice-send-email-label").textContent = "社員全員に同じ内容をメールでも送信する";
   document.getElementById("notice-title").value = "";
   document.getElementById("notice-body").value = "";
   document.getElementById("notice-attachment-url").value = "";
@@ -1969,7 +1970,9 @@ function openNoticeEditModal(n){
   originalAttachmentFileId = n.attachmentFileId || null;
   attachmentUploadFailed = false;
   document.getElementById("notice-modal-title").textContent = "お知らせを編集";
-  document.getElementById("notice-send-email-row").style.display = "none";
+  document.getElementById("notice-send-email-row").style.display = "flex";
+  document.getElementById("notice-send-email").checked = false;
+  document.getElementById("notice-send-email-label").textContent = "更新内容を社員全員にメールでも送信する";
   document.getElementById("notice-title").value = n.title || "";
   document.getElementById("notice-body").value = n.body || "";
   document.getElementById("notice-attachment-url").value = n.attachmentUrl || "";
@@ -1999,6 +2002,22 @@ document.getElementById("notice-submit").addEventListener("click", async ()=>{
   errEl.textContent = "";
   statusEl.textContent = "";
 
+  const sendEmail = document.getElementById("notice-send-email").checked;
+  let recipients = [];
+  if(sendEmail){
+    // 送信直前にFirestoreから最新の社員名簿を取得し直してから確認する
+    try{
+      const freshSnap = await getDocs(collection(db,"employees"));
+      employeesAll = freshSnap.docs.map(d=>({email:d.id, ...d.data()}));
+    }catch(e){ /* 取得失敗時はキャッシュのまま表示を続行 */ }
+    recipients = resolveMailRecipients(employeesAll);
+    const overrideNotice = isMailOverrideActive()
+      ? `\n\n※現在メール送信先が「${MAIL_SEND_TARGET}」に上書き設定されているため、上記の人数・宛先のみに送信されます（全社員には送信されません）。`
+      : "";
+    const actionLabel = editingNoticeId ? "更新し" : "投稿し";
+    if(!confirm(`このお知らせを${actionLabel}、${recipients.length} 名にメールも送信します。${overrideNotice}\n\nよろしいですか？`)) return;
+  }
+
   if(editingNoticeId){
     try{
       await updateDoc(doc(db,"announcements", editingNoticeId), {
@@ -2010,25 +2029,14 @@ document.getElementById("notice-submit").addEventListener("click", async ()=>{
         try{ await deleteDriveFile(originalAttachmentFileId); }catch(e){ /* 削除に失敗しても更新自体は成功として扱う */ }
       }
       toast("お知らせを更新しました。");
+      if(sendEmail){
+        await sendNoticeEmails(title, body, attachmentUrl);
+      }
       noticeModal.classList.remove("show");
     }catch(e){
       errEl.textContent = "更新に失敗しました。権限をご確認ください。";
     }
     return;
-  }
-
-  const sendEmail = document.getElementById("notice-send-email").checked;
-  if(sendEmail){
-    // 送信直前にFirestoreから最新の社員名簿を取得し直してから確認する
-    try{
-      const freshSnap = await getDocs(collection(db,"employees"));
-      employeesAll = freshSnap.docs.map(d=>({email:d.id, ...d.data()}));
-    }catch(e){ /* 取得失敗時はキャッシュのまま表示を続行 */ }
-    const recipients = resolveMailRecipients(employeesAll);
-    const overrideNotice = isMailOverrideActive()
-      ? `\n\n※現在メール送信先が「${MAIL_SEND_TARGET}」に上書き設定されているため、上記の人数・宛先のみに送信されます（全社員には送信されません）。`
-      : "";
-    if(!confirm(`このお知らせを投稿し、${recipients.length} 名にメールも送信します。${overrideNotice}\n\nよろしいですか？`)) return;
   }
 
   try{
