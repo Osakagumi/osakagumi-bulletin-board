@@ -1941,7 +1941,7 @@ function renderNotices(){
     readBtn.addEventListener("click", async ()=>{
       try{
         await setDoc(doc(db,"notice_reads", currentUser.email), { readIds: arrayUnion(n.id) }, { merge:true });
-        await updateDoc(doc(db,"announcements", n.id), { readBy: arrayUnion(currentUser.email) });
+        await updateDoc(doc(db,"announcements", n.id), { [`readByAt.${currentUser.email}`]: new Date().toISOString() });
       }catch(e){
         toast("既読にできませんでした。");
       }
@@ -1976,20 +1976,45 @@ function renderNotices(){
 }
 
 const noticeModal = document.getElementById("notice-modal");
+function buildReadByModalHtml(n, empList){
+  const readByAt = n.readByAt || {};
+  const readEmails = Object.keys(readByAt);
+  const readRows = readEmails.map(email=>{
+    const emp = empList.find(e=>(e.email||"").toLowerCase()===email.toLowerCase());
+    const name = emp?.name || email;
+    const dt = readByAt[email];
+    const dtLabel = dt ? new Date(dt).toLocaleString("ja-JP",{year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}) : "";
+    return { name, email, dtLabel, dt: dt||"" };
+  }).sort((a,b)=> a.dt.localeCompare(b.dt));
+
+  const activeEmployees = empList.filter(e=>!e.hidden);
+  const unreadEmployees = activeEmployees.filter(e => !readEmails.some(re=>re.toLowerCase()===(e.email||"").toLowerCase()))
+    .sort((a,b)=> (a.name||"").localeCompare(b.name||"","ja"));
+
+  let html = `<div style="font-size:12.5px;font-weight:700;color:var(--muted);margin:4px 0 6px;">既読者（${readRows.length}名）</div>`;
+  if(readRows.length===0){
+    html += `<div style="font-size:12.5px;color:var(--muted);padding:4px 0 10px;">まだ誰も既読にしていません。</div>`;
+  } else {
+    html += readRows.map(r=>`
+      <div style="display:flex;justify-content:space-between;gap:8px;padding:7px 2px;border-bottom:1px solid var(--line);font-size:13px;">
+        <a href="mailto:${escapeHtml(r.email)}" style="color:var(--text);text-decoration:underline;">${escapeHtml(r.name)}</a>
+        <span style="color:var(--muted);font-size:11.5px;white-space:nowrap;">${escapeHtml(r.dtLabel)}</span>
+      </div>
+    `).join("");
+  }
+  html += `<div style="font-size:12.5px;font-weight:700;color:var(--muted);margin:14px 0 6px;">未読者（${unreadEmployees.length}名）</div>`;
+  if(unreadEmployees.length===0){
+    html += `<div style="font-size:12.5px;color:var(--muted);padding:4px 0;">未読者はいません。</div>`;
+  } else {
+    html += unreadEmployees.map(e=>`<div style="padding:7px 2px;border-bottom:1px solid var(--line);font-size:13px;color:var(--muted);">${escapeHtml(e.name||e.email)}</div>`).join("");
+  }
+  return html;
+}
 function openNoticeReadByModal(n){
   const listEl = document.getElementById("notice-readby-list");
   const titleEl = document.getElementById("notice-readby-title");
-  const readBy = n.readBy || [];
-  titleEl.textContent = `既読者一覧（${readBy.length}名）`;
-  if(readBy.length===0){
-    listEl.innerHTML = `<div class="empty-state">まだ誰も既読にしていません。</div>`;
-  } else {
-    const names = readBy.map(email=>{
-      const emp = employeesAll.find(e=>(e.email||"").toLowerCase()===email.toLowerCase());
-      return emp?.name || email;
-    }).sort((a,b)=> a.localeCompare(b,"ja"));
-    listEl.innerHTML = names.map(name=>`<div style="padding:7px 2px;border-bottom:1px solid var(--line);font-size:13px;">${escapeHtml(name)}</div>`).join("");
-  }
+  titleEl.textContent = "既読状況";
+  listEl.innerHTML = buildReadByModalHtml(n, employeesAll);
   document.getElementById("notice-readby-modal").classList.add("show");
 }
 document.getElementById("notice-readby-close").addEventListener("click", ()=>{

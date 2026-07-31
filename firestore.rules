@@ -164,7 +164,7 @@ service cloud.firestore {
         request.resource.data.authorEmail == request.auth.token.email;
       allow update: if isSignedIn() &&
         (resource.data.authorEmail == request.auth.token.email || isAdmin() ||
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(["readBy"]));
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(["readByAt"]));
       allow delete: if isSignedIn() &&
         (resource.data.authorEmail == request.auth.token.email || isAdmin());
     }

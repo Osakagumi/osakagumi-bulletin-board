@@ -308,8 +308,14 @@
       <div class="panel">
         <h2>掲示中のお知らせ一覧</h2>
         <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">個人ごとの「既読」状態に関わらず、現在掲示されている全てのお知らせを確認・削除できます。投稿から1ヶ月経過したお知らせは、いずれかの管理者がログインした際に自動的に削除されます。</p>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+          <label style="display:flex;align-items:center;gap:5px;font-size:12.5px;color:var(--text);">
+            <input type="checkbox" id="notices-select-all" style="width:auto;">全て選択
+          </label>
+          <button class="btn btn-danger" id="notices-bulk-delete-btn">選択したものを削除</button>
+        </div>
         <table>
-          <thead><tr><th>タイトル</th><th>本文</th><th>投稿者</th><th>投稿日時</th><th>操作</th></tr></thead>
+          <thead><tr><th style="width:30px;"></th><th>タイトル</th><th>本文</th><th>投稿者</th><th>投稿日時</th><th>操作</th></tr></thead>
           <tbody id="notices-admin-table-body"></tbody>
         </table>
       </div>
@@ -542,6 +548,46 @@
     <div id="notices-readby-list" style="max-height:320px;overflow-y:auto;"></div>
     <div class="row-btns">
       <button class="btn btn-ghost" id="notices-readby-close" style="border:1px solid var(--line);">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="notice-detail-modal">
+  <div class="modal" style="width:440px;">
+    <h3>お知らせ詳細</h3>
+    <div id="notice-detail-view">
+      <div style="font-weight:700;font-size:14.5px;margin-bottom:4px;" id="notice-detail-title-text"></div>
+      <div style="font-size:11.5px;color:var(--muted);margin-bottom:10px;" id="notice-detail-meta"></div>
+      <div style="font-size:13.5px;line-height:1.7;white-space:pre-wrap;color:var(--text);margin-bottom:10px;" id="notice-detail-body"></div>
+      <div id="notice-detail-attachment" style="margin-bottom:12px;font-size:13px;"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
+        <button class="btn btn-ghost" id="notice-detail-read-btn" style="border:1px solid var(--line);">既読にする</button>
+        <button class="btn btn-ghost" id="notice-detail-readby-btn" style="border:1px solid var(--line);">既読を確認</button>
+        <button class="btn btn-ghost" id="notice-detail-edit-btn" style="border:1px solid var(--line);">編集</button>
+        <button class="btn btn-danger" id="notice-detail-delete-btn">削除</button>
+      </div>
+    </div>
+    <div id="notice-detail-edit-form" style="display:none;">
+      <div style="margin-bottom:10px;">
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">タイトル</label>
+        <input type="text" id="notice-detail-edit-title" style="width:100%;padding:8px 9px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;">
+      </div>
+      <div style="margin-bottom:10px;">
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">本文</label>
+        <textarea id="notice-detail-edit-body" style="width:100%;min-height:100px;padding:8px 9px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;"></textarea>
+      </div>
+      <div style="margin-bottom:6px;">
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">リンク</label>
+        <input type="url" id="notice-detail-edit-url" style="width:100%;padding:8px 9px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;">
+      </div>
+      <div style="color:var(--danger);font-size:12px;min-height:16px;" id="notice-detail-edit-error"></div>
+      <div class="row-btns">
+        <button class="btn btn-ghost" id="notice-detail-edit-cancel" style="border:1px solid var(--line);">キャンセル</button>
+        <button class="btn btn-primary" id="notice-detail-edit-save">保存する</button>
+      </div>
+    </div>
+    <div class="row-btns">
+      <button class="btn btn-ghost" id="notice-detail-close" style="border:1px solid var(--line);">閉じる</button>
     </div>
   </div>
 </div>
@@ -933,44 +979,85 @@ function initNoticesAdminListener(){
     renderNoticesAdminTable(notices);
   }, (err)=>{ console.error("[お知らせ取得エラー]", err); });
 }
+function buildReadByModalHtml(n, empList){
+  const readByAt = n.readByAt || {};
+  const readEmails = Object.keys(readByAt);
+  const readRows = readEmails.map(email=>{
+    const emp = empList.find(e=>(e.email||"").toLowerCase()===email.toLowerCase());
+    const name = emp?.name || email;
+    const dt = readByAt[email];
+    const dtLabel = dt ? new Date(dt).toLocaleString("ja-JP",{year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}) : "";
+    return { name, email, dtLabel, dt: dt||"" };
+  }).sort((a,b)=> a.dt.localeCompare(b.dt));
+
+  const activeEmployees = empList.filter(e=>!e.hidden);
+  const unreadEmployees = activeEmployees.filter(e => !readEmails.some(re=>re.toLowerCase()===(e.email||"").toLowerCase()))
+    .sort((a,b)=> (a.name||"").localeCompare(b.name||"","ja"));
+
+  let html = `<div style="font-size:12.5px;font-weight:700;color:var(--muted);margin:4px 0 6px;">既読者（${readRows.length}名）</div>`;
+  if(readRows.length===0){
+    html += `<div style="font-size:12.5px;color:var(--muted);padding:4px 0 10px;">まだ誰も既読にしていません。</div>`;
+  } else {
+    html += readRows.map(r=>`
+      <div style="display:flex;justify-content:space-between;gap:8px;padding:7px 2px;border-bottom:1px solid var(--line);font-size:13px;">
+        <a href="mailto:${escapeHtml(r.email)}" style="color:var(--text);text-decoration:underline;">${escapeHtml(r.name)}</a>
+        <span style="color:var(--muted);font-size:11.5px;white-space:nowrap;">${escapeHtml(r.dtLabel)}</span>
+      </div>
+    `).join("");
+  }
+  html += `<div style="font-size:12.5px;font-weight:700;color:var(--muted);margin:14px 0 6px;">未読者（${unreadEmployees.length}名）</div>`;
+  if(unreadEmployees.length===0){
+    html += `<div style="font-size:12.5px;color:var(--muted);padding:4px 0;">未読者はいません。</div>`;
+  } else {
+    html += unreadEmployees.map(e=>`<div style="padding:7px 2px;border-bottom:1px solid var(--line);font-size:13px;color:var(--muted);">${escapeHtml(e.name||e.email)}</div>`).join("");
+  }
+  return html;
+}
 function openNoticesReadByModal(n){
   const listEl = document.getElementById("notices-readby-list");
   const titleEl = document.getElementById("notices-readby-title");
-  const readBy = n.readBy || [];
-  titleEl.textContent = `既読者一覧（${readBy.length}名）`;
-  if(readBy.length===0){
-    listEl.innerHTML = `<div class="empty" style="padding:8px 0;color:var(--muted);font-size:13px;">まだ誰も既読にしていません。</div>`;
-  } else {
-    const names = readBy.map(email=>{
-      const emp = employeesAll.find(e=>(e.email||"").toLowerCase()===email.toLowerCase());
-      return emp?.name || email;
-    }).sort((a,b)=> a.localeCompare(b,"ja"));
-    listEl.innerHTML = names.map(name=>`<div style="padding:7px 2px;border-bottom:1px solid var(--line);font-size:13px;">${escapeHtml(name)}</div>`).join("");
-  }
+  titleEl.textContent = "既読状況";
+  listEl.innerHTML = buildReadByModalHtml(n, employeesAll);
   document.getElementById("notices-readby-modal").classList.add("show");
 }
 document.getElementById("notices-readby-close").addEventListener("click", ()=>{
   document.getElementById("notices-readby-modal").classList.remove("show");
 });
 
+let noticesAllAdmin = [];
+let selectedNoticeIds = new Set();
+async function deleteOneNotice(n){
+  await deleteDoc(doc(db,"announcements", n.id));
+  if(n.attachmentFileId){
+    try{ await deleteDriveFile(n.attachmentFileId); }catch(e){ /* 削除に失敗しても致命的ではない */ }
+  }
+}
 function renderNoticesAdminTable(notices){
+  noticesAllAdmin = notices;
+  selectedNoticeIds = new Set([...selectedNoticeIds].filter(id => notices.some(n=>n.id===id)));
   const body = document.getElementById("notices-admin-table-body");
   if(!body) return;
   body.innerHTML = "";
   if(notices.length===0){
-    body.innerHTML = `<tr><td colspan="5" class="empty">掲示中のお知らせはありません。</td></tr>`;
+    body.innerHTML = `<tr><td colspan="6" class="empty">掲示中のお知らせはありません。</td></tr>`;
+    document.getElementById("notices-select-all").checked = false;
     return;
   }
   notices.forEach(n=>{
     const tr = document.createElement("tr");
     const bodyPreview = (n.body||"").length > 40 ? n.body.slice(0,40)+"…" : (n.body||"");
     tr.innerHTML = `
+      <td><input type="checkbox" class="notice-row-check" data-id="${n.id}" style="width:auto;"${selectedNoticeIds.has(n.id) ? " checked" : ""}></td>
       <td>${escapeHtml(n.title||"")}</td>
       <td style="color:var(--muted);max-width:260px;">${escapeHtml(bodyPreview)}</td>
       <td>${escapeHtml(n.authorName||n.authorEmail||"")}</td>
       <td style="font-size:12px;color:var(--muted);">${escapeHtml(tsToStr(n.createdAt))}</td>
       <td class="actions"></td>
     `;
+    tr.querySelector(".notice-row-check").addEventListener("change", (e)=>{
+      if(e.target.checked) selectedNoticeIds.add(n.id); else selectedNoticeIds.delete(n.id);
+      document.getElementById("notices-select-all").checked = selectedNoticeIds.size===notices.length;
+    });
     const readByBtn = document.createElement("button");
     readByBtn.className = "btn btn-ghost"; readByBtn.textContent = "既読を確認";
     readByBtn.addEventListener("click", ()=> openNoticesReadByModal(n));
@@ -979,16 +1066,124 @@ function renderNoticesAdminTable(notices){
     btn.className = "btn btn-danger"; btn.textContent = "削除";
     btn.addEventListener("click", async ()=>{
       if(!confirm(`「${n.title}」を削除しますか？`)) return;
-      await deleteDoc(doc(db,"announcements", n.id));
-      if(n.attachmentFileId){
-        try{ await deleteDriveFile(n.attachmentFileId); }catch(e){ /* 削除に失敗しても致命的ではない */ }
-      }
+      await deleteOneNotice(n);
       toast("お知らせを削除しました。");
     });
     tr.querySelector(".actions").appendChild(btn);
+    const detailBtn = document.createElement("button");
+    detailBtn.className = "btn btn-ghost"; detailBtn.textContent = "詳細";
+    detailBtn.style.marginLeft = "auto";
+    detailBtn.addEventListener("click", ()=> openNoticeDetailModal(n));
+    tr.querySelector(".actions").appendChild(detailBtn);
+    tr.querySelector(".actions").style.display = "flex";
+    tr.querySelector(".actions").style.gap = "6px";
     body.appendChild(tr);
   });
+  document.getElementById("notices-select-all").checked = notices.length>0 && selectedNoticeIds.size===notices.length;
 }
+document.getElementById("notices-select-all").addEventListener("change", (e)=>{
+  if(e.target.checked){
+    selectedNoticeIds = new Set(noticesAllAdmin.map(n=>n.id));
+  } else {
+    selectedNoticeIds = new Set();
+  }
+  renderNoticesAdminTable(noticesAllAdmin);
+});
+document.getElementById("notices-bulk-delete-btn").addEventListener("click", async ()=>{
+  if(selectedNoticeIds.size===0){ toast("削除するお知らせを選択してください。"); return; }
+  if(!confirm(`選択した${selectedNoticeIds.size}件のお知らせを削除しますか？`)) return;
+  const targets = noticesAllAdmin.filter(n=>selectedNoticeIds.has(n.id));
+  for(const n of targets){
+    try{ await deleteOneNotice(n); }catch(e){ /* 1件失敗しても他は続行 */ }
+  }
+  selectedNoticeIds = new Set();
+  toast(`${targets.length}件のお知らせを削除しました。`);
+});
+
+let noticeDetailCurrent = null;
+function renderNoticeDetailView(n){
+  document.getElementById("notice-detail-title-text").textContent = n.title || "";
+  document.getElementById("notice-detail-meta").textContent =
+    `${n.authorName || n.authorEmail || ""} ・ ${tsToStr(n.createdAt)}`;
+  document.getElementById("notice-detail-body").textContent = n.body || "";
+  const attEl = document.getElementById("notice-detail-attachment");
+  attEl.innerHTML = n.attachmentUrl
+    ? `<a href="${escapeHtml(n.attachmentUrl)}" target="_blank" rel="noopener noreferrer" style="color:var(--brand);">📎 添付ファイル</a>`
+    : "";
+  document.getElementById("notice-detail-view").style.display = "block";
+  document.getElementById("notice-detail-edit-form").style.display = "none";
+}
+function openNoticeDetailModal(n){
+  noticeDetailCurrent = n;
+  renderNoticeDetailView(n);
+  document.getElementById("notice-detail-modal").classList.add("show");
+}
+document.getElementById("notice-detail-close").addEventListener("click", ()=>{
+  document.getElementById("notice-detail-modal").classList.remove("show");
+});
+document.getElementById("notice-detail-read-btn").addEventListener("click", async ()=>{
+  if(!noticeDetailCurrent) return;
+  try{
+    await updateDoc(doc(db,"announcements", noticeDetailCurrent.id), {
+      [`readByAt.${currentUser.email}`]: new Date().toISOString()
+    });
+    toast("既読にしました。");
+  }catch(e){
+    toast("既読にできませんでした。");
+  }
+});
+document.getElementById("notice-detail-readby-btn").addEventListener("click", ()=>{
+  if(noticeDetailCurrent) openNoticesReadByModal(noticeDetailCurrent);
+});
+document.getElementById("notice-detail-delete-btn").addEventListener("click", async ()=>{
+  if(!noticeDetailCurrent) return;
+  if(!confirm(`「${noticeDetailCurrent.title}」を削除しますか？`)) return;
+  await deleteOneNotice(noticeDetailCurrent);
+  toast("お知らせを削除しました。");
+  document.getElementById("notice-detail-modal").classList.remove("show");
+});
+document.getElementById("notice-detail-edit-btn").addEventListener("click", ()=>{
+  if(!noticeDetailCurrent) return;
+  document.getElementById("notice-detail-edit-title").value = noticeDetailCurrent.title || "";
+  document.getElementById("notice-detail-edit-body").value = noticeDetailCurrent.body || "";
+  document.getElementById("notice-detail-edit-url").value = noticeDetailCurrent.attachmentUrl || "";
+  document.getElementById("notice-detail-edit-error").textContent = "";
+  document.getElementById("notice-detail-view").style.display = "none";
+  document.getElementById("notice-detail-edit-form").style.display = "block";
+});
+document.getElementById("notice-detail-edit-cancel").addEventListener("click", ()=>{
+  if(noticeDetailCurrent) renderNoticeDetailView(noticeDetailCurrent);
+});
+document.getElementById("notice-detail-edit-save").addEventListener("click", async ()=>{
+  if(!noticeDetailCurrent) return;
+  const title = document.getElementById("notice-detail-edit-title").value.trim();
+  const bodyText = document.getElementById("notice-detail-edit-body").value.trim();
+  const attachmentUrl = document.getElementById("notice-detail-edit-url").value.trim();
+  const errEl = document.getElementById("notice-detail-edit-error");
+  if(!title){ errEl.textContent = "タイトルを入力してください。"; return; }
+  const oldFileId = noticeDetailCurrent.attachmentFileId || "";
+  const urlChanged = (noticeDetailCurrent.attachmentUrl || "") !== attachmentUrl;
+  try{
+    await updateDoc(doc(db,"announcements", noticeDetailCurrent.id), {
+      title, body: bodyText, attachmentUrl,
+      attachmentFileId: urlChanged ? "" : oldFileId,
+      updatedAt: Timestamp.now()
+    });
+    if(urlChanged && oldFileId){
+      try{
+        await setDoc(doc(db,"pending_drive_deletes", oldFileId), {
+          noticeTitle: noticeDetailCurrent.title || "",
+          queuedAt: new Date().toISOString()
+        });
+      }catch(e){ /* 失敗しても更新自体は成功として扱う */ }
+    }
+    toast("お知らせを更新しました。");
+    noticeDetailCurrent = { ...noticeDetailCurrent, title, body: bodyText, attachmentUrl, attachmentFileId: urlChanged ? "" : oldFileId };
+    renderNoticeDetailView(noticeDetailCurrent);
+  }catch(e){
+    errEl.textContent = "更新に失敗しました。権限をご確認ください。";
+  }
+});
 
 let pendingDriveDeletesAll = [];
 function initPendingDriveDeletesListener(){
