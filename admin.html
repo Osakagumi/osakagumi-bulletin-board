@@ -1022,6 +1022,11 @@ function openNoticesReadByModal(n){
 }
 document.getElementById("notices-readby-close").addEventListener("click", ()=>{
   document.getElementById("notices-readby-modal").classList.remove("show");
+  if(reopenDetailAfterReadBy && noticeDetailCurrent){
+    renderNoticeDetailView(noticeDetailCurrent);
+    document.getElementById("notice-detail-modal").classList.add("show");
+  }
+  reopenDetailAfterReadBy = false;
 });
 
 let noticesAllAdmin = [];
@@ -1132,8 +1137,12 @@ document.getElementById("notice-detail-read-btn").addEventListener("click", asyn
     toast("既読にできませんでした。");
   }
 });
+let reopenDetailAfterReadBy = false;
 document.getElementById("notice-detail-readby-btn").addEventListener("click", ()=>{
-  if(noticeDetailCurrent) openNoticesReadByModal(noticeDetailCurrent);
+  if(!noticeDetailCurrent) return;
+  document.getElementById("notice-detail-modal").classList.remove("show");
+  reopenDetailAfterReadBy = true;
+  openNoticesReadByModal(noticeDetailCurrent);
 });
 document.getElementById("notice-detail-delete-btn").addEventListener("click", async ()=>{
   if(!noticeDetailCurrent) return;
