@@ -355,11 +355,11 @@
     .wb-board{grid-template-columns:repeat(auto-fit,minmax(160px,1fr));}
   }
   .wb-board.wb-board-fit{
-    display:flex; flex-wrap:nowrap; align-items:stretch; gap:10px;
+    display:flex; flex-wrap:nowrap; align-items:flex-start; gap:10px;
     overflow-x:auto; overflow-y:hidden;
   }
   .wb-board.wb-board-fit .wb-board-col{ flex:0 0 auto; display:flex; flex-direction:column; }
-  .wb-board.wb-board-fit .col-body{ overflow:hidden; flex:1 1 auto; }
+  .wb-board.wb-board-fit .col-body{ overflow:hidden; }
   .wb-board-col{background:var(--surface);border:1.5px solid var(--line);border-radius:10px;overflow:hidden;}
   .wb-board-col .col-head{padding:9px 8px;font-size:var(--wb-font-size);font-weight:700;color:#fff;text-align:center;overflow-wrap:break-word;}
   .wb-board-col .col-body{padding:10px 8px;display:flex;flex-direction:column;gap:6px;min-height:40px;}
@@ -2696,6 +2696,14 @@ function renderWbBoard(){
   const HEAD_HEIGHT = Math.round(fontPx * 1.4) + 20;
   const ROW_HEIGHT = Math.round(fontPx * 1.9) + 6;
   const CHIP_COL_WIDTH = Math.round(64 * (fontPx/13)) + 34;
+  const measureCanvas = document.createElement("canvas");
+  const measureCtx = measureCanvas.getContext("2d");
+  function headerTextWidth(text){
+    measureCtx.font = `700 ${fontPx}px sans-serif`;
+    // 見出しは2文字程度で改行される想定なので、最も長い「単語」ではなく1文字ずつの折返し幅を考慮する
+    const lines = text.length > 2 ? [text.slice(0, Math.ceil(text.length/2)), text.slice(Math.ceil(text.length/2))] : [text];
+    return Math.max(...lines.map(l=> measureCtx.measureText(l).width));
+  }
 
   colData.forEach(({col, members})=>{
     const colEl = document.createElement("div");
@@ -2706,6 +2714,7 @@ function renderWbBoard(){
     head.textContent = col.name;
     const bodyEl = document.createElement("div");
     bodyEl.className = "col-body";
+    const headerMinWidth = isPcFit ? Math.ceil(headerTextWidth(col.name)) + 20 : 0;
 
     if(members.length===0){
       colEl.classList.add("is-empty");
@@ -2713,7 +2722,7 @@ function renderWbBoard(){
       e.className = "empty-col";
       e.textContent = "-";
       bodyEl.appendChild(e);
-      if(isPcFit) colEl.style.flex = "0 0 56px";
+      if(isPcFit) colEl.style.flex = `0 0 ${Math.max(56, headerMinWidth)}px`;
     } else {
       members.forEach(emp=>{
         const chip = document.createElement("div");
@@ -2722,15 +2731,18 @@ function renderWbBoard(){
         bodyEl.appendChild(chip);
       });
       if(isPcFit){
-        const contentHeight = Math.max(60, availableHeight - HEAD_HEIGHT - 20);
-        const maxRowsPerSubCol = Math.max(1, Math.floor(contentHeight / ROW_HEIGHT));
+        const maxContentHeight = Math.max(60, availableHeight - HEAD_HEIGHT - 20);
+        const maxRowsPerSubCol = Math.max(1, Math.floor(maxContentHeight / ROW_HEIGHT));
         const subCols = Math.max(1, Math.ceil(members.length / maxRowsPerSubCol));
+        // 列数に対して実際に必要な行数分だけの高さにし、無駄な余白を減らす
+        const rowsNeeded = Math.ceil(members.length / subCols);
+        const contentHeight = Math.min(maxContentHeight, rowsNeeded * ROW_HEIGHT);
         bodyEl.style.display = "block";
         bodyEl.style.columnWidth = `${CHIP_COL_WIDTH}px`;
         bodyEl.style.columnGap = "10px";
         bodyEl.style.columnFill = "auto"; // 上から詰めて表示し、あふれた分だけ次の列へ
         bodyEl.style.height = `${contentHeight}px`;
-        const minWidth = subCols*CHIP_COL_WIDTH + (subCols-1)*10 + 18;
+        const minWidth = Math.max(subCols*CHIP_COL_WIDTH + (subCols-1)*10 + 18, headerMinWidth);
         colEl.style.flex = `1 1 ${minWidth}px`; // 画面に余白があれば、この枠が広がって埋める
       }
     }
