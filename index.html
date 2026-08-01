@@ -355,11 +355,12 @@
     .wb-board{grid-template-columns:repeat(auto-fit,minmax(160px,1fr));}
   }
   .wb-board.wb-board-fit{
-    display:flex; flex-wrap:nowrap; align-items:flex-start; gap:10px;
+    display:flex; flex-wrap:nowrap; align-items:stretch; gap:10px;
     overflow-x:auto; overflow-y:hidden;
   }
   .wb-board.wb-board-fit .wb-board-col{ flex:0 0 auto; display:flex; flex-direction:column; }
   .wb-board.wb-board-fit .col-body{ overflow:hidden; }
+  .wb-board.wb-board-fit .col-head{ white-space:nowrap; overflow:hidden; }
   .wb-board-col{background:var(--surface);border:1.5px solid var(--line);border-radius:10px;overflow:hidden;}
   .wb-board-col .col-head{padding:9px 8px;font-size:var(--wb-font-size);font-weight:700;color:#fff;text-align:center;overflow-wrap:break-word;}
   .wb-board-col .col-body{padding:10px 8px;display:flex;flex-direction:column;gap:6px;min-height:40px;}
@@ -2700,9 +2701,7 @@ function renderWbBoard(){
   const measureCtx = measureCanvas.getContext("2d");
   function headerTextWidth(text){
     measureCtx.font = `700 ${fontPx}px sans-serif`;
-    // 見出しは2文字程度で改行される想定なので、最も長い「単語」ではなく1文字ずつの折返し幅を考慮する
-    const lines = text.length > 2 ? [text.slice(0, Math.ceil(text.length/2)), text.slice(Math.ceil(text.length/2))] : [text];
-    return Math.max(...lines.map(l=> measureCtx.measureText(l).width));
+    return measureCtx.measureText(text).width; // 見出しは折り返さず1行で収める前提の幅
   }
 
   colData.forEach(({col, members})=>{
@@ -2714,7 +2713,7 @@ function renderWbBoard(){
     head.textContent = col.name;
     const bodyEl = document.createElement("div");
     bodyEl.className = "col-body";
-    const headerMinWidth = isPcFit ? Math.ceil(headerTextWidth(col.name)) + 20 : 0;
+    const headerMinWidth = isPcFit ? Math.ceil(headerTextWidth(col.name)) + 32 : 0;
 
     if(members.length===0){
       colEl.classList.add("is-empty");
@@ -2743,7 +2742,7 @@ function renderWbBoard(){
         bodyEl.style.columnFill = "auto"; // 上から詰めて表示し、あふれた分だけ次の列へ
         bodyEl.style.height = `${contentHeight}px`;
         const minWidth = Math.max(subCols*CHIP_COL_WIDTH + (subCols-1)*10 + 18, headerMinWidth);
-        colEl.style.flex = `1 1 ${minWidth}px`; // 画面に余白があれば、この枠が広がって埋める
+        colEl.style.flex = `0 0 ${minWidth}px`; // 必要最小限の幅のみ確保し、他の枠のために広げすぎない
       }
     }
     colEl.appendChild(head); colEl.appendChild(bodyEl);
