@@ -350,10 +350,16 @@
   .wb-note-cell{color:var(--muted);font-size:calc(var(--wb-font-size) * 0.962);}
   .wb-editable{cursor:pointer;}
   .wb-editable:hover{text-decoration:underline;}
-  .wb-board{display:grid;grid-template-columns:repeat(var(--wb-board-cols, 5), minmax(0, 1fr));gap:10px;}
+  .wb-board{display:grid;grid-template-columns:repeat(var(--wb-board-cols, 5), minmax(150px, 1fr));gap:10px;overflow-x:auto;padding-bottom:4px;}
   @media (max-width:900px){
     .wb-board{grid-template-columns:repeat(auto-fit,minmax(160px,1fr));}
   }
+  .wb-board.wb-board-fit{
+    display:flex; flex-wrap:nowrap; align-items:stretch; gap:10px;
+    overflow-x:auto; overflow-y:hidden;
+  }
+  .wb-board.wb-board-fit .wb-board-col{ flex:0 0 auto; display:flex; flex-direction:column; }
+  .wb-board.wb-board-fit .col-body{ overflow:hidden; flex:1 1 auto; }
   .wb-board-col{background:var(--surface);border:1.5px solid var(--line);border-radius:10px;overflow:hidden;}
   .wb-board-col .col-head{padding:9px 8px;font-size:var(--wb-font-size);font-weight:700;color:#fff;text-align:center;overflow-wrap:break-word;}
   .wb-board-col .col-body{padding:10px 8px;display:flex;flex-direction:column;gap:6px;min-height:40px;}
@@ -2576,6 +2582,8 @@ window.addEventListener("resize", ()=>{
     if(wbView && wbView.style.display !== "none"){
       if(wbCurrentView==="preset"){
         renderWbPresetTable();
+      } else if(wbCurrentView==="board"){
+        renderWbBoard();
       } else {
         renderWbList();
       }
@@ -2660,9 +2668,36 @@ function renderWbBoard(){
   const list = getSortedEmployees();
   const columns = wbStatusesAll.slice();
   columns.push({ id: "__unset__", name: "未設定", color: "#9CA3AF" });
-  board.style.setProperty("--wb-board-cols", columns.length);
 
-  columns.forEach(col=>{
+  // スマホ幅は今まで通りの均等グリッド表示。PC・サイネージ幅では画面に収まるよう自動調整する。
+  const isPcFit = (isDisplayMode ? window.innerWidth : board.clientWidth || window.innerWidth) > 900;
+  board.classList.toggle("wb-board-fit", isPcFit);
+
+  const colData = columns.map(col=>{
+    const members = list.filter(emp=>{
+      const effStatus = getEffectiveWbStatus(emp);
+      if(effStatus==="OFFHOURS") return false; // 時間外は表示対象外
+      if(col.id==="__unset__") return !effStatus || !wbStatusInfo(effStatus);
+      return effStatus === col.id;
+    });
+    return { col, members };
+  });
+
+  let availableHeight = 0;
+  if(isPcFit){
+    const rect = board.getBoundingClientRect();
+    availableHeight = Math.max(220, window.innerHeight - rect.top - 16);
+    board.style.height = `${availableHeight}px`;
+  } else {
+    board.style.height = "";
+  }
+
+  const fontPx = wbFontSizePx || 13;
+  const HEAD_HEIGHT = Math.round(fontPx * 1.4) + 20;
+  const ROW_HEIGHT = Math.round(fontPx * 1.9) + 6;
+  const CHIP_COL_WIDTH = Math.round(64 * (fontPx/13)) + 34;
+
+  colData.forEach(({col, members})=>{
     const colEl = document.createElement("div");
     colEl.className = "wb-board-col";
     const head = document.createElement("div");
@@ -2671,17 +2706,14 @@ function renderWbBoard(){
     head.textContent = col.name;
     const bodyEl = document.createElement("div");
     bodyEl.className = "col-body";
-    const members = list.filter(emp=>{
-      const effStatus = getEffectiveWbStatus(emp);
-      if(effStatus==="OFFHOURS") return false; // 時間外は表示対象外
-      if(col.id==="__unset__") return !effStatus || !wbStatusInfo(effStatus);
-      return effStatus === col.id;
-    });
+
     if(members.length===0){
+      colEl.classList.add("is-empty");
       const e = document.createElement("div");
       e.className = "empty-col";
       e.textContent = "-";
       bodyEl.appendChild(e);
+      if(isPcFit) colEl.style.width = "56px";
     } else {
       members.forEach(emp=>{
         const chip = document.createElement("div");
@@ -2689,6 +2721,16 @@ function renderWbBoard(){
         chip.textContent = emp.name || emp.email;
         bodyEl.appendChild(chip);
       });
+      if(isPcFit){
+        const contentHeight = Math.max(60, availableHeight - HEAD_HEIGHT - 20);
+        const maxRowsPerSubCol = Math.max(1, Math.floor(contentHeight / ROW_HEIGHT));
+        const subCols = Math.max(1, Math.ceil(members.length / maxRowsPerSubCol));
+        bodyEl.style.display = "block";
+        bodyEl.style.columnWidth = `${CHIP_COL_WIDTH}px`;
+        bodyEl.style.columnGap = "10px";
+        bodyEl.style.height = `${contentHeight}px`;
+        colEl.style.width = `${subCols*CHIP_COL_WIDTH + (subCols-1)*10 + 18}px`;
+      }
     }
     colEl.appendChild(head); colEl.appendChild(bodyEl);
     board.appendChild(colEl);
