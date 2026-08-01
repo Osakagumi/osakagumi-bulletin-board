@@ -350,11 +350,14 @@
   .wb-note-cell{color:var(--muted);font-size:calc(var(--wb-font-size) * 0.962);}
   .wb-editable{cursor:pointer;}
   .wb-editable:hover{text-decoration:underline;}
-  .wb-board{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;}
+  .wb-board{display:grid;grid-template-columns:repeat(var(--wb-board-cols, 5), minmax(0, 1fr));gap:10px;}
+  @media (max-width:900px){
+    .wb-board{grid-template-columns:repeat(auto-fit,minmax(160px,1fr));}
+  }
   .wb-board-col{background:var(--surface);border:1.5px solid var(--line);border-radius:10px;overflow:hidden;}
-  .wb-board-col .col-head{padding:9px 12px;font-size:var(--wb-font-size);font-weight:700;color:#fff;}
-  .wb-board-col .col-body{padding:10px 12px;display:flex;flex-direction:column;gap:6px;min-height:40px;}
-  .wb-board-col .name-chip{font-size:var(--wb-font-size);color:var(--text);}
+  .wb-board-col .col-head{padding:9px 8px;font-size:var(--wb-font-size);font-weight:700;color:#fff;text-align:center;overflow-wrap:break-word;}
+  .wb-board-col .col-body{padding:10px 8px;display:flex;flex-direction:column;gap:6px;min-height:40px;}
+  .wb-board-col .name-chip{font-size:var(--wb-font-size);color:var(--text);overflow-wrap:break-word;}
   .wb-board-col .empty-col{font-size:calc(var(--wb-font-size) * 0.885);color:var(--muted);}
 
   /* ---------- 安否確認 ---------- */
@@ -530,7 +533,7 @@
         <div class="section-toolbar">
           <div class="seg-toggle" id="wb-view-toggle">
             <button class="seg-btn active" data-wbview="list">一覧</button>
-            <button class="seg-btn" data-wbview="board">ボード</button>
+            <button class="seg-btn" data-wbview="board">行き先別</button>
             <button class="seg-btn" data-wbview="preset" id="wb-preset-tab-btn" style="display:none;">事前設定</button>
           </div>
           <div id="wb-preset-bulk-status-wrap" style="display:none;align-items:center;gap:8px;">
@@ -2657,7 +2660,7 @@ function renderWbBoard(){
   const list = getSortedEmployees();
   const columns = wbStatusesAll.slice();
   columns.push({ id: "__unset__", name: "未設定", color: "#9CA3AF" });
-  columns.push({ id: "OFFHOURS", name: "時間外", color: "#8A8F98" });
+  board.style.setProperty("--wb-board-cols", columns.length);
 
   columns.forEach(col=>{
     const colEl = document.createElement("div");
@@ -2670,8 +2673,8 @@ function renderWbBoard(){
     bodyEl.className = "col-body";
     const members = list.filter(emp=>{
       const effStatus = getEffectiveWbStatus(emp);
-      if(col.id==="OFFHOURS") return effStatus==="OFFHOURS";
-      if(col.id==="__unset__") return effStatus!=="OFFHOURS" && (!effStatus || !wbStatusInfo(effStatus));
+      if(effStatus==="OFFHOURS") return false; // 時間外は表示対象外
+      if(col.id==="__unset__") return !effStatus || !wbStatusInfo(effStatus);
       return effStatus === col.id;
     });
     if(members.length===0){
