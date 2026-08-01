@@ -89,8 +89,9 @@
   header .brand .title small{display:block;font-weight:400;color:var(--muted);font-size:10.5px;font-family:var(--mono);letter-spacing:.03em;}
   header .user-box{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--muted);}
   header .user-box a, header .user-box button{
-    border:1px solid var(--line);background:#fff;padding:6px 10px;border-radius:7px;font-size:12px;color:var(--text);text-decoration:none;
+    border:none;background:var(--brand);padding:6px 10px;border-radius:7px;font-size:12px;color:#fff;text-decoration:none;
   }
+  header .user-box a:hover, header .user-box button:hover{background:var(--brand-dark);}
 
   nav.tabs{display:flex;gap:4px;padding:8px 14px 0;background:var(--surface);border-bottom:1px solid var(--line);overflow-x:auto;align-items:center;}
   nav.tabs button{
@@ -332,7 +333,8 @@
   .notice-item .n-actions-left{display:flex;gap:6px;flex-wrap:wrap;}
   .notice-item .n-actions-left button{border:1px solid var(--danger);color:var(--danger);background:#fff;border-radius:7px;padding:5px 11px;font-size:11.5px;}
   .notice-item .n-actions-left button:hover{background:var(--danger);color:#fff;}
-  .notice-item .n-readby-btn{border:1px solid var(--line);color:var(--muted);background:#fff;border-radius:7px;padding:5px 11px;font-size:11.5px;margin-left:auto;}
+  .notice-item .n-readby-btn{border:none;color:#fff;background:var(--brand);border-radius:7px;padding:5px 11px;font-size:11.5px;margin-left:auto;}
+  .notice-item .n-readby-btn:hover{background:var(--brand-dark);}
   .notice-item .n-readby-btn:hover{border-color:var(--brand);color:var(--brand);}
 
   /* ---------- 行き先 ---------- */
