@@ -2713,7 +2713,7 @@ function renderWbBoard(){
       e.className = "empty-col";
       e.textContent = "-";
       bodyEl.appendChild(e);
-      if(isPcFit) colEl.style.width = "56px";
+      if(isPcFit) colEl.style.flex = "0 0 56px";
     } else {
       members.forEach(emp=>{
         const chip = document.createElement("div");
@@ -2728,8 +2728,10 @@ function renderWbBoard(){
         bodyEl.style.display = "block";
         bodyEl.style.columnWidth = `${CHIP_COL_WIDTH}px`;
         bodyEl.style.columnGap = "10px";
+        bodyEl.style.columnFill = "auto"; // 上から詰めて表示し、あふれた分だけ次の列へ
         bodyEl.style.height = `${contentHeight}px`;
-        colEl.style.width = `${subCols*CHIP_COL_WIDTH + (subCols-1)*10 + 18}px`;
+        const minWidth = subCols*CHIP_COL_WIDTH + (subCols-1)*10 + 18;
+        colEl.style.flex = `1 1 ${minWidth}px`; // 画面に余白があれば、この枠が広がって埋める
       }
     }
     colEl.appendChild(head); colEl.appendChild(bodyEl);
