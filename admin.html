@@ -1626,11 +1626,6 @@ async function deleteCalendarYear(yearStr){
   await deleteDoc(doc(db,"calendar_years", yearStr));
 }
 
-/* ============================================================
-   カレンダー：Excel出力（アップロードされたサンプルと同じ様式）
-============================================================ */
-}
-
 
 function showCalSeedLimitPanel(){
   const panel = document.getElementById("cal-seed-limit-panel");
