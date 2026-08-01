@@ -395,7 +395,7 @@
             <label>サイネージ表示の初期ビュー</label>
             <select id="wb-kiosk-default-view">
               <option value="list">一覧表示</option>
-              <option value="board">ボード表示</option>
+              <option value="board">行き先別表示</option>
             </select>
           </div>
         </div>
@@ -570,13 +570,12 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signOut, inMemoryPersistence, setPersistence } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, setDoc,
-  query, where, onSnapshot, orderBy, limit, documentId, Timestamp
+  query, where, onSnapshot, orderBy, limit, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig, CATEGORIES, EQUIPMENT_STATUSES, SAFETY_STATUSES, EMAILJS_CONFIG, resolveMailRecipients, isMailOverrideActive, MAIL_SEND_TARGET } from "./firebase-config.js";
 import { deleteDriveFile } from "./gdrive-helper.js";
@@ -1604,9 +1603,6 @@ function renderCalendarYearsTable(){
     const tr = document.createElement("tr");
     const createdLabel = y.createdAt ? y.createdAt.slice(0,16).replace("T"," ") : "";
     tr.innerHTML = `<td>${escapeHtml(y.year)}年度</td><td style="color:var(--muted);font-size:12px;">${escapeHtml(createdLabel)}</td><td class="actions"></td>`;
-    const exportBtn = document.createElement("button");
-    exportBtn.className = "btn btn-ghost"; exportBtn.textContent = "Excel出力";
-    exportBtn.addEventListener("click", ()=> exportCalendarYearToExcel(Number(y.year)));
     const btn = document.createElement("button");
     btn.className = "btn btn-danger"; btn.textContent = "削除";
     btn.addEventListener("click", async ()=>{
@@ -1614,7 +1610,6 @@ function renderCalendarYearsTable(){
       await deleteCalendarYear(y.year);
       toast(`${y.year}年度を削除しました。`);
     });
-    tr.querySelector(".actions").appendChild(exportBtn);
     tr.querySelector(".actions").appendChild(btn);
     body.appendChild(tr);
   });
@@ -1634,216 +1629,6 @@ async function deleteCalendarYear(yearStr){
 /* ============================================================
    カレンダー：Excel出力（アップロードされたサンプルと同じ様式）
 ============================================================ */
-function calMonthListForExport(yearStart){
-  const pairs = [];
-  for(let i=0;i<6;i++){
-    const leftMonth = 4+i;
-    const rightMonth = 10+i;
-    if(rightMonth<=12){
-      pairs.push([{y:yearStart,m:leftMonth}, {y:yearStart,m:rightMonth}]);
-    } else {
-      pairs.push([{y:yearStart,m:leftMonth}, {y:yearStart+1,m:rightMonth-12}]);
-    }
-  }
-  return pairs;
-}
-function calBuildWeeksForExport(y,m){
-  const firstDow = new Date(y, m-1, 1).getDay();
-  const daysInMonth = new Date(y, m, 0).getDate();
-  let dayNum = 1 - firstDow;
-  const weeks = [];
-  while(dayNum <= daysInMonth){
-    const week = [];
-    for(let col=0; col<7; col++, dayNum++){
-      week.push((dayNum>=1 && dayNum<=daysInMonth) ? dayNum : null);
-    }
-    weeks.push(week);
-  }
-  return weeks;
-}
-
-const CAL_FONT_NAME = "HG丸ｺﾞｼｯｸM-PRO";
-const CAL_HOLIDAY_FILL = { type:"pattern", pattern:"solid", fgColor:{argb:"FFFFCCFF"} };
-const CAL_HOLIDAY_FONT_COLOR = "FFFF0000";
-const CAL_SUN_COLOR = "FFFF0000";
-const CAL_SAT_COLOR = "FF0070C0";
-const CAL_TEMPLATE_URL = "./calendar_template_master.xlsx";
-const CAL_TEMPLATE_BLOCK_STARTS = [3,17,31,45,59,73];
-
-// 雛形（実物のExcelを6週分の枠に統一したマスターテンプレート）の1ブロック分に
-// 値・色を書き込む。罫線・列幅・行高さなど、値以外の書式は雛形のものをそのまま使う。
-function calFillBlockFromTemplate(ws, startRow, cols, y, m, dataMap, pairIndex, sideIdx){
-  const daysInMonth = new Date(y, m, 0).getDate();
-  let holidayCount = 0;
-  for(let day=1; day<=daysInMonth; day++){
-    const dateStr = `${y}-${cal_p2(m)}-${cal_p2(day)}`;
-    if(dataMap[dateStr] && dataMap[dateStr].isHoliday) holidayCount++;
-  }
-  const workingCount = daysInMonth - holidayCount;
-  // 労働日数・休日数（雛形の数式は年度をまたぐと参照がずれるため、実値で上書きする）
-  ws.getCell(`${cols[0]}${startRow}`).value = workingCount;
-  ws.getCell(`${cols[6]}${startRow}`).value = holidayCount;
-
-  // 月名見出し（4月・1月は「A1」参照の数式に任せるため、ここでは書き換えない）
-  const isSpecial = (pairIndex===0 && sideIdx===0) || (pairIndex===3 && sideIdx===1);
-  if(!isSpecial){
-    const headerCol = sideIdx===0 ? "E" : "M";
-    const headerCell = ws.getCell(`${headerCol}${startRow}`);
-    const zenkaku = "０１２３４５６７８９";
-    const toZ = n => String(n).split("").map(d=>zenkaku[d]).join("");
-    headerCell.value = `${toZ(m)}月`;
-  }
-
-  // 日付・備考の枠（6週分）をいったんクリアしてから、必要な週だけ書き込む
-  const wdRow = startRow + 1;
-  const weeks = calBuildWeeksForExport(y, m);
-  for(let wi=0; wi<6; wi++){
-    const dateRow = wdRow + 1 + wi*2;
-    const noteRow = dateRow + 1;
-    cols.forEach((col, i)=>{
-      const numCell = ws.getCell(`${col}${dateRow}`);
-      const noteCell = ws.getCell(`${col}${noteRow}`);
-      // ExcelJSは、雛形読み込み時に同じ書式のセル同士で内部的にスタイルオブジェクトを共有しているため、
-      // そのまま.fill/.fontを変更すると他の同じ書式のセルまで巻き込まれてしまう。
-      // セルごとに複製してから変更することで、他のセルへの影響を断ち切る。
-      numCell.style = Object.assign({}, numCell.style);
-      noteCell.style = Object.assign({}, noteCell.style);
-      numCell.value = null;
-      noteCell.value = null;
-      numCell.fill = { type:"pattern", pattern:"none" };
-      noteCell.fill = { type:"pattern", pattern:"none" };
-      let baseColor;
-      if(i===0) baseColor = CAL_SUN_COLOR;
-      if(i===6) baseColor = CAL_SAT_COLOR;
-      numCell.font = { name:CAL_FONT_NAME, size:10, color: baseColor?{argb:baseColor}:undefined };
-      noteCell.font = { name:CAL_FONT_NAME, size:6 };
-
-      if(wi < weeks.length){
-        const day = weeks[wi][i];
-        if(day!==null){
-          const dateStr = `${y}-${cal_p2(m)}-${cal_p2(day)}`;
-          const info = dataMap[dateStr] || {};
-          numCell.value = day;
-          let dateColor = baseColor;
-          if(info.isHoliday){
-            numCell.fill = CAL_HOLIDAY_FILL;
-            noteCell.fill = CAL_HOLIDAY_FILL;
-            if(i===6){
-              // 土曜日：休みでも数字は原則青字。文字列がある場合のみ赤字にする
-              dateColor = info.label ? CAL_HOLIDAY_FONT_COLOR : CAL_SAT_COLOR;
-            } else {
-              dateColor = CAL_HOLIDAY_FONT_COLOR;
-            }
-          }
-          numCell.font = { name:CAL_FONT_NAME, size:10, color: dateColor?{argb:dateColor}:undefined };
-          if(info.label){
-            noteCell.value = info.label;
-            let noteColor = i===6 ? CAL_SAT_COLOR : undefined;
-            if(info.isHoliday) noteColor = CAL_HOLIDAY_FONT_COLOR;
-            noteCell.font = { name:CAL_FONT_NAME, size:6, bold: !!info.isHoliday, color: noteColor?{argb:noteColor}:undefined };
-
-            // 休日ではないが文字列が入っている日（地下道清掃など）は、青の太枠で囲む
-            if(!info.isHoliday){
-              const blueBorder = { style:"medium", color:{argb:CAL_SAT_COLOR} };
-              numCell.border = { top:blueBorder, left:blueBorder, right:blueBorder, bottom:{style:"none"} };
-              noteCell.border = { top:{style:"none"}, left:blueBorder, right:blueBorder, bottom:blueBorder };
-            }
-          }
-        }
-      }
-    });
-  }
-  return { workingCount, holidayCount };
-}
-
-async function exportCalendarYearToExcel(yearStart){
-  if(!window.ExcelJS){
-    toast("Excel出力の準備ができていません。少し待ってから再度お試しください。");
-    return;
-  }
-  toast("Excelファイルを作成中です…");
-  try{
-    const templateRes = await fetch(`${CAL_TEMPLATE_URL}?v=${Date.now()}`, { cache: "no-store" });
-    if(!templateRes.ok) throw new Error("テンプレートの取得に失敗しました: " + templateRes.status);
-    const templateBuffer = await templateRes.arrayBuffer();
-
-    const startId = `${yearStart}-04-01`;
-    const endId = `${yearStart+1}-03-31`;
-    const q = query(collection(db,"calendar_days"), where(documentId(), ">=", startId), where(documentId(), "<=", endId));
-    const snap = await getDocs(q);
-    const dataMap = {};
-    snap.docs.forEach(d=>{ dataMap[d.id] = d.data(); });
-
-    const wb = new window.ExcelJS.Workbook();
-    await wb.xlsx.load(templateBuffer);
-    const ws = wb.worksheets[0];
-    ws.name = `令和${yearStart-2018}年度(${yearStart}年度)`;
-
-    // A1に年度の基準日（1月1日）を設定。4月・1月の見出しはA1を参照する数式が計算する。
-    const a1Cell = ws.getCell("A1");
-    a1Cell.value = new Date(Date.UTC(yearStart, 0, 1));
-    a1Cell.numFmt = "yyyy/m/d";
-
-    const pairs = calMonthListForExport(yearStart);
-    let leftWorkingSum = 0, leftHolidaySum = 0, rightWorkingSum = 0, rightHolidaySum = 0;
-    pairs.forEach((pair, pairIndex)=>{
-      const startRow = CAL_TEMPLATE_BLOCK_STARTS[pairIndex];
-      pair.forEach((info, sideIdx)=>{
-        const cols = sideIdx===0 ? ["B","C","D","E","F","G","H"] : ["J","K","L","M","N","O","P"];
-        const { workingCount, holidayCount } = calFillBlockFromTemplate(ws, startRow, cols, info.y, info.m, dataMap, pairIndex, sideIdx);
-        if(sideIdx===0){ leftWorkingSum += workingCount; leftHolidaySum += holidayCount; }
-        else { rightWorkingSum += workingCount; rightHolidaySum += holidayCount; }
-      });
-    });
-
-    // A1参照の数式セル（タイトル・4月見出し・1月見出し・労働日数集計）は、
-    // ExcelJSで読み書きすると再計算されずキャッシュが古いままになることがあるため、
-    // 数式は残しつつ、正しい計算結果をこちらで明示的にセットし直す。
-    const eraYear = y => y - 2018; // 令和年 = 西暦 - 2018（このアプリの対象期間内では常に令和として扱う）
-    const yearlyWorking = leftWorkingSum + rightWorkingSum;
-    const yearlyHoliday = leftHolidaySum + rightHolidaySum;
-
-    ws.getCell("B1").value = {
-      formula: 'TEXT(A1,"[$-ja-JP-x-gannen]ggge年度") & "（" & YEAR(A1) & "年度）"',
-      result: `令和${eraYear(yearStart)}年度（${yearStart}年度）`
-    };
-    ws.getCell("L1").value = {
-      formula: '"（労働日数" & L88 & "日/年：休日数" & P88 & "日/年）"',
-      result: `（労働日数${yearlyWorking}日/年：休日数${yearlyHoliday}日/年）`
-    };
-    ws.getCell("C3").value = {
-      formula: 'TEXT(A1,"[$-ja-JP-x-gannen]ggge年") & "（" & YEAR(A1) & "年）/ ４月"',
-      result: `令和${eraYear(yearStart)}年（${yearStart}年）/ ４月`
-    };
-    ws.getCell("K45").value = {
-      formula: 'TEXT(A1+365,"[$-ja-JP-x-gannen]ggge年") & "（" & YEAR(A1+365) & "年）/ １月"',
-      result: `令和${eraYear(yearStart+1)}年（${yearStart+1}年）/ １月`
-    };
-    ws.getCell("D87").value = { formula: "B3+B17+B31+B45+B59+B73", result: leftWorkingSum };
-    ws.getCell("H87").value = { formula: "H3+H17+H31+H45+H59+H73", result: leftHolidaySum };
-    ws.getCell("L87").value = { formula: "J3+J17+J31+J45+J59+J73", result: rightWorkingSum };
-    ws.getCell("P87").value = { formula: "P3+P17+P31+P45+P59+P73", result: rightHolidaySum };
-    ws.getCell("L88").value = { formula: "D87+L87", result: yearlyWorking };
-    ws.getCell("P88").value = { formula: "H87+P87", result: yearlyHoliday };
-    ws.getCell("N91").value = { formula: "L88", result: yearlyWorking };
-    const monthlyAvg = Math.floor((yearlyWorking/12)*100)/100;
-    ws.getCell("P91").value = { formula: "ROUNDDOWN(N91/O91,2)", result: monthlyAvg };
-
-    const outBuffer = await wb.xlsx.writeBuffer();
-    const blob = new Blob([outBuffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${yearStart}年度_年間カレンダー.xlsx`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-    toast("Excelファイルを出力しました。");
-  }catch(e){
-    console.error("[カレンダーExcel出力エラー]", e);
-    toast("Excel出力に失敗しました。テンプレートファイルがリポジトリに配置されているかご確認ください。");
-  }
 }
 
 
