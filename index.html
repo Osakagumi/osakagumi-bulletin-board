@@ -422,6 +422,7 @@
 
   @media (max-width:720px){
     header .header-clock{ display:none; }
+    #cal-export-btn{ display:none; }
   }
   @media (max-width:520px){
     main{padding:12px;}
@@ -3727,21 +3728,32 @@ async function exportCalendarYearToExcel(yearStart){
     const yearlyWorking = leftWorkingSum + rightWorkingSum;
     const yearlyHoliday = leftHolidaySum + rightHolidaySum;
 
+    // B1・C3・K45はA1の日付を参照する数式にする。
+    // ただし[$-ja-JP-x-gannen]のようなExcel専用の和暦書式コードはGoogleスプレッドシートで
+    // 再計算エラー(#VALUE!)になるため使わず、改元日を埋め込んだ早見表(IFS)形式にする。
+    // 将来また改元があった場合は、下の eraFormula() の一番上に
+    //   "，DATE(新元号開始年,月,日)<=(対象日), \"新元号名\" & (YEAR(対象日)-新元号開始年+1)"
+    // のような1行を追記すれば対応できる（新元号の名称は発表され次第、手動で追記が必要）。
+    const eraFormula = dateExpr =>
+      `IFS(${dateExpr}>=DATE(2019,5,1),"令和"&(YEAR(${dateExpr})-2018),` +
+      `${dateExpr}>=DATE(1989,1,8),"平成"&(YEAR(${dateExpr})-1988),` +
+      `TRUE,"昭和"&(YEAR(${dateExpr})-1925))`;
+
     ws.getCell("B1").value = {
-      formula: 'TEXT(A1,"[$-ja-JP-x-gannen]ggge年度") & "（" & YEAR(A1) & "年度）"',
+      formula: `${eraFormula("A1")} & "年度（" & YEAR(A1) & "年度）"`,
       result: `令和${eraYear(yearStart)}年度（${yearStart}年度）`
+    };
+    ws.getCell("C3").value = {
+      formula: `${eraFormula("A1")} & "年（" & YEAR(A1) & "年）/ ４月"`,
+      result: `令和${eraYear(yearStart)}年（${yearStart}年）/ ４月`
+    };
+    ws.getCell("K45").value = {
+      formula: `${eraFormula("A1+365")} & "年（" & YEAR(A1+365) & "年）/ １月"`,
+      result: `令和${eraYear(yearStart+1)}年（${yearStart+1}年）/ １月`
     };
     ws.getCell("L1").value = {
       formula: '"（労働日数" & L88 & "日/年：休日数" & P88 & "日/年）"',
       result: `（労働日数${yearlyWorking}日/年：休日数${yearlyHoliday}日/年）`
-    };
-    ws.getCell("C3").value = {
-      formula: 'TEXT(A1,"[$-ja-JP-x-gannen]ggge年") & "（" & YEAR(A1) & "年）/ ４月"',
-      result: `令和${eraYear(yearStart)}年（${yearStart}年）/ ４月`
-    };
-    ws.getCell("K45").value = {
-      formula: 'TEXT(A1+365,"[$-ja-JP-x-gannen]ggge年") & "（" & YEAR(A1+365) & "年）/ １月"',
-      result: `令和${eraYear(yearStart+1)}年（${yearStart+1}年）/ １月`
     };
     ws.getCell("D87").value = { formula: "B3+B17+B31+B45+B59+B73", result: leftWorkingSum };
     ws.getCell("H87").value = { formula: "H3+H17+H31+H45+H59+H73", result: leftHolidaySum };
