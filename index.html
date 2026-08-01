@@ -546,11 +546,6 @@
             <button class="seg-btn" data-wbview="board">行き先別</button>
             <button class="seg-btn" data-wbview="preset" id="wb-preset-tab-btn" style="display:none;">事前設定</button>
           </div>
-          <div id="wb-preset-bulk-status-wrap" style="display:none;align-items:center;gap:8px;">
-            <span style="font-size:12.5px;color:var(--muted);white-space:nowrap;">連続設定：</span>
-            <div class="seg-toggle" id="wb-preset-bulk-status-toggle"></div>
-          </div>
-          <button class="btn-primary" id="wb-preset-bulk-done-btn" style="display:none;">完了</button>
           <div class="header-clock" id="header-clock-kiosk" style="display:none;"></div>
           <button class="btn-primary" id="wb-edit-my-btn">自分の行き先を入力</button>
         </div>
@@ -562,13 +557,17 @@
         </div>
         <div id="wb-preset-view" style="display:none;">
           <div class="section-toolbar" style="margin-bottom:10px;">
-            <div style="display:flex;align-items:center;gap:8px;">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
               <span style="font-size:12.5px;color:var(--muted);">対象日：</span>
               <span class="date-picker-label" id="wb-preset-date-picker"></span>
+              <div id="wb-preset-bulk-status-wrap" style="display:none;align-items:center;gap:8px;">
+                <span style="font-size:12.5px;color:var(--muted);white-space:nowrap;">連続設定：</span>
+                <div class="seg-toggle" id="wb-preset-bulk-status-toggle"></div>
+              </div>
+              <button class="btn-primary" id="wb-preset-bulk-done-btn" style="display:none;">完了</button>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
-              <button class="btn-primary" id="wb-preset-save-btn">この日の内容を保存する</button>
-              <button class="btn-primary" id="wb-preset-save-default-btn">この内容を初期状態として保存</button>
+              <button class="btn-primary" id="wb-preset-save-btn">保存</button>
             </div>
           </div>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
@@ -579,8 +578,8 @@
           <div class="wb-list-columns" id="wb-preset-columns"></div>
           <p style="font-size:11.5px;color:var(--muted);margin-top:10px;">
             指定できるのは、カレンダー上で休日になっていない日のみです。事前設定は最大7日分まで保持されます（過去の日付は自動的に削除されます）。<br>
-            「この日の内容を保存する」を押すと、個別に変更していない社員も含めて、今表示されている内容がこの日の事前設定として保存されます。<br>
-            「初期状態として保存」しておくと、事前設定していない日を開いたときの初期値として使われます。<br>
+            「保存」を押すと、個別に変更していない社員も含めて、今表示されている内容がこの日の事前設定として保存されます。<br>
+            「保存済：」の「初期状態」を編集しておくと、事前設定していない日を開いたときの初期値として使われます。<br>
             当日、本人が「自分の行き先を入力」でその場で変更した場合は、その内容が優先して表示されます。
           </p>
         </div>
@@ -2903,15 +2902,12 @@ function renderWbPresetTable(){
 
   const storedDates = wbPresetStoredDates();
   const saveBtn = document.getElementById("wb-preset-save-btn");
-  const saveDefaultBtn = document.getElementById("wb-preset-save-default-btn");
   if(editingDefaults){
     dateLabel.innerHTML = `<b>初期状態</b>を編集しています。ここで設定した内容が、事前設定していない日を開いたときの初期値として使われます。`;
     if(saveBtn) saveBtn.style.display = "none";
-    if(saveDefaultBtn) saveDefaultBtn.style.display = "none";
   } else {
     dateLabel.innerHTML = `<b>${formatDateJP(wbPresetSelectedDate)}</b> の行き先を事前設定します。保存中の日付：${storedDates.length}/7件`;
     if(saveBtn) saveBtn.style.display = "inline-block";
-    if(saveDefaultBtn) saveDefaultBtn.style.display = "inline-block";
   }
   renderWbPresetDatesList();
 
@@ -3192,44 +3188,27 @@ function renderWbPresetDatesList(){
   const wrap = document.getElementById("wb-preset-dates-list");
   if(!wrap) return;
   const storedDates = wbPresetStoredDates();
-  const hasDefaults = Object.keys(wbPresetDefaults||{}).length > 0;
   wrap.innerHTML = "";
 
-  if(hasDefaults){
-    const pill = document.createElement("div");
-    pill.className = "wb-preset-date-pill" + (isEditingWbDefaults() ? " active" : "");
-    const textSpan = document.createElement("span");
-    textSpan.className = "wb-preset-date-text";
-    textSpan.textContent = "初期状態";
-    textSpan.addEventListener("click", ()=>{
-      wbPresetEditingDefaults = true;
-      renderWbPresetTable();
-    });
-    const delBtn = document.createElement("button");
-    delBtn.type = "button";
-    delBtn.className = "wb-preset-date-del";
-    delBtn.textContent = "×";
-    delBtn.addEventListener("click", async (e)=>{
-      e.stopPropagation();
-      if(!confirm("初期状態を削除しますか？")) return;
-      try{
-        await deleteDoc(doc(db,"wb_presets", WB_DEFAULTS_KEY));
-        if(isEditingWbDefaults()){
-          wbPresetEditingDefaults = false;
-          renderWbPresetTable();
-        }
-        toast("初期状態を削除しました。");
-      }catch(e2){
-        toast("削除に失敗しました。");
-      }
-    });
-    pill.appendChild(textSpan);
-    pill.appendChild(delBtn);
-    wrap.appendChild(pill);
-  }
+  // 「初期状態」は常時表示し、削除ボタンは付けない
+  const defaultPill = document.createElement("div");
+  defaultPill.className = "wb-preset-date-pill" + (isEditingWbDefaults() ? " active" : "");
+  const defaultTextSpan = document.createElement("span");
+  defaultTextSpan.className = "wb-preset-date-text";
+  defaultTextSpan.textContent = "初期状態";
+  defaultTextSpan.addEventListener("click", ()=>{
+    wbPresetEditingDefaults = true;
+    renderWbPresetTable();
+  });
+  defaultPill.appendChild(defaultTextSpan);
+  wrap.appendChild(defaultPill);
 
-  if(storedDates.length===0 && !hasDefaults){
-    wrap.innerHTML = `<span style="font-size:11.5px;color:var(--muted);">保存済みの日付はまだありません。</span>`;
+  if(storedDates.length===0){
+    const emptyNote = document.createElement("span");
+    emptyNote.style.fontSize = "11.5px";
+    emptyNote.style.color = "var(--muted)";
+    emptyNote.textContent = "日付ごとの事前設定はまだありません。";
+    wrap.appendChild(emptyNote);
     return;
   }
   storedDates.forEach(dateStr=>{
@@ -3258,26 +3237,6 @@ function renderWbPresetDatesList(){
     wrap.appendChild(pill);
   });
 }
-
-document.getElementById("wb-preset-save-default-btn").addEventListener("click", async ()=>{
-  const dayPresets = wbPresetsByDate[wbPresetSelectedDate] || {};
-  const states = {};
-  Object.keys(dayPresets).forEach(email=>{
-    if(dayPresets[email].status){
-      states[email] = { status: dayPresets[email].status, note: dayPresets[email].note||"" };
-    }
-  });
-  if(Object.keys(states).length===0){
-    toast("この日に設定されている内容がありません。先に状態を設定してください。");
-    return;
-  }
-  try{
-    await setDoc(doc(db,"wb_presets","_defaults"), { states, updatedBy: currentUser.email, updatedAt: new Date().toISOString() });
-    toast("初期状態として保存しました。");
-  }catch(e){
-    toast("保存に失敗しました。");
-  }
-});
 
 
 document.querySelectorAll("#wb-view-toggle .seg-btn").forEach(btn=>{
