@@ -2030,13 +2030,17 @@ function renderNotices(){
 const noticeModal = document.getElementById("notice-modal");
 function buildReadByModalHtml(n, empList){
   const readByAt = n.readByAt || {};
-  const readEmails = Object.keys(readByAt);
+  // メールアドレス形式でないキー（テスト時の誤登録など）は既読者一覧から除外する
+  const readEmails = Object.keys(readByAt).filter(k => k.includes("@"));
   const readRows = readEmails.map(email=>{
     const emp = empList.find(e=>(e.email||"").toLowerCase()===email.toLowerCase());
     const name = emp?.name || email;
     const dt = readByAt[email];
-    const dtLabel = dt ? new Date(dt).toLocaleString("ja-JP",{year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}) : "";
-    return { name, email, dtLabel, dt: dt||"" };
+    const parsedDt = dt ? new Date(dt) : null;
+    const dtLabel = (parsedDt && !isNaN(parsedDt.getTime()))
+      ? parsedDt.toLocaleString("ja-JP",{year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"})
+      : "";
+    return { name, email, dtLabel, dt: (parsedDt && !isNaN(parsedDt.getTime())) ? dt : "" };
   }).sort((a,b)=> a.dt.localeCompare(b.dt));
 
   const activeEmployees = empList.filter(e=>!e.hidden);
