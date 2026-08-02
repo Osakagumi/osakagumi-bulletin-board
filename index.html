@@ -900,6 +900,15 @@ const todayStr = () => {
   const d = new Date();
   return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
 };
+// ISO文字列(UTC基準)をブラウザのローカル日付(JST)の "YYYY-MM-DD" に変換する。
+// statusUpdatedAt等はnew Date().toISOString()で保存されておりUTC基準のため、
+// そのまま文字列の先頭10文字を比較すると、日本時間の午前0時〜8時台に
+// 「今日のはずなのに前日と判定される」ズレが発生する。必ずこちらで比較すること。
+function toLocalDateStr(isoStr){
+  const d = new Date(isoStr);
+  if(isNaN(d.getTime())) return "";
+  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+}
 
 /* ---------- ヘッダー時計（通常画面は中央、サイネージ表示はツールバー） ---------- */
 function updateHeaderClock(){
@@ -2504,7 +2513,7 @@ function getEffectiveWbStatus(emp){
     if(restStatus) return restStatus.id;
   }
   // 本人が今日その場で変更していれば最優先
-  const updatedToday = emp.statusUpdatedAt && String(emp.statusUpdatedAt).slice(0,10) === todayStr();
+  const updatedToday = emp.statusUpdatedAt && toLocalDateStr(emp.statusUpdatedAt) === todayStr();
   if(updatedToday && emp.status){
     return emp.status;
   }
@@ -2553,7 +2562,7 @@ function getWbNoteLines(emp){
 }
 
 function getBaseWbNote(emp){
-  const updatedToday = emp.statusUpdatedAt && String(emp.statusUpdatedAt).slice(0,10) === todayStr();
+  const updatedToday = emp.statusUpdatedAt && toLocalDateStr(emp.statusUpdatedAt) === todayStr();
   if(updatedToday){
     return emp.note || "";
   }
