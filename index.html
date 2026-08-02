@@ -349,7 +349,13 @@
   .wb-table tr.dept-row td{background:#FAFBFC;font-size:calc(var(--wb-font-size) * 0.846);font-weight:700;color:var(--brand-dark);letter-spacing:.03em;padding:6px 10px;}
   .wb-table tr:last-child td{border-bottom:none;}
   .wb-status-badge{display:inline-block;padding:4px 10px;border-radius:14px;font-size:calc(var(--wb-font-size) * 0.923);font-weight:700;color:#fff;white-space:nowrap;}
-  .wb-note-cell{color:var(--muted);font-size:calc(var(--wb-font-size) * 0.962);}
+  .wb-note-cell{
+    color:var(--muted);font-size:calc(var(--wb-font-size) * 0.962);line-height:1.35;
+  }
+  .wb-note-cell .wb-note-tl-line{color:var(--brand-dark);font-weight:700;}
+  .wb-note-cell .wb-note-text-line{
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
   .wb-editable{cursor:pointer;}
   .wb-editable:hover{text-decoration:underline;}
   .wb-board{display:grid;grid-template-columns:repeat(var(--wb-board-cols, 5), minmax(150px, 1fr));gap:10px;overflow-x:auto;padding-bottom:4px;}
@@ -1079,13 +1085,17 @@ document.querySelectorAll(".tab-btn").forEach(btn=>{
 function applySavedTabOrder(){
   let saved;
   try{ saved = JSON.parse(localStorage.getItem(TAB_ORDER_KEY) || "null"); }catch(e){ saved = null; }
-  if(!saved || !Array.isArray(saved)) return;
   const nav = document.getElementById("main-tabs");
   const reorderBtn = document.getElementById("tab-reorder-toggle");
-  saved.forEach(viewName=>{
-    const btn = nav.querySelector(`.tab-btn[data-view="${viewName}"]`);
-    if(btn) nav.insertBefore(btn, reorderBtn);
-  });
+  if(saved && Array.isArray(saved)){
+    saved.forEach(viewName=>{
+      const btn = nav.querySelector(`.tab-btn[data-view="${viewName}"]`);
+      if(btn) nav.insertBefore(btn, reorderBtn);
+    });
+  }
+  // 並び替え結果に関わらず、一番左の「表示されている」タブを初期表示にする
+  const firstBtn = Array.from(nav.querySelectorAll(".tab-btn")).find(b => b.style.display !== "none");
+  if(firstBtn) switchToTab(firstBtn.dataset.view);
 }
 function currentTabOrder(){
   return Array.from(document.querySelectorAll("#main-tabs .tab-btn")).map(b=>b.dataset.view);
@@ -2512,20 +2522,34 @@ function getEffectiveWbStatus(emp){
   return ""; // 未設定
 }
 
-function getWbNoteDisplay(emp){
+function renderWbNoteCell(tdNote, tlText, baseNote){
+  tdNote.innerHTML = "";
+  if(baseNote){
+    const noteLine = document.createElement("div");
+    noteLine.className = "wb-note-text-line";
+    noteLine.textContent = baseNote;
+    tdNote.appendChild(noteLine);
+  }
+  if(tlText){
+    const tlLine = document.createElement("div");
+    tlLine.className = "wb-note-tl-line";
+    tlLine.textContent = tlText;
+    tdNote.appendChild(tlLine);
+  }
+}
+function getWbNoteLines(emp){
   if(!isNowInWorkWindow()){
-    return "";
+    return { tlText: "", baseNote: "" };
   }
   const baseNote = getBaseWbNote(emp);
   const tl = getEffectiveTimeLeave(emp);
+  let tlText = "";
   if(tl){
-    let tlText;
     if(tl.type==="am") tlText = "AM休";
     else if(tl.type==="pm") tlText = "PM休";
     else tlText = `時間休 ${tl.start}〜${tl.end}`;
-    return baseNote ? `${tlText} / ${baseNote}` : tlText;
   }
-  return baseNote;
+  return { tlText, baseNote };
 }
 
 function getBaseWbNote(emp){
@@ -2632,7 +2656,8 @@ function renderWbList(){
     tdStatus.appendChild(badge);
     const tdNote = document.createElement("td");
     tdNote.className = "wb-note-cell";
-    tdNote.textContent = getWbNoteDisplay(emp);
+    const { tlText, baseNote } = getWbNoteLines(emp);
+    renderWbNoteCell(tdNote, tlText, baseNote);
     tr.appendChild(tdDept); tr.appendChild(tdName); tr.appendChild(tdStatus); tr.appendChild(tdNote);
     return tr;
   }
@@ -2883,16 +2908,15 @@ async function applyWbPresetBulkStatus(email){
   }
 }
 
-function presetNoteDisplay(preset){
-  if(!preset) return "";
+function presetNoteLines(preset){
+  if(!preset) return { tlText: "", baseNote: "" };
+  let tlText = "";
   if(preset.timeLeaveType){
-    let tlText;
     if(preset.timeLeaveType==="am") tlText = "AM休";
     else if(preset.timeLeaveType==="pm") tlText = "PM休";
     else tlText = `時間休 ${preset.timeLeaveStart}〜${preset.timeLeaveEnd}`;
-    return preset.note ? `${tlText} / ${preset.note}` : tlText;
   }
-  return preset.note || "";
+  return { tlText, baseNote: preset.note || "" };
 }
 
 function renderWbPresetTable(){
@@ -2975,7 +2999,12 @@ function renderWbPresetTable(){
       tdStatus.appendChild(badge);
       const tdNote = document.createElement("td");
       tdNote.className = "wb-note-cell";
-      tdNote.textContent = editingDefaults ? (preset ? (preset.note||"") : "") : presetNoteDisplay(effective);
+      if(editingDefaults){
+        renderWbNoteCell(tdNote, "", preset ? (preset.note||"") : "");
+      } else {
+        const { tlText, baseNote } = presetNoteLines(effective);
+        renderWbNoteCell(tdNote, tlText, baseNote);
+      }
       tr.appendChild(tdDept); tr.appendChild(tdName); tr.appendChild(tdStatus); tr.appendChild(tdNote);
       tbody.appendChild(tr);
     });
