@@ -319,23 +319,31 @@
   .seg-btn.active{background:var(--brand);color:#fff;}
 
   /* ---------- お知らせ ---------- */
-  .notice-list{display:flex;flex-direction:column;gap:10px;}
-  .notice-item{background:var(--surface);border:1.5px solid var(--line);border-radius:10px;padding:14px 16px;}
-  .notice-item .n-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:6px;flex-wrap:wrap;}
-  .notice-item .n-title{font-size:14.5px;font-weight:700;}
-  .notice-item .n-meta{font-size:11.5px;color:var(--muted);font-family:var(--mono);white-space:nowrap;}
-  .notice-item .n-author-link{color:var(--muted);text-decoration:underline;}
-  .notice-item .n-author-link:hover{color:var(--brand);}
-  .notice-item .n-body{font-size:13.5px;line-height:1.7;white-space:pre-wrap;color:var(--text);}
-  .notice-item .n-attachment{margin-top:8px;}
-  .notice-item .n-attachment a{font-size:13px;color:var(--brand);text-decoration:underline;}
-  .notice-item .n-actions{margin-top:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;}
-  .notice-item .n-actions-left{display:flex;gap:6px;flex-wrap:wrap;}
-  .notice-item .n-actions-left button{border:1px solid var(--danger);color:var(--danger);background:#fff;border-radius:7px;padding:5px 11px;font-size:11.5px;}
-  .notice-item .n-actions-left button:hover{background:var(--danger);color:#fff;}
-  .notice-item .n-readby-btn{border:none;color:#fff;background:var(--brand);border-radius:7px;padding:5px 11px;font-size:11.5px;margin-left:auto;}
-  .notice-item .n-readby-btn:hover{background:var(--brand-dark);}
-  .notice-item .n-readby-btn:hover{border-color:var(--brand);color:var(--brand);}
+  .notice-table{width:100%;border-collapse:collapse;background:var(--surface);border:1.5px solid var(--line);border-radius:10px;overflow:hidden;}
+  .notice-table th{text-align:left;font-size:12px;color:var(--muted);padding:10px 14px;border-bottom:1.5px solid var(--line);background:#F7F9FB;}
+  .notice-table td{padding:11px 14px;border-bottom:1px solid var(--line);font-size:13.5px;vertical-align:middle;}
+  .notice-table tr:last-child td{border-bottom:none;}
+  .notice-table tr.notice-row-unread .n-title-cell{font-weight:700;}
+  .notice-table .n-date-cell{font-size:12px;color:var(--muted);font-family:var(--mono);white-space:nowrap;}
+  .notice-table .n-author-cell{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px;}
+  .notice-table .n-author-link{color:var(--muted);text-decoration:underline;}
+  .notice-table .n-author-link:hover{color:var(--brand);}
+  .notice-table .n-detail-btn{border:none;color:#fff;background:var(--brand);border-radius:7px;padding:6px 13px;font-size:12px;white-space:nowrap;}
+  .notice-table .n-detail-btn:hover{background:var(--brand-dark);}
+  .empty-state{padding:24px;text-align:center;color:var(--muted);font-size:13.5px;}
+
+  #notice-detail-modal .modal{width:520px;max-width:92vw;}
+  #notice-detail-modal .n-detail-title{font-size:16px;font-weight:700;margin-bottom:5px;}
+  #notice-detail-modal .n-detail-meta{font-size:12px;color:var(--muted);font-family:var(--mono);margin-bottom:14px;}
+  #notice-detail-modal .n-detail-body{font-size:13.5px;line-height:1.7;white-space:pre-wrap;color:var(--text);margin-bottom:10px;}
+  #notice-detail-modal .n-detail-attachment{margin-bottom:14px;}
+  #notice-detail-modal .n-detail-attachment a{font-size:13px;color:var(--brand);text-decoration:underline;}
+  #notice-detail-modal .n-detail-actions{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-top:6px;}
+  #notice-detail-modal .n-detail-actions-left{display:flex;gap:6px;flex-wrap:wrap;}
+  #notice-detail-modal .n-detail-actions-left button{border:1px solid var(--danger);color:var(--danger);background:#fff;border-radius:7px;padding:6px 13px;font-size:12px;}
+  #notice-detail-modal .n-detail-actions-left button:hover{background:var(--danger);color:#fff;}
+  #notice-detail-modal .n-detail-readby-btn{border:none;color:#fff;background:var(--brand);border-radius:7px;padding:6px 13px;font-size:12px;}
+  #notice-detail-modal .n-detail-readby-btn:hover{background:var(--brand-dark);}
 
   /* ---------- 行き先 ---------- */
   .wb-list-columns{display:grid;grid-template-columns:1fr;gap:14px;align-items:start;}
@@ -541,7 +549,10 @@
         <div class="section-toolbar">
           <button class="btn-primary" id="notice-new-btn" style="display:none;">＋ 新規投稿</button>
         </div>
-        <div class="notice-list" id="notice-list"></div>
+        <table class="notice-table">
+          <thead><tr><th style="width:110px;">投稿日</th><th style="width:140px;">投稿者</th><th>タイトル</th><th style="width:70px;"></th></tr></thead>
+          <tbody id="notice-list"></tbody>
+        </table>
       </section>
 
       <!-- ---- 行き先 ---- -->
@@ -678,6 +689,27 @@
       <div class="modal-err" id="notice-attach-error"></div>
       <div class="row-btns">
         <button class="btn-ghost" id="notice-attach-cancel" style="border:1px solid var(--line);">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ お知らせ詳細 ============ -->
+  <div class="modal-overlay" id="notice-detail-modal">
+    <div class="modal">
+      <div class="n-detail-title" id="notice-detail-title-text"></div>
+      <div class="n-detail-meta" id="notice-detail-meta"></div>
+      <div class="n-detail-body" id="notice-detail-body"></div>
+      <div class="n-detail-attachment" id="notice-detail-attachment"></div>
+      <div class="n-detail-actions">
+        <div class="n-detail-actions-left" id="notice-detail-actions-left">
+          <button id="notice-detail-read-btn">既読にする</button>
+          <button id="notice-detail-edit-btn" style="display:none;">編集</button>
+          <button id="notice-detail-delete-btn" style="display:none;">削除</button>
+        </div>
+        <button class="n-detail-readby-btn" id="notice-detail-readby-btn">既読を確認</button>
+      </div>
+      <div class="row-btns">
+        <button class="btn-ghost" id="notice-detail-close" style="border:1px solid var(--line);">閉じる</button>
       </div>
     </div>
   </div>
@@ -1986,65 +2018,88 @@ function renderNotices(){
   el.innerHTML = "";
   const visibleNotices = noticesAll.filter(n => !myReadNoticeIds.includes(n.id));
   if(visibleNotices.length===0){
-    el.innerHTML = `<div class="empty-state">${noticesAll.length===0 ? "お知らせはまだありません。" : "未読のお知らせはありません。"}</div>`;
+    el.innerHTML = `<tr><td colspan="4" class="empty-state">${noticesAll.length===0 ? "お知らせはまだありません。" : "未読のお知らせはありません。"}</td></tr>`;
     return;
   }
   visibleNotices.forEach(n=>{
-    const item = document.createElement("div");
-    item.className = "notice-item";
+    const tr = document.createElement("tr");
+    tr.className = "notice-row-unread";
     const authorNameHtml = n.authorEmail
       ? `<a href="mailto:${escapeHtml(n.authorEmail)}" class="n-author-link">${escapeHtml(n.authorName||n.authorEmail)}</a>`
       : escapeHtml(n.authorName||"");
-    item.innerHTML = `
-      <div class="n-head">
-        <div class="n-title">${escapeHtml(n.title)}</div>
-        <div class="n-meta">${authorNameHtml} ・ ${tsToStr(n.createdAt)}</div>
-      </div>
-      <div class="n-body">${escapeHtml(n.body||"")}</div>
-      ${n.attachmentUrl ? `<div class="n-attachment"><a href="${escapeHtml(n.attachmentUrl)}" target="_blank" rel="noopener noreferrer">📎 添付ファイル</a></div>` : ""}
+    tr.innerHTML = `
+      <td class="n-date-cell">${escapeHtml(tsToStr(n.createdAt))}</td>
+      <td class="n-author-cell">${authorNameHtml}</td>
+      <td class="n-title-cell">${escapeHtml(n.title)}</td>
+      <td></td>
     `;
-    const actions = document.createElement("div");
-    actions.className = "n-actions";
-    const leftGroup = document.createElement("div");
-    leftGroup.className = "n-actions-left";
-    const readBtn = document.createElement("button");
-    readBtn.textContent = "既読にする";
-    readBtn.addEventListener("click", async ()=>{
-      try{
-        await setDoc(doc(db,"notice_reads", currentUser.email), { readIds: arrayUnion(n.id) }, { merge:true });
-        await updateDoc(doc(db,"announcements", n.id), { [`readByAt.${currentUser.email}`]: new Date().toISOString() });
-      }catch(e){
-        toast("既読にできませんでした。");
-      }
-    });
-    leftGroup.appendChild(readBtn);
-    if(isAdmin || n.authorEmail===currentUser.email){
-      const editBtn = document.createElement("button");
-      editBtn.textContent = "編集";
-      editBtn.addEventListener("click", ()=> openNoticeEditModal(n));
-      leftGroup.appendChild(editBtn);
-      const delBtn = document.createElement("button");
-      delBtn.textContent = "削除";
-      delBtn.addEventListener("click", async ()=>{
-        if(!confirm("このお知らせを削除しますか？")) return;
-        await deleteDoc(doc(db,"announcements", n.id));
-        if(n.attachmentFileId){
-          try{ await deleteDriveFile(n.attachmentFileId); }catch(e){ /* 削除に失敗しても致命的ではない */ }
-        }
-        toast("お知らせを削除しました。");
-      });
-      leftGroup.appendChild(delBtn);
-    }
-    actions.appendChild(leftGroup);
-    const readByBtn = document.createElement("button");
-    readByBtn.textContent = "既読を確認";
-    readByBtn.className = "n-readby-btn";
-    readByBtn.addEventListener("click", ()=> openNoticeReadByModal(n));
-    actions.appendChild(readByBtn);
-    item.appendChild(actions);
-    el.appendChild(item);
+    const detailBtn = document.createElement("button");
+    detailBtn.className = "n-detail-btn";
+    detailBtn.textContent = "詳細";
+    detailBtn.addEventListener("click", ()=> openNoticeDetailModal(n));
+    tr.lastElementChild.appendChild(detailBtn);
+    el.appendChild(tr);
   });
 }
+
+let noticeDetailCurrent = null;
+function renderNoticeDetailView(n){
+  document.getElementById("notice-detail-title-text").textContent = n.title || "";
+  const authorHtml = n.authorEmail
+    ? `<a href="mailto:${escapeHtml(n.authorEmail)}" class="n-author-link">${escapeHtml(n.authorName||n.authorEmail)}</a>`
+    : escapeHtml(n.authorName||"");
+  document.getElementById("notice-detail-meta").innerHTML = `${authorHtml} ・ ${escapeHtml(tsToStr(n.createdAt))}`;
+  document.getElementById("notice-detail-body").textContent = n.body || "";
+  const attEl = document.getElementById("notice-detail-attachment");
+  attEl.innerHTML = n.attachmentUrl
+    ? `<a href="${escapeHtml(n.attachmentUrl)}" target="_blank" rel="noopener noreferrer">📎 添付ファイル</a>`
+    : "";
+  const canManage = isAdmin || n.authorEmail===currentUser.email;
+  document.getElementById("notice-detail-edit-btn").style.display = canManage ? "inline-block" : "none";
+  document.getElementById("notice-detail-delete-btn").style.display = canManage ? "inline-block" : "none";
+}
+function openNoticeDetailModal(n){
+  noticeDetailCurrent = n;
+  renderNoticeDetailView(n);
+  document.getElementById("notice-detail-modal").classList.add("show");
+}
+document.getElementById("notice-detail-close").addEventListener("click", ()=>{
+  document.getElementById("notice-detail-modal").classList.remove("show");
+});
+document.getElementById("notice-detail-read-btn").addEventListener("click", async ()=>{
+  if(!noticeDetailCurrent) return;
+  const n = noticeDetailCurrent;
+  try{
+    await setDoc(doc(db,"notice_reads", currentUser.email), { readIds: arrayUnion(n.id) }, { merge:true });
+    await updateDoc(doc(db,"announcements", n.id), { [`readByAt.${currentUser.email}`]: new Date().toISOString() });
+    document.getElementById("notice-detail-modal").classList.remove("show");
+  }catch(e){
+    toast("既読にできませんでした。");
+  }
+});
+document.getElementById("notice-detail-edit-btn").addEventListener("click", ()=>{
+  if(!noticeDetailCurrent) return;
+  document.getElementById("notice-detail-modal").classList.remove("show");
+  openNoticeEditModal(noticeDetailCurrent);
+});
+document.getElementById("notice-detail-delete-btn").addEventListener("click", async ()=>{
+  if(!noticeDetailCurrent) return;
+  const n = noticeDetailCurrent;
+  if(!confirm("このお知らせを削除しますか？")) return;
+  await deleteDoc(doc(db,"announcements", n.id));
+  if(n.attachmentFileId){
+    try{ await deleteDriveFile(n.attachmentFileId); }catch(e){ /* 削除に失敗しても致命的ではない */ }
+  }
+  toast("お知らせを削除しました。");
+  document.getElementById("notice-detail-modal").classList.remove("show");
+});
+let reopenNoticeDetailAfterReadBy = false;
+document.getElementById("notice-detail-readby-btn").addEventListener("click", ()=>{
+  if(!noticeDetailCurrent) return;
+  document.getElementById("notice-detail-modal").classList.remove("show");
+  reopenNoticeDetailAfterReadBy = true;
+  openNoticeReadByModal(noticeDetailCurrent);
+});
 
 const noticeModal = document.getElementById("notice-modal");
 function buildReadByModalHtml(n, empList){
@@ -2094,6 +2149,11 @@ function openNoticeReadByModal(n){
 }
 document.getElementById("notice-readby-close").addEventListener("click", ()=>{
   document.getElementById("notice-readby-modal").classList.remove("show");
+  if(reopenNoticeDetailAfterReadBy && noticeDetailCurrent){
+    renderNoticeDetailView(noticeDetailCurrent);
+    document.getElementById("notice-detail-modal").classList.add("show");
+  }
+  reopenNoticeDetailAfterReadBy = false;
 });
 
 document.getElementById("notice-new-btn").addEventListener("click", ()=>{
