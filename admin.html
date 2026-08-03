@@ -30,7 +30,7 @@
   header a.back{font-size:12px;border:none;padding:6px 10px;border-radius:7px;text-decoration:none;color:#fff;background:var(--brand);}
   header a.back:hover{background:var(--brand-dark);}
 
-  nav.tabs{display:flex;gap:4px;padding:8px 14px 0;background:var(--surface);border-bottom:1px solid var(--line);overflow-x:auto;}
+  nav.tabs{display:flex;gap:4px;padding:8px 14px 0;background:var(--surface);border-bottom:1px solid var(--line);overflow-x:auto;position:sticky;z-index:19;}
   nav.tabs button{background:none;border:none;padding:10px 14px;font-size:13.5px;color:var(--muted);border-bottom:2.5px solid transparent;font-weight:600;white-space:nowrap;}
   nav.tabs button.active{color:var(--brand);border-color:var(--brand);}
   .tab-badge{
@@ -637,6 +637,14 @@ function toast(msg){
 function escapeHtml(s){
   return String(s??"").replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+// タブ行(nav.tabs)をヘッダーの直下に固定表示するため、ヘッダーの実際の高さを都度反映する
+function updateStickyNavOffset(){
+  const header = document.querySelector("header");
+  const nav = document.getElementById("main-tabs");
+  if(header && nav) nav.style.top = `${header.offsetHeight}px`;
+}
+updateStickyNavOffset();
+window.addEventListener("resize", updateStickyNavOffset);
 let categoriesAll = [];
 function catInfo(id){ return categoriesAll.find(c=>c.id===id) || {label:id, color:"#888"}; }
 async function seedCategoriesIfEmpty(){
