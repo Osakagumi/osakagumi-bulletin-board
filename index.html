@@ -353,16 +353,16 @@
     .notice-table thead{ display:none; }
     .notice-table, .notice-table tbody{ display:block; width:100%; }
     .notice-table tr{
-      display:flex; flex-direction:column; width:100%; box-sizing:border-box;
+      display:flex; flex-wrap:wrap; align-items:center; width:100%; box-sizing:border-box;
       padding:12px 14px; border-bottom:1px solid var(--line);
     }
     .notice-table tr:last-child{ border-bottom:none; }
     .notice-table td{ display:block; padding:2px 0; border-bottom:none; }
-    .notice-table .n-title-cell{ order:1; font-size:15px; font-weight:700; white-space:normal; }
-    .notice-table .n-date-cell{ order:2; margin-top:4px; }
-    .notice-table .n-author-cell{ order:3; max-width:none; white-space:normal; overflow:visible; text-overflow:clip; }
-    .notice-table td:last-child{ order:4; margin-top:8px; }
-    .notice-table td:last-child .n-detail-btn{ width:100%; padding:10px; font-size:13.5px; }
+    .notice-table .n-title-cell{ order:1; width:100%; font-size:15px; font-weight:700; white-space:normal; margin-bottom:6px; }
+    .notice-table .n-date-cell{ order:2; }
+    .notice-table .n-author-cell{ order:3; margin-left:8px; max-width:none; white-space:normal; overflow:visible; text-overflow:clip; }
+    .notice-table td:last-child{ order:4; margin-left:auto; }
+    .notice-table td:last-child .n-detail-btn{ padding:7px 16px; font-size:13px; }
   }
   .empty-state{padding:24px;text-align:center;color:var(--muted);font-size:13.5px;}
 
@@ -434,7 +434,7 @@
     position:fixed;inset:0;background:rgba(15,25,40,.45);display:none;align-items:center;justify-content:center;padding:20px;z-index:50;
   }
   .modal-overlay.show{display:flex;}
-  .modal{background:#fff;border-radius:12px;padding:22px;width:100%;max-width:380px;}
+  .modal{background:#fff;border-radius:12px;padding:22px;width:100%;max-width:380px;max-height:calc(100vh - 40px);overflow-y:auto;}
   .modal h3{margin:0 0 4px;font-size:16px;}
   .modal .sub{font-size:12px;color:var(--muted);font-family:var(--mono);margin-bottom:16px;}
   .modal .field{margin-bottom:14px;}
