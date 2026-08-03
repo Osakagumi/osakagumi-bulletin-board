@@ -324,6 +324,7 @@
   }
   .res-item.past{opacity:.55;}
   .res-item .meta{font-size:13px;}
+  .res-actions{display:flex;gap:6px;flex-shrink:0;}
   .res-item .meta b{display:block;font-size:13.5px;margin-bottom:2px;}
   .res-item .meta .time{font-family:var(--mono);color:var(--muted);font-size:12px;}
   .res-item button{border:1px solid var(--danger);color:var(--danger);background:#fff;border-radius:7px;padding:6px 12px;font-size:12px;}
@@ -521,6 +522,9 @@
     <main>
       <!-- ---- 予約（会議室・車輌／予約する＋マイ予約） ---- -->
       <section id="view-reserve" style="display:none;">
+        <div class="section-divider" style="margin-top:0;">マイ予約</div>
+        <div class="res-list" id="my-res-list"></div>
+
         <div class="cat-row" id="cat-row"></div>
         <div class="eq-grid" id="eq-grid"></div>
 
@@ -548,9 +552,6 @@
             <div id="tl-panels"></div>
           </div>
         </div>
-
-        <div class="section-divider">マイ予約</div>
-        <div class="res-list" id="my-res-list"></div>
       </section>
 
       <!-- ---- 貸出（測量機器・ドローン） ---- -->
@@ -879,31 +880,6 @@
       <div class="row-btns">
         <button class="btn-ghost" id="modal-cancel" style="border:1px solid var(--line);">キャンセル</button>
         <button class="btn-primary" id="modal-confirm">予約を確定する</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ============ 予約編集 ============ -->
-  <div class="modal-overlay" id="res-edit-modal">
-    <div class="modal">
-      <h3>予約を編集</h3>
-      <div class="sub" id="res-edit-summary"></div>
-      <div class="field">
-        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">開始時刻</label>
-        <input type="time" id="res-edit-start">
-      </div>
-      <div class="field">
-        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">終了時刻</label>
-        <input type="time" id="res-edit-end">
-      </div>
-      <div class="field">
-        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">利用目的・行き先など</label>
-        <textarea id="res-edit-purpose" placeholder="例）〇〇現場 測量／〇〇工事 打合せ／〇〇市役所"></textarea>
-      </div>
-      <div class="modal-err" id="res-edit-error"></div>
-      <div class="row-btns">
-        <button class="btn-ghost" id="res-edit-cancel" style="border:1px solid var(--line);">キャンセル</button>
-        <button class="btn-primary" id="res-edit-save">保存する</button>
       </div>
     </div>
   </div>
@@ -1276,6 +1252,8 @@ function renderCategoryRow(){
     pill.addEventListener("click", ()=>{
       selectedCategory = cat.id;
       selectedEquipment = null;
+      editingReservationId = null;
+      editingReservationDate = null;
       document.getElementById("timeline-panel").classList.remove("show");
       renderCategoryRow();
       renderEquipmentGrid();
@@ -1330,6 +1308,8 @@ function renderEquipmentGrid(){
     card.addEventListener("click", ()=>{
       selectedEquipment = eq;
       tlPendingByDate = {};
+      editingReservationId = null;
+      editingReservationDate = null;
       renderEquipmentGrid();
       showTimelinePanel();
     });
@@ -1767,6 +1747,8 @@ document.getElementById("tl-month-input").addEventListener("change", (e)=>{
   if(!e.target.value) return;
   selectedMonth = e.target.value;
   tlPendingByDate = {};
+  editingReservationId = null;
+  editingReservationDate = null;
   updateMonthLabel();
   loadReservationsForMonth();
 });
@@ -1777,6 +1759,8 @@ function shiftMonth(delta){
   const d = new Date(y, m-1+delta, 1);
   selectedMonth = `${d.getFullYear()}-${pad2(d.getMonth()+1)}`;
   tlPendingByDate = {};
+  editingReservationId = null;
+  editingReservationDate = null;
   updateMonthLabel();
   loadReservationsForMonth();
 }
@@ -1894,6 +1878,7 @@ function buildDaySlots(wrap, dateStr, dayReservations){
     const isPast = isPastDate || (isToday && s.start < nowMins);
 
     const booking = dayReservations.find(r=>{
+      if(r.id === editingReservationId) return false; // 編集中の予約は選択し直せるよう除外
       const startM = timeToMinutes(r.startTime), endM = timeToMinutes(r.endTime);
       return s.start >= startM && s.start < endM;
     });
@@ -1925,6 +1910,7 @@ function buildDaySlots(wrap, dateStr, dayReservations){
 function rangeHasConflictOnDate(dateStr, lo, hi){
   return monthReservations.some(r=>{
     if(r.date !== dateStr) return false;
+    if(r.id === editingReservationId) return false;
     const s = timeToMinutes(r.startTime), e = timeToMinutes(r.endTime);
     return Math.max(lo,s) < Math.min(hi,e);
   });
@@ -1984,6 +1970,7 @@ function updateDaySelectionBar(dateStr, selBarEl){
   clearBtn.textContent = "クリア";
   clearBtn.addEventListener("click", ()=>{
     delete tlPendingByDate[dateStr];
+    if(editingReservationId && dateStr===editingReservationDate){ editingReservationId = null; editingReservationDate = null; }
     refreshDayPanel(dateStr);
   });
   const bookBtn = document.createElement("button");
@@ -2023,23 +2010,35 @@ async function confirmReservation(){
   }
   const purpose = document.getElementById("modal-purpose").value.trim();
   try{
-    await addDoc(collection(db,"reservations"), {
-      equipmentId: selectedEquipment.id,
-      equipmentName: selectedEquipment.name,
-      category: selectedEquipment.category,
-      date: dateStr,
-      startTime: minutesToHHMM(lo),
-      endTime: minutesToHHMM(hi),
-      purpose,
-      userId: currentUser.uid,
-      userEmail: currentUser.email,
-      userName: myDisplayName(),
-      createdAt: Timestamp.now()
-    });
+    if(editingReservationId){
+      await updateDoc(doc(db,"reservations", editingReservationId), {
+        date: dateStr,
+        startTime: minutesToHHMM(lo),
+        endTime: minutesToHHMM(hi),
+        purpose
+      });
+      editingReservationId = null;
+      editingReservationDate = null;
+      toast("予約を更新しました。");
+    } else {
+      await addDoc(collection(db,"reservations"), {
+        equipmentId: selectedEquipment.id,
+        equipmentName: selectedEquipment.name,
+        category: selectedEquipment.category,
+        date: dateStr,
+        startTime: minutesToHHMM(lo),
+        endTime: minutesToHHMM(hi),
+        purpose,
+        userId: currentUser.uid,
+        userEmail: currentUser.email,
+        userName: myDisplayName(),
+        createdAt: Timestamp.now()
+      });
+      toast("予約を確定しました。");
+    }
     reserveModal.classList.remove("show");
     delete tlPendingByDate[dateStr];
     refreshDayPanel(dateStr);
-    toast("予約を確定しました。");
   }catch(e){
     errEl.textContent = "予約の登録に失敗しました。時間をおいて再度お試しください。";
   }
@@ -2077,11 +2076,12 @@ function renderMyReservations(list){
       </div>
     `;
     if(!isPast){
+      const actions = document.createElement("div");
+      actions.className = "res-actions";
       const editBtn = document.createElement("button");
       editBtn.textContent = "編集";
-      editBtn.style.marginRight = "6px";
-      editBtn.addEventListener("click", ()=> openEditReservationModal(r));
-      item.appendChild(editBtn);
+      editBtn.addEventListener("click", ()=> jumpToReservationForEdit(r));
+      actions.appendChild(editBtn);
       const btn = document.createElement("button");
       btn.textContent = "キャンセル";
       btn.addEventListener("click", async ()=>{
@@ -2089,62 +2089,29 @@ function renderMyReservations(list){
         await deleteDoc(doc(db,"reservations", r.id));
         toast("予約をキャンセルしました。");
       });
-      item.appendChild(btn);
+      actions.appendChild(btn);
+      item.appendChild(actions);
     }
     el.appendChild(item);
   });
 }
 
-let editingReservation = null;
-function openEditReservationModal(r){
-  editingReservation = r;
-  document.getElementById("res-edit-summary").textContent =
-    `${r.equipmentName} / ${formatDateJP(r.date)}`;
-  document.getElementById("res-edit-start").value = r.startTime;
-  document.getElementById("res-edit-end").value = r.endTime;
-  document.getElementById("res-edit-purpose").value = r.purpose || "";
-  document.getElementById("res-edit-error").textContent = "";
-  document.getElementById("res-edit-modal").classList.add("show");
+let editingReservationId = null;
+let editingReservationDate = null;
+function jumpToReservationForEdit(r){
+  const eq = equipmentAll.find(e=>e.id===r.equipmentId);
+  if(!eq){ toast("対象の設備が見つかりませんでした。"); return; }
+  editingReservationId = r.id;
+  editingReservationDate = r.date;
+  selectedCategory = r.category;
+  selectedEquipment = eq;
+  selectedMonth = r.date.slice(0,7);
+  tlPendingByDate = { [r.date]: { start: timeToMinutes(r.startTime), end: timeToMinutes(r.endTime) } };
+  switchToTab("reserve");
+  renderCategoryRow();
+  renderEquipmentGrid();
+  showTimelinePanel();
 }
-document.getElementById("res-edit-cancel").addEventListener("click", ()=>{
-  document.getElementById("res-edit-modal").classList.remove("show");
-});
-document.getElementById("res-edit-save").addEventListener("click", async ()=>{
-  const errEl = document.getElementById("res-edit-error");
-  errEl.textContent = "";
-  if(!editingReservation) return;
-  const startTime = document.getElementById("res-edit-start").value;
-  const endTime = document.getElementById("res-edit-end").value;
-  const purpose = document.getElementById("res-edit-purpose").value.trim();
-  if(!startTime || !endTime){ errEl.textContent = "開始・終了時刻を入力してください。"; return; }
-  const startM = timeToMinutes(startTime), endM = timeToMinutes(endTime);
-  if(startM >= endM){ errEl.textContent = "終了時刻は開始時刻より後にしてください。"; return; }
-  try{
-    // 保存直前に、同じ機材・同じ日の他の予約と重ならないか確認する
-    const q = query(
-      collection(db,"reservations"),
-      where("equipmentId","==", editingReservation.equipmentId),
-      where("date","==", editingReservation.date)
-    );
-    const snap = await getDocs(q);
-    const conflict = snap.docs.some(d=>{
-      if(d.id === editingReservation.id) return false;
-      const data = d.data();
-      const s = timeToMinutes(data.startTime), e = timeToMinutes(data.endTime);
-      return Math.max(startM,s) < Math.min(endM,e);
-    });
-    if(conflict){
-      errEl.textContent = "この時間帯は既に他の予約と重なっています。";
-      return;
-    }
-    await updateDoc(doc(db,"reservations", editingReservation.id), { startTime, endTime, purpose });
-    document.getElementById("res-edit-modal").classList.remove("show");
-    toast("予約を更新しました。");
-  }catch(e){
-    errEl.textContent = "更新に失敗しました。時間をおいて再度お試しください。";
-  }
-});
-
 /* =========================================================
    お知らせ
 ========================================================= */
