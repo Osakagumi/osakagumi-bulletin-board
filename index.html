@@ -44,6 +44,12 @@
   .field input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font-size:14px;}
   .field input:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 3px rgba(28,90,165,.15);}
   #login-btn{width:100%;padding:11px;background:var(--brand);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;margin-top:6px;}
+  #login-password-toggle{
+    position:absolute;right:4px;top:50%;transform:translateY(-50%);
+    background:none;border:none;font-size:16px;padding:6px 8px;cursor:pointer;color:var(--muted);line-height:1;
+  }
+  #login-forgot-wrap{text-align:center;margin-top:12px;}
+  #login-forgot-wrap a{font-size:12.5px;color:var(--brand);text-decoration:underline;cursor:pointer;}
   #login-btn:hover{background:var(--brand-dark);}
   #login-error{color:var(--danger);font-size:12.5px;margin-top:10px;min-height:16px;}
 
@@ -458,10 +464,16 @@
       </div>
       <div class="field">
         <label>パスワード</label>
-        <input type="password" id="login-password" autocomplete="current-password" placeholder="••••••••">
+        <div style="position:relative;">
+          <input type="password" id="login-password" autocomplete="current-password" placeholder="••••••••" style="padding-right:44px;">
+          <button type="button" id="login-password-toggle" title="パスワードを表示">👁</button>
+        </div>
       </div>
       <button id="login-btn">ログイン</button>
       <div id="login-error"></div>
+      <div id="login-forgot-wrap">
+        <a href="#" id="login-forgot-link">パスワードを忘れた方はこちら</a>
+      </div>
     </div>
   </div>
 
@@ -876,7 +888,7 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
-  getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut
+  getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, sendPasswordResetEmail
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, addDoc, deleteDoc, query, where,
@@ -1026,12 +1038,38 @@ let calWorkEndTime = "17:00";
 
 /* ---------- auth ---------- */
 document.getElementById("login-btn").addEventListener("click", doLogin);
+document.getElementById("login-password-toggle").addEventListener("click", ()=>{
+  const pwInput = document.getElementById("login-password");
+  const btn = document.getElementById("login-password-toggle");
+  const showing = pwInput.type === "text";
+  pwInput.type = showing ? "password" : "text";
+  btn.textContent = showing ? "👁" : "🙈";
+  btn.title = showing ? "パスワードを表示" : "パスワードを隠す";
+});
+document.getElementById("login-forgot-link").addEventListener("click", async (e)=>{
+  e.preventDefault();
+  const email = document.getElementById("login-email").value.trim();
+  const errEl = document.getElementById("login-error");
+  if(!email){
+    errEl.textContent = "先にメールアドレスを入力してください。";
+    return;
+  }
+  try{
+    await sendPasswordResetEmail(auth, email);
+    errEl.style.color = "#1a7f37";
+    errEl.textContent = "パスワード再設定用のメールを送信しました。メールをご確認ください。";
+  }catch(err){
+    errEl.style.color = "";
+    errEl.textContent = "送信に失敗しました。メールアドレスをご確認ください。";
+  }
+});
 document.getElementById("login-password").addEventListener("keydown", e=>{ if(e.key==="Enter") doLogin(); });
 
 async function doLogin(){
   const email = document.getElementById("login-email").value.trim();
   const pw = document.getElementById("login-password").value;
   const errEl = document.getElementById("login-error");
+  errEl.style.color = "";
   errEl.textContent = "";
   if(!email || !pw){ errEl.textContent = "メールアドレスとパスワードを入力してください。"; return; }
   try{
