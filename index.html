@@ -3299,7 +3299,7 @@ function renderWbPresetDatesList(){
   defaultTextSpan.className = "wb-preset-date-text";
   defaultTextSpan.textContent = "初期状態";
   defaultTextSpan.addEventListener("click", ()=>{
-    wbPresetEditingDefaults = true;
+    wbPresetEditingDefaults = !isEditingWbDefaults();
     renderWbPresetTable();
   });
   defaultPill.appendChild(defaultTextSpan);
