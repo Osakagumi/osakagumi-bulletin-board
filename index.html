@@ -274,14 +274,14 @@
   }
 
   .timeline-wrap{overflow-x:auto;}
-  .timeline{position:relative;min-width:640px;}
-  .tl-ruler{display:flex;border-bottom:1px solid var(--line);padding-left:0;}
+  #tl-panels{min-width:640px;}
+  .tl-ruler{display:flex;border-bottom:1px solid var(--line);padding-left:92px;min-width:640px;position:sticky;top:0;background:var(--surface);z-index:2;box-sizing:border-box;}
   .tl-ruler .tick{flex:1;font-family:var(--mono);font-size:10px;color:var(--muted);border-left:1px solid var(--line);padding:2px 0 4px 3px;}
   .tl-slots{display:flex;background:
       repeating-linear-gradient(90deg, transparent, transparent calc(100%/1 - 1px));
     border-bottom:1px solid var(--line);}
   .slot{
-    flex:1;height:46px;border-left:1px solid #EDF1F6;position:relative;background:#fff;
+    flex:1;height:38px;border-left:1px solid #EDF1F6;position:relative;background:#fff;
   }
   .slot.hour-start{border-left:1px solid var(--line);}
   .slot.free:hover{background:#EFF5FC;cursor:pointer;}
@@ -290,16 +290,28 @@
   .slot.booked .lbl{position:absolute;inset:2px 4px;font-size:9.5px;color:#fff;line-height:1.2;overflow:hidden;font-weight:600;}
   .slot.past{background:#F6F7F9;cursor:not-allowed;}
 
+  .tl-day-panel{display:flex;align-items:stretch;border-bottom:1px solid var(--line);}
+  .tl-day-panel-head{
+    flex:0 0 92px;display:flex;flex-direction:column;justify-content:center;
+    font-size:12px;padding:4px 8px;font-family:var(--mono);color:var(--text);position:sticky;left:0;background:var(--surface);z-index:1;
+    border-right:1px solid var(--line);
+  }
+  .tl-day-panel-head.weekend-sat{color:#2E6FA3;}
+  .tl-day-panel-head.weekend-sun{color:var(--danger);}
+  .tl-day-panel-head.is-today{background:#FFF6C4;}
+  .tl-day-panel-body{flex:1;min-width:0;}
+  .tl-day-sel-bar{
+    display:none;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;
+    background:#F4F8FC;padding:6px 10px;font-size:12px;
+  }
+  .tl-day-sel-bar.show{display:flex;}
+  .tl-day-sel-bar button{border-radius:6px;padding:5px 10px;font-size:11.5px;}
+  .tl-day-sel-bar .tl-day-sel-clear{border:1px solid var(--line);background:#fff;color:var(--text);}
+  .tl-day-sel-bar .tl-day-sel-book{border:none;background:var(--brand);color:#fff;}
+
   .legend{display:flex;gap:16px;margin-top:10px;font-size:11.5px;color:var(--muted);flex-wrap:wrap;}
   .legend span{display:inline-flex;align-items:center;gap:5px;}
   .legend i{width:10px;height:10px;border-radius:2px;display:inline-block;}
-
-  .selection-bar{
-    margin-top:14px;padding:12px;border-radius:9px;background:#F4F8FC;border:1px dashed var(--brand);
-    display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;font-size:13px;
-  }
-  .selection-bar .range{font-family:var(--mono);font-weight:700;color:var(--brand-dark);}
-  .selection-bar .actions button{border:none;border-radius:7px;padding:8px 14px;font-size:13px;font-weight:600;}
   .btn-primary{background:var(--brand);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-size:13.5px;font-weight:600;}
   .btn-primary:hover{background:var(--brand-dark);}
   .btn-ghost{background:none;color:var(--muted);border:1px solid var(--line);border-radius:8px;padding:9px 16px;font-size:13.5px;font-weight:600;}
@@ -519,16 +531,11 @@
               <button id="date-prev">◀</button>
               <span class="date-picker-label" id="date-picker-label"></span>
               <button id="date-next">▶</button>
+              <input type="month" id="tl-month-input" style="opacity:0;position:absolute;width:1px;height:1px;pointer-events:none;">
             </div>
           </div>
           <div class="howto">
-            <b>予約の仕方：</b>①開始したい時刻のマスをタップ → ②終了したい時刻のマスをタップ → ③下に出る「この時間で予約する」を押して確定
-          </div>
-          <div class="timeline-wrap">
-            <div class="timeline">
-              <div class="tl-ruler" id="tl-ruler"></div>
-              <div class="tl-slots" id="tl-slots"></div>
-            </div>
+            <b>予約の仕方：</b>①開始したい時刻のマスをタップ → ②終了したい時刻のマスをタップ → ③その日の下に出る「この時間で予約する」を押して確定
           </div>
           <div class="legend">
             <span><i style="background:#fff;border:1px solid var(--line);"></i>空き</span>
@@ -536,13 +543,9 @@
             <span><i style="background:var(--muted);"></i>予約済み</span>
             <span><i style="background:#F6F7F9;"></i>予約不可（過去）</span>
           </div>
-
-          <div class="selection-bar" id="selection-bar" style="display:none;">
-            <div>選択中: <span class="range" id="selection-range"></span></div>
-            <div class="actions">
-              <button class="btn-ghost" id="clear-selection">クリア</button>
-              <button class="btn-primary" id="open-reserve-modal">この時間で予約する</button>
-            </div>
+          <div class="timeline-wrap">
+            <div class="tl-ruler" id="tl-ruler"></div>
+            <div id="tl-panels"></div>
           </div>
         </div>
 
@@ -1007,10 +1010,6 @@ let equipmentAll = [];
 let selectedCategory = CATEGORIES.find(c=>c.mode!=="checkout")?.id || null;
 let selectedCheckoutCategory = CATEGORIES.find(c=>c.mode==="checkout")?.id || null;
 let selectedEquipment = null;
-let selectedDate = todayStr();
-let reservationsUnsub = null;
-let reservationsForDay = [];
-let pendingStart = null, pendingEnd = null;
 let myResUnsub = null;
 
 let employeesAll = [];
@@ -1305,7 +1304,7 @@ function renderEquipmentGrid(){
     card.innerHTML = `<div class="name">${escapeHtml(eq.name)}</div><div class="note">${escapeHtml(eq.note||"")}</div>`;
     card.addEventListener("click", ()=>{
       selectedEquipment = eq;
-      pendingStart = pendingEnd = null;
+      tlPendingByDate = {};
       renderEquipmentGrid();
       showTimelinePanel();
     });
@@ -1727,37 +1726,38 @@ function setTimeFieldValue(el, timeStr){
   }
 }
 
-/* ---------- timeline ---------- */
-updateWeekdayBadge();
-document.getElementById("date-picker-label").addEventListener("click", (e)=>{
-  openCalendarPicker(e.currentTarget, selectedDate, {
-    onSelect: (dateStr)=>{
-      selectedDate = dateStr || todayStr();
-      pendingStart = pendingEnd = null;
-      updateWeekdayBadge();
-      loadReservationsForDay();
-    }
-  });
+/* ---------- timeline (月表示) ---------- */
+let selectedMonth = todayStr().slice(0,7); // "YYYY-MM"
+let monthReservations = [];
+let monthReservationsUnsub = null;
+let tlPendingByDate = {}; // { "YYYY-MM-DD": {start, end} }
+let activeConfirmDate = null;
+
+document.getElementById("date-picker-label").addEventListener("click", ()=>{
+  const input = document.getElementById("tl-month-input");
+  input.value = selectedMonth;
+  if(input.showPicker){ input.showPicker(); } else { input.click(); }
 });
-document.getElementById("date-prev").addEventListener("click", ()=> shiftDate(-1));
-document.getElementById("date-next").addEventListener("click", ()=> shiftDate(1));
-function shiftDate(delta){
-  const d = new Date(selectedDate + "T00:00:00");
-  d.setDate(d.getDate()+delta);
-  selectedDate = `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
-  pendingStart = pendingEnd = null;
-  updateWeekdayBadge();
-  loadReservationsForDay();
+document.getElementById("tl-month-input").addEventListener("change", (e)=>{
+  if(!e.target.value) return;
+  selectedMonth = e.target.value;
+  tlPendingByDate = {};
+  updateMonthLabel();
+  loadReservationsForMonth();
+});
+document.getElementById("date-prev").addEventListener("click", ()=> shiftMonth(-1));
+document.getElementById("date-next").addEventListener("click", ()=> shiftMonth(1));
+function shiftMonth(delta){
+  const [y,m] = selectedMonth.split("-").map(Number);
+  const d = new Date(y, m-1+delta, 1);
+  selectedMonth = `${d.getFullYear()}-${pad2(d.getMonth()+1)}`;
+  tlPendingByDate = {};
+  updateMonthLabel();
+  loadReservationsForMonth();
 }
-function updateWeekdayBadge(){
-  const d = new Date(selectedDate + "T00:00:00");
-  const labels = ["日","月","火","水","木","金","土"];
-  const label = document.getElementById("date-picker-label");
-  const dow = d.getDay();
-  label.textContent = `${selectedDate.replace(/-/g,"/")}(${labels[dow]})`;
-  label.classList.remove("weekend-sat","weekend-sun");
-  if(dow===6) label.classList.add("weekend-sat");
-  if(dow===0) label.classList.add("weekend-sun");
+function updateMonthLabel(){
+  const [y,m] = selectedMonth.split("-").map(Number);
+  document.getElementById("date-picker-label").textContent = `${y}年${m}月`;
 }
 
 function showTimelinePanel(){
@@ -1766,9 +1766,9 @@ function showTimelinePanel(){
   const cat = catInfo(selectedEquipment.category);
   document.getElementById("tl-eq-title").innerHTML =
     `${escapeHtml(selectedEquipment.name)}<span class="cat-tag" style="background:${cat.color}">${cat.label}</span>`;
-  updateWeekdayBadge();
+  updateMonthLabel();
   renderRuler();
-  loadReservationsForDay();
+  loadReservationsForMonth();
 }
 
 function renderRuler(){
@@ -1783,37 +1783,92 @@ function renderRuler(){
   });
 }
 
-function loadReservationsForDay(){
-  if(reservationsUnsub){ reservationsUnsub(); reservationsUnsub = null; }
+function daysInSelectedMonth(){
+  const [y,m] = selectedMonth.split("-").map(Number);
+  return new Date(y, m, 0).getDate();
+}
+
+function loadReservationsForMonth(){
+  if(monthReservationsUnsub){ monthReservationsUnsub(); monthReservationsUnsub = null; }
   if(!selectedEquipment) return;
+  const [y,m] = selectedMonth.split("-").map(Number);
+  const monthStart = `${y}-${pad2(m)}-01`;
+  const monthEnd = `${y}-${pad2(m)}-${pad2(daysInSelectedMonth())}`;
   const q = query(
     collection(db,"reservations"),
     where("equipmentId","==", selectedEquipment.id),
-    where("date","==", selectedDate)
+    where("date",">=", monthStart),
+    where("date","<=", monthEnd)
   );
-  reservationsUnsub = onSnapshot(q, snap=>{
-    reservationsForDay = snap.docs.map(d=>({id:d.id, ...d.data()}));
-    renderSlots();
+  monthReservationsUnsub = onSnapshot(q, snap=>{
+    monthReservations = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    renderMonthPanels();
   });
 }
 
-function renderSlots(){
-  const wrap = document.getElementById("tl-slots");
+function timeToMinutes(hhmm){
+  const [h,m] = hhmm.split(":").map(Number);
+  return h*60+m;
+}
+
+function renderMonthPanels(){
+  const wrap = document.getElementById("tl-panels");
+  wrap.innerHTML = "";
+  const daysN = daysInSelectedMonth();
+  const [y,m] = selectedMonth.split("-").map(Number);
+  const weekdayLabels = ["日","月","火","水","木","金","土"];
+  const today = todayStr();
+
+  for(let day=1; day<=daysN; day++){
+    const dateStr = `${y}-${pad2(m)}-${pad2(day)}`;
+    const dayReservations = monthReservations.filter(r=>r.date===dateStr);
+    const d = new Date(y, m-1, day);
+    const dow = d.getDay();
+
+    const panel = document.createElement("div");
+    panel.className = "tl-day-panel";
+
+    const head = document.createElement("div");
+    head.className = "tl-day-panel-head";
+    if(dow===6) head.classList.add("weekend-sat");
+    if(dow===0) head.classList.add("weekend-sun");
+    if(dateStr===today) head.classList.add("is-today");
+    head.innerHTML = `${m}/${day}<br>(${weekdayLabels[dow]})`;
+    panel.appendChild(head);
+
+    const body = document.createElement("div");
+    body.className = "tl-day-panel-body";
+
+    const slotsEl = document.createElement("div");
+    slotsEl.className = "tl-slots";
+    buildDaySlots(slotsEl, dateStr, dayReservations);
+    body.appendChild(slotsEl);
+
+    const selBar = document.createElement("div");
+    selBar.className = "tl-day-sel-bar";
+    body.appendChild(selBar);
+    updateDaySelectionBar(dateStr, selBar);
+
+    panel.appendChild(body);
+    wrap.appendChild(panel);
+  }
+}
+
+function buildDaySlots(wrap, dateStr, dayReservations){
   wrap.innerHTML = "";
   const now = new Date();
-  const isToday = selectedDate === todayStr();
+  const isToday = dateStr === todayStr();
   const nowMins = now.getHours()*60 + now.getMinutes();
   const cat = catInfo(selectedEquipment.category);
+  const pending = tlPendingByDate[dateStr];
 
   SLOTS.forEach(s=>{
     const div = document.createElement("div");
     div.className = "slot" + (s.start%60===0 ? " hour-start":"");
     const isPast = isToday && s.start < nowMins;
 
-    const booking = reservationsForDay.find(r=>{
-      const [sh,sm] = r.startTime.split(":").map(Number);
-      const [eh,em] = r.endTime.split(":").map(Number);
-      const startM = sh*60+sm, endM = eh*60+em;
+    const booking = dayReservations.find(r=>{
+      const startM = timeToMinutes(r.startTime), endM = timeToMinutes(r.endTime);
       return s.start >= startM && s.start < endM;
     });
 
@@ -1831,93 +1886,112 @@ function renderSlots(){
       div.classList.add("past");
     } else {
       div.classList.add("free");
-      div.addEventListener("click", ()=> handleSlotClick(s.start));
+      if(pending && s.start >= Math.min(pending.start,pending.end) && s.start < Math.max(pending.start,pending.end)){
+        div.classList.remove("free");
+        div.classList.add("pending");
+      }
+      div.addEventListener("click", ()=> handleSlotClick(dateStr, s.start));
     }
     wrap.appendChild(div);
   });
-
-  updateSelectionRendering();
 }
 
-function timeToMinutes(hhmm){
-  const [h,m] = hhmm.split(":").map(Number);
-  return h*60+m;
-}
-
-function handleSlotClick(slotStart){
-  if(pendingStart===null){
-    pendingStart = slotStart;
-    pendingEnd = slotStart + SLOT_MIN;
-  } else if(pendingEnd===null){
-    // shouldn't happen, safety
-    pendingEnd = slotStart + SLOT_MIN;
-  } else {
-    // extend/reset selection
-    const lo = Math.min(pendingStart, slotStart);
-    const hi = Math.max(pendingStart, slotStart) + SLOT_MIN;
-    // check no booked slot within range
-    if(rangeHasConflict(lo, hi)){
-      pendingStart = slotStart; pendingEnd = slotStart + SLOT_MIN;
-    } else {
-      pendingStart = lo; pendingEnd = hi;
-    }
-  }
-  renderSlots();
-}
-
-function rangeHasConflict(lo, hi){
-  return reservationsForDay.some(r=>{
+function rangeHasConflictOnDate(dateStr, lo, hi){
+  return monthReservations.some(r=>{
+    if(r.date !== dateStr) return false;
     const s = timeToMinutes(r.startTime), e = timeToMinutes(r.endTime);
     return Math.max(lo,s) < Math.min(hi,e);
   });
 }
 
-function updateSelectionRendering(){
-  const bar = document.getElementById("selection-bar");
-  if(pendingStart===null || pendingEnd===null){
-    bar.style.display = "none";
-    return;
-  }
-  const lo = Math.min(pendingStart,pendingEnd), hi = Math.max(pendingStart,pendingEnd);
-  // paint pending slots
-  const slotEls = document.getElementById("tl-slots").children;
-  SLOTS.forEach((s, idx)=>{
-    const el = slotEls[idx];
-    if(!el) return;
-    if(el.classList.contains("booked") || el.classList.contains("past")) return;
-    if(s.start >= lo && s.start < hi){
-      el.classList.add("pending"); el.classList.remove("free");
+function handleSlotClick(dateStr, slotStart){
+  const pending = tlPendingByDate[dateStr];
+  if(!pending){
+    tlPendingByDate[dateStr] = { start: slotStart, end: slotStart + SLOT_MIN };
+  } else {
+    const lo = Math.min(pending.start, slotStart);
+    const hi = Math.max(pending.start, slotStart) + SLOT_MIN;
+    if(rangeHasConflictOnDate(dateStr, lo, hi)){
+      tlPendingByDate[dateStr] = { start: slotStart, end: slotStart + SLOT_MIN };
+    } else {
+      tlPendingByDate[dateStr] = { start: lo, end: hi };
     }
-  });
-  bar.style.display = "flex";
-  document.getElementById("selection-range").textContent =
-    `${minutesToHHMM(lo)} 〜 ${minutesToHHMM(hi)}`;
+  }
+  refreshDayPanel(dateStr);
 }
 
-document.getElementById("clear-selection").addEventListener("click", ()=>{
-  pendingStart = pendingEnd = null;
-  renderSlots();
-});
+function refreshDayPanel(dateStr){
+  // 該当日のパネルだけ再描画する（月全体は再構築しない）
+  const daysN = daysInSelectedMonth();
+  const [y,m] = selectedMonth.split("-").map(Number);
+  const panels = document.getElementById("tl-panels").children;
+  for(let day=1; day<=daysN; day++){
+    const ds = `${y}-${pad2(m)}-${pad2(day)}`;
+    if(ds !== dateStr) continue;
+    const panel = panels[day-1];
+    if(!panel) return;
+    const body = panel.querySelector(".tl-day-panel-body");
+    const slotsEl = body.querySelector(".tl-slots");
+    const selBar = body.querySelector(".tl-day-sel-bar");
+    const dayReservations = monthReservations.filter(r=>r.date===ds);
+    buildDaySlots(slotsEl, ds, dayReservations);
+    updateDaySelectionBar(ds, selBar);
+    return;
+  }
+}
+
+function updateDaySelectionBar(dateStr, selBarEl){
+  const pending = tlPendingByDate[dateStr];
+  selBarEl.innerHTML = "";
+  if(!pending){
+    selBarEl.classList.remove("show");
+    return;
+  }
+  selBarEl.classList.add("show");
+  const lo = Math.min(pending.start,pending.end), hi = Math.max(pending.start,pending.end);
+  const label = document.createElement("div");
+  label.textContent = `選択中: ${minutesToHHMM(lo)} 〜 ${minutesToHHMM(hi)}`;
+  const actions = document.createElement("div");
+  actions.style.display = "flex"; actions.style.gap = "6px";
+  const clearBtn = document.createElement("button");
+  clearBtn.className = "tl-day-sel-clear";
+  clearBtn.textContent = "クリア";
+  clearBtn.addEventListener("click", ()=>{
+    delete tlPendingByDate[dateStr];
+    refreshDayPanel(dateStr);
+  });
+  const bookBtn = document.createElement("button");
+  bookBtn.className = "tl-day-sel-book";
+  bookBtn.textContent = "この時間で予約する";
+  bookBtn.addEventListener("click", ()=> openReserveModalFor(dateStr));
+  actions.appendChild(clearBtn); actions.appendChild(bookBtn);
+  selBarEl.appendChild(label); selBarEl.appendChild(actions);
+}
 
 /* ---------- reserve modal ---------- */
 const reserveModal = document.getElementById("reserve-modal");
-document.getElementById("open-reserve-modal").addEventListener("click", ()=>{
-  if(pendingStart===null || pendingEnd===null) return;
-  const lo = Math.min(pendingStart,pendingEnd), hi = Math.max(pendingStart,pendingEnd);
+function openReserveModalFor(dateStr){
+  const pending = tlPendingByDate[dateStr];
+  if(!pending) return;
+  activeConfirmDate = dateStr;
+  const lo = Math.min(pending.start,pending.end), hi = Math.max(pending.start,pending.end);
   document.getElementById("modal-summary").textContent =
-    `${selectedEquipment.name} / ${formatDateJP(selectedDate)} ${minutesToHHMM(lo)}〜${minutesToHHMM(hi)}`;
+    `${selectedEquipment.name} / ${formatDateJP(dateStr)} ${minutesToHHMM(lo)}〜${minutesToHHMM(hi)}`;
   document.getElementById("modal-purpose").value = "";
   document.getElementById("modal-error").textContent = "";
   reserveModal.classList.add("show");
-});
+}
 document.getElementById("modal-cancel").addEventListener("click", ()=> reserveModal.classList.remove("show"));
 document.getElementById("modal-confirm").addEventListener("click", confirmReservation);
 
 async function confirmReservation(){
   const errEl = document.getElementById("modal-error");
   errEl.textContent = "";
-  const lo = Math.min(pendingStart,pendingEnd), hi = Math.max(pendingStart,pendingEnd);
-  if(rangeHasConflict(lo,hi)){
+  const dateStr = activeConfirmDate;
+  const pending = dateStr ? tlPendingByDate[dateStr] : null;
+  if(!dateStr || !pending) return;
+  const lo = Math.min(pending.start,pending.end), hi = Math.max(pending.start,pending.end);
+  if(rangeHasConflictOnDate(dateStr, lo,hi)){
     errEl.textContent = "この時間帯は既に予約されています。画面を更新して選び直してください。";
     return;
   }
@@ -1927,7 +2001,7 @@ async function confirmReservation(){
       equipmentId: selectedEquipment.id,
       equipmentName: selectedEquipment.name,
       category: selectedEquipment.category,
-      date: selectedDate,
+      date: dateStr,
       startTime: minutesToHHMM(lo),
       endTime: minutesToHHMM(hi),
       purpose,
@@ -1937,7 +2011,8 @@ async function confirmReservation(){
       createdAt: Timestamp.now()
     });
     reserveModal.classList.remove("show");
-    pendingStart = pendingEnd = null;
+    delete tlPendingByDate[dateStr];
+    refreshDayPanel(dateStr);
     toast("予約を確定しました。");
   }catch(e){
     errEl.textContent = "予約の登録に失敗しました。時間をおいて再度お試しください。";
