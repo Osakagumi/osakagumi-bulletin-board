@@ -298,7 +298,7 @@
   }
   .tl-day-panel-head.weekend-sat{color:#2E6FA3;}
   .tl-day-panel-head.weekend-sun{color:var(--danger);}
-  .tl-day-panel-head.is-today{background:#FFF6C4;}
+  .tl-day-panel-head.is-today{background:#CDEFFB;}
   .tl-day-panel-body{flex:1;min-width:0;}
   .tl-day-sel-bar{
     display:none;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;
@@ -879,6 +879,31 @@
       <div class="row-btns">
         <button class="btn-ghost" id="modal-cancel" style="border:1px solid var(--line);">キャンセル</button>
         <button class="btn-primary" id="modal-confirm">予約を確定する</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 予約編集 ============ -->
+  <div class="modal-overlay" id="res-edit-modal">
+    <div class="modal">
+      <h3>予約を編集</h3>
+      <div class="sub" id="res-edit-summary"></div>
+      <div class="field">
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">開始時刻</label>
+        <input type="time" id="res-edit-start">
+      </div>
+      <div class="field">
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">終了時刻</label>
+        <input type="time" id="res-edit-end">
+      </div>
+      <div class="field">
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">利用目的・行き先など</label>
+        <textarea id="res-edit-purpose" placeholder="例）〇〇現場 測量／〇〇工事 打合せ／〇〇市役所"></textarea>
+      </div>
+      <div class="modal-err" id="res-edit-error"></div>
+      <div class="row-btns">
+        <button class="btn-ghost" id="res-edit-cancel" style="border:1px solid var(--line);">キャンセル</button>
+        <button class="btn-primary" id="res-edit-save">保存する</button>
       </div>
     </div>
   </div>
@@ -1858,6 +1883,7 @@ function buildDaySlots(wrap, dateStr, dayReservations){
   wrap.innerHTML = "";
   const now = new Date();
   const isToday = dateStr === todayStr();
+  const isPastDate = dateStr < todayStr(); // 今日より前の日は丸ごと過去扱い
   const nowMins = now.getHours()*60 + now.getMinutes();
   const cat = catInfo(selectedEquipment.category);
   const pending = tlPendingByDate[dateStr];
@@ -1865,7 +1891,7 @@ function buildDaySlots(wrap, dateStr, dayReservations){
   SLOTS.forEach(s=>{
     const div = document.createElement("div");
     div.className = "slot" + (s.start%60===0 ? " hour-start":"");
-    const isPast = isToday && s.start < nowMins;
+    const isPast = isPastDate || (isToday && s.start < nowMins);
 
     const booking = dayReservations.find(r=>{
       const startM = timeToMinutes(r.startTime), endM = timeToMinutes(r.endTime);
@@ -2051,6 +2077,11 @@ function renderMyReservations(list){
       </div>
     `;
     if(!isPast){
+      const editBtn = document.createElement("button");
+      editBtn.textContent = "編集";
+      editBtn.style.marginRight = "6px";
+      editBtn.addEventListener("click", ()=> openEditReservationModal(r));
+      item.appendChild(editBtn);
       const btn = document.createElement("button");
       btn.textContent = "キャンセル";
       btn.addEventListener("click", async ()=>{
@@ -2063,6 +2094,56 @@ function renderMyReservations(list){
     el.appendChild(item);
   });
 }
+
+let editingReservation = null;
+function openEditReservationModal(r){
+  editingReservation = r;
+  document.getElementById("res-edit-summary").textContent =
+    `${r.equipmentName} / ${formatDateJP(r.date)}`;
+  document.getElementById("res-edit-start").value = r.startTime;
+  document.getElementById("res-edit-end").value = r.endTime;
+  document.getElementById("res-edit-purpose").value = r.purpose || "";
+  document.getElementById("res-edit-error").textContent = "";
+  document.getElementById("res-edit-modal").classList.add("show");
+}
+document.getElementById("res-edit-cancel").addEventListener("click", ()=>{
+  document.getElementById("res-edit-modal").classList.remove("show");
+});
+document.getElementById("res-edit-save").addEventListener("click", async ()=>{
+  const errEl = document.getElementById("res-edit-error");
+  errEl.textContent = "";
+  if(!editingReservation) return;
+  const startTime = document.getElementById("res-edit-start").value;
+  const endTime = document.getElementById("res-edit-end").value;
+  const purpose = document.getElementById("res-edit-purpose").value.trim();
+  if(!startTime || !endTime){ errEl.textContent = "開始・終了時刻を入力してください。"; return; }
+  const startM = timeToMinutes(startTime), endM = timeToMinutes(endTime);
+  if(startM >= endM){ errEl.textContent = "終了時刻は開始時刻より後にしてください。"; return; }
+  try{
+    // 保存直前に、同じ機材・同じ日の他の予約と重ならないか確認する
+    const q = query(
+      collection(db,"reservations"),
+      where("equipmentId","==", editingReservation.equipmentId),
+      where("date","==", editingReservation.date)
+    );
+    const snap = await getDocs(q);
+    const conflict = snap.docs.some(d=>{
+      if(d.id === editingReservation.id) return false;
+      const data = d.data();
+      const s = timeToMinutes(data.startTime), e = timeToMinutes(data.endTime);
+      return Math.max(startM,s) < Math.min(endM,e);
+    });
+    if(conflict){
+      errEl.textContent = "この時間帯は既に他の予約と重なっています。";
+      return;
+    }
+    await updateDoc(doc(db,"reservations", editingReservation.id), { startTime, endTime, purpose });
+    document.getElementById("res-edit-modal").classList.remove("show");
+    toast("予約を更新しました。");
+  }catch(e){
+    errEl.textContent = "更新に失敗しました。時間をおいて再度お試しください。";
+  }
+});
 
 /* =========================================================
    お知らせ
