@@ -125,11 +125,46 @@
     <!-- ============ 設備管理 ============ -->
     <section id="view-equipment">
       <div class="panel">
+        <h2 id="cat-form-title">カテゴリを追加</h2>
+        <div class="form-grid">
+          <div class="field">
+            <label>カテゴリ名</label>
+            <input type="text" id="cat-label" placeholder="例）会議室">
+          </div>
+          <div class="field">
+            <label>色</label>
+            <input type="color" id="cat-color" value="#2E9E8F" style="height:38px;padding:2px;">
+          </div>
+          <div class="field">
+            <label>方式</label>
+            <select id="cat-mode">
+              <option value="timeline">時間枠予約（会議室・車輌など）</option>
+              <option value="checkout">貸出管理（測量機器・ドローンなど）</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>表示順（小さいほど上に表示）</label>
+            <input type="number" id="cat-order" value="0">
+          </div>
+        </div>
+        <button class="btn btn-primary" id="cat-save-btn">追加する</button>
+        <button class="btn btn-ghost" id="cat-cancel-edit" style="display:none;">編集をやめる</button>
+        <table style="margin-top:16px;">
+          <thead><tr><th>カテゴリ名</th><th>色</th><th>方式</th><th>表示順</th><th>操作</th></tr></thead>
+          <tbody id="cat-table-body"></tbody>
+        </table>
+      </div>
+
+      <div class="panel">
         <h2 id="eq-form-title">設備を追加</h2>
         <div class="form-grid">
           <div class="field">
             <label>設備名</label>
             <input type="text" id="eq-name" placeholder="例）トータルステーション①">
+          </div>
+          <div class="field">
+            <label>管理番号</label>
+            <input type="text" id="eq-asset-no" placeholder="例）ST-001">
           </div>
           <div class="field">
             <label>カテゴリ</label>
@@ -159,7 +194,7 @@
       <div class="panel">
         <h2>登録済み設備一覧</h2>
         <table>
-          <thead><tr><th>設備名</th><th>カテゴリ</th><th>備考</th><th>表示順</th><th>表示設定</th><th>貸出状況</th><th>操作</th></tr></thead>
+          <thead><tr><th>設備名</th><th>管理番号</th><th>カテゴリ</th><th>備考</th><th>表示順</th><th>表示設定</th><th>貸出状況</th><th>操作</th></tr></thead>
           <tbody id="eq-table-body"></tbody>
         </table>
       </div>
@@ -582,7 +617,7 @@ import {
   getFirestore, collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, setDoc,
   query, where, onSnapshot, orderBy, limit, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig, CATEGORIES, EQUIPMENT_STATUSES, SAFETY_STATUSES, EMAILJS_CONFIG, resolveMailRecipients, isMailOverrideActive, MAIL_SEND_TARGET } from "./firebase-config.js";
+import { firebaseConfig, CATEGORIES as SEED_CATEGORIES, EQUIPMENT_STATUSES, SAFETY_STATUSES, EMAILJS_CONFIG, resolveMailRecipients, isMailOverrideActive, MAIL_SEND_TARGET } from "./firebase-config.js";
 import { deleteDriveFile } from "./gdrive-helper.js";
 
 const app = initializeApp(firebaseConfig);
@@ -602,7 +637,137 @@ function toast(msg){
 function escapeHtml(s){
   return String(s??"").replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
-function catInfo(id){ return CATEGORIES.find(c=>c.id===id) || {label:id, color:"#888"}; }
+let categoriesAll = [];
+function catInfo(id){ return categoriesAll.find(c=>c.id===id) || {label:id, color:"#888"}; }
+async function seedCategoriesIfEmpty(){
+  const snap = await getDocs(collection(db,"equipment_categories"));
+  if(!snap.empty) return;
+  for(const c of SEED_CATEGORIES){
+    try{
+      await setDoc(doc(db,"equipment_categories", c.id), {
+        label: c.label, color: c.color, mode: c.mode, order: SEED_CATEGORIES.indexOf(c)*10
+      });
+    }catch(e){ /* 既に他の管理者が作成済みの場合など、失敗しても致命的ではない */ }
+  }
+}
+function initCategoriesListener(){
+  onSnapshot(collection(db,"equipment_categories"), snap=>{
+    categoriesAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    categoriesAll.sort((a,b)=> (a.order??0)-(b.order??0));
+    renderCategoriesTable();
+    populateCategorySelects();
+    renderEquipmentTable();
+  });
+}
+
+let editingCategoryId = null;
+function maxCategoryOrder(){
+  if(categoriesAll.length===0) return 0;
+  return Math.max(...categoriesAll.map(c=>c.order??0));
+}
+function renderCategoriesTable(){
+  const body = document.getElementById("cat-table-body");
+  if(!body) return;
+  body.innerHTML = "";
+  if(categoriesAll.length===0){
+    body.innerHTML = `<tr><td colspan="5" class="empty">カテゴリがまだありません。</td></tr>`;
+    return;
+  }
+  categoriesAll.forEach(c=>{
+    const inUse = equipmentAll.some(e=>e.category===c.id);
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHtml(c.label)}</td>
+      <td><span style="display:inline-block;width:16px;height:16px;border-radius:4px;background:${c.color};vertical-align:middle;"></span></td>
+      <td>${c.mode==="checkout" ? "貸出管理" : "時間枠予約"}</td>
+      <td></td>
+      <td class="actions"></td>
+    `;
+    const orderTd = tr.children[3];
+    const orderInput = document.createElement("input");
+    orderInput.type = "number";
+    orderInput.value = c.order ?? 0;
+    orderInput.style.width = "64px";
+    orderInput.addEventListener("change", async ()=>{
+      const newOrder = Number(orderInput.value) || 0;
+      try{
+        await updateDoc(doc(db,"equipment_categories", c.id), { order: newOrder });
+        toast(`「${c.label}」の表示順を${newOrder}に変更しました。`);
+      }catch(e){
+        toast("表示順の更新に失敗しました。");
+        orderInput.value = c.order ?? 0;
+      }
+    });
+    orderTd.appendChild(orderInput);
+    const actionsTd = tr.querySelector(".actions");
+    const editBtn = document.createElement("button");
+    editBtn.className="btn btn-ghost"; editBtn.textContent="編集";
+    editBtn.addEventListener("click", ()=> startEditCategory(c));
+    actionsTd.appendChild(editBtn);
+    const delBtn = document.createElement("button");
+    delBtn.className="btn btn-danger"; delBtn.textContent="削除";
+    delBtn.addEventListener("click", async ()=>{
+      if(inUse){
+        toast("このカテゴリを使っている設備があるため削除できません。先に設備側のカテゴリを変更してください。");
+        return;
+      }
+      if(!confirm(`カテゴリ「${c.label}」を削除しますか？`)) return;
+      try{
+        await deleteDoc(doc(db,"equipment_categories", c.id));
+        toast("カテゴリを削除しました。");
+      }catch(e){
+        toast("削除に失敗しました。権限をご確認ください。");
+      }
+    });
+    actionsTd.appendChild(delBtn);
+    body.appendChild(tr);
+  });
+}
+function startEditCategory(c){
+  editingCategoryId = c.id;
+  document.getElementById("cat-form-title").textContent = "カテゴリを編集：" + c.label;
+  document.getElementById("cat-label").value = c.label || "";
+  document.getElementById("cat-color").value = c.color || "#2E9E8F";
+  document.getElementById("cat-mode").value = c.mode || "timeline";
+  document.getElementById("cat-order").value = c.order ?? 0;
+  document.getElementById("cat-save-btn").textContent = "変更を保存";
+  document.getElementById("cat-cancel-edit").style.display = "inline-block";
+  window.scrollTo({top:0, behavior:"smooth"});
+}
+function resetCategoryForm(){
+  editingCategoryId = null;
+  document.getElementById("cat-form-title").textContent = "カテゴリを追加";
+  document.getElementById("cat-label").value = "";
+  document.getElementById("cat-color").value = "#2E9E8F";
+  document.getElementById("cat-mode").value = "timeline";
+  document.getElementById("cat-order").value = maxCategoryOrder() + 10;
+  document.getElementById("cat-save-btn").textContent = "追加する";
+  document.getElementById("cat-cancel-edit").style.display = "none";
+}
+document.getElementById("cat-cancel-edit").addEventListener("click", resetCategoryForm);
+document.getElementById("cat-save-btn").addEventListener("click", async ()=>{
+  const label = document.getElementById("cat-label").value.trim();
+  if(!label){ toast("カテゴリ名を入力してください。"); return; }
+  const payload = {
+    label,
+    color: document.getElementById("cat-color").value,
+    mode: document.getElementById("cat-mode").value,
+    order: Number(document.getElementById("cat-order").value) || 0
+  };
+  try{
+    if(editingCategoryId){
+      await updateDoc(doc(db,"equipment_categories", editingCategoryId), payload);
+      toast("カテゴリを更新しました。");
+    } else {
+      await addDoc(collection(db,"equipment_categories"), payload);
+      toast("カテゴリを追加しました。");
+    }
+    resetCategoryForm();
+  }catch(e){
+    toast("保存に失敗しました。権限をご確認ください。");
+  }
+});
+
 function nameForEmail(email){
   const emp = employeesAll.find(e=>e.email===email);
   return (emp && emp.name) || "";
@@ -637,7 +802,7 @@ onAuthStateChanged(auth, async (user)=>{
   }
 
   document.getElementById("admin-app").style.display = "block";
-  populateCategorySelects();
+  seedCategoriesIfEmpty().then(initCategoriesListener);
   initEquipmentListener();
   initReservationsListener();
   initAdminsListener();
@@ -733,12 +898,19 @@ applySavedAdminTabOrder();
 function populateCategorySelects(){
   const sel = document.getElementById("eq-category");
   const filterSel = document.getElementById("res-filter-category");
-  CATEGORIES.forEach(c=>{
+  const prevSel = sel.value, prevFilter = filterSel ? filterSel.value : null;
+  sel.innerHTML = "";
+  if(filterSel) filterSel.innerHTML = '<option value="">すべて</option>';
+  categoriesAll.forEach(c=>{
     const o1 = document.createElement("option"); o1.value=c.id; o1.textContent=c.label;
     sel.appendChild(o1);
-    const o2 = document.createElement("option"); o2.value=c.id; o2.textContent=c.label;
-    filterSel.appendChild(o2);
+    if(filterSel){
+      const o2 = document.createElement("option"); o2.value=c.id; o2.textContent=c.label;
+      filterSel.appendChild(o2);
+    }
   });
+  if(categoriesAll.some(c=>c.id===prevSel)) sel.value = prevSel;
+  if(filterSel && prevFilter !== null) filterSel.value = prevFilter;
 }
 
 /* ============ 設備管理 ============ */
@@ -757,7 +929,7 @@ function renderEquipmentTable(){
   const body = document.getElementById("eq-table-body");
   body.innerHTML = "";
   if(equipmentAll.length===0){
-    body.innerHTML = `<tr><td colspan="7" class="empty">まだ設備が登録されていません。</td></tr>`;
+    body.innerHTML = `<tr><td colspan="8" class="empty">まだ設備が登録されていません。</td></tr>`;
     return;
   }
   equipmentAll.forEach(eq=>{
@@ -768,6 +940,7 @@ function renderEquipmentTable(){
     if(eq.active===false) tr.classList.add("muted-row");
     tr.innerHTML = `
       <td>${escapeHtml(eq.name)}</td>
+      <td style="color:var(--muted);">${escapeHtml(eq.assetNo||"")}</td>
       <td><span class="tag" style="background:${cat.color}">${cat.label}</span></td>
       <td style="color:var(--muted);max-width:220px;">${escapeHtml(eq.note||"")}</td>
       <td></td>
@@ -775,7 +948,7 @@ function renderEquipmentTable(){
       <td>${isCheckoutMode && st ? `<span class="tag" style="background:${st.color}">${st.label}</span>` : "-"}</td>
       <td class="actions"></td>
     `;
-    const orderTd = tr.children[3];
+    const orderTd = tr.children[4];
     const orderInput = document.createElement("input");
     orderInput.type = "number";
     orderInput.value = eq.order ?? 0;
@@ -817,7 +990,8 @@ function startEditEquipment(eq){
   editingEquipmentId = eq.id;
   document.getElementById("eq-form-title").textContent = "設備を編集：" + eq.name;
   document.getElementById("eq-name").value = eq.name || "";
-  document.getElementById("eq-category").value = eq.category || CATEGORIES[0].id;
+  document.getElementById("eq-asset-no").value = eq.assetNo || "";
+  document.getElementById("eq-category").value = eq.category || (categoriesAll[0]?.id || "");
   document.getElementById("eq-note").value = eq.note || "";
   document.getElementById("eq-order").value = eq.order ?? 0;
   document.getElementById("eq-last-inspection").value = eq.lastInspectionDate || "";
@@ -832,6 +1006,7 @@ function resetEquipmentForm(){
   editingEquipmentId = null;
   document.getElementById("eq-form-title").textContent = "設備を追加";
   document.getElementById("eq-name").value = "";
+  document.getElementById("eq-asset-no").value = "";
   document.getElementById("eq-note").value = "";
   document.getElementById("eq-order").value = maxOrderInCategory(document.getElementById("eq-category").value) + 10;
   document.getElementById("eq-last-inspection").value = "";
@@ -845,6 +1020,7 @@ document.getElementById("eq-save-btn").addEventListener("click", async ()=>{
   if(!name){ toast("設備名を入力してください。"); return; }
   const payload = {
     name,
+    assetNo: document.getElementById("eq-asset-no").value.trim(),
     category: document.getElementById("eq-category").value,
     note: document.getElementById("eq-note").value.trim(),
     order: Number(document.getElementById("eq-order").value)||0,

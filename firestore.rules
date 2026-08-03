@@ -116,6 +116,12 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // 設備カテゴリ（会議室・業務共用車輌・測量機器・ドローンなど）: 全員が読める。管理は管理者のみ。
+    match /equipment_categories/{categoryId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
     // 社員名簿（行き先ボード兼用）: ログインすると自動で自分の行が作られる。
     // 読み取りは全員。新規作成は本人のみ（なりすまし登録防止）。
     // 更新（氏名・所属・状態など）は本人 / 管理者 / 行き先の他者設定権限者。削除は管理者のみ。
