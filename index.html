@@ -3320,13 +3320,8 @@ function renderWbPresetDatesList(){
     textSpan.className = "wb-preset-date-text";
     textSpan.textContent = formatDateJP(dateStr);
     textSpan.addEventListener("click", ()=>{
-      const isActive = dateStr===wbPresetSelectedDate && !isEditingWbDefaults();
-      if(isActive){
-        wbPresetEditingDefaults = true;
-      } else {
-        wbPresetSelectedDate = dateStr;
-        wbPresetEditingDefaults = false;
-      }
+      wbPresetSelectedDate = dateStr;
+      wbPresetEditingDefaults = false;
       renderWbPresetTable();
     });
     const delBtn = document.createElement("button");
