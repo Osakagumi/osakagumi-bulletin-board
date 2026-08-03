@@ -653,13 +653,17 @@ onAuthStateChanged(auth, async (user)=>{
 
 /* ---------- tabs ---------- */
 const ADMIN_VIEWS = ["equipment","reservations","admins","userimport","notices","whereabouts","safety","calendar"];
+function switchToAdminTab(viewName){
+  document.querySelectorAll(".tab-btn").forEach(b=>{
+    b.classList.toggle("active", b.dataset.view===viewName);
+  });
+  ADMIN_VIEWS.forEach(v=>{
+    document.getElementById("view-"+v).style.display = (v===viewName) ? "block":"none";
+  });
+}
 document.querySelectorAll(".tab-btn").forEach(btn=>{
   btn.addEventListener("click", ()=>{
-    document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
-    btn.classList.add("active");
-    ADMIN_VIEWS.forEach(v=>{
-      document.getElementById("view-"+v).style.display = (v===btn.dataset.view) ? "block":"none";
-    });
+    switchToAdminTab(btn.dataset.view);
   });
 });
 
@@ -668,13 +672,17 @@ const ADMIN_TAB_ORDER_KEY = "osakagumi-admin-tab-order";
 function applySavedAdminTabOrder(){
   let saved;
   try{ saved = JSON.parse(localStorage.getItem(ADMIN_TAB_ORDER_KEY) || "null"); }catch(e){ saved = null; }
-  if(!saved || !Array.isArray(saved)) return;
   const nav = document.getElementById("main-tabs");
   const reorderBtn = document.getElementById("tab-reorder-toggle");
-  saved.forEach(viewName=>{
-    const btn = nav.querySelector(`.tab-btn[data-view="${viewName}"]`);
-    if(btn) nav.insertBefore(btn, reorderBtn);
-  });
+  if(saved && Array.isArray(saved)){
+    saved.forEach(viewName=>{
+      const btn = nav.querySelector(`.tab-btn[data-view="${viewName}"]`);
+      if(btn) nav.insertBefore(btn, reorderBtn);
+    });
+  }
+  // 並び替え結果に関わらず、一番左のタブを初期表示にする
+  const firstBtn = nav.querySelector(".tab-btn");
+  if(firstBtn) switchToAdminTab(firstBtn.dataset.view);
 }
 function currentAdminTabOrder(){
   return Array.from(document.querySelectorAll("#main-tabs .tab-btn")).map(b=>b.dataset.view);
@@ -1732,6 +1740,25 @@ function initEmployeesListener(){
     renderCalendarEditors(lastCalEditorEmails);
   });
 }
+function departmentSortIndex(id){
+  const idx = departmentsAll.findIndex(x=>x.id===id);
+  return idx===-1 ? 9999 : idx; // 未所属・不明な部署は最後に
+}
+function sortByDeptAndEmployeeNo(list){
+  return list.slice().sort((a,b)=>{
+    const da = departmentSortIndex(a.department);
+    const db = departmentSortIndex(b.department);
+    if(da!==db) return da-db;
+    const na = a.employeeNo ? Number(a.employeeNo) : null;
+    const nb = b.employeeNo ? Number(b.employeeNo) : null;
+    const validA = na!==null && !isNaN(na);
+    const validB = nb!==null && !isNaN(nb);
+    if(validA && validB && na!==nb) return na-nb;
+    if(validA && !validB) return -1;
+    if(!validA && validB) return 1;
+    return (a.name||"").localeCompare(b.name||"","ja");
+  });
+}
 function renderEmployees(){
   const body = document.getElementById("emp-table-body");
   if(!body) return;
@@ -1740,7 +1767,7 @@ function renderEmployees(){
     body.innerHTML = `<tr><td colspan="8" class="empty">まだ社員データがありません。対象の人がログインするか、CSV一括登録すると追加されます。</td></tr>`;
     return;
   }
-  employeesAll.forEach(emp=>{
+  sortByDeptAndEmployeeNo(employeesAll).forEach(emp=>{
     const tr = document.createElement("tr");
     if(emp.hidden) tr.style.opacity = "0.45";
 
@@ -1907,7 +1934,7 @@ function renderSafetyDashboard(responses){
     return;
   }
   const respMap = new Map((responses||[]).map(r=>[r.userEmail, r]));
-  const roster = employeesAll.slice().sort((a,b)=> (a.name||"").localeCompare(b.name||"","ja"));
+  const roster = sortByDeptAndEmployeeNo(employeesAll);
   const answeredCount = roster.filter(e=>respMap.has(e.email)).length;
   summary.textContent = `回答済み: ${answeredCount} / ${roster.length} 人`;
 

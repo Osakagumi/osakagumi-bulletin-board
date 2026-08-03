@@ -2675,8 +2675,15 @@ function getBaseWbNote(emp){
   }
   return emp.note || "";
 }
+function departmentSortIndex(id){
+  const idx = departmentsAll.findIndex(x=>x.id===id);
+  return idx===-1 ? 9999 : idx; // 未所属・不明な部署は最後に
+}
 function getSortedEmployees(){
   return employeesAll.filter(e=>!e.hidden).slice().sort((a,b)=>{
+    const da = departmentSortIndex(a.department);
+    const db = departmentSortIndex(b.department);
+    if(da!==db) return da-db;
     const na = a.employeeNo ? Number(a.employeeNo) : null;
     const nb = b.employeeNo ? Number(b.employeeNo) : null;
     const validA = na!==null && !isNaN(na);
