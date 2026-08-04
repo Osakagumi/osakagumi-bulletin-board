@@ -104,7 +104,7 @@
   body.reserve-signage-mode .tl-day-sel-bar button{ font-size:15px; padding:6px 12px; }
   body.reserve-signage-mode .legend{ font-size:14px; margin-top:4px; }
   body.reserve-signage-mode .tl-ruler .tick{ font-size:18px; }
-  body.reserve-signage-mode .slot.booked .lbl{ font-size:var(--sig-lbl-font, 10px); inset:1px 1px; text-align:center; }
+  body.reserve-signage-mode .slot.booked .lbl{ inset:1px 1px; text-align:center; }
   .header-clock{
     display:flex; align-items:baseline; gap:10px; font-family:var(--mono); color:var(--brand-dark);
   }
@@ -330,7 +330,7 @@
   .slot.booked{background:var(--slot-color,#ccc);cursor:default;}
   .slot.booked.editable-booked{cursor:pointer;}
   .slot.booked.editable-booked:hover{filter:brightness(0.9);}
-  .slot.booked .lbl{position:absolute;inset:2px 4px;font-size:9.5px;color:#fff;line-height:1.2;overflow:hidden;font-weight:600;}
+  .slot.booked .lbl{position:absolute;inset:2px 4px;font-size:var(--lbl-font, 9.5px);color:#fff;line-height:1.2;overflow:hidden;font-weight:600;}
   .slot.past{background:#F6F7F9;cursor:not-allowed;}
 
   .tl-day-panel{display:flex;align-items:stretch;border-bottom:1px solid var(--line);}
@@ -2056,8 +2056,10 @@ function renderMonthPanels(){
     currentSignageRowsPerColumn = rowsPerColumn;
     requestAnimationFrame(()=>{
       applySignageRowHeight(rowsPerColumn);
-      applySignageLabelFontSize();
+      applyBookingLabelFontSize();
     });
+  } else {
+    requestAnimationFrame(()=> applyBookingLabelFontSize());
   }
 }
 
@@ -2076,12 +2078,13 @@ function applySignageRowHeight(rowsPerColumn){
   document.documentElement.style.setProperty("--sig-slot-h", `${rowH}px`);
 }
 
-function applySignageLabelFontSize(){
+function applyBookingLabelFontSize(){
   const slotEl = document.querySelector("#tl-panels .slot");
   if(!slotEl) return;
   const slotW = slotEl.getBoundingClientRect().width;
   if(!slotW) return;
-  const insetPx = 2; // .lbl の inset:1px 1px 分（左右合計）
+  // サイネージは inset:1px 1px（左右合計2px）、通常画面は inset:2px 4px（左右合計8px）
+  const insetPx = document.body.classList.contains("reserve-signage-mode") ? 2 : 8;
   const availW = Math.max(8, slotW - insetPx);
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");
@@ -2095,7 +2098,7 @@ function applySignageLabelFontSize(){
   const perPx = twoCharWidth / testSize;
   let fontSize = (availW / perPx) - 0.5; // 計算値ぎりぎりだと収まらないことがあるため少し安全マージンを引く
   fontSize = Math.max(8, Math.min(20, fontSize));
-  document.documentElement.style.setProperty("--sig-lbl-font", `${fontSize}px`);
+  document.documentElement.style.setProperty("--lbl-font", `${fontSize}px`);
 }
 
 function buildDaySlots(wrap, dateStr, dayReservations){
@@ -3128,7 +3131,8 @@ function applyKioskScale(elId){
 let wbResizeTimer = null;
 window.addEventListener("resize", ()=>{
   if(isDisplayMode) applyKioskScale("view-whereabouts");
-  if(reserveSignageEquipmentId){ applySignageRowHeight(currentSignageRowsPerColumn); applySignageLabelFontSize(); }
+  if(reserveSignageEquipmentId){ applySignageRowHeight(currentSignageRowsPerColumn); }
+  applyBookingLabelFontSize();
   clearTimeout(wbResizeTimer);
   wbResizeTimer = setTimeout(()=>{
     const wbView = document.getElementById("view-whereabouts");
