@@ -299,13 +299,20 @@ export const MAIL_SEND_TARGET = "*";
      ```html
      <p>{{message}}</p>
      <p>以下のボタンから、そのまま回答できます（未ログインの場合のみログイン画面が挟まります）。</p>
-     <p>
-       <a href="{{link_safe}}" style="background:#2E9E8F;color:#fff;padding:10px 16px;text-decoration:none;border-radius:6px;margin-right:8px;">無事です</a>
-       <a href="{{link_damage}}" style="background:#C0392B;color:#fff;padding:10px 16px;text-decoration:none;border-radius:6px;margin-right:8px;">被害があります</a>
-       <a href="{{link_unknown}}" style="background:#E8853F;color:#fff;padding:10px 16px;text-decoration:none;border-radius:6px;">わからない・確認中</a>
-     </p>
+     <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;max-width:320px;">
+       <tr><td style="padding-bottom:8px;">
+         <a href="{{link_safe}}" style="display:block;width:100%;box-sizing:border-box;background:#2E9E8F;color:#fff;padding:12px 16px;text-decoration:none;border-radius:6px;text-align:center;font-weight:bold;">無事です</a>
+       </td></tr>
+       <tr><td style="padding-bottom:8px;">
+         <a href="{{link_damage}}" style="display:block;width:100%;box-sizing:border-box;background:#C0392B;color:#fff;padding:12px 16px;text-decoration:none;border-radius:6px;text-align:center;font-weight:bold;">被害があります</a>
+       </td></tr>
+       <tr><td>
+         <a href="{{link_unknown}}" style="display:block;width:100%;box-sizing:border-box;background:#E8853F;color:#fff;padding:12px 16px;text-decoration:none;border-radius:6px;text-align:center;font-weight:bold;">わからない・確認中</a>
+       </td></tr>
+     </table>
      <p><a href="{{link}}">システムを開く（回答内容を確認してから送信）</a></p>
      ```
+     ※ すでにテンプレートを作成済みの場合は、EmailJSの管理画面でこのテンプレートを開き、Content（HTML）を上記の内容に貼り替えて保存してください（自動では反映されません）。
    - **To Email** 欄に必ず `{{to_email}}` と入力（これを忘れると全員同じ宛先に届いてしまいます）
    - 保存後の **Template ID** をメモ（この値は`safetyTemplateId`に使います）
 4. 「Account」→「General」から **Public Key** をメモ

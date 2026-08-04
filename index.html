@@ -72,17 +72,10 @@
   body.reserve-signage-mode nav.tabs{ display:none !important; }
   body.reserve-signage-mode #app{ height:100vh; overflow:hidden; }
   body.reserve-signage-mode main{
-    max-width:none; padding:12px; height:100vh; box-sizing:border-box;
+    max-width:none; padding:18px; height:100vh; box-sizing:border-box;
     display:flex; align-items:flex-start; justify-content:center;
   }
-  body.reserve-signage-mode #view-reserve{
-    width:100%; max-width:none; flex-shrink:0;
-    transform-origin:top center;
-  }
-  body.reserve-signage-mode #timeline-panel{ width:100%; box-sizing:border-box; }
-  body.reserve-signage-mode .timeline-wrap{ overflow-x:visible; }
-  body.reserve-signage-mode #tl-panels{ min-width:0; width:100%; }
-  body.reserve-signage-mode .tl-ruler{ min-width:0; }
+  body.reserve-signage-mode #view-reserve{ width:100%; transform-origin:top center; }
   body.reserve-signage-mode .cat-row,
   body.reserve-signage-mode .eq-grid,
   body.reserve-signage-mode .section-divider,
@@ -98,13 +91,13 @@
   body.reserve-signage-mode #signage-view-toggle{ grid-area:toggle; justify-self:end; flex-shrink:0; }
   body.reserve-signage-mode .eq-title{ font-size:26px; }
   body.reserve-signage-mode .howto{ display:none !important; }
-  body.reserve-signage-mode .slot{ height:var(--sig-slot-h, 56px); }
-  body.reserve-signage-mode .tl-day-panel-head{ font-size:18px; line-height:1.15; flex:0 0 68px; padding:2px 4px; }
-  body.reserve-signage-mode .tl-day-sel-bar{ font-size:16px; padding:5px 10px; }
-  body.reserve-signage-mode .tl-day-sel-bar button{ font-size:15px; padding:6px 12px; }
-  body.reserve-signage-mode .legend{ font-size:14px; margin-top:4px; }
-  body.reserve-signage-mode .tl-ruler .tick{ font-size:18px; }
-  body.reserve-signage-mode .slot.booked .lbl{ inset:1px 1px; text-align:center; }
+  body.reserve-signage-mode .slot{ height:64px; }
+  body.reserve-signage-mode .tl-day-panel-head{ font-size:20px; }
+  body.reserve-signage-mode .tl-day-sel-bar{ font-size:20px; }
+  body.reserve-signage-mode .tl-day-sel-bar button{ font-size:20px; padding:8px 16px; }
+  body.reserve-signage-mode .legend{ font-size:16px; margin-top:6px; }
+  body.reserve-signage-mode .tl-ruler .tick{ font-size:20px; }
+  body.reserve-signage-mode .slot.booked .lbl{ font-size:18px; }
   .header-clock{
     display:flex; align-items:baseline; gap:10px; font-family:var(--mono); color:var(--brand-dark);
   }
@@ -314,10 +307,8 @@
 
   .timeline-wrap{overflow-x:auto;}
   #tl-panels{min-width:640px;}
-  .tl-ruler{display:flex;border-bottom:1px solid var(--line);min-width:640px;position:sticky;top:0;background:var(--surface);z-index:2;box-sizing:border-box;}
-  .tl-ruler-spacer{border-bottom:none;}
-  .tl-ruler .tick{flex:1;font-family:var(--mono);font-size:13.5px;color:var(--muted);border-left:none;padding:2px 0 4px 3px;overflow:visible;white-space:nowrap;position:relative;z-index:1;}
-  .tl-ruler .tick.hour-start{border-left:1px solid var(--line);}
+  .tl-ruler{display:flex;border-bottom:1px solid var(--line);padding-left:92px;min-width:640px;position:sticky;top:0;background:var(--surface);z-index:2;box-sizing:border-box;}
+  .tl-ruler .tick{flex:1;font-family:var(--mono);font-size:13.5px;color:var(--muted);border-left:1px solid var(--line);padding:2px 0 4px 3px;overflow:visible;white-space:nowrap;position:relative;z-index:1;}
   .tl-slots{display:flex;background:
       repeating-linear-gradient(90deg, transparent, transparent calc(100%/1 - 1px));
     border-bottom:1px solid var(--line);}
@@ -330,7 +321,7 @@
   .slot.booked{background:var(--slot-color,#ccc);cursor:default;}
   .slot.booked.editable-booked{cursor:pointer;}
   .slot.booked.editable-booked:hover{filter:brightness(0.9);}
-  .slot.booked .lbl{position:absolute;inset:2px 4px;font-size:var(--lbl-font, 9.5px);color:#fff;line-height:1.2;overflow:hidden;font-weight:600;}
+  .slot.booked .lbl{position:absolute;inset:2px 4px;font-size:9.5px;color:#fff;line-height:1.2;overflow:hidden;font-weight:600;}
   .slot.past{background:#F6F7F9;cursor:not-allowed;}
 
   .tl-day-panel{display:flex;align-items:stretch;border-bottom:1px solid var(--line);}
@@ -1169,30 +1160,27 @@ onAuthStateChanged(auth, async (user)=>{
     updateStickyNavOffset();
     document.getElementById("user-email").textContent = user.email;
     updateHeaderUserLabel();
-    try{
-      const adminDoc = await getDoc(doc(db, "admins", user.email));
-      isAdmin = adminDoc.exists();
-    }catch(e){ isAdmin = false; }
-    try{
-      const posterDoc = await getDoc(doc(db, "announcement_posters", user.email));
-      isPoster = isAdmin || posterDoc.exists();
-    }catch(e){ isPoster = isAdmin; }
-    try{
-      const wbEditorDoc = await getDoc(doc(db, "whereabouts_editors", user.email));
-      isWhereaboutsEditor = isAdmin || wbEditorDoc.exists();
-    }catch(e){ isWhereaboutsEditor = isAdmin; }
-    try{
-      const eqManagerDoc = await getDoc(doc(db, "equipment_managers", user.email));
-      isEquipmentManager = isAdmin || eqManagerDoc.exists();
-    }catch(e){ isEquipmentManager = isAdmin; }
-    try{
-      const calEditorDoc = await getDoc(doc(db, "calendar_editors", user.email));
-      isCalendarEditor = isAdmin || calEditorDoc.exists();
-    }catch(e){ isCalendarEditor = isAdmin; }
+    // 権限チェックは直列でawaitすると往復通信が5回分積み重なり、
+    // 回線が遅いと数秒〜十数秒のロスになる。並列で一度に取得する。
+    const [adminDoc, posterDoc, wbEditorDoc, eqManagerDoc, calEditorDoc] = await Promise.all([
+      getDoc(doc(db, "admins", user.email)).catch(()=>null),
+      getDoc(doc(db, "announcement_posters", user.email)).catch(()=>null),
+      getDoc(doc(db, "whereabouts_editors", user.email)).catch(()=>null),
+      getDoc(doc(db, "equipment_managers", user.email)).catch(()=>null),
+      getDoc(doc(db, "calendar_editors", user.email)).catch(()=>null)
+    ]);
+    isAdmin = !!(adminDoc && adminDoc.exists());
+    isPoster = isAdmin || !!(posterDoc && posterDoc.exists());
+    isWhereaboutsEditor = isAdmin || !!(wbEditorDoc && wbEditorDoc.exists());
+    isEquipmentManager = isAdmin || !!(eqManagerDoc && eqManagerDoc.exists());
+    isCalendarEditor = isAdmin || !!(calEditorDoc && calEditorDoc.exists());
     document.getElementById("admin-link").style.display = isAdmin ? "inline-block" : "none";
     document.getElementById("notice-new-btn").style.display = isPoster ? "inline-block" : "none";
     document.getElementById("wb-preset-tab-btn").style.display = (isAdmin || isWhereaboutsEditor) ? "inline-block" : "none";
-    await ensureEmployeeRecord();
+    // 安否確認のメールリンクから来た場合に画面が出るまでを速くするため、
+    // 表示に必須ではない社員レコード作成はawaitせずバックグラウンドで行う
+    ensureEmployeeRecord();
+    initSafetyCampaignListener();
     initCategoriesListener();
     initEquipmentListener();
     initMyReservationsListener();
@@ -1203,7 +1191,6 @@ onAuthStateChanged(auth, async (user)=>{
     initWbStatusesListener();
     initWbColumnsListener();
     initEmployeesListener();
-    initSafetyCampaignListener();
     initCalendarTab();
     initWbPresetsListener();
 
@@ -1923,13 +1910,10 @@ function showTimelinePanel(){
 function renderRuler(){
   const ruler = document.getElementById("tl-ruler");
   ruler.innerHTML = "";
-  const spacer = document.createElement("div");
-  spacer.className = "tl-day-panel-head tl-ruler-spacer";
-  ruler.appendChild(spacer);
   SLOTS.forEach(s=>{
     const isHour = s.start % 60 === 0;
     const tick = document.createElement("div");
-    tick.className = "tick" + (isHour ? " hour-start" : "");
+    tick.className = "tick";
     tick.textContent = isHour ? s.label : "";
     ruler.appendChild(tick);
   });
@@ -1966,13 +1950,10 @@ function timeToMinutes(hhmm){
 function buildTickRulerEl(){
   const ruler = document.createElement("div");
   ruler.className = "tl-ruler";
-  const spacer = document.createElement("div");
-  spacer.className = "tl-day-panel-head tl-ruler-spacer";
-  ruler.appendChild(spacer);
   SLOTS.forEach(s=>{
     const isHour = s.start % 60 === 0;
     const tick = document.createElement("div");
-    tick.className = "tick" + (isHour ? " hour-start" : "");
+    tick.className = "tick";
     tick.textContent = isHour ? s.label : "";
     ruler.appendChild(tick);
   });
@@ -2052,53 +2033,8 @@ function renderMonthPanels(){
     }
   }
   if(reserveSignageEquipmentId){
-    const rowsPerColumn = useTwoColumns ? Math.ceil(daysN/2) : (signageTodayOnly ? 1 : daysN);
-    currentSignageRowsPerColumn = rowsPerColumn;
-    requestAnimationFrame(()=>{
-      applySignageRowHeight(rowsPerColumn);
-      applyBookingLabelFontSize();
-    });
-  } else {
-    requestAnimationFrame(()=> applyBookingLabelFontSize());
+    requestAnimationFrame(()=> applyKioskScale("view-reserve"));
   }
-}
-
-let currentSignageRowsPerColumn = null;
-function applySignageRowHeight(rowsPerColumn){
-  const wrap = document.getElementById("tl-panels");
-  if(!wrap || !rowsPerColumn) return;
-  const rect = wrap.getBoundingClientRect();
-  // 下端に余裕を持たせる（編集時に選択バーが出て行の高さが一時的に伸びても
-  // 画面からはみ出さないよう、ぎりぎりまで使い切らずに多めの余白を確保する）
-  const BOTTOM_BUFFER = 90;
-  const BORDER_PER_ROW = 1; // 各行の border-bottom 分
-  const availForRows = window.innerHeight - rect.top - BOTTOM_BUFFER - (rowsPerColumn * BORDER_PER_ROW);
-  // 42px未満だと日付ラベル(18px・2行固定)が収まりきらなくなるため下限にする
-  const rowH = Math.max(42, Math.min(64, Math.floor(availForRows / rowsPerColumn)));
-  document.documentElement.style.setProperty("--sig-slot-h", `${rowH}px`);
-}
-
-function applyBookingLabelFontSize(){
-  const slotEl = document.querySelector("#tl-panels .slot");
-  if(!slotEl) return;
-  const slotW = slotEl.getBoundingClientRect().width;
-  if(!slotW) return;
-  // サイネージは inset:1px 1px（左右合計2px）、通常画面は inset:2px 4px（左右合計8px）
-  const insetPx = document.body.classList.contains("reserve-signage-mode") ? 2 : 8;
-  const availW = Math.max(8, slotW - insetPx);
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d");
-  const testSize = 100;
-  // 実際に画面で使われているフォント（--sans）で測定する。
-  // 総称の sans-serif で測ると実際のフォントより幅が狭く出て、
-  // 「入るはず」と判定したサイズが実際には収まらないことがあるため。
-  const sansFont = getComputedStyle(document.documentElement).getPropertyValue("--sans").trim() || "sans-serif";
-  ctx.font = `600 ${testSize}px ${sansFont}`;
-  const twoCharWidth = ctx.measureText("国国").width; // 全角2文字分の基準幅
-  const perPx = twoCharWidth / testSize;
-  let fontSize = (availW / perPx) - 0.5; // 計算値ぎりぎりだと収まらないことがあるため少し安全マージンを引く
-  fontSize = Math.max(8, Math.min(20, fontSize));
-  document.documentElement.style.setProperty("--lbl-font", `${fontSize}px`);
 }
 
 function buildDaySlots(wrap, dateStr, dayReservations){
@@ -3122,7 +3058,6 @@ function applyKioskScale(elId){
   const scale = Math.min(availH/rect.height, 1);
   if(scale < 1){
     // 縮小後も横幅が画面いっぱいのままになるよう、縮小前の幅を広げておく
-    // （親側がflexで中央寄せされている前提。widthにはCSS側で!importantを付けないこと）
     el.style.width = `${rect.width/scale}px`;
   }
   el.style.transformOrigin = "top center";
@@ -3131,8 +3066,7 @@ function applyKioskScale(elId){
 let wbResizeTimer = null;
 window.addEventListener("resize", ()=>{
   if(isDisplayMode) applyKioskScale("view-whereabouts");
-  if(reserveSignageEquipmentId){ applySignageRowHeight(currentSignageRowsPerColumn); }
-  applyBookingLabelFontSize();
+  if(reserveSignageEquipmentId) applyKioskScale("view-reserve");
   clearTimeout(wbResizeTimer);
   wbResizeTimer = setTimeout(()=>{
     const wbView = document.getElementById("view-whereabouts");
