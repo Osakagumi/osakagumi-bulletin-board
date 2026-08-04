@@ -2062,7 +2062,11 @@ function applySignageRowHeight(rowsPerColumn){
   const wrap = document.getElementById("tl-panels");
   if(!wrap || !rowsPerColumn) return;
   const rect = wrap.getBoundingClientRect();
-  const availForRows = window.innerHeight - rect.top - 16; // 画面下端までの残り高さ
+  // 下端に余裕を持たせる（編集時に選択バーが出て行の高さが一時的に伸びても
+  // 画面からはみ出さないよう、ぎりぎりまで使い切らずに多めの余白を確保する）
+  const BOTTOM_BUFFER = 90;
+  const BORDER_PER_ROW = 1; // 各行の border-bottom 分
+  const availForRows = window.innerHeight - rect.top - BOTTOM_BUFFER - (rowsPerColumn * BORDER_PER_ROW);
   const rowH = Math.max(32, Math.min(64, Math.floor(availForRows / rowsPerColumn)));
   document.documentElement.style.setProperty("--sig-slot-h", `${rowH}px`);
 }
