@@ -75,8 +75,7 @@
     max-width:none; padding:18px; height:100vh; box-sizing:border-box;
     display:flex; align-items:flex-start; justify-content:center;
   }
-  body.reserve-signage-mode #view-reserve{ width:100%; }
-  body.reserve-signage-mode #timeline-panel{ transform-origin:top center; }
+  body.reserve-signage-mode #view-reserve{ width:100%; transform-origin:top center; }
   body.reserve-signage-mode .cat-row,
   body.reserve-signage-mode .eq-grid,
   body.reserve-signage-mode .section-divider,
@@ -1941,6 +1940,53 @@ function timeToMinutes(hhmm){
   return h*60+m;
 }
 
+function buildTickRulerEl(){
+  const ruler = document.createElement("div");
+  ruler.className = "tl-ruler";
+  SLOTS.forEach(s=>{
+    const isHour = s.start % 60 === 0;
+    const tick = document.createElement("div");
+    tick.className = "tick";
+    tick.textContent = isHour ? s.label : "";
+    ruler.appendChild(tick);
+  });
+  return ruler;
+}
+
+function buildDayPanelEl(y, m, day, weekdayLabels, today){
+  const dateStr = `${y}-${pad2(m)}-${pad2(day)}`;
+  const dayReservations = monthReservations.filter(r=>r.date===dateStr);
+  const d = new Date(y, m-1, day);
+  const dow = d.getDay();
+
+  const panel = document.createElement("div");
+  panel.className = "tl-day-panel";
+
+  const head = document.createElement("div");
+  head.className = "tl-day-panel-head";
+  if(dow===6) head.classList.add("weekend-sat");
+  if(dow===0) head.classList.add("weekend-sun");
+  if(dateStr===today) head.classList.add("is-today");
+  head.innerHTML = `${m}/${day}<br>(${weekdayLabels[dow]})`;
+  panel.appendChild(head);
+
+  const body = document.createElement("div");
+  body.className = "tl-day-panel-body";
+
+  const slotsEl = document.createElement("div");
+  slotsEl.className = "tl-slots";
+  buildDaySlots(slotsEl, dateStr, dayReservations);
+  body.appendChild(slotsEl);
+
+  const selBar = document.createElement("div");
+  selBar.className = "tl-day-sel-bar";
+  body.appendChild(selBar);
+  updateDaySelectionBar(dateStr, selBar);
+
+  panel.appendChild(body);
+  return panel;
+}
+
 function renderMonthPanels(){
   const wrap = document.getElementById("tl-panels");
   wrap.innerHTML = "";
@@ -1949,42 +1995,37 @@ function renderMonthPanels(){
   const weekdayLabels = ["日","月","火","水","木","金","土"];
   const today = todayStr();
 
-  for(let day=1; day<=daysN; day++){
-    const dateStr = `${y}-${pad2(m)}-${pad2(day)}`;
-    if(signageTodayOnly && dateStr!==today) continue; // サイネージ「今日」表示のときは今日以外を飛ばす
-    const dayReservations = monthReservations.filter(r=>r.date===dateStr);
-    const d = new Date(y, m-1, day);
-    const dow = d.getDay();
+  // サイネージの月表示は、縦に長くなりすぎないよう左右2列に分けて表示する
+  const useTwoColumns = reserveSignageEquipmentId && !signageTodayOnly;
+  const mainRuler = document.getElementById("tl-ruler");
 
-    const panel = document.createElement("div");
-    panel.className = "tl-day-panel";
-
-    const head = document.createElement("div");
-    head.className = "tl-day-panel-head";
-    if(dow===6) head.classList.add("weekend-sat");
-    if(dow===0) head.classList.add("weekend-sun");
-    if(dateStr===today) head.classList.add("is-today");
-    head.innerHTML = `${m}/${day}<br>(${weekdayLabels[dow]})`;
-    panel.appendChild(head);
-
-    const body = document.createElement("div");
-    body.className = "tl-day-panel-body";
-
-    const slotsEl = document.createElement("div");
-    slotsEl.className = "tl-slots";
-    buildDaySlots(slotsEl, dateStr, dayReservations);
-    body.appendChild(slotsEl);
-
-    const selBar = document.createElement("div");
-    selBar.className = "tl-day-sel-bar";
-    body.appendChild(selBar);
-    updateDaySelectionBar(dateStr, selBar);
-
-    panel.appendChild(body);
-    wrap.appendChild(panel);
+  if(useTwoColumns){
+    mainRuler.style.display = "none";
+    wrap.style.display = "flex";
+    wrap.style.gap = "16px";
+    const half = Math.ceil(daysN/2);
+    [[1,half],[half+1,daysN]].forEach(([from,to])=>{
+      const col = document.createElement("div");
+      col.style.flex = "1";
+      col.style.minWidth = "0";
+      col.appendChild(buildTickRulerEl());
+      for(let day=from; day<=to; day++){
+        col.appendChild(buildDayPanelEl(y, m, day, weekdayLabels, today));
+      }
+      wrap.appendChild(col);
+    });
+  } else {
+    mainRuler.style.display = "";
+    wrap.style.display = "";
+    wrap.style.gap = "";
+    for(let day=1; day<=daysN; day++){
+      const dateStr = `${y}-${pad2(m)}-${pad2(day)}`;
+      if(signageTodayOnly && dateStr!==today) continue; // サイネージ「今日」表示のときは今日以外を飛ばす
+      wrap.appendChild(buildDayPanelEl(y, m, day, weekdayLabels, today));
+    }
   }
   if(reserveSignageEquipmentId){
-    requestAnimationFrame(()=> applyKioskScale("timeline-panel"));
+    requestAnimationFrame(()=> applyKioskScale("view-reserve"));
   }
 }
 
@@ -2972,7 +3013,7 @@ function applyKioskScale(elId){
 let wbResizeTimer = null;
 window.addEventListener("resize", ()=>{
   if(isDisplayMode) applyKioskScale("view-whereabouts");
-  if(reserveSignageEquipmentId) applyKioskScale("timeline-panel");
+  if(reserveSignageEquipmentId) applyKioskScale("view-reserve");
   clearTimeout(wbResizeTimer);
   wbResizeTimer = setTimeout(()=>{
     const wbView = document.getElementById("view-whereabouts");
