@@ -70,12 +70,23 @@
   /* ---------- サイネージ表示モード（時間枠予約） ---------- */
   body.reserve-signage-mode header,
   body.reserve-signage-mode nav.tabs{ display:none !important; }
-  body.reserve-signage-mode main{ max-width:none; padding:18px; box-sizing:border-box; }
+  body.reserve-signage-mode #app{ height:100vh; overflow:hidden; }
+  body.reserve-signage-mode main{
+    max-width:none; padding:18px; height:100vh; box-sizing:border-box;
+    display:flex; align-items:flex-start; justify-content:center;
+  }
+  body.reserve-signage-mode #view-reserve{ width:100%; }
+  body.reserve-signage-mode #timeline-panel{ transform-origin:top center; }
   body.reserve-signage-mode .cat-row,
   body.reserve-signage-mode .eq-grid,
   body.reserve-signage-mode .section-divider,
   body.reserve-signage-mode #my-res-list{ display:none !important; }
-  body.reserve-signage-mode .tl-head{ font-size:1.15em; }
+  body.reserve-signage-mode .tl-head{
+    font-size:1.15em; display:grid; grid-template-columns:1fr auto 1fr; align-items:center;
+  }
+  body.reserve-signage-mode .tl-head .eq-title{ grid-column:1; justify-self:start; }
+  body.reserve-signage-mode #reserve-date-nav{ grid-column:2; justify-self:center; }
+  body.reserve-signage-mode #signage-view-toggle{ grid-column:3; justify-self:end; }
   body.reserve-signage-mode .eq-title{ font-size:1.3em; }
   body.reserve-signage-mode .slot{ height:56px; }
   body.reserve-signage-mode .tl-day-panel-head{ font-size:1.1em; }
@@ -1972,6 +1983,9 @@ function renderMonthPanels(){
     panel.appendChild(body);
     wrap.appendChild(panel);
   }
+  if(reserveSignageEquipmentId){
+    requestAnimationFrame(()=> applyKioskScale("timeline-panel"));
+  }
 }
 
 function buildDaySlots(wrap, dateStr, dayReservations){
@@ -2934,12 +2948,12 @@ function renderWhereabouts(){
   renderWbList();
   renderWbBoard();
   if(isDisplayMode){
-    requestAnimationFrame(applyKioskScale);
+    requestAnimationFrame(()=> applyKioskScale("view-whereabouts"));
   }
 }
 
-function applyKioskScale(){
-  const el = document.getElementById("view-whereabouts");
+function applyKioskScale(elId){
+  const el = document.getElementById(elId);
   if(!el) return;
   el.style.transform = "none";
   el.style.width = "";
@@ -2957,7 +2971,8 @@ function applyKioskScale(){
 }
 let wbResizeTimer = null;
 window.addEventListener("resize", ()=>{
-  if(isDisplayMode) applyKioskScale();
+  if(isDisplayMode) applyKioskScale("view-whereabouts");
+  if(reserveSignageEquipmentId) applyKioskScale("timeline-panel");
   clearTimeout(wbResizeTimer);
   wbResizeTimer = setTimeout(()=>{
     const wbView = document.getElementById("view-whereabouts");
