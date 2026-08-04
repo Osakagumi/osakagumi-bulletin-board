@@ -1109,6 +1109,7 @@ onAuthStateChanged(auth, async (user)=>{
     currentUser = user;
     document.getElementById("login-screen").style.display = "none";
     document.getElementById("app").style.display = "flex";
+    updateStickyNavOffset();
     document.getElementById("user-email").textContent = user.email;
     updateHeaderUserLabel();
     try{

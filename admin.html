@@ -810,6 +810,7 @@ onAuthStateChanged(auth, async (user)=>{
   }
 
   document.getElementById("admin-app").style.display = "block";
+  updateStickyNavOffset();
   seedCategoriesIfEmpty().then(initCategoriesListener);
   initEquipmentListener();
   initReservationsListener();
