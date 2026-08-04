@@ -81,15 +81,20 @@
   body.reserve-signage-mode .section-divider,
   body.reserve-signage-mode #my-res-list{ display:none !important; }
   body.reserve-signage-mode .tl-head{
-    font-size:1.15em; display:grid; grid-template-columns:1fr auto 1fr; align-items:center;
+    font-size:1.2em; display:grid;
+    grid-template-columns:1fr auto 1fr;
+    grid-template-areas:"title nav toggle";
+    align-items:center; column-gap:12px;
   }
-  body.reserve-signage-mode .tl-head .eq-title{ grid-column:1; justify-self:start; }
-  body.reserve-signage-mode #reserve-date-nav{ grid-column:2; justify-self:center; }
-  body.reserve-signage-mode #signage-view-toggle{ grid-column:3; justify-self:end; }
+  body.reserve-signage-mode .tl-head .eq-title{ grid-area:title; justify-self:start; white-space:nowrap; }
+  body.reserve-signage-mode #reserve-date-nav{ grid-area:nav; justify-self:center; flex-wrap:nowrap; white-space:nowrap; }
+  body.reserve-signage-mode #signage-view-toggle{ grid-area:toggle; justify-self:end; flex-shrink:0; }
   body.reserve-signage-mode .eq-title{ font-size:1.3em; }
-  body.reserve-signage-mode .slot{ height:56px; }
-  body.reserve-signage-mode .tl-day-panel-head{ font-size:1.1em; }
-  body.reserve-signage-mode .tl-day-sel-bar{ font-size:1.05em; }
+  body.reserve-signage-mode .howto{ display:none !important; }
+  body.reserve-signage-mode .slot{ height:64px; }
+  body.reserve-signage-mode .tl-day-panel-head{ font-size:1.2em; }
+  body.reserve-signage-mode .tl-day-sel-bar{ font-size:1.1em; }
+  body.reserve-signage-mode .legend{ font-size:1em; margin-top:6px; }
   .header-clock{
     display:flex; align-items:baseline; gap:10px; font-family:var(--mono); color:var(--brand-dark);
   }
