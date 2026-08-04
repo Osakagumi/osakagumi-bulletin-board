@@ -96,7 +96,7 @@
   body.reserve-signage-mode .tl-day-sel-bar{ font-size:1.1em; }
   body.reserve-signage-mode .legend{ font-size:1em; margin-top:6px; }
   body.reserve-signage-mode .tl-ruler .tick{
-    font-size:1.35em; font-weight:700; overflow:visible; white-space:nowrap; position:relative; z-index:1;
+    font-size:1.35em; overflow:visible; white-space:nowrap; position:relative; z-index:1;
   }
   .header-clock{
     display:flex; align-items:baseline; gap:10px; font-family:var(--mono); color:var(--brand-dark);
@@ -1969,6 +1969,7 @@ function buildDayPanelEl(y, m, day, weekdayLabels, today){
 
   const panel = document.createElement("div");
   panel.className = "tl-day-panel";
+  panel.dataset.date = dateStr;
 
   const head = document.createElement("div");
   head.className = "tl-day-panel-head";
@@ -2107,23 +2108,16 @@ function handleSlotClick(dateStr, slotStart){
 }
 
 function refreshDayPanel(dateStr){
-  // 該当日のパネルだけ再描画する（月全体は再構築しない）
-  const daysN = daysInSelectedMonth();
-  const [y,m] = selectedMonth.split("-").map(Number);
-  const panels = document.getElementById("tl-panels").children;
-  for(let day=1; day<=daysN; day++){
-    const ds = `${y}-${pad2(m)}-${pad2(day)}`;
-    if(ds !== dateStr) continue;
-    const panel = panels[day-1];
-    if(!panel) return;
-    const body = panel.querySelector(".tl-day-panel-body");
-    const slotsEl = body.querySelector(".tl-slots");
-    const selBar = body.querySelector(".tl-day-sel-bar");
-    const dayReservations = monthReservations.filter(r=>r.date===ds);
-    buildDaySlots(slotsEl, ds, dayReservations);
-    updateDaySelectionBar(ds, selBar);
-    return;
-  }
+  // 該当日のパネルだけ再描画する（月全体は再構築しない）。
+  // 2列レイアウトでも正しく見つかるよう、位置ではなくdata-date属性で探す。
+  const panel = document.querySelector(`#tl-panels .tl-day-panel[data-date="${dateStr}"]`);
+  if(!panel) return;
+  const body = panel.querySelector(".tl-day-panel-body");
+  const slotsEl = body.querySelector(".tl-slots");
+  const selBar = body.querySelector(".tl-day-sel-bar");
+  const dayReservations = monthReservations.filter(r=>r.date===dateStr);
+  buildDaySlots(slotsEl, dateStr, dayReservations);
+  updateDaySelectionBar(dateStr, selBar);
 }
 
 function updateDaySelectionBar(dateStr, selBarEl){
