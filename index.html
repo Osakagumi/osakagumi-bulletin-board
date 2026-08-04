@@ -93,7 +93,7 @@
   body.reserve-signage-mode .howto{ display:none !important; }
   body.reserve-signage-mode .slot{ height:64px; }
   body.reserve-signage-mode .tl-day-panel-head{ font-size:1.2em; }
-  body.reserve-signage-mode .tl-day-sel-bar{ font-size:1.4em; }
+  body.reserve-signage-mode .tl-day-sel-bar{ font-size:1em; }
   body.reserve-signage-mode .legend{ font-size:1em; margin-top:6px; }
   body.reserve-signage-mode .tl-ruler .tick{ font-size:1.6em; }
   .header-clock{
@@ -2069,6 +2069,7 @@ function buildDaySlots(wrap, dateStr, dayReservations){
       if(canEdit){
         div.classList.add("editable-booked");
         div.addEventListener("click", ()=>{
+          clearOtherPendingSelections(dateStr);
           editingReservationId = booking.id;
           editingReservationDate = dateStr;
           tlPendingByDate[dateStr] = { start: timeToMinutes(booking.startTime), end: timeToMinutes(booking.endTime) };
@@ -2104,9 +2105,9 @@ function rangeHasConflictOnDate(dateStr, lo, hi){
   });
 }
 
-function handleSlotClick(dateStr, slotStart){
-  // 同時に2つ以上の日の選択（編集中も含む）を持てないようにする。
-  // 別の日をクリックしたら、それ以外の日の選択・編集状態は解除する。
+// 同時に2つ以上の日の選択（編集中も含む）を持てないようにする。
+// 別の日を操作したら、それ以外の日の選択・編集状態は解除する。
+function clearOtherPendingSelections(dateStr){
   const otherDates = Object.keys(tlPendingByDate).filter(d => d !== dateStr);
   if(otherDates.length > 0){
     otherDates.forEach(d => delete tlPendingByDate[d]);
@@ -2116,6 +2117,10 @@ function handleSlotClick(dateStr, slotStart){
     }
     otherDates.forEach(d => refreshDayPanel(d));
   }
+}
+
+function handleSlotClick(dateStr, slotStart){
+  clearOtherPendingSelections(dateStr);
 
   const pending = tlPendingByDate[dateStr];
   if(!pending){
