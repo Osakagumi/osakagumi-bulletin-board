@@ -95,9 +95,7 @@
   body.reserve-signage-mode .tl-day-panel-head{ font-size:1.2em; }
   body.reserve-signage-mode .tl-day-sel-bar{ font-size:1.1em; }
   body.reserve-signage-mode .legend{ font-size:1em; margin-top:6px; }
-  body.reserve-signage-mode .tl-ruler .tick{
-    font-size:1.35em; overflow:visible; white-space:nowrap; position:relative; z-index:1;
-  }
+  body.reserve-signage-mode .tl-ruler .tick{ font-size:1.6em; }
   .header-clock{
     display:flex; align-items:baseline; gap:10px; font-family:var(--mono); color:var(--brand-dark);
   }
@@ -308,7 +306,7 @@
   .timeline-wrap{overflow-x:auto;}
   #tl-panels{min-width:640px;}
   .tl-ruler{display:flex;border-bottom:1px solid var(--line);padding-left:92px;min-width:640px;position:sticky;top:0;background:var(--surface);z-index:2;box-sizing:border-box;}
-  .tl-ruler .tick{flex:1;font-family:var(--mono);font-size:10px;color:var(--muted);border-left:1px solid var(--line);padding:2px 0 4px 3px;}
+  .tl-ruler .tick{flex:1;font-family:var(--mono);font-size:13.5px;color:var(--muted);border-left:1px solid var(--line);padding:2px 0 4px 3px;overflow:visible;white-space:nowrap;position:relative;z-index:1;}
   .tl-slots{display:flex;background:
       repeating-linear-gradient(90deg, transparent, transparent calc(100%/1 - 1px));
     border-bottom:1px solid var(--line);}
@@ -319,6 +317,8 @@
   .slot.free:hover{background:#EFF5FC;cursor:pointer;}
   .slot.pending{background:rgba(28,90,165,0.18);box-shadow:inset 0 0 0 1.5px var(--brand);cursor:pointer;}
   .slot.booked{background:var(--slot-color,#ccc);cursor:default;}
+  .slot.booked.editable-booked{cursor:pointer;}
+  .slot.booked.editable-booked:hover{filter:brightness(0.9);}
   .slot.booked .lbl{position:absolute;inset:2px 4px;font-size:9.5px;color:#fff;line-height:1.2;overflow:hidden;font-weight:600;}
   .slot.past{background:#F6F7F9;cursor:not-allowed;}
 
@@ -2061,7 +2061,19 @@ function buildDaySlots(wrap, dateStr, dayReservations){
     if(booking){
       div.classList.add("booked");
       div.style.setProperty("--slot-color", cat.color);
-      div.title = `${booking.startTime}-${booking.endTime} ${booking.userName||booking.userEmail}\n${booking.purpose||""}`;
+      const bookingEndM = timeToMinutes(booking.endTime);
+      const bookingIsPast = isPastDate || (isToday && bookingEndM <= nowMins);
+      const canEdit = !bookingIsPast && (booking.userEmail===currentUser.email || isAdmin);
+      div.title = `${booking.startTime}-${booking.endTime} ${booking.userName||booking.userEmail}\n${booking.purpose||""}` + (canEdit ? "\n（タップで編集）" : "");
+      if(canEdit){
+        div.classList.add("editable-booked");
+        div.addEventListener("click", ()=>{
+          editingReservationId = booking.id;
+          editingReservationDate = dateStr;
+          tlPendingByDate[dateStr] = { start: timeToMinutes(booking.startTime), end: timeToMinutes(booking.endTime) };
+          refreshDayPanel(dateStr);
+        });
+      }
       if(s.start === Math.round(timeToMinutes(booking.startTime))){
         const lbl = document.createElement("div");
         lbl.className = "lbl";
