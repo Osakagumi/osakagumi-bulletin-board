@@ -75,7 +75,11 @@
     max-width:none !important; padding:12px; height:100vh; box-sizing:border-box;
     display:block !important; width:100% !important; margin:0 !important;
   }
-  body.reserve-signage-mode #view-reserve{ width:100% !important; max-width:none !important; margin:0 !important; transform-origin:top center; }
+  body.reserve-signage-mode #view-reserve{
+    width:100vw !important; max-width:none !important;
+    margin-left:calc(50% - 50vw) !important; margin-right:calc(50% - 50vw) !important;
+    transform-origin:top center;
+  }
   body.reserve-signage-mode #timeline-panel{ width:100% !important; box-sizing:border-box; }
   body.reserve-signage-mode .timeline-wrap{ overflow-x:visible; }
   body.reserve-signage-mode #tl-panels{ min-width:0; width:100%; }
@@ -97,7 +101,6 @@
   body.reserve-signage-mode .howto{ display:none !important; }
   body.reserve-signage-mode .slot{ height:64px; }
   body.reserve-signage-mode .tl-day-panel-head{ font-size:20px; flex:0 0 68px; padding:4px 4px; }
-  body.reserve-signage-mode .tl-ruler{ padding-left:68px; }
   body.reserve-signage-mode .tl-day-sel-bar{ font-size:20px; }
   body.reserve-signage-mode .tl-day-sel-bar button{ font-size:20px; padding:8px 16px; }
   body.reserve-signage-mode .legend{ font-size:16px; margin-top:6px; }
@@ -312,7 +315,8 @@
 
   .timeline-wrap{overflow-x:auto;}
   #tl-panels{min-width:640px;}
-  .tl-ruler{display:flex;border-bottom:1px solid var(--line);padding-left:92px;min-width:640px;position:sticky;top:0;background:var(--surface);z-index:2;box-sizing:border-box;}
+  .tl-ruler{display:flex;border-bottom:1px solid var(--line);min-width:640px;position:sticky;top:0;background:var(--surface);z-index:2;box-sizing:border-box;}
+  .tl-ruler-spacer{border-bottom:none;}
   .tl-ruler .tick{flex:1;font-family:var(--mono);font-size:13.5px;color:var(--muted);border-left:1px solid var(--line);padding:2px 0 4px 3px;overflow:visible;white-space:nowrap;position:relative;z-index:1;}
   .tl-slots{display:flex;background:
       repeating-linear-gradient(90deg, transparent, transparent calc(100%/1 - 1px));
@@ -1919,6 +1923,9 @@ function showTimelinePanel(){
 function renderRuler(){
   const ruler = document.getElementById("tl-ruler");
   ruler.innerHTML = "";
+  const spacer = document.createElement("div");
+  spacer.className = "tl-day-panel-head tl-ruler-spacer";
+  ruler.appendChild(spacer);
   SLOTS.forEach(s=>{
     const isHour = s.start % 60 === 0;
     const tick = document.createElement("div");
@@ -1959,6 +1966,9 @@ function timeToMinutes(hhmm){
 function buildTickRulerEl(){
   const ruler = document.createElement("div");
   ruler.className = "tl-ruler";
+  const spacer = document.createElement("div");
+  spacer.className = "tl-day-panel-head tl-ruler-spacer";
+  ruler.appendChild(spacer);
   SLOTS.forEach(s=>{
     const isHour = s.start % 60 === 0;
     const tick = document.createElement("div");
