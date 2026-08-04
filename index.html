@@ -93,7 +93,7 @@
   body.reserve-signage-mode .howto{ display:none !important; }
   body.reserve-signage-mode .slot{ height:64px; }
   body.reserve-signage-mode .tl-day-panel-head{ font-size:1.2em; }
-  body.reserve-signage-mode .tl-day-sel-bar{ font-size:1.1em; }
+  body.reserve-signage-mode .tl-day-sel-bar{ font-size:1.4em; }
   body.reserve-signage-mode .legend{ font-size:1em; margin-top:6px; }
   body.reserve-signage-mode .tl-ruler .tick{ font-size:1.6em; }
   .header-clock{
@@ -2161,7 +2161,7 @@ function updateDaySelectionBar(dateStr, selBarEl){
   actions.style.display = "flex"; actions.style.gap = "6px";
   const clearBtn = document.createElement("button");
   clearBtn.className = "tl-day-sel-clear";
-  clearBtn.textContent = isEditing ? "編集中止" : "クリア";
+  clearBtn.textContent = "編集中止";
   clearBtn.addEventListener("click", ()=>{
     delete tlPendingByDate[dateStr];
     if(editingReservationId && dateStr===editingReservationDate){ editingReservationId = null; editingReservationDate = null; }
