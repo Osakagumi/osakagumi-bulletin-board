@@ -1059,6 +1059,7 @@ let wbPresetEditingDefaults = false;
 let wbPresetBulkStatus = null;
 let calWorkStartTime = "08:00";
 let calWorkEndTime = "17:00";
+let wbOffHoursBufferMin = 15;
 
 /* ---------- auth ---------- */
 document.getElementById("login-btn").addEventListener("click", doLogin);
@@ -2689,6 +2690,7 @@ function initWbColumnsListener(){
 
     calWorkStartTime = data.workStartTime || "08:00";
     calWorkEndTime = data.workEndTime || "17:00";
+    wbOffHoursBufferMin = data.offHoursBufferMin ?? 15;
 
     renderWhereabouts();
   }, (err)=>{ console.error("[行き先列数設定取得エラー]", err); });
@@ -2726,8 +2728,8 @@ function getWorkWindow(){
   const workStartMin = sh*60+sm, workEndMin = eh*60+em;
   return {
     workStartMin, workEndMin,
-    windowStartMin: workStartMin - 15,
-    windowEndMin: workEndMin + 15
+    windowStartMin: workStartMin - wbOffHoursBufferMin,
+    windowEndMin: workEndMin + wbOffHoursBufferMin
   };
 }
 

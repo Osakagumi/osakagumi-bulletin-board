@@ -378,7 +378,7 @@
       <div class="panel">
         <h2>定時（就業時間）の設定</h2>
         <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-          行き先の表示は、定時の15分前〜15分後の間だけ通常表示され、それ以外の時間は全員「時間外」と表示されます。時間休（AM休・PM休・時間休）の範囲もこの定時を基準に計算されます。
+          行き先の表示は、定時の前後（下記の時間幅）だけ通常表示され、それ以外の時間は全員「時間外」と表示されます。時間休（AM休・PM休・時間休）の範囲もこの定時を基準に計算されます。
         </p>
         <div class="form-grid">
           <div class="field">
@@ -388,6 +388,10 @@
           <div class="field">
             <label>終業時刻</label>
             <input type="time" id="cal-work-end-input" value="17:00">
+          </div>
+          <div class="field">
+            <label>時間外とする範囲（定時の前後）</label>
+            <select id="cal-work-buffer-input"></select>
           </div>
         </div>
         <button class="btn btn-primary" id="cal-work-save-btn">保存する</button>
@@ -1446,18 +1450,34 @@ function initWbColumnsListener(){
     // 定時
     const workStart = data.workStartTime || "08:00";
     const workEnd = data.workEndTime || "17:00";
+    const workBuffer = data.offHoursBufferMin ?? 15;
     const workStartInput = document.getElementById("cal-work-start-input");
     if(workStartInput && document.activeElement !== workStartInput){ workStartInput.value = workStart; }
     const workEndInput = document.getElementById("cal-work-end-input");
     if(workEndInput && document.activeElement !== workEndInput){ workEndInput.value = workEnd; }
+    const workBufferInput = document.getElementById("cal-work-buffer-input");
+    if(workBufferInput && document.activeElement !== workBufferInput){ workBufferInput.value = workBuffer; }
   });
 }
+// 時間外とする範囲：0:00～3:00を15分刻みで選択肢化
+(function populateWorkBufferOptions(){
+  const sel = document.getElementById("cal-work-buffer-input");
+  if(!sel) return;
+  for(let m=0; m<=180; m+=15){
+    const opt = document.createElement("option");
+    opt.value = m;
+    opt.textContent = `${Math.floor(m/60)}:${String(m%60).padStart(2,"0")}`;
+    sel.appendChild(opt);
+  }
+  sel.value = 15;
+})();
 document.getElementById("cal-work-save-btn").addEventListener("click", async ()=>{
   const workStart = document.getElementById("cal-work-start-input").value || "08:00";
   const workEnd = document.getElementById("cal-work-end-input").value || "17:00";
+  const workBuffer = Number(document.getElementById("cal-work-buffer-input").value) || 0;
   if(workStart >= workEnd){ toast("終業時刻は始業時刻より後にしてください。"); return; }
   try{
-    await setDoc(doc(db,"app_settings","whereabouts"), { workStartTime: workStart, workEndTime: workEnd }, { merge:true });
+    await setDoc(doc(db,"app_settings","whereabouts"), { workStartTime: workStart, workEndTime: workEnd, offHoursBufferMin: workBuffer }, { merge:true });
     toast("定時を保存しました。");
   }catch(e){
     toast("保存に失敗しました。");
