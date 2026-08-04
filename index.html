@@ -2086,10 +2086,14 @@ function applySignageLabelFontSize(){
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");
   const testSize = 100;
-  ctx.font = `600 ${testSize}px sans-serif`;
+  // 実際に画面で使われているフォント（--sans）で測定する。
+  // 総称の sans-serif で測ると実際のフォントより幅が狭く出て、
+  // 「入るはず」と判定したサイズが実際には収まらないことがあるため。
+  const sansFont = getComputedStyle(document.documentElement).getPropertyValue("--sans").trim() || "sans-serif";
+  ctx.font = `600 ${testSize}px ${sansFont}`;
   const twoCharWidth = ctx.measureText("国国").width; // 全角2文字分の基準幅
   const perPx = twoCharWidth / testSize;
-  let fontSize = Math.floor(availW / perPx);
+  let fontSize = (availW / perPx) - 0.5; // 計算値ぎりぎりだと収まらないことがあるため少し安全マージンを引く
   fontSize = Math.max(8, Math.min(20, fontSize));
   document.documentElement.style.setProperty("--sig-lbl-font", `${fontSize}px`);
 }
