@@ -99,7 +99,7 @@
   body.reserve-signage-mode .eq-title{ font-size:26px; }
   body.reserve-signage-mode .howto{ display:none !important; }
   body.reserve-signage-mode .slot{ height:var(--sig-slot-h, 56px); }
-  body.reserve-signage-mode .tl-day-panel-head{ font-size:18px; flex:0 0 68px; padding:4px 4px; }
+  body.reserve-signage-mode .tl-day-panel-head{ font-size:var(--sig-head-font, 18px); line-height:1.15; flex:0 0 68px; padding:2px 4px; }
   body.reserve-signage-mode .tl-day-sel-bar{ font-size:16px; padding:5px 10px; }
   body.reserve-signage-mode .tl-day-sel-bar button{ font-size:15px; padding:6px 12px; }
   body.reserve-signage-mode .legend{ font-size:14px; margin-top:4px; }
@@ -2069,6 +2069,9 @@ function applySignageRowHeight(rowsPerColumn){
   const availForRows = window.innerHeight - rect.top - BOTTOM_BUFFER - (rowsPerColumn * BORDER_PER_ROW);
   const rowH = Math.max(32, Math.min(64, Math.floor(availForRows / rowsPerColumn)));
   document.documentElement.style.setProperty("--sig-slot-h", `${rowH}px`);
+  // 日付ラベルは2行(例:「8/16」「(日)」)なので、行の高さに収まるようフォントも連動して縮める
+  const headFont = Math.max(10, Math.min(18, Math.floor(rowH * 0.28)));
+  document.documentElement.style.setProperty("--sig-head-font", `${headFont}px`);
 }
 
 function buildDaySlots(wrap, dateStr, dayReservations){
