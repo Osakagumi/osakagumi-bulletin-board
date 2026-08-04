@@ -66,6 +66,20 @@
   body.kiosk-mode .section-toolbar{ margin-bottom:20px; }
   body.kiosk-mode #wb-edit-my-btn{ display:none !important; }
   body.kiosk-mode #header-clock-kiosk{ display:flex !important; }
+
+  /* ---------- サイネージ表示モード（時間枠予約） ---------- */
+  body.reserve-signage-mode header,
+  body.reserve-signage-mode nav.tabs{ display:none !important; }
+  body.reserve-signage-mode main{ max-width:none; padding:18px; box-sizing:border-box; }
+  body.reserve-signage-mode .cat-row,
+  body.reserve-signage-mode .eq-grid,
+  body.reserve-signage-mode .section-divider,
+  body.reserve-signage-mode #my-res-list{ display:none !important; }
+  body.reserve-signage-mode .tl-head{ font-size:1.15em; }
+  body.reserve-signage-mode .eq-title{ font-size:1.3em; }
+  body.reserve-signage-mode .slot{ height:56px; }
+  body.reserve-signage-mode .tl-day-panel-head{ font-size:1.1em; }
+  body.reserve-signage-mode .tl-day-sel-bar{ font-size:1.05em; }
   .header-clock{
     display:flex; align-items:baseline; gap:10px; font-family:var(--mono); color:var(--brand-dark);
   }
@@ -543,7 +557,11 @@
         <div id="timeline-panel">
           <div class="tl-head">
             <div class="eq-title" id="tl-eq-title"></div>
-            <div class="date-nav">
+            <div class="seg-toggle" id="signage-view-toggle" style="display:none;">
+              <button class="seg-btn" data-signageview="today">今日</button>
+              <button class="seg-btn active" data-signageview="month">月</button>
+            </div>
+            <div class="date-nav" id="reserve-date-nav">
               <button id="date-prev">◀</button>
               <span class="date-picker-label" id="date-picker-label"></span>
               <button id="date-next">▶</button>
@@ -568,6 +586,7 @@
         <div class="section-divider">マイ予約</div>
         <div class="res-list" id="my-res-list"></div>
       </section>
+      <div id="reserve-signage-error" style="display:none;padding:40px;text-align:center;font-size:16px;color:var(--muted);"></div>
 
       <!-- ---- 貸出（測量機器・ドローン） ---- -->
       <section id="view-checkout" style="display:none;">
@@ -959,11 +978,18 @@ if(urlPreselect.email){
   if(emailInput) emailInput.value = urlPreselect.email;
 }
 
-/* ---------- サイネージ表示モード ---------- */
+/* ---------- サイネージ表示モード（行き先） ---------- */
 const isDisplayMode = urlParams.get("display") === "1";
 if(isDisplayMode){
   document.body.classList.add("kiosk-mode");
 }
+
+/* ---------- サイネージ表示モード（時間枠予約：設備を1つ指定） ---------- */
+const reserveSignageEquipmentId = urlParams.get("reserveSignage");
+if(reserveSignageEquipmentId){
+  document.body.classList.add("reserve-signage-mode");
+}
+let signageTodayOnly = false;
 
 /* ---------- helpers ---------- */
 const pad2 = n => String(n).padStart(2,"0");
@@ -1158,6 +1184,9 @@ onAuthStateChanged(auth, async (user)=>{
     if(isDisplayMode){
       switchToTab("whereabouts");
     }
+    if(reserveSignageEquipmentId){
+      switchToTab("reserve");
+    }
   }else{
     currentUser = null;
     document.getElementById("login-screen").style.display = "flex";
@@ -1331,12 +1360,47 @@ function initEquipmentListener(){
   onSnapshot(q, snap=>{
     equipmentAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
     equipmentAll.sort((a,b)=> (a.order??0)-(b.order??0) || a.name.localeCompare(b.name,"ja"));
+    if(reserveSignageEquipmentId){
+      initReserveSignageMode();
+      return;
+    }
     renderCategoryRow();
     renderEquipmentGrid();
     renderCheckoutCategoryRow();
     renderCheckoutTab();
   });
 }
+
+function initReserveSignageMode(){
+  const eq = equipmentAll.find(e=>e.id===reserveSignageEquipmentId);
+  const errEl = document.getElementById("reserve-signage-error");
+  if(!eq || !eq.signageEnabled){
+    document.getElementById("view-reserve").style.display = "none";
+    errEl.style.display = "block";
+    errEl.textContent = !eq
+      ? "指定された設備が見つかりませんでした（非表示になっているか、削除された可能性があります）。"
+      : "この設備はサイネージモードが有効になっていません。管理画面の設備管理から設定してください。";
+    return;
+  }
+  document.getElementById("view-reserve").style.display = "block";
+  document.getElementById("signage-view-toggle").style.display = "inline-flex";
+  selectedEquipment = eq;
+  showTimelinePanel();
+}
+document.querySelectorAll('#signage-view-toggle .seg-btn').forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    document.querySelectorAll('#signage-view-toggle .seg-btn').forEach(b=>b.classList.remove("active"));
+    btn.classList.add("active");
+    signageTodayOnly = btn.dataset.signageview === "today";
+    document.getElementById("reserve-date-nav").style.display = signageTodayOnly ? "none" : "flex";
+    if(signageTodayOnly){
+      selectedMonth = todayStr().slice(0,7);
+      loadReservationsForMonth();
+    } else {
+      renderMonthPanels();
+    }
+  });
+});
 
 function renderEquipmentGrid(){
   const grid = document.getElementById("eq-grid");
@@ -1876,6 +1940,7 @@ function renderMonthPanels(){
 
   for(let day=1; day<=daysN; day++){
     const dateStr = `${y}-${pad2(m)}-${pad2(day)}`;
+    if(signageTodayOnly && dateStr!==today) continue; // サイネージ「今日」表示のときは今日以外を飛ばす
     const dayReservations = monthReservations.filter(r=>r.date===dateStr);
     const d = new Date(y, m-1, day);
     const dow = d.getDay();

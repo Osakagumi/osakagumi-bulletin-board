@@ -186,6 +186,10 @@
             <input type="checkbox" id="eq-active" checked style="width:auto;">
             <label style="margin:0;font-size:12.5px;color:var(--text);">予約対象として表示する</label>
           </div>
+          <div class="field" style="display:flex;align-items:center;gap:6px;padding-top:20px;">
+            <input type="checkbox" id="eq-signage" style="width:auto;">
+            <label style="margin:0;font-size:12.5px;color:var(--text);">サイネージモードを使用する</label>
+          </div>
         </div>
         <button class="btn btn-primary" id="eq-save-btn">追加する</button>
         <button class="btn btn-ghost" id="eq-cancel-edit" style="display:none;">編集をやめる</button>
@@ -194,7 +198,7 @@
       <div class="panel">
         <h2>登録済み設備一覧</h2>
         <table>
-          <thead><tr><th>設備名</th><th>管理番号</th><th>カテゴリ</th><th>備考</th><th>表示順</th><th>表示設定</th><th>貸出状況</th><th>操作</th></tr></thead>
+          <thead><tr><th>設備名</th><th>管理番号</th><th>カテゴリ</th><th>備考</th><th>表示順</th><th>表示設定</th><th>貸出状況</th><th>サイネージ</th><th>操作</th></tr></thead>
           <tbody id="eq-table-body"></tbody>
         </table>
       </div>
@@ -942,7 +946,7 @@ function renderEquipmentTable(){
   const body = document.getElementById("eq-table-body");
   body.innerHTML = "";
   if(equipmentAll.length===0){
-    body.innerHTML = `<tr><td colspan="8" class="empty">まだ設備が登録されていません。</td></tr>`;
+    body.innerHTML = `<tr><td colspan="9" class="empty">まだ設備が登録されていません。</td></tr>`;
     return;
   }
   equipmentAll.forEach(eq=>{
@@ -959,6 +963,7 @@ function renderEquipmentTable(){
       <td></td>
       <td>${eq.active===false ? "非表示" : "表示中"}</td>
       <td>${isCheckoutMode && st ? `<span class="tag" style="background:${st.color}">${st.label}</span>` : "-"}</td>
+      <td>${eq.signageEnabled ? `<a href="${indexPageUrl()}?reserveSignage=${encodeURIComponent(eq.id)}" target="_blank" rel="noopener noreferrer">画面を開く</a>` : "-"}</td>
       <td class="actions"></td>
     `;
     const orderTd = tr.children[4];
@@ -1009,6 +1014,7 @@ function startEditEquipment(eq){
   document.getElementById("eq-order").value = eq.order ?? 0;
   document.getElementById("eq-last-inspection").value = eq.lastInspectionDate || "";
   document.getElementById("eq-active").checked = eq.active !== false;
+  document.getElementById("eq-signage").checked = eq.signageEnabled === true;
   document.getElementById("eq-save-btn").textContent = "変更を保存";
   document.getElementById("eq-cancel-edit").style.display = "inline-block";
   window.scrollTo({top:0, behavior:"smooth"});
@@ -1024,6 +1030,7 @@ function resetEquipmentForm(){
   document.getElementById("eq-order").value = maxOrderInCategory(document.getElementById("eq-category").value) + 10;
   document.getElementById("eq-last-inspection").value = "";
   document.getElementById("eq-active").checked = true;
+  document.getElementById("eq-signage").checked = false;
   document.getElementById("eq-save-btn").textContent = "追加する";
   document.getElementById("eq-cancel-edit").style.display = "none";
 }
@@ -1038,7 +1045,8 @@ document.getElementById("eq-save-btn").addEventListener("click", async ()=>{
     note: document.getElementById("eq-note").value.trim(),
     order: Number(document.getElementById("eq-order").value)||0,
     lastInspectionDate: document.getElementById("eq-last-inspection").value || "",
-    active: document.getElementById("eq-active").checked
+    active: document.getElementById("eq-active").checked,
+    signageEnabled: document.getElementById("eq-signage").checked
   };
   try{
     if(editingEquipmentId){
