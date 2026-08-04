@@ -525,6 +525,7 @@
             <select id="safety-campaign-select"></select>
           </div>
           <button class="btn btn-danger" id="safety-close-btn" style="display:none;">この安否確認を終了する</button>
+          <button class="btn btn-danger" id="safety-delete-btn" style="display:none;">選択中の安否確認を削除</button>
         </div>
         <div id="safety-dashboard-summary" style="font-size:13px;color:var(--muted);margin-bottom:10px;"></div>
         <table>
@@ -2113,6 +2114,8 @@ let safetyCampaignsAll = [];
 let selectedSafetyCampaignId = null;
 let safetyResponsesUnsub = null;
 
+const MAX_SAFETY_CAMPAIGNS = 5;
+
 function initSafetyCampaignsListener(){
   const q = query(collection(db,"safety_campaigns"), orderBy("createdAt","desc"));
   onSnapshot(q, snap=>{
@@ -2125,29 +2128,75 @@ function renderSafetyCampaignSelect(){
   const prevValue = selectedSafetyCampaignId;
   sel.innerHTML = "";
   if(safetyCampaignsAll.length===0){
-    sel.innerHTML = `<option value="">まだ安否確認はありません</option>`;
+    sel.innerHTML = `<option value="">表示できる過去の安否確認はありません</option>`;
     selectedSafetyCampaignId = null;
     document.getElementById("safety-close-btn").style.display = "none";
+    document.getElementById("safety-delete-btn").style.display = "none";
     renderSafetyDashboard();
     return;
   }
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "表示する過去の安否確認を選択してください";
+  sel.appendChild(placeholder);
   safetyCampaignsAll.forEach(c=>{
     const opt = document.createElement("option");
     opt.value = c.id;
     opt.textContent = `${c.active ? "【発信中】":"【終了】"} ${c.title} (${tsToStr(c.createdAt)})`;
     sel.appendChild(opt);
   });
+  // 発信直後などプルダウンに残っている選択は維持し、それ以外は毎回プレースホルダーに戻す
   if(prevValue && safetyCampaignsAll.some(c=>c.id===prevValue)){
     sel.value = prevValue;
+    selectedSafetyCampaignId = prevValue;
   } else {
-    sel.value = safetyCampaignsAll[0].id;
+    sel.value = "";
+    selectedSafetyCampaignId = null;
   }
-  selectedSafetyCampaignId = sel.value;
+  document.getElementById("safety-delete-btn").style.display = selectedSafetyCampaignId ? "inline-block" : "none";
   watchSelectedCampaignResponses();
 }
 document.getElementById("safety-campaign-select").addEventListener("change", e=>{
-  selectedSafetyCampaignId = e.target.value;
+  selectedSafetyCampaignId = e.target.value || null;
+  document.getElementById("safety-delete-btn").style.display = selectedSafetyCampaignId ? "inline-block" : "none";
   watchSelectedCampaignResponses();
+});
+
+async function deleteSafetyCampaignWithResponses(campaignId){
+  const respSnap = await getDocs(query(collection(db,"safety_responses"), where("campaignId","==", campaignId)));
+  for(const d of respSnap.docs){
+    await deleteDoc(doc(db,"safety_responses", d.id));
+  }
+  await deleteDoc(doc(db,"safety_campaigns", campaignId));
+}
+
+// 発信のたびに呼び出し、最大保存件数(MAX_SAFETY_CAMPAIGNS)を超えた分を古い順に削除する
+async function enforceSafetyCampaignLimit(){
+  try{
+    const snap = await getDocs(query(collection(db,"safety_campaigns"), orderBy("createdAt","desc")));
+    const all = snap.docs.map(d=>({id:d.id}));
+    if(all.length <= MAX_SAFETY_CAMPAIGNS) return;
+    const toDelete = all.slice(MAX_SAFETY_CAMPAIGNS); // 新しい順に並んでいるので、はみ出した古い分
+    for(const c of toDelete){
+      await deleteSafetyCampaignWithResponses(c.id);
+    }
+  }catch(e){
+    console.error("[安否確認 上限超過分の自動削除エラー]", e);
+  }
+}
+
+document.getElementById("safety-delete-btn").addEventListener("click", async ()=>{
+  if(!selectedSafetyCampaignId) return;
+  const campaign = safetyCampaignsAll.find(c=>c.id===selectedSafetyCampaignId);
+  const label = campaign ? campaign.title : "この安否確認";
+  if(!confirm(`「${label}」を削除しますか？\n回答データも含めて完全に削除され、元に戻せません。`)) return;
+  try{
+    await deleteSafetyCampaignWithResponses(selectedSafetyCampaignId);
+    selectedSafetyCampaignId = null;
+    toast("削除しました。");
+  }catch(e){
+    toast("削除に失敗しました。権限をご確認ください。");
+  }
 });
 
 function watchSelectedCampaignResponses(){
@@ -2287,6 +2336,7 @@ document.getElementById("safety-launch-btn").addEventListener("click", async ()=
     document.getElementById("safety-title-input").value = "";
     document.getElementById("safety-message-input").value = "";
     toast("安否確認を発信しました。");
+    await enforceSafetyCampaignLimit();
     if(sendEmail){
       await sendSafetyEmails(newCampaignRef.id, title, message);
     }
