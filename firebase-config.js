@@ -61,7 +61,7 @@ export const EMAILJS_CONFIG = {
 // 例）テスト時: "h.ishikawa@osakagumi.co.jp"
 // 例）複数人でテスト: "h.ishikawa@osakagumi.co.jp;n.kasai@osakagumi.co.jp"
 // 本番で全社員に送る場合は必ず "*" に戻してください。
-export const MAIL_SEND_TARGET = "h.ishikawa@osakagumi.co.jp;zoom@osakagumi.co.jp";
+export const MAIL_SEND_TARGET = "h.ishikawa@osakagumi.co.jp";
 
 // お知らせ添付ファイル用：Googleドライブ連携の設定
 // 1. https://console.cloud.google.com で新しいプロジェクトを作成（osakagumi.sys@gmail.comでログインして作成すると管理が楽です）
