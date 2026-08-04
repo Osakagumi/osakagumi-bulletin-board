@@ -73,10 +73,10 @@
   body.reserve-signage-mode #app{ height:100vh; overflow:hidden; }
   body.reserve-signage-mode main{
     max-width:none; padding:12px; height:100vh; box-sizing:border-box;
-    display:block; width:100%; margin:0;
+    display:flex; align-items:flex-start; justify-content:center;
   }
   body.reserve-signage-mode #view-reserve{
-    width:100%; max-width:none; margin:0;
+    width:100%; max-width:none;
     transform-origin:top center;
   }
   body.reserve-signage-mode #timeline-panel{ width:100%; box-sizing:border-box; }
@@ -3068,15 +3068,19 @@ function applyKioskScale(elId){
   const el = document.getElementById(elId);
   if(!el) return;
   el.style.transform = "none";
+  el.style.width = "";
   const availH = window.innerHeight - 36;
   const rect = el.getBoundingClientRect();
   if(rect.width===0 || rect.height===0) return;
-  // 横幅は常に100%のまま固定し、縦方向だけを画面の高さに収まるよう縮小する
-  // (幅を事前に広げてから縮小して帳尻を合わせる方式は、CSS側の指定次第で
-  //  正しく効かなくなることがあるため、横は一切いじらない方式にしている)
+  // 高さだけを基準に縮小率を決める（横幅は画面いっぱいのまま保つ）
   const scale = Math.min(availH/rect.height, 1);
+  if(scale < 1){
+    // 縮小後も横幅が画面いっぱいのままになるよう、縮小前の幅を広げておく
+    // （親側がflexで中央寄せされている前提。widthにはCSS側で!importantを付けないこと）
+    el.style.width = `${rect.width/scale}px`;
+  }
   el.style.transformOrigin = "top center";
-  el.style.transform = scale < 1 ? `scaleY(${scale})` : "none";
+  el.style.transform = `scale(${scale})`;
 }
 let wbResizeTimer = null;
 window.addEventListener("resize", ()=>{
