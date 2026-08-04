@@ -2139,6 +2139,7 @@ function updateDaySelectionBar(dateStr, selBarEl){
     selBarEl.classList.remove("show");
     return;
   }
+  const isEditing = editingReservationId && dateStr===editingReservationDate;
   selBarEl.classList.add("show");
   const lo = Math.min(pending.start,pending.end), hi = Math.max(pending.start,pending.end);
   const label = document.createElement("div");
@@ -2147,17 +2148,39 @@ function updateDaySelectionBar(dateStr, selBarEl){
   actions.style.display = "flex"; actions.style.gap = "6px";
   const clearBtn = document.createElement("button");
   clearBtn.className = "tl-day-sel-clear";
-  clearBtn.textContent = "クリア";
+  clearBtn.textContent = isEditing ? "編集中止" : "クリア";
   clearBtn.addEventListener("click", ()=>{
     delete tlPendingByDate[dateStr];
     if(editingReservationId && dateStr===editingReservationDate){ editingReservationId = null; editingReservationDate = null; }
     refreshDayPanel(dateStr);
   });
+  actions.appendChild(clearBtn);
+  if(isEditing){
+    const deleteBtn = document.createElement("button");
+    deleteBtn.className = "tl-day-sel-clear";
+    deleteBtn.textContent = "削除";
+    deleteBtn.addEventListener("click", async ()=>{
+      if(!confirm("この予約をキャンセルしますか？")) return;
+      const resId = editingReservationId;
+      try{
+        await deleteDoc(doc(db,"reservations", resId));
+        toast("予約をキャンセルしました。");
+      }catch(e){
+        toast("キャンセルに失敗しました。");
+        return;
+      }
+      delete tlPendingByDate[dateStr];
+      editingReservationId = null;
+      editingReservationDate = null;
+      refreshDayPanel(dateStr);
+    });
+    actions.appendChild(deleteBtn);
+  }
   const bookBtn = document.createElement("button");
   bookBtn.className = "tl-day-sel-book";
   bookBtn.textContent = "この時間で予約する";
   bookBtn.addEventListener("click", ()=> openReserveModalFor(dateStr));
-  actions.appendChild(clearBtn); actions.appendChild(bookBtn);
+  actions.appendChild(bookBtn);
   selBarEl.appendChild(label); selBarEl.appendChild(actions);
 }
 
