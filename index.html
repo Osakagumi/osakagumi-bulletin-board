@@ -72,15 +72,14 @@
   body.reserve-signage-mode nav.tabs{ display:none !important; }
   body.reserve-signage-mode #app{ height:100vh; overflow:hidden; }
   body.reserve-signage-mode main{
-    max-width:none !important; padding:12px; height:100vh; box-sizing:border-box;
-    display:block !important; width:100% !important; margin:0 !important;
+    max-width:none; padding:12px; height:100vh; box-sizing:border-box;
+    display:block; width:100%; margin:0;
   }
   body.reserve-signage-mode #view-reserve{
-    width:100vw !important; max-width:none !important;
-    margin-left:calc(50% - 50vw) !important; margin-right:calc(50% - 50vw) !important;
+    width:100%; max-width:none; margin:0;
     transform-origin:top center;
   }
-  body.reserve-signage-mode #timeline-panel{ width:100% !important; box-sizing:border-box; }
+  body.reserve-signage-mode #timeline-panel{ width:100%; box-sizing:border-box; }
   body.reserve-signage-mode .timeline-wrap{ overflow-x:visible; }
   body.reserve-signage-mode #tl-panels{ min-width:0; width:100%; }
   body.reserve-signage-mode .tl-ruler{ min-width:0; }
@@ -3069,18 +3068,15 @@ function applyKioskScale(elId){
   const el = document.getElementById(elId);
   if(!el) return;
   el.style.transform = "none";
-  el.style.width = "";
   const availH = window.innerHeight - 36;
   const rect = el.getBoundingClientRect();
   if(rect.width===0 || rect.height===0) return;
-  // 高さだけを基準に縮小率を決める（横幅は画面いっぱいのまま保つ）
+  // 横幅は常に100%のまま固定し、縦方向だけを画面の高さに収まるよう縮小する
+  // (幅を事前に広げてから縮小して帳尻を合わせる方式は、CSS側の指定次第で
+  //  正しく効かなくなることがあるため、横は一切いじらない方式にしている)
   const scale = Math.min(availH/rect.height, 1);
-  if(scale < 1){
-    // 縮小後も横幅が画面いっぱいのままになるよう、縮小前の幅を広げておく
-    el.style.width = `${rect.width/scale}px`;
-  }
   el.style.transformOrigin = "top center";
-  el.style.transform = `scale(${scale})`;
+  el.style.transform = scale < 1 ? `scaleY(${scale})` : "none";
 }
 let wbResizeTimer = null;
 window.addEventListener("resize", ()=>{
