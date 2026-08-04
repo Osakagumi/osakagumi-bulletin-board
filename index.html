@@ -337,8 +337,9 @@
     background:#F4F8FC;padding:6px 10px;font-size:12px;
   }
   .tl-day-sel-bar.show{display:flex;}
-  .tl-day-sel-bar button{border-radius:6px;padding:5px 10px;font-size:11.5px;}
-  .tl-day-sel-bar .tl-day-sel-clear{border:1px solid var(--line);background:#fff;color:var(--text);}
+  .tl-day-sel-bar button{border-radius:6px;padding:5px 10px;font-size:12px;}
+  .tl-day-sel-bar .tl-day-sel-clear{border:1px solid var(--text);background:#fff;color:var(--text);}
+  .tl-day-sel-bar .tl-day-sel-delete{border:1px solid var(--danger);background:#fff;color:var(--danger);}
   .tl-day-sel-bar .tl-day-sel-book{border:none;background:var(--brand);color:#fff;}
 
   .legend{display:flex;gap:16px;margin-top:10px;font-size:11.5px;color:var(--muted);flex-wrap:wrap;}
@@ -2157,7 +2158,7 @@ function updateDaySelectionBar(dateStr, selBarEl){
   actions.appendChild(clearBtn);
   if(isEditing){
     const deleteBtn = document.createElement("button");
-    deleteBtn.className = "tl-day-sel-clear";
+    deleteBtn.className = "tl-day-sel-delete";
     deleteBtn.textContent = "削除";
     deleteBtn.addEventListener("click", async ()=>{
       if(!confirm("この予約をキャンセルしますか？")) return;
