@@ -104,7 +104,7 @@
   body.reserve-signage-mode .tl-day-sel-bar button{ font-size:15px; padding:6px 12px; }
   body.reserve-signage-mode .legend{ font-size:14px; margin-top:4px; }
   body.reserve-signage-mode .tl-ruler .tick{ font-size:18px; }
-  body.reserve-signage-mode .slot.booked .lbl{ font-size:10px; inset:1px 1px; letter-spacing:-0.5px; }
+  body.reserve-signage-mode .slot.booked .lbl{ font-size:var(--sig-lbl-font, 10px); inset:1px 1px; text-align:center; }
   .header-clock{
     display:flex; align-items:baseline; gap:10px; font-family:var(--mono); color:var(--brand-dark);
   }
@@ -2054,7 +2054,10 @@ function renderMonthPanels(){
   if(reserveSignageEquipmentId){
     const rowsPerColumn = useTwoColumns ? Math.ceil(daysN/2) : (signageTodayOnly ? 1 : daysN);
     currentSignageRowsPerColumn = rowsPerColumn;
-    requestAnimationFrame(()=> applySignageRowHeight(rowsPerColumn));
+    requestAnimationFrame(()=>{
+      applySignageRowHeight(rowsPerColumn);
+      applySignageLabelFontSize();
+    });
   }
 }
 
@@ -2071,6 +2074,24 @@ function applySignageRowHeight(rowsPerColumn){
   // 42px未満だと日付ラベル(18px・2行固定)が収まりきらなくなるため下限にする
   const rowH = Math.max(42, Math.min(64, Math.floor(availForRows / rowsPerColumn)));
   document.documentElement.style.setProperty("--sig-slot-h", `${rowH}px`);
+}
+
+function applySignageLabelFontSize(){
+  const slotEl = document.querySelector("#tl-panels .slot");
+  if(!slotEl) return;
+  const slotW = slotEl.getBoundingClientRect().width;
+  if(!slotW) return;
+  const insetPx = 2; // .lbl の inset:1px 1px 分（左右合計）
+  const availW = Math.max(8, slotW - insetPx);
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  const testSize = 100;
+  ctx.font = `600 ${testSize}px sans-serif`;
+  const twoCharWidth = ctx.measureText("国国").width; // 全角2文字分の基準幅
+  const perPx = twoCharWidth / testSize;
+  let fontSize = Math.floor(availW / perPx);
+  fontSize = Math.max(8, Math.min(20, fontSize));
+  document.documentElement.style.setProperty("--sig-lbl-font", `${fontSize}px`);
 }
 
 function buildDaySlots(wrap, dateStr, dayReservations){
@@ -3103,7 +3124,7 @@ function applyKioskScale(elId){
 let wbResizeTimer = null;
 window.addEventListener("resize", ()=>{
   if(isDisplayMode) applyKioskScale("view-whereabouts");
-  if(reserveSignageEquipmentId) applySignageRowHeight(currentSignageRowsPerColumn);
+  if(reserveSignageEquipmentId){ applySignageRowHeight(currentSignageRowsPerColumn); applySignageLabelFontSize(); }
   clearTimeout(wbResizeTimer);
   wbResizeTimer = setTimeout(()=>{
     const wbView = document.getElementById("view-whereabouts");
