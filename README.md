@@ -1,8 +1,8 @@
 # 大坂組社内ポータルサイト セットアップ手順
 
-対象：測量機器・会議室・業務共用車輌の予約管理（スマホ・PC対応）
+対象：お知らせ・行き先（社員の所在管理）・会議室や車輌の時間枠予約・測量機器やドローンの貸出管理・年間カレンダー・安否確認など、社内の各種業務をまとめた社内ポータルサイト（スマホ・PC対応）
 
-構成：タイムカードPWAと同じく、Firebase（Auth + Firestore）+ 静的HTML（GitHub Pages等でホスト可）
+構成：Firebase（Auth + Firestore）+ 静的HTML（GitHub Pages等でホスト可）。メール送信にEmailJS、カレンダーのExcel出力にExcelJS（`calendar_template_master.xlsx`という雛形ファイルを使用）、お知らせ添付ファイルの保存にGoogleドライブ連携（任意設定）を利用しています。
 
 ---
 
@@ -24,7 +24,7 @@
 
 `firebase-config.js` を開き、`firebaseConfig` の中身を手順1でコピーした値に書き換えてください。
 
-必要であれば `BUSINESS_HOURS`（予約可能時間帯・時間単位）や `CATEGORIES`（カテゴリ名・色）もここで調整できます。
+必要であれば `BUSINESS_HOURS`（予約可能時間帯・時間単位）もここで調整できます。設備のカテゴリ（会議室・業務共用車輌・測量機器・ドローンなど）は、`firebase-config.js`内の`CATEGORIES`が初回アクセス時の初期データとして使われたあとはFirestoreで管理される方式になっており、admin.htmlの「設備管理」タブから追加・編集・削除できます。
 
 ## 3. Firestoreのセキュリティルールを設定する
 
