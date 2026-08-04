@@ -104,7 +104,7 @@
   body.reserve-signage-mode .tl-day-sel-bar button{ font-size:15px; padding:6px 12px; }
   body.reserve-signage-mode .legend{ font-size:14px; margin-top:4px; }
   body.reserve-signage-mode .tl-ruler .tick{ font-size:18px; }
-  body.reserve-signage-mode .slot.booked .lbl{ font-size:16px; }
+  body.reserve-signage-mode .slot.booked .lbl{ font-size:11px; }
   .header-clock{
     display:flex; align-items:baseline; gap:10px; font-family:var(--mono); color:var(--brand-dark);
   }
@@ -316,7 +316,8 @@
   #tl-panels{min-width:640px;}
   .tl-ruler{display:flex;border-bottom:1px solid var(--line);min-width:640px;position:sticky;top:0;background:var(--surface);z-index:2;box-sizing:border-box;}
   .tl-ruler-spacer{border-bottom:none;}
-  .tl-ruler .tick{flex:1;font-family:var(--mono);font-size:13.5px;color:var(--muted);border-left:1px solid var(--line);padding:2px 0 4px 3px;overflow:visible;white-space:nowrap;position:relative;z-index:1;}
+  .tl-ruler .tick{flex:1;font-family:var(--mono);font-size:13.5px;color:var(--muted);border-left:1px solid #EDF1F6;padding:2px 0 4px 3px;overflow:visible;white-space:nowrap;position:relative;z-index:1;}
+  .tl-ruler .tick.hour-start{border-left:1px solid var(--line);}
   .tl-slots{display:flex;background:
       repeating-linear-gradient(90deg, transparent, transparent calc(100%/1 - 1px));
     border-bottom:1px solid var(--line);}
@@ -1928,7 +1929,7 @@ function renderRuler(){
   SLOTS.forEach(s=>{
     const isHour = s.start % 60 === 0;
     const tick = document.createElement("div");
-    tick.className = "tick";
+    tick.className = "tick" + (isHour ? " hour-start" : "");
     tick.textContent = isHour ? s.label : "";
     ruler.appendChild(tick);
   });
@@ -1971,7 +1972,7 @@ function buildTickRulerEl(){
   SLOTS.forEach(s=>{
     const isHour = s.start % 60 === 0;
     const tick = document.createElement("div");
-    tick.className = "tick";
+    tick.className = "tick" + (isHour ? " hour-start" : "");
     tick.textContent = isHour ? s.label : "";
     ruler.appendChild(tick);
   });
