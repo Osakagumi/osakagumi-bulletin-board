@@ -72,11 +72,11 @@
   body.reserve-signage-mode nav.tabs{ display:none !important; }
   body.reserve-signage-mode #app{ height:100vh; overflow:hidden; }
   body.reserve-signage-mode main{
-    max-width:none; padding:18px; height:100vh; box-sizing:border-box;
-    display:flex; align-items:flex-start; justify-content:center;
+    max-width:none !important; padding:12px; height:100vh; box-sizing:border-box;
+    display:block !important; width:100% !important; margin:0 !important;
   }
-  body.reserve-signage-mode #view-reserve{ width:100%; transform-origin:top center; }
-  body.reserve-signage-mode #timeline-panel{ width:100%; box-sizing:border-box; }
+  body.reserve-signage-mode #view-reserve{ width:100% !important; max-width:none !important; margin:0 !important; transform-origin:top center; }
+  body.reserve-signage-mode #timeline-panel{ width:100% !important; box-sizing:border-box; }
   body.reserve-signage-mode .timeline-wrap{ overflow-x:visible; }
   body.reserve-signage-mode #tl-panels{ min-width:0; width:100%; }
   body.reserve-signage-mode .tl-ruler{ min-width:0; }
@@ -96,7 +96,8 @@
   body.reserve-signage-mode .eq-title{ font-size:26px; }
   body.reserve-signage-mode .howto{ display:none !important; }
   body.reserve-signage-mode .slot{ height:64px; }
-  body.reserve-signage-mode .tl-day-panel-head{ font-size:20px; }
+  body.reserve-signage-mode .tl-day-panel-head{ font-size:20px; flex:0 0 68px; padding:4px 4px; }
+  body.reserve-signage-mode .tl-ruler{ padding-left:68px; }
   body.reserve-signage-mode .tl-day-sel-bar{ font-size:20px; }
   body.reserve-signage-mode .tl-day-sel-bar button{ font-size:20px; padding:8px 16px; }
   body.reserve-signage-mode .legend{ font-size:16px; margin-top:6px; }
