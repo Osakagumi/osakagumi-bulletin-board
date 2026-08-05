@@ -1178,7 +1178,7 @@ onAuthStateChanged(auth, async (user)=>{
     isCalendarEditor = isAdmin || !!(calEditorDoc && calEditorDoc.exists());
     document.getElementById("admin-link").style.display = isAdmin ? "inline-block" : "none";
     document.getElementById("notice-new-btn").style.display = isPoster ? "inline-block" : "none";
-    document.getElementById("wb-preset-tab-btn").style.display = (isAdmin || isWhereaboutsEditor) ? "inline-block" : "none";
+    document.getElementById("wb-preset-tab-btn").style.display = (!isDisplayMode && (isAdmin || isWhereaboutsEditor)) ? "inline-block" : "none";
     // 安否確認のメールリンクから来た場合に画面が出るまでを速くするため、
     // 表示に必須ではない社員レコード作成はawaitせずバックグラウンドで行う
     ensureEmployeeRecord();
