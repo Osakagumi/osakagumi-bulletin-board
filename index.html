@@ -647,9 +647,11 @@
           <div class="section-toolbar" style="margin-bottom:10px;">
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
               <span style="font-size:12.5px;color:var(--muted);">対象日：</span>
+              <button type="button" class="date-nav-btn" id="wb-preset-date-prev">◀</button>
               <span class="date-picker-label" id="wb-preset-date-picker"></span>
+              <button type="button" class="date-nav-btn" id="wb-preset-date-next">▶</button>
               <div id="wb-preset-bulk-status-wrap" style="display:none;align-items:center;gap:8px;">
-                <span style="font-size:12.5px;color:var(--muted);white-space:nowrap;">連続設定：</span>
+                <span style="font-size:12.5px;color:var(--muted);white-space:nowrap;margin-left:1em;">連続設定：</span>
                 <div class="seg-toggle" id="wb-preset-bulk-status-toggle"></div>
               </div>
               <button class="btn-primary" id="wb-preset-bulk-done-btn" style="display:none;">完了</button>
@@ -3479,32 +3481,47 @@ function renderWbPresetTable(){
   }
 }
 
+async function selectWbPresetDate(dateStr){
+  if(!dateStr) return;
+  if(dateStr < todayStr()){
+    toast("過去の日付は選択できません。");
+    return;
+  }
+  const isHoliday = await isDateHoliday(dateStr);
+  if(isHoliday){
+    toast("休日には事前設定できません。カレンダーで休日ではない日を選んでください。");
+    return;
+  }
+  const storedDates = wbPresetStoredDates();
+  if(!storedDates.includes(dateStr) && storedDates.length >= 7){
+    const oldest = storedDates[0];
+    if(!confirm(`事前設定は最大7日分までです。最も古い ${formatDateJP(oldest)} を削除して、${formatDateJP(dateStr)} を追加しますか？`)){
+      return;
+    }
+    await deleteWbPresetsForDate(oldest);
+  }
+  wbPresetSelectedDate = dateStr;
+  wbPresetEditingDefaults = false;
+  renderWbPresetTable();
+}
+function shiftDateStr(dateStr, days){
+  const d = new Date(dateStr + "T00:00:00");
+  d.setDate(d.getDate() + days);
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,"0");
+  const dd = String(d.getDate()).padStart(2,"0");
+  return `${y}-${m}-${dd}`;
+}
 document.getElementById("wb-preset-date-picker").addEventListener("click", (e)=>{
   openCalendarPicker(e.currentTarget, wbPresetSelectedDate, {
-    onSelect: async (dateStr)=>{
-      if(!dateStr) return;
-      if(dateStr < todayStr()){
-        toast("過去の日付は選択できません。");
-        return;
-      }
-      const isHoliday = await isDateHoliday(dateStr);
-      if(isHoliday){
-        toast("休日には事前設定できません。カレンダーで休日ではない日を選んでください。");
-        return;
-      }
-      const storedDates = wbPresetStoredDates();
-      if(!storedDates.includes(dateStr) && storedDates.length >= 7){
-        const oldest = storedDates[0];
-        if(!confirm(`事前設定は最大7日分までです。最も古い ${formatDateJP(oldest)} を削除して、${formatDateJP(dateStr)} を追加しますか？`)){
-          return;
-        }
-        await deleteWbPresetsForDate(oldest);
-      }
-      wbPresetSelectedDate = dateStr;
-      wbPresetEditingDefaults = false;
-      renderWbPresetTable();
-    }
+    onSelect: (dateStr)=> selectWbPresetDate(dateStr)
   });
+});
+document.getElementById("wb-preset-date-prev").addEventListener("click", ()=>{
+  selectWbPresetDate(shiftDateStr(wbPresetSelectedDate || todayStr(), -1));
+});
+document.getElementById("wb-preset-date-next").addEventListener("click", ()=>{
+  selectWbPresetDate(shiftDateStr(wbPresetSelectedDate || todayStr(), 1));
 });
 
 let wbPresetEditingEmail = null;
