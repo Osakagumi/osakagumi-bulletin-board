@@ -165,6 +165,7 @@
     background:#fff;padding:6px 6px 6px 12px;font-size:12.5px;
   }
   .wb-preset-date-pill.active{border-color:var(--brand);background:#F4F8FC;color:var(--brand-dark);font-weight:700;}
+  .wb-preset-date-pill-default{padding:6px 12px;justify-content:center;}
   .wb-preset-date-pill .wb-preset-date-text{cursor:pointer;}
   .wb-preset-date-pill .wb-preset-date-del{
     border:none;background:none;color:var(--muted);font-size:14px;line-height:1;padding:3px 6px;border-radius:50%;cursor:pointer;
@@ -3738,7 +3739,7 @@ function renderWbPresetDatesList(){
 
   // 「初期状態」は常時表示し、削除ボタンは付けない
   const defaultPill = document.createElement("div");
-  defaultPill.className = "wb-preset-date-pill" + (isEditingWbDefaults() ? " active" : "");
+  defaultPill.className = "wb-preset-date-pill wb-preset-date-pill-default" + (isEditingWbDefaults() ? " active" : "");
   const defaultTextSpan = document.createElement("span");
   defaultTextSpan.className = "wb-preset-date-text";
   defaultTextSpan.textContent = "初期状態";
