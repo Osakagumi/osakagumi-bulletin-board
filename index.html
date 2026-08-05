@@ -3298,6 +3298,36 @@ async function cleanupPastWbPresets(){
   for(const d of pastDates){
     await deleteWbPresetsForDate(d);
   }
+  await consumeTodayWbPresets(todayStrVal);
+}
+
+// 当日分の事前設定は、朝いちばんに表示された時点で各社員の実データへコピーしてから削除する
+// （表示は崩れないまま、事前設定としては残さない＝「事前設定」の枠を消費する形にする）
+async function consumeTodayWbPresets(dateStr){
+  const todayPresets = wbPresetsByDate[dateStr];
+  if(!todayPresets || Object.keys(todayPresets).length===0) return;
+  for(const email of Object.keys(todayPresets)){
+    const preset = todayPresets[email];
+    try{
+      const empSnap = await getDoc(doc(db,"employees", email));
+      if(!empSnap.exists()) continue;
+      const emp = empSnap.data();
+      // 本人が既に今日その場で編集済みなら、それを優先してこちらでは上書きしない
+      const updatedToday = emp.statusUpdatedAt && toLocalDateStr(emp.statusUpdatedAt) === dateStr;
+      if(updatedToday) continue;
+      await updateDoc(doc(db,"employees", email), {
+        status: preset.status || "",
+        note: preset.note || "",
+        statusUpdatedAt: new Date().toISOString(),
+        statusUpdatedBy: "事前設定（自動反映）",
+        timeLeaveDate: preset.timeLeaveType ? dateStr : "",
+        timeLeaveStart: preset.timeLeaveType ? (preset.timeLeaveStart||"") : "",
+        timeLeaveEnd: preset.timeLeaveType ? (preset.timeLeaveEnd||"") : "",
+        timeLeaveType: preset.timeLeaveType || ""
+      });
+    }catch(e){ /* 反映に失敗しても他の人の処理は続行する */ }
+  }
+  await deleteWbPresetsForDate(dateStr);
 }
 
 async function deleteWbPresetsForDate(dateStr){
