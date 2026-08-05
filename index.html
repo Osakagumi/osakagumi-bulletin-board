@@ -2913,10 +2913,15 @@ function isNowInWorkWindow(){
   return nowMin >= win.windowStartMin && nowMin <= win.windowEndMin;
 }
 
-// 本人が今日その場で時間休を設定していればそれを、なければ今日分の事前設定の時間休を返す
+// 本人が今日その場で編集済みならその内容（時間休なしも含む）を最優先、
+// 編集していなければ今日分の事前設定の時間休を返す
 function getEffectiveTimeLeave(emp){
-  if(emp.timeLeaveDate===todayStr() && emp.timeLeaveType){
-    return { type: emp.timeLeaveType, start: emp.timeLeaveStart, end: emp.timeLeaveEnd };
+  const updatedToday = emp.statusUpdatedAt && toLocalDateStr(emp.statusUpdatedAt) === todayStr();
+  if(updatedToday){
+    if(emp.timeLeaveType){
+      return { type: emp.timeLeaveType, start: emp.timeLeaveStart, end: emp.timeLeaveEnd };
+    }
+    return null; // 今日その場で「時間休なし」として保存された＝事前設定より優先して時間休なし扱い
   }
   const todayPresets = wbPresetsByDate[todayStr()] || {};
   const preset = todayPresets[emp.email];
@@ -2944,6 +2949,25 @@ function isTimeLeaveActiveNow(emp){
   return nowMin >= (sh*60+sm) && nowMin <= (eh*60+em);
 }
 
+// ステータスの優先順位（今日その場での編集 > 当日の事前設定 > 初期状態）だけを見る。
+// 時間休・定時外による強制上書きは含まない（モーダルの初期値表示など、素の状態が欲しい場面で使う）
+function getEffectiveBaseStatus(emp){
+  const updatedToday = emp.statusUpdatedAt && toLocalDateStr(emp.statusUpdatedAt) === todayStr();
+  if(updatedToday && emp.status){
+    return emp.status;
+  }
+  const todayPresets = wbPresetsByDate[todayStr()] || {};
+  const preset = todayPresets[emp.email];
+  if(preset && preset.status){
+    return preset.status;
+  }
+  const def = wbPresetDefaults[emp.email];
+  if(def && def.status){
+    return def.status;
+  }
+  return ""; // 未設定
+}
+
 // 実際に表示するステータスIDを返す。定時外の場合は特別な文字列 "OFFHOURS" を返す。
 function getEffectiveWbStatus(emp){
   if(!isNowInWorkWindow()){
@@ -2953,23 +2977,7 @@ function getEffectiveWbStatus(emp){
     const restStatus = wbStatusesAll.find(s=>s.name==="休み");
     if(restStatus) return restStatus.id;
   }
-  // 本人が今日その場で変更していれば最優先
-  const updatedToday = emp.statusUpdatedAt && toLocalDateStr(emp.statusUpdatedAt) === todayStr();
-  if(updatedToday && emp.status){
-    return emp.status;
-  }
-  // 当日分の事前設定
-  const todayPresets = wbPresetsByDate[todayStr()] || {};
-  const preset = todayPresets[emp.email];
-  if(preset && preset.status){
-    return preset.status;
-  }
-  // 初期状態（デフォルトテンプレート）
-  const def = wbPresetDefaults[emp.email];
-  if(def && def.status){
-    return def.status;
-  }
-  return ""; // 未設定
+  return getEffectiveBaseStatus(emp);
 }
 
 function renderWbNoteCell(tdNote, tlText, baseNote){
@@ -3759,7 +3767,7 @@ document.getElementById("wb-cancel").addEventListener("click", ()=> wbModal.clas
 
 function openWbModal(email){
   wbEditingEmail = email;
-  const emp = employeesAll.find(e=>e.email===email);
+  const emp = employeesAll.find(e=>e.email===email) || { email };
   document.getElementById("wb-modal-title").textContent =
     email===currentUser.email ? "自分の行き先を入力" : `${emp?.name || email} さんの行き先を入力`;
   const sel = document.getElementById("wb-status-select");
@@ -3775,18 +3783,20 @@ function openWbModal(email){
       sel.appendChild(opt);
     });
   }
-  sel.value = emp?.status || (wbStatusesAll[0]?.id || "");
-  document.getElementById("wb-note").value = emp?.note || "";
+  // 事前設定・初期状態も含めた「実際に有効な内容」を初期値として表示する
+  sel.value = getEffectiveBaseStatus(emp) || (wbStatusesAll[0]?.id || "");
+  document.getElementById("wb-note").value = getBaseWbNote(emp);
   document.getElementById("wb-error").textContent = "";
 
-  const hasTimeLeaveToday = emp?.timeLeaveDate === todayStr() && emp?.timeLeaveStart && emp?.timeLeaveEnd;
+  const effectiveTl = getEffectiveTimeLeave(emp);
+  const hasTimeLeaveToday = !!(effectiveTl && effectiveTl.start && effectiveTl.end);
   const tlCheck = document.getElementById("wb-timeleave-check");
   const tlFields = document.getElementById("wb-timeleave-fields");
-  tlCheck.checked = !!hasTimeLeaveToday;
+  tlCheck.checked = hasTimeLeaveToday;
   tlFields.style.display = hasTimeLeaveToday ? "flex" : "none";
-  setTimeFieldValue(document.getElementById("wb-timeleave-start"), hasTimeLeaveToday ? emp.timeLeaveStart : "");
-  setTimeFieldValue(document.getElementById("wb-timeleave-end"), hasTimeLeaveToday ? emp.timeLeaveEnd : "");
-  selectTlType(hasTimeLeaveToday ? (emp.timeLeaveType || "custom") : "custom");
+  setTimeFieldValue(document.getElementById("wb-timeleave-start"), hasTimeLeaveToday ? effectiveTl.start : "");
+  setTimeFieldValue(document.getElementById("wb-timeleave-end"), hasTimeLeaveToday ? effectiveTl.end : "");
+  selectTlType(hasTimeLeaveToday ? (effectiveTl.type || "custom") : "custom");
 
   wbModal.classList.add("show");
 }
