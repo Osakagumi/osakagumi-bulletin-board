@@ -184,13 +184,16 @@
 
   /* checkout mode (測量機器・ドローン) */
   .checkout-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-bottom:18px;}
-  .sp-summary-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;}
-  .sp-summary-card{border:1.5px solid var(--line);border-radius:12px;padding:14px 16px;background:#fff;position:relative;}
-  .sp-summary-card h4{margin:0 0 8px;font-size:15px;}
-  .sp-summary-card .sp-stat-row{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin-bottom:4px;}
-  .sp-summary-card .sp-stat-row b{color:var(--text);font-weight:700;}
-  .sp-summary-card .sp-edit-btn{position:absolute;top:12px;right:12px;border:none;background:none;color:var(--muted);font-size:12px;cursor:pointer;}
-  .sp-summary-card .sp-edit-btn:hover{color:var(--brand);}
+  .sp-holdings-table{width:100%;border-collapse:collapse;}
+  .sp-holdings-table th, .sp-holdings-table td{border:1px solid var(--line);padding:10px 14px;text-align:left;}
+  .sp-holdings-table th.sp-type-th{min-width:170px;position:relative;background:#F8FAFC;vertical-align:top;}
+  .sp-holdings-table th.sp-type-th h4{margin:0 0 8px;font-size:16px;}
+  .sp-holdings-table th.sp-type-th .sp-stat-row{display:flex;justify-content:space-between;font-size:12px;font-weight:400;color:var(--muted);margin-bottom:3px;}
+  .sp-holdings-table th.sp-type-th .sp-stat-row b{color:var(--text);font-weight:700;}
+  .sp-holdings-table th.sp-type-th .sp-edit-btn{position:absolute;top:10px;right:10px;border:none;background:none;color:var(--muted);font-size:12px;cursor:pointer;font-weight:400;}
+  .sp-holdings-table th.sp-type-th .sp-edit-btn:hover{color:var(--brand);}
+  .sp-holdings-table td.sp-count-cell{font-size:22px;font-weight:700;text-align:center;}
+  .sp-holdings-table td.sp-count-cell.sp-count-zero{color:var(--line);font-weight:400;font-size:16px;}
   .sp-type-badge{display:inline-block;padding:2px 8px;border-radius:10px;background:#EEF3FA;color:var(--brand-dark);font-size:11.5px;font-weight:700;}
   .checkout-card{background:var(--surface);border:1.5px solid var(--line);border-radius:10px;padding:14px;}
   .checkout-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;}
@@ -625,14 +628,14 @@
           <div class="checkout-grid" id="checkout-eq-grid"></div>
         </div>
         <div id="checkout-steelplates-panel" style="display:none;">
-          <div class="sp-summary-row" id="sp-summary-row"></div>
-          <div class="section-toolbar" style="margin-top:14px;">
+          <div class="section-toolbar">
             <button class="btn-primary" id="sp-new-btn">＋ 貸出・返却を記録</button>
             <button class="btn-ghost" id="sp-history-toggle-btn" style="border:1px solid var(--line);">履歴を表示</button>
+            <button class="btn-ghost" id="sp-type-add-btn" style="border:1px solid var(--line);display:none;">＋ 鉄板の種類を追加</button>
           </div>
           <div id="sp-holdings-section">
-            <table>
-              <thead><tr><th>現場名</th><th style="width:220px;">借受数</th></tr></thead>
+            <table class="sp-holdings-table">
+              <thead id="sp-holdings-thead"></thead>
               <tbody id="sp-holdings-list"></tbody>
             </table>
           </div>
@@ -696,10 +699,10 @@
       <!-- 敷鉄板 種類の設定モーダル（管理者・測量機器管理者のみ） -->
       <div class="modal-overlay" id="sp-type-modal">
         <div class="modal">
-          <h3>鉄板の設定</h3>
+          <h3 id="sp-type-modal-title">鉄板の設定</h3>
           <div class="field">
             <label>名称</label>
-            <input type="text" id="sp-type-name-input" placeholder="例：6m">
+            <input type="text" id="sp-type-name-input" placeholder="例：5m">
           </div>
           <div class="field">
             <label>総数（枚）</label>
@@ -711,6 +714,7 @@
           </div>
           <div id="sp-type-error" style="color:var(--danger);font-size:12.5px;margin-top:4px;"></div>
           <div class="modal-actions">
+            <button class="btn-ghost" id="sp-type-delete-btn" style="border:1px solid var(--danger);color:var(--danger);display:none;">この種類を削除</button>
             <button class="btn-ghost" id="sp-type-cancel-btn" style="border:1px solid var(--line);">キャンセル</button>
             <button class="btn-primary" id="sp-type-save-btn">保存</button>
           </div>
@@ -4657,19 +4661,19 @@ function spOutstandingCount(typeId){
   return lent - returned;
 }
 function renderSteelPlateSummary(){
-  const wrap = document.getElementById("sp-summary-row");
-  if(!wrap) return;
-  wrap.innerHTML = "";
-  if(spPlateTypesAll.length===0){
-    wrap.innerHTML = `<div style="color:var(--muted);font-size:13px;">鉄板の種類がまだ登録されていません。</div>`;
-    return;
-  }
+  const thead = document.getElementById("sp-holdings-thead");
+  if(!thead) return;
+  thead.innerHTML = "";
+  const tr = document.createElement("tr");
+  const siteTh = document.createElement("th");
+  siteTh.textContent = "現場名";
+  tr.appendChild(siteTh);
   spPlateTypesAll.forEach(t=>{
     const outstanding = spOutstandingCount(t.id);
     const stock = (Number(t.totalCount)||0) - outstanding;
-    const card = document.createElement("div");
-    card.className = "sp-summary-card";
-    card.innerHTML = `
+    const th = document.createElement("th");
+    th.className = "sp-type-th";
+    th.innerHTML = `
       <h4>${t.name}</h4>
       <div class="sp-stat-row"><span>総数</span><b>${t.totalCount ?? 0} 枚</b></div>
       <div class="sp-stat-row"><span>現在貸出枚数</span><b>${outstanding} 枚</b></div>
@@ -4681,10 +4685,12 @@ function renderSteelPlateSummary(){
       editBtn.className = "sp-edit-btn";
       editBtn.textContent = "編集";
       editBtn.addEventListener("click", ()=> openSpTypeModal(t.id));
-      card.appendChild(editBtn);
+      th.appendChild(editBtn);
     }
-    wrap.appendChild(card);
+    tr.appendChild(th);
   });
+  thead.appendChild(tr);
+  document.getElementById("sp-type-add-btn").style.display = (isAdmin || isEquipmentManager) ? "inline-block" : "none";
 }
 function spTypeName(typeId){
   const t = spPlateTypesAll.find(t=>t.id===typeId);
@@ -4778,18 +4784,28 @@ function renderSpHoldingsList(){
   const tbody = document.getElementById("sp-holdings-list");
   if(!tbody) return;
   const holdings = getSiteHoldings();
+  const colCount = 1 + spPlateTypesAll.length;
   tbody.innerHTML = "";
+  if(spPlateTypesAll.length===0){
+    tbody.innerHTML = `<tr><td style="color:var(--muted);text-align:center;padding:16px;">鉄板の種類がまだ登録されていません。「＋鉄板の種類を追加」から登録してください。</td></tr>`;
+    return;
+  }
   if(holdings.length===0){
-    tbody.innerHTML = `<tr><td colspan="2" style="color:var(--muted);text-align:center;padding:16px;">現在、貸出中の現場はありません。</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${colCount}" style="color:var(--muted);text-align:center;padding:16px;">現在、貸出中の現場はありません。</td></tr>`;
     return;
   }
   holdings.forEach(h=>{
-    const countText = h.byType.map(t=> `${spTypeName(t.typeId)}　${t.count}枚`).join("　　");
     const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${h.siteName}</td>
-      <td>${countText}</td>
-    `;
+    const nameTd = document.createElement("td");
+    nameTd.textContent = h.siteName;
+    tr.appendChild(nameTd);
+    spPlateTypesAll.forEach(t=>{
+      const entry = h.byType.find(x=>x.typeId===t.id);
+      const td = document.createElement("td");
+      td.className = "sp-count-cell" + (entry ? "" : " sp-count-zero");
+      td.textContent = entry ? `${entry.count}` : "0";
+      tr.appendChild(td);
+    });
     tbody.appendChild(tr);
   });
 }
@@ -4910,14 +4926,17 @@ document.getElementById("sp-save-btn")?.addEventListener("click", async ()=>{
 });
 
 function openSpTypeModal(typeId){
-  spEditingTypeId = typeId;
-  const t = spPlateTypesAll.find(t=>t.id===typeId);
+  spEditingTypeId = typeId || null;
+  const t = typeId ? spPlateTypesAll.find(t=>t.id===typeId) : null;
+  document.getElementById("sp-type-modal-title").textContent = t ? "鉄板の設定" : "鉄板の種類を追加";
   document.getElementById("sp-type-name-input").value = t?.name || "";
   document.getElementById("sp-type-total-input").value = t?.totalCount ?? "";
   document.getElementById("sp-type-price-input").value = t?.unitPricePerDay ?? "";
   document.getElementById("sp-type-error").textContent = "";
+  document.getElementById("sp-type-delete-btn").style.display = t ? "inline-block" : "none";
   document.getElementById("sp-type-modal").classList.add("show");
 }
+document.getElementById("sp-type-add-btn")?.addEventListener("click", ()=> openSpTypeModal(null));
 document.getElementById("sp-type-cancel-btn")?.addEventListener("click", ()=>{
   document.getElementById("sp-type-modal").classList.remove("show");
 });
@@ -4928,13 +4947,43 @@ document.getElementById("sp-type-save-btn")?.addEventListener("click", async ()=
   const totalCount = Number(document.getElementById("sp-type-total-input").value);
   const unitPricePerDay = Number(document.getElementById("sp-type-price-input").value);
   if(!name){ errEl.textContent = "名称を入力してください。"; return; }
-  if(!spEditingTypeId) return;
   try{
-    await updateDoc(doc(db,"steel_plate_types", spEditingTypeId), { name, totalCount, unitPricePerDay });
+    if(spEditingTypeId){
+      await updateDoc(doc(db,"steel_plate_types", spEditingTypeId), { name, totalCount, unitPricePerDay });
+      toast("更新しました。");
+    } else {
+      if(spPlateTypesAll.some(t=>t.name===name)){
+        errEl.textContent = "同じ名称の種類がすでに登録されています。";
+        return;
+      }
+      const nextOrder = spPlateTypesAll.reduce((max,t)=> Math.max(max, t.order??0), 0) + 1;
+      await addDoc(collection(db,"steel_plate_types"), { name, totalCount, unitPricePerDay, order: nextOrder });
+      toast("追加しました。");
+    }
     document.getElementById("sp-type-modal").classList.remove("show");
-    toast("更新しました。");
   }catch(e){
-    errEl.textContent = "更新に失敗しました。権限をご確認ください。";
+    errEl.textContent = "保存に失敗しました。権限をご確認ください。";
+  }
+});
+document.getElementById("sp-type-delete-btn")?.addEventListener("click", async ()=>{
+  if(!spEditingTypeId) return;
+  const t = spPlateTypesAll.find(t=>t.id===spEditingTypeId);
+  const outstanding = spOutstandingCount(spEditingTypeId);
+  const hasHistory = spTransactionsAll.some(tx=>tx.typeId===spEditingTypeId);
+  let msg = `「${t?.name || ""}」を削除しますか？`;
+  if(outstanding > 0){
+    msg += `\n\n※現在${outstanding}枚が貸出中のまま残っています。`;
+  }
+  if(hasHistory){
+    msg += `\n\n※この種類の貸出・返却の履歴は削除されず残ります。`;
+  }
+  if(!confirm(msg)) return;
+  try{
+    await deleteDoc(doc(db,"steel_plate_types", spEditingTypeId));
+    document.getElementById("sp-type-modal").classList.remove("show");
+    toast("削除しました。");
+  }catch(e){
+    document.getElementById("sp-type-error").textContent = "削除に失敗しました。権限をご確認ください。";
   }
 });
 
