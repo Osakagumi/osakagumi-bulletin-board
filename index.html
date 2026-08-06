@@ -184,6 +184,14 @@
 
   /* checkout mode (測量機器・ドローン) */
   .checkout-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-bottom:18px;}
+  .sp-summary-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;}
+  .sp-summary-card{border:1.5px solid var(--line);border-radius:12px;padding:14px 16px;background:#fff;position:relative;}
+  .sp-summary-card h4{margin:0 0 8px;font-size:15px;}
+  .sp-summary-card .sp-stat-row{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin-bottom:4px;}
+  .sp-summary-card .sp-stat-row b{color:var(--text);font-weight:700;}
+  .sp-summary-card .sp-edit-btn{position:absolute;top:12px;right:12px;border:none;background:none;color:var(--muted);font-size:12px;cursor:pointer;}
+  .sp-summary-card .sp-edit-btn:hover{color:var(--brand);}
+  .sp-type-badge{display:inline-block;padding:2px 8px;border-radius:10px;background:#EEF3FA;color:var(--brand-dark);font-size:11.5px;font-weight:700;}
   .checkout-card{background:var(--surface);border:1.5px solid var(--line);border-radius:10px;padding:14px;}
   .checkout-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;}
   .checkout-head .name{font-size:14px;font-weight:700;}
@@ -565,6 +573,7 @@
       <button class="tab-btn" data-view="whereabouts">行き先</button>
       <button class="tab-btn" data-view="reserve">予約</button>
       <button class="tab-btn" data-view="checkout">貸出</button>
+      <button class="tab-btn" data-view="steelplates">敷鉄板</button>
       <button class="tab-btn" data-view="safety" style="display:none;">安否確認</button>
       <button class="tab-btn" data-view="calendar">カレンダー</button>
       <button class="tab-reorder-btn" id="tab-reorder-toggle" title="タブの並び替え">並び替え</button>
@@ -615,6 +624,81 @@
         <div class="cat-row" id="checkout-cat-row"></div>
         <div class="checkout-grid" id="checkout-eq-grid"></div>
       </section>
+
+      <!-- ---- 敷鉄板 ---- -->
+      <section id="view-steelplates" style="display:none;">
+        <div class="sp-summary-row" id="sp-summary-row"></div>
+        <div class="section-toolbar" style="margin-top:14px;">
+          <button class="btn-primary" id="sp-new-btn">＋ 貸出・返却を記録</button>
+        </div>
+        <table>
+          <thead><tr><th style="width:100px;">日付</th><th style="width:60px;">種別</th><th>現場名</th><th style="width:120px;">注文者</th><th style="width:80px;">貸出</th><th style="width:80px;">返却</th><th style="width:110px;">記録者</th><th style="width:60px;"></th></tr></thead>
+          <tbody id="sp-tx-list"></tbody>
+        </table>
+      </section>
+
+      <!-- 敷鉄板 貸出・返却モーダル -->
+      <div class="modal-overlay" id="sp-modal">
+        <div class="modal">
+          <h3 id="sp-modal-title">貸出・返却を記録</h3>
+          <div class="field">
+            <label>区分</label>
+            <div class="seg-toggle" id="sp-type-toggle">
+              <button type="button" class="seg-btn active" data-sptype="lend">貸出</button>
+              <button type="button" class="seg-btn" data-sptype="return">返却</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>鉄板の種類</label>
+            <select id="sp-plate-select"></select>
+          </div>
+          <div class="field">
+            <label>日付</label>
+            <input type="date" id="sp-date-input">
+          </div>
+          <div class="field">
+            <label>現場名</label>
+            <input type="text" id="sp-site-input" placeholder="例：本社運輸倉庫前">
+          </div>
+          <div class="field">
+            <label>注文者</label>
+            <input type="text" id="sp-orderer-input" placeholder="例：須藤">
+          </div>
+          <div class="field">
+            <label>枚数</label>
+            <input type="number" id="sp-count-input" min="1" step="1" placeholder="例：5">
+          </div>
+          <div id="sp-error" style="color:var(--danger);font-size:12.5px;margin-top:4px;"></div>
+          <div class="modal-actions">
+            <button class="btn-ghost" id="sp-cancel-btn" style="border:1px solid var(--line);">キャンセル</button>
+            <button class="btn-primary" id="sp-save-btn">保存</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 敷鉄板 種類の設定モーダル（管理者・測量機器管理者のみ） -->
+      <div class="modal-overlay" id="sp-type-modal">
+        <div class="modal">
+          <h3>鉄板の設定</h3>
+          <div class="field">
+            <label>名称</label>
+            <input type="text" id="sp-type-name-input" placeholder="例：6m">
+          </div>
+          <div class="field">
+            <label>総数（枚）</label>
+            <input type="number" id="sp-type-total-input" min="0" step="1">
+          </div>
+          <div class="field">
+            <label>単価（円/日/枚）</label>
+            <input type="number" id="sp-type-price-input" min="0" step="1">
+          </div>
+          <div id="sp-type-error" style="color:var(--danger);font-size:12.5px;margin-top:4px;"></div>
+          <div class="modal-actions">
+            <button class="btn-ghost" id="sp-type-cancel-btn" style="border:1px solid var(--line);">キャンセル</button>
+            <button class="btn-primary" id="sp-type-save-btn">保存</button>
+          </div>
+        </div>
+      </div>
 
       <!-- ---- お知らせ ---- -->
       <section id="view-notices">
@@ -1196,6 +1280,8 @@ onAuthStateChanged(auth, async (user)=>{
     initEmployeesListener();
     initCalendarTab();
     initWbPresetsListener();
+    initSteelPlateTypesListener();
+    initSteelPlateTxListener();
 
     if(urlPreselect.campaign){
       switchToTab("safety");
@@ -1215,7 +1301,7 @@ onAuthStateChanged(auth, async (user)=>{
 });
 
 /* ---------- tabs ---------- */
-const ALL_VIEWS = ["notices","whereabouts","reserve","checkout","safety","calendar"];
+const ALL_VIEWS = ["notices","whereabouts","reserve","checkout","steelplates","safety","calendar"];
 const TAB_ORDER_KEY = "osakagumi-portal-tab-order";
 function switchToTab(viewName){
   document.querySelectorAll(".tab-btn").forEach(b=>{
@@ -1227,6 +1313,11 @@ function switchToTab(viewName){
   applyMainWidthForCurrentTab();
   if(viewName==="whereabouts"){
     renderWhereabouts();
+  }
+  if(viewName==="steelplates"){
+    ensureDefaultSteelPlateTypes();
+    renderSteelPlateSummary();
+    renderSteelPlateTxList();
   }
 }
 document.querySelectorAll(".tab-btn").forEach(btn=>{
@@ -4475,6 +4566,218 @@ async function editCalLabel(dateStr){
     toast("更新に失敗しました。権限をご確認ください。");
   }
 }
+
+/* ---------- 敷鉄板（貸出・返却管理） ---------- */
+let spPlateTypesAll = [];
+let spTransactionsAll = [];
+let spTypesSeeded = false;
+let spEditingTypeId = null;
+
+function initSteelPlateTypesListener(){
+  const q = query(collection(db,"steel_plate_types"), orderBy("order","asc"));
+  onSnapshot(q, snap=>{
+    spPlateTypesAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    renderSteelPlateSummary();
+    renderSpPlateSelectOptions();
+  });
+}
+function initSteelPlateTxListener(){
+  const q = query(collection(db,"steel_plate_transactions"), orderBy("date","desc"));
+  onSnapshot(q, snap=>{
+    spTransactionsAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    renderSteelPlateSummary();
+    renderSteelPlateTxList();
+  });
+}
+// 初回アクセス時、鉄板の種類が1件も登録されていなければ、
+// 敷鉄板_出庫管理表.xlsx にあった6m・3mの初期値で自動登録する（管理者のみ）
+async function ensureDefaultSteelPlateTypes(){
+  if(spTypesSeeded || !isAdmin) return;
+  spTypesSeeded = true;
+  try{
+    const snap = await getDocs(collection(db,"steel_plate_types"));
+    if(!snap.empty) return;
+    await setDoc(doc(db,"steel_plate_types","6m"), { name:"6m", totalCount:278, unitPricePerDay:25, order:1 });
+    await setDoc(doc(db,"steel_plate_types","3m"), { name:"3m", totalCount:27, unitPricePerDay:15, order:2 });
+  }catch(e){ /* 権限がなければ何もしない */ }
+}
+function spOutstandingCount(typeId){
+  let lent = 0, returned = 0;
+  spTransactionsAll.forEach(tx=>{
+    if(tx.typeId !== typeId) return;
+    if(tx.type==="lend") lent += Number(tx.count)||0;
+    else if(tx.type==="return") returned += Number(tx.count)||0;
+  });
+  return lent - returned;
+}
+function renderSteelPlateSummary(){
+  const wrap = document.getElementById("sp-summary-row");
+  if(!wrap) return;
+  wrap.innerHTML = "";
+  if(spPlateTypesAll.length===0){
+    wrap.innerHTML = `<div style="color:var(--muted);font-size:13px;">鉄板の種類がまだ登録されていません。</div>`;
+    return;
+  }
+  spPlateTypesAll.forEach(t=>{
+    const outstanding = spOutstandingCount(t.id);
+    const stock = (Number(t.totalCount)||0) - outstanding;
+    const card = document.createElement("div");
+    card.className = "sp-summary-card";
+    card.innerHTML = `
+      <h4>${t.name}</h4>
+      <div class="sp-stat-row"><span>総数</span><b>${t.totalCount ?? 0} 枚</b></div>
+      <div class="sp-stat-row"><span>現在貸出枚数</span><b>${outstanding} 枚</b></div>
+      <div class="sp-stat-row"><span>現在在庫</span><b>${stock} 枚</b></div>
+      <div class="sp-stat-row"><span>単価</span><b>${t.unitPricePerDay ?? 0} 円/日/枚</b></div>
+    `;
+    if(isAdmin || isEquipmentManager){
+      const editBtn = document.createElement("button");
+      editBtn.className = "sp-edit-btn";
+      editBtn.textContent = "編集";
+      editBtn.addEventListener("click", ()=> openSpTypeModal(t.id));
+      card.appendChild(editBtn);
+    }
+    wrap.appendChild(card);
+  });
+}
+function spTypeName(typeId){
+  const t = spPlateTypesAll.find(t=>t.id===typeId);
+  return t ? t.name : typeId;
+}
+function renderSteelPlateTxList(){
+  const tbody = document.getElementById("sp-tx-list");
+  if(!tbody) return;
+  tbody.innerHTML = "";
+  if(spTransactionsAll.length===0){
+    tbody.innerHTML = `<tr><td colspan="8" style="color:var(--muted);text-align:center;padding:16px;">まだ記録がありません。</td></tr>`;
+    return;
+  }
+  spTransactionsAll.forEach(tx=>{
+    const canDelete = isAdmin || isEquipmentManager || tx.createdByEmail===currentUser.email;
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${formatDateJP(tx.date)}</td>
+      <td><span class="sp-type-badge">${spTypeName(tx.typeId)}</span></td>
+      <td>${tx.siteName || ""}</td>
+      <td>${tx.orderer || ""}</td>
+      <td>${tx.type==="lend" ? (tx.count+" 枚") : ""}</td>
+      <td>${tx.type==="return" ? (tx.count+" 枚") : ""}</td>
+      <td style="font-size:12px;color:var(--muted);">${tx.createdByName || tx.createdByEmail || ""}</td>
+      <td></td>
+    `;
+    if(canDelete){
+      const delBtn = document.createElement("button");
+      delBtn.className = "icon-btn";
+      delBtn.textContent = "削除";
+      delBtn.style.cssText = "border:none;background:none;color:var(--danger);font-size:12px;cursor:pointer;";
+      delBtn.addEventListener("click", async ()=>{
+        if(!confirm("この記録を削除しますか？")) return;
+        try{
+          await deleteDoc(doc(db,"steel_plate_transactions", tx.id));
+        }catch(e){
+          toast("削除に失敗しました。権限をご確認ください。");
+        }
+      });
+      tr.lastElementChild.appendChild(delBtn);
+    }
+    tbody.appendChild(tr);
+  });
+}
+function renderSpPlateSelectOptions(){
+  const sel = document.getElementById("sp-plate-select");
+  if(!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = "";
+  spPlateTypesAll.forEach(t=>{
+    const opt = document.createElement("option");
+    opt.value = t.id; opt.textContent = t.name;
+    sel.appendChild(opt);
+  });
+  if(prev && spPlateTypesAll.some(t=>t.id===prev)) sel.value = prev;
+}
+
+let spSelectedType = "lend";
+document.querySelectorAll("#sp-type-toggle .seg-btn").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    spSelectedType = btn.dataset.sptype;
+    document.querySelectorAll("#sp-type-toggle .seg-btn").forEach(b=>{
+      b.classList.toggle("active", b===btn);
+    });
+  });
+});
+
+function openSpModal(){
+  spSelectedType = "lend";
+  document.querySelectorAll("#sp-type-toggle .seg-btn").forEach(b=>{
+    b.classList.toggle("active", b.dataset.sptype==="lend");
+  });
+  renderSpPlateSelectOptions();
+  document.getElementById("sp-date-input").value = todayStr();
+  document.getElementById("sp-site-input").value = "";
+  document.getElementById("sp-orderer-input").value = "";
+  document.getElementById("sp-count-input").value = "";
+  document.getElementById("sp-error").textContent = "";
+  document.getElementById("sp-modal").classList.add("show");
+}
+document.getElementById("sp-new-btn").addEventListener("click", openSpModal);
+document.getElementById("sp-cancel-btn").addEventListener("click", ()=>{
+  document.getElementById("sp-modal").classList.remove("show");
+});
+document.getElementById("sp-save-btn").addEventListener("click", async ()=>{
+  const errEl = document.getElementById("sp-error");
+  errEl.textContent = "";
+  const typeId = document.getElementById("sp-plate-select").value;
+  const date = document.getElementById("sp-date-input").value;
+  const siteName = document.getElementById("sp-site-input").value.trim();
+  const orderer = document.getElementById("sp-orderer-input").value.trim();
+  const count = Number(document.getElementById("sp-count-input").value);
+  if(!typeId){ errEl.textContent = "鉄板の種類を登録してください（管理者にご連絡ください）。"; return; }
+  if(!date){ errEl.textContent = "日付を入力してください。"; return; }
+  if(!siteName){ errEl.textContent = "現場名を入力してください。"; return; }
+  if(!count || count <= 0){ errEl.textContent = "枚数は1以上の数値で入力してください。"; return; }
+  const emp = employeesAll.find(e=>e.email===currentUser.email);
+  try{
+    await addDoc(collection(db,"steel_plate_transactions"), {
+      typeId, type: spSelectedType, count, date, siteName, orderer,
+      createdByEmail: currentUser.email,
+      createdByName: emp?.name || currentUser.email,
+      createdAt: new Date().toISOString()
+    });
+    document.getElementById("sp-modal").classList.remove("show");
+    toast("記録しました。");
+  }catch(e){
+    errEl.textContent = "保存に失敗しました。権限をご確認ください。";
+  }
+});
+
+function openSpTypeModal(typeId){
+  spEditingTypeId = typeId;
+  const t = spPlateTypesAll.find(t=>t.id===typeId);
+  document.getElementById("sp-type-name-input").value = t?.name || "";
+  document.getElementById("sp-type-total-input").value = t?.totalCount ?? "";
+  document.getElementById("sp-type-price-input").value = t?.unitPricePerDay ?? "";
+  document.getElementById("sp-type-error").textContent = "";
+  document.getElementById("sp-type-modal").classList.add("show");
+}
+document.getElementById("sp-type-cancel-btn").addEventListener("click", ()=>{
+  document.getElementById("sp-type-modal").classList.remove("show");
+});
+document.getElementById("sp-type-save-btn").addEventListener("click", async ()=>{
+  const errEl = document.getElementById("sp-type-error");
+  errEl.textContent = "";
+  const name = document.getElementById("sp-type-name-input").value.trim();
+  const totalCount = Number(document.getElementById("sp-type-total-input").value);
+  const unitPricePerDay = Number(document.getElementById("sp-type-price-input").value);
+  if(!name){ errEl.textContent = "名称を入力してください。"; return; }
+  if(!spEditingTypeId) return;
+  try{
+    await updateDoc(doc(db,"steel_plate_types", spEditingTypeId), { name, totalCount, unitPricePerDay });
+    document.getElementById("sp-type-modal").classList.remove("show");
+    toast("更新しました。");
+  }catch(e){
+    errEl.textContent = "更新に失敗しました。権限をご確認ください。";
+  }
+});
 
 </script>
 </body>
