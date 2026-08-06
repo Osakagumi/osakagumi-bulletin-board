@@ -250,6 +250,7 @@
   }
   .cal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
   .cal-header .cal-label{font-size:13.5px;font-weight:700;font-family:var(--mono);}
+  .cal-year-select{font-size:13.5px;font-weight:700;font-family:var(--mono);border:1px solid var(--line);border-radius:5px;padding:2px 4px;background:#fff;color:var(--text);cursor:pointer;}
   .cal-nav{border:1px solid var(--line);background:#fff;border-radius:6px;width:26px;height:26px;font-size:12px;}
   .cal-nav:hover{background:#F4F8FC;}
   .cal-weekdays{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-size:11px;color:var(--muted);margin-bottom:4px;}
@@ -1904,7 +1905,22 @@ function openCalendarPicker(anchorEl, initialDateStr, opts){
     prevBtn.addEventListener("click", ()=>{ viewMonth--; if(viewMonth<0){viewMonth=11;viewYear--;} render(); });
     const label = document.createElement("div");
     label.className = "cal-label";
-    label.textContent = `${viewYear}年 ${viewMonth+1}月`;
+    const yearSelect = document.createElement("select");
+    yearSelect.className = "cal-year-select";
+    const curYearVal = new Date().getFullYear();
+    for(let y = curYearVal - 10; y <= curYearVal + 10; y++){
+      const opt = document.createElement("option");
+      opt.value = String(y);
+      opt.textContent = `${y}年`;
+      if(y === viewYear) opt.selected = true;
+      yearSelect.appendChild(opt);
+    }
+    yearSelect.addEventListener("click", (e)=> e.stopPropagation());
+    yearSelect.addEventListener("change", ()=>{ viewYear = Number(yearSelect.value); render(); });
+    const monthSpan = document.createElement("span");
+    monthSpan.textContent = ` ${viewMonth+1}月`;
+    label.appendChild(yearSelect);
+    label.appendChild(monthSpan);
     const nextBtn = document.createElement("button");
     nextBtn.type = "button"; nextBtn.className = "cal-nav"; nextBtn.textContent = "▶";
     nextBtn.addEventListener("click", ()=>{ viewMonth++; if(viewMonth>11){viewMonth=0;viewYear++;} render(); });
