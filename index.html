@@ -1169,6 +1169,13 @@ function formatDateJP(dateStr){
 
 /* ---------- state ---------- */
 let currentUser = null;
+// タブ切り替え時の幅調整で使う値。applySavedTabOrder()（後述）がページ読み込み時点で
+// switchToTab()を呼び、その中でこれらの変数を参照する可能性があるため、
+// （保存されたタブ順で「行き先」が先頭になっていると発生）
+// 使われるより前の、できるだけ早い時点で宣言しておく。
+let wbDisplayWidthPx = null;
+let wbFontSizePx = 13;
+let kioskDefaultViewApplied = false;
 let isAdmin = false;
 let isPoster = false;
 let isWhereaboutsEditor = false;
@@ -1317,16 +1324,19 @@ function switchToTab(viewName){
     b.classList.toggle("active", b.dataset.view===viewName);
   });
   ALL_VIEWS.forEach(name=>{
-    document.getElementById("view-"+name).style.display = (name===viewName) ? "block":"none";
+    const el = document.getElementById("view-"+name);
+    if(el) el.style.display = (name===viewName) ? "block":"none";
   });
   applyMainWidthForCurrentTab();
   if(viewName==="whereabouts"){
-    renderWhereabouts();
+    try{ renderWhereabouts(); }catch(e){ console.error("[行き先の表示エラー]", e); }
   }
   if(viewName==="steelplates"){
-    ensureDefaultSteelPlateTypes();
-    renderSteelPlateSummary();
-    renderSteelPlateTxList();
+    try{
+      ensureDefaultSteelPlateTypes();
+      renderSteelPlateSummary();
+      renderSteelPlateTxList();
+    }catch(e){ console.error("[敷鉄板の表示エラー]", e); }
   }
 }
 document.querySelectorAll(".tab-btn").forEach(btn=>{
@@ -2913,9 +2923,6 @@ function initWbStatusesListener(){
     renderWbPresetBulkToggle();
   }, (err)=>{ console.error("[行き先ステータス取得エラー]", err); });
 }
-let wbDisplayWidthPx = null;
-let wbFontSizePx = 13;
-let kioskDefaultViewApplied = false;
 function applyMainWidthForCurrentTab(){
   if(isDisplayMode) return; // サイネージモードはCSS側でmax-width:noneを常に適用済み
   const mainEl = document.querySelector("main");
@@ -4773,11 +4780,11 @@ function openSpModal(){
   document.getElementById("sp-error").textContent = "";
   document.getElementById("sp-modal").classList.add("show");
 }
-document.getElementById("sp-new-btn").addEventListener("click", openSpModal);
-document.getElementById("sp-cancel-btn").addEventListener("click", ()=>{
+document.getElementById("sp-new-btn")?.addEventListener("click", openSpModal);
+document.getElementById("sp-cancel-btn")?.addEventListener("click", ()=>{
   document.getElementById("sp-modal").classList.remove("show");
 });
-document.getElementById("sp-save-btn").addEventListener("click", async ()=>{
+document.getElementById("sp-save-btn")?.addEventListener("click", async ()=>{
   const errEl = document.getElementById("sp-error");
   errEl.textContent = "";
   const date = document.getElementById("sp-date-input").value;
@@ -4827,10 +4834,10 @@ function openSpTypeModal(typeId){
   document.getElementById("sp-type-error").textContent = "";
   document.getElementById("sp-type-modal").classList.add("show");
 }
-document.getElementById("sp-type-cancel-btn").addEventListener("click", ()=>{
+document.getElementById("sp-type-cancel-btn")?.addEventListener("click", ()=>{
   document.getElementById("sp-type-modal").classList.remove("show");
 });
-document.getElementById("sp-type-save-btn").addEventListener("click", async ()=>{
+document.getElementById("sp-type-save-btn")?.addEventListener("click", async ()=>{
   const errEl = document.getElementById("sp-type-error");
   errEl.textContent = "";
   const name = document.getElementById("sp-type-name-input").value.trim();
