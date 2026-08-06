@@ -4783,6 +4783,9 @@ function renderSteelPlateSummary(){
     }
     tr.appendChild(th);
   });
+  const actionTh = document.createElement("th");
+  actionTh.style.width = "70px";
+  tr.appendChild(actionTh);
   thead.appendChild(tr);
   document.getElementById("sp-type-add-btn").style.display = (isAdmin || isEquipmentManager) ? "inline-block" : "none";
 }
@@ -4878,7 +4881,7 @@ function renderSpHoldingsList(){
   const tbody = document.getElementById("sp-holdings-list");
   if(!tbody) return;
   const holdings = getSiteHoldings();
-  const colCount = 1 + spPlateTypesAll.length;
+  const colCount = 2 + spPlateTypesAll.length;
   tbody.innerHTML = "";
   if(spPlateTypesAll.length===0){
     tbody.innerHTML = `<tr><td style="color:var(--muted);text-align:center;padding:16px;">鉄板の種類がまだ登録されていません。「＋鉄板の種類を追加」から登録してください。</td></tr>`;
@@ -4900,6 +4903,14 @@ function renderSpHoldingsList(){
       td.textContent = entry ? `${entry.count}` : "0";
       tr.appendChild(td);
     });
+    const actionTd = document.createElement("td");
+    actionTd.style.textAlign = "center";
+    const editBtn = document.createElement("button");
+    editBtn.textContent = "編集";
+    editBtn.style.cssText = "border:1px solid var(--line);background:#fff;border-radius:6px;color:var(--muted);font-size:12px;padding:5px 10px;cursor:pointer;";
+    editBtn.addEventListener("click", ()=> openSpReturnEditModal(h.siteName));
+    actionTd.appendChild(editBtn);
+    tr.appendChild(actionTd);
     tbody.appendChild(tr);
   });
 }
@@ -4958,6 +4969,32 @@ document.querySelectorAll("#sp-type-toggle .seg-btn").forEach(btn=>{
     applySpTypeUI();
   });
 });
+
+function openSpReturnEditModal(siteName){
+  spSelectedType = "return";
+  document.querySelectorAll("#sp-type-toggle .seg-btn").forEach(b=>{
+    b.classList.toggle("active", b.dataset.sptype==="return");
+  });
+  applySpTypeUI(); // ここで sp-return-select に現在の貸出中グループ一覧が入る
+
+  const leftmostTypeId = spPlateTypesAll[0]?.id || null;
+  // その現場の直近の取引（貸出・返却どちらでも可）から、直近の注文者を拾う
+  // spTransactionsAll は date の新しい順に並んでいる
+  const lastTx = spTransactionsAll.find(tx=> tx.siteName===siteName);
+  const lastOrderer = lastTx ? (lastTx.orderer || "") : "";
+
+  const sel = document.getElementById("sp-return-select");
+  const groups = JSON.parse(sel.dataset.groups || "[]");
+  let idx = groups.findIndex(g=> g.typeId===leftmostTypeId && g.siteName===siteName && g.orderer===lastOrderer);
+  if(idx===-1) idx = groups.findIndex(g=> g.typeId===leftmostTypeId && g.siteName===siteName);
+  if(idx===-1) idx = groups.findIndex(g=> g.siteName===siteName);
+  if(idx!==-1) sel.value = String(idx);
+
+  document.getElementById("sp-date-input").value = todayStr();
+  document.getElementById("sp-count-input").value = "";
+  document.getElementById("sp-error").textContent = "";
+  document.getElementById("sp-modal").classList.add("show");
+}
 
 function openSpModal(){
   spSelectedType = "lend";
