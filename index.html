@@ -648,21 +648,30 @@
               <button type="button" class="seg-btn" data-sptype="return">返却</button>
             </div>
           </div>
-          <div class="field">
-            <label>鉄板の種類</label>
-            <select id="sp-plate-select"></select>
+          <div id="sp-lend-fields">
+            <div class="field">
+              <label>鉄板の種類</label>
+              <select id="sp-plate-select"></select>
+            </div>
+            <div class="field">
+              <label>現場名</label>
+              <input type="text" id="sp-site-input" placeholder="例：本社運輸倉庫前" list="sp-site-datalist">
+              <datalist id="sp-site-datalist"></datalist>
+            </div>
+            <div class="field">
+              <label>注文者</label>
+              <input type="text" id="sp-orderer-input" placeholder="例：須藤">
+            </div>
+          </div>
+          <div id="sp-return-fields" style="display:none;">
+            <div class="field">
+              <label>貸出中の記録から選択</label>
+              <select id="sp-return-select"></select>
+            </div>
           </div>
           <div class="field">
             <label>日付</label>
             <input type="date" id="sp-date-input">
-          </div>
-          <div class="field">
-            <label>現場名</label>
-            <input type="text" id="sp-site-input" placeholder="例：本社運輸倉庫前">
-          </div>
-          <div class="field">
-            <label>注文者</label>
-            <input type="text" id="sp-orderer-input" placeholder="例：須藤">
           </div>
           <div class="field">
             <label>枚数</label>
@@ -4695,14 +4704,57 @@ function renderSpPlateSelectOptions(){
   });
   if(prev && spPlateTypesAll.some(t=>t.id===prev)) sel.value = prev;
 }
+// 過去に入力した現場名を記憶し、次回以降は候補として選べるようにする
+function renderSpSiteDatalist(){
+  const list = document.getElementById("sp-site-datalist");
+  if(!list) return;
+  const names = [...new Set(spTransactionsAll.map(tx=>tx.siteName).filter(Boolean))].sort();
+  list.innerHTML = names.map(n=>`<option value="${n.replace(/"/g,"&quot;")}"></option>`).join("");
+}
+// 現場名・注文者・鉄板の種類ごとに、貸出枚数−返却枚数（＝現在借りている枚数）を集計する
+function getOutstandingLoanGroups(){
+  const map = new Map();
+  spTransactionsAll.forEach(tx=>{
+    const key = `${tx.typeId}__${tx.siteName}__${tx.orderer||""}`;
+    const cur = map.get(key) || { typeId: tx.typeId, siteName: tx.siteName, orderer: tx.orderer||"", outstanding: 0 };
+    cur.outstanding += (tx.type==="lend" ? (Number(tx.count)||0) : -(Number(tx.count)||0));
+    map.set(key, cur);
+  });
+  return [...map.values()].filter(g=>g.outstanding > 0).sort((a,b)=> a.siteName.localeCompare(b.siteName,"ja"));
+}
+function renderSpReturnSelectOptions(){
+  const sel = document.getElementById("sp-return-select");
+  if(!sel) return;
+  const groups = getOutstandingLoanGroups();
+  sel.innerHTML = "";
+  if(groups.length===0){
+    sel.innerHTML = `<option value="">現在貸出中の記録がありません</option>`;
+    return;
+  }
+  groups.forEach((g, i)=>{
+    const opt = document.createElement("option");
+    opt.value = String(i);
+    opt.textContent = `[${spTypeName(g.typeId)}] ${g.siteName}（${g.orderer || "注文者不明"}）－ 現在${g.outstanding}枚`;
+    sel.appendChild(opt);
+  });
+  sel.dataset.groups = JSON.stringify(groups);
+}
 
 let spSelectedType = "lend";
+function applySpTypeUI(){
+  document.getElementById("sp-lend-fields").style.display = spSelectedType==="lend" ? "block" : "none";
+  document.getElementById("sp-return-fields").style.display = spSelectedType==="return" ? "block" : "none";
+  if(spSelectedType==="return"){
+    renderSpReturnSelectOptions();
+  }
+}
 document.querySelectorAll("#sp-type-toggle .seg-btn").forEach(btn=>{
   btn.addEventListener("click", ()=>{
     spSelectedType = btn.dataset.sptype;
     document.querySelectorAll("#sp-type-toggle .seg-btn").forEach(b=>{
       b.classList.toggle("active", b===btn);
     });
+    applySpTypeUI();
   });
 });
 
@@ -4712,6 +4764,8 @@ function openSpModal(){
     b.classList.toggle("active", b.dataset.sptype==="lend");
   });
   renderSpPlateSelectOptions();
+  renderSpSiteDatalist();
+  applySpTypeUI();
   document.getElementById("sp-date-input").value = todayStr();
   document.getElementById("sp-site-input").value = "";
   document.getElementById("sp-orderer-input").value = "";
@@ -4726,15 +4780,29 @@ document.getElementById("sp-cancel-btn").addEventListener("click", ()=>{
 document.getElementById("sp-save-btn").addEventListener("click", async ()=>{
   const errEl = document.getElementById("sp-error");
   errEl.textContent = "";
-  const typeId = document.getElementById("sp-plate-select").value;
   const date = document.getElementById("sp-date-input").value;
-  const siteName = document.getElementById("sp-site-input").value.trim();
-  const orderer = document.getElementById("sp-orderer-input").value.trim();
   const count = Number(document.getElementById("sp-count-input").value);
-  if(!typeId){ errEl.textContent = "鉄板の種類を登録してください（管理者にご連絡ください）。"; return; }
   if(!date){ errEl.textContent = "日付を入力してください。"; return; }
-  if(!siteName){ errEl.textContent = "現場名を入力してください。"; return; }
   if(!count || count <= 0){ errEl.textContent = "枚数は1以上の数値で入力してください。"; return; }
+
+  let typeId, siteName, orderer;
+  if(spSelectedType==="lend"){
+    typeId = document.getElementById("sp-plate-select").value;
+    siteName = document.getElementById("sp-site-input").value.trim();
+    orderer = document.getElementById("sp-orderer-input").value.trim();
+    if(!typeId){ errEl.textContent = "鉄板の種類を登録してください（管理者にご連絡ください）。"; return; }
+    if(!siteName){ errEl.textContent = "現場名を入力してください。"; return; }
+  } else {
+    const sel = document.getElementById("sp-return-select");
+    const groups = JSON.parse(sel.dataset.groups || "[]");
+    const group = groups[Number(sel.value)];
+    if(!group){ errEl.textContent = "返却する貸出記録を選択してください。"; return; }
+    if(count > group.outstanding){ errEl.textContent = `返却枚数が貸出中の枚数（${group.outstanding}枚）を超えています。`; return; }
+    typeId = group.typeId;
+    siteName = group.siteName;
+    orderer = group.orderer;
+  }
+
   const emp = employeesAll.find(e=>e.email===currentUser.email);
   try{
     await addDoc(collection(db,"steel_plate_transactions"), {
