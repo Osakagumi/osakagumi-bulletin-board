@@ -4958,7 +4958,23 @@ function applySpTypeUI(){
   document.getElementById("sp-return-fields").style.display = spSelectedType==="return" ? "block" : "none";
   if(spSelectedType==="return"){
     renderSpReturnSelectOptions();
+    trySelectMatchingReturnGroup();
   }
+}
+// 貸出タブ側（種類・現場名・注文者）の現在の入力内容に一致する「貸出中グループ」があれば、
+// 返却タブに切り替えた時にそれを自動選択する（貸出⇄返却を行き来しても状態が保たれるように）
+function trySelectMatchingReturnGroup(){
+  const sel = document.getElementById("sp-return-select");
+  const groups = JSON.parse(sel.dataset.groups || "[]");
+  if(groups.length===0) return;
+  const typeId = document.getElementById("sp-plate-select").value;
+  const siteName = document.getElementById("sp-site-input").value.trim();
+  const orderer = document.getElementById("sp-orderer-input").value.trim();
+  if(!siteName) return;
+  let idx = groups.findIndex(g=> g.typeId===typeId && g.siteName===siteName && g.orderer===orderer);
+  if(idx===-1) idx = groups.findIndex(g=> g.typeId===typeId && g.siteName===siteName);
+  if(idx===-1) idx = groups.findIndex(g=> g.siteName===siteName);
+  if(idx!==-1) sel.value = String(idx);
 }
 document.querySelectorAll("#sp-type-toggle .seg-btn").forEach(btn=>{
   btn.addEventListener("click", ()=>{
@@ -4971,24 +4987,27 @@ document.querySelectorAll("#sp-type-toggle .seg-btn").forEach(btn=>{
 });
 
 function openSpReturnEditModal(siteName){
-  spSelectedType = "return";
-  document.querySelectorAll("#sp-type-toggle .seg-btn").forEach(b=>{
-    b.classList.toggle("active", b.dataset.sptype==="return");
-  });
-  applySpTypeUI(); // ここで sp-return-select に現在の貸出中グループ一覧が入る
-
   const leftmostTypeId = spPlateTypesAll[0]?.id || null;
   // その現場の直近の取引（貸出・返却どちらでも可）から、直近の注文者を拾う
   // spTransactionsAll は date の新しい順に並んでいる
   const lastTx = spTransactionsAll.find(tx=> tx.siteName===siteName);
   const lastOrderer = lastTx ? (lastTx.orderer || "") : "";
 
-  const sel = document.getElementById("sp-return-select");
-  const groups = JSON.parse(sel.dataset.groups || "[]");
-  let idx = groups.findIndex(g=> g.typeId===leftmostTypeId && g.siteName===siteName && g.orderer===lastOrderer);
-  if(idx===-1) idx = groups.findIndex(g=> g.typeId===leftmostTypeId && g.siteName===siteName);
-  if(idx===-1) idx = groups.findIndex(g=> g.siteName===siteName);
-  if(idx!==-1) sel.value = String(idx);
+  // 貸出タブ側のフィールドにも同じ内容を入れておく。
+  // これにより「返却」表示中に「貸出」へ切り替えても内容が失われず、
+  // 再度「返却」へ戻せば同じ組み合わせが自動選択される。
+  renderSpPlateSelectOptions();
+  if(leftmostTypeId) document.getElementById("sp-plate-select").value = leftmostTypeId;
+  document.getElementById("sp-site-input").value = siteName;
+  document.getElementById("sp-orderer-input").value = lastOrderer;
+  document.getElementById("sp-orderer-display").textContent = lastOrderer || "未選択";
+  document.getElementById("sp-orderer-display").style.color = lastOrderer ? "var(--text)" : "var(--muted)";
+
+  spSelectedType = "return";
+  document.querySelectorAll("#sp-type-toggle .seg-btn").forEach(b=>{
+    b.classList.toggle("active", b.dataset.sptype==="return");
+  });
+  applySpTypeUI(); // sp-return-select の一覧を作り、上で入れた内容に一致するものを自動選択する
 
   document.getElementById("sp-date-input").value = todayStr();
   document.getElementById("sp-count-input").value = "";
