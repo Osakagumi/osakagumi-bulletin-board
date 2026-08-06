@@ -196,6 +196,8 @@
   .sp-holdings-table th.sp-type-th .sp-edit-btn{position:absolute;top:10px;right:10px;border:none;background:none;color:var(--muted);font-size:12px;cursor:pointer;font-weight:400;}
   .sp-holdings-table th.sp-type-th .sp-edit-btn:hover{color:var(--brand);}
   .sp-holdings-table td.sp-count-cell{font-size:22px;font-weight:700;text-align:center;}
+  .sp-holdings-table .sp-count-link{color:inherit;text-decoration:none;display:inline-block;padding:2px 10px;border-radius:6px;cursor:pointer;}
+  .sp-holdings-table .sp-count-link:hover{background:#EEF3FA;color:var(--brand-dark);text-decoration:underline;}
   .sp-holdings-table td.sp-count-cell.sp-count-zero{color:var(--text);font-weight:400;font-size:16px;}
   .sp-history-table{width:100%;min-width:760px;border-collapse:collapse;font-size:13px;}
   .sp-history-table th, .sp-history-table td{border:1px solid var(--line);padding:8px 12px;text-align:left;}
@@ -666,30 +668,22 @@
               <button type="button" class="seg-btn" data-sptype="return">返却</button>
             </div>
           </div>
-          <div id="sp-lend-fields">
-            <div class="field">
-              <label>鉄板の種類</label>
-              <select id="sp-plate-select"></select>
-            </div>
-            <div class="field">
-              <label>現場名</label>
-              <input type="text" id="sp-site-input" placeholder="例：本社運輸倉庫前" list="sp-site-datalist">
-              <datalist id="sp-site-datalist"></datalist>
-            </div>
-            <div class="field">
-              <label>注文者</label>
-              <div style="display:flex;align-items:center;gap:8px;">
-                <span id="sp-orderer-display" style="flex:1;color:var(--muted);">未選択</span>
-                <button type="button" class="btn-ghost" id="sp-orderer-pick-btn" style="border:1px solid var(--line);">選択</button>
-              </div>
-              <input type="hidden" id="sp-orderer-input">
-            </div>
+          <div class="field">
+            <label>鉄板の種類</label>
+            <select id="sp-plate-select"></select>
           </div>
-          <div id="sp-return-fields" style="display:none;">
-            <div class="field">
-              <label>貸出中の記録から選択</label>
-              <select id="sp-return-select"></select>
+          <div class="field">
+            <label>現場名</label>
+            <input type="text" id="sp-site-input" placeholder="例：本社運輸倉庫前" list="sp-site-datalist">
+            <datalist id="sp-site-datalist"></datalist>
+          </div>
+          <div class="field">
+            <label>注文者</label>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span id="sp-orderer-display" style="flex:1;color:var(--muted);">未選択</span>
+              <button type="button" class="btn-ghost" id="sp-orderer-pick-btn" style="border:1px solid var(--line);">選択</button>
             </div>
+            <input type="hidden" id="sp-orderer-input">
           </div>
           <div class="field">
             <label>日付</label>
@@ -4783,9 +4777,6 @@ function renderSteelPlateSummary(){
     }
     tr.appendChild(th);
   });
-  const actionTh = document.createElement("th");
-  actionTh.style.width = "70px";
-  tr.appendChild(actionTh);
   thead.appendChild(tr);
   document.getElementById("sp-type-add-btn").style.display = (isAdmin || isEquipmentManager) ? "inline-block" : "none";
 }
@@ -4881,7 +4872,7 @@ function renderSpHoldingsList(){
   const tbody = document.getElementById("sp-holdings-list");
   if(!tbody) return;
   const holdings = getSiteHoldings();
-  const colCount = 2 + spPlateTypesAll.length;
+  const colCount = 1 + spPlateTypesAll.length;
   tbody.innerHTML = "";
   if(spPlateTypesAll.length===0){
     tbody.innerHTML = `<tr><td style="color:var(--muted);text-align:center;padding:16px;">鉄板の種類がまだ登録されていません。「＋鉄板の種類を追加」から登録してください。</td></tr>`;
@@ -4898,19 +4889,17 @@ function renderSpHoldingsList(){
     tr.appendChild(nameTd);
     spPlateTypesAll.forEach(t=>{
       const entry = h.byType.find(x=>x.typeId===t.id);
+      const count = entry ? entry.count : 0;
       const td = document.createElement("td");
-      td.className = "sp-count-cell" + (entry ? "" : " sp-count-zero");
-      td.textContent = entry ? `${entry.count}` : "0";
+      td.className = "sp-count-cell" + (count>0 ? "" : " sp-count-zero");
+      const link = document.createElement("a");
+      link.href = "javascript:void(0)";
+      link.className = "sp-count-link";
+      link.textContent = `${count}`;
+      link.addEventListener("click", ()=> openSpCellModal(h.siteName, t.id, count));
+      td.appendChild(link);
       tr.appendChild(td);
     });
-    const actionTd = document.createElement("td");
-    actionTd.style.textAlign = "center";
-    const editBtn = document.createElement("button");
-    editBtn.textContent = "編集";
-    editBtn.style.cssText = "border:1px solid var(--line);background:#fff;border-radius:6px;color:var(--muted);font-size:12px;padding:5px 10px;cursor:pointer;";
-    editBtn.addEventListener("click", ()=> openSpReturnEditModal(h.siteName));
-    actionTd.appendChild(editBtn);
-    tr.appendChild(actionTd);
     tbody.appendChild(tr);
   });
 }
@@ -4924,91 +4913,39 @@ document.getElementById("sp-history-toggle-btn")?.addEventListener("click", ()=>
   btn.textContent = showingHistory ? "履歴を表示" : "保有枚数一覧に戻る";
 });
 
-function getOutstandingLoanGroups(){
-  const map = new Map();
-  spTransactionsAll.forEach(tx=>{
-    const key = `${tx.typeId}__${tx.siteName}__${tx.orderer||""}`;
-    const cur = map.get(key) || { typeId: tx.typeId, siteName: tx.siteName, orderer: tx.orderer||"", outstanding: 0 };
-    cur.outstanding += (tx.type==="lend" ? (Number(tx.count)||0) : -(Number(tx.count)||0));
-    map.set(key, cur);
-  });
-  return [...map.values()].filter(g=>g.outstanding > 0).sort((a,b)=> a.siteName.localeCompare(b.siteName,"ja"));
-}
-function renderSpReturnSelectOptions(){
-  const sel = document.getElementById("sp-return-select");
-  if(!sel) return;
-  const groups = getOutstandingLoanGroups();
-  sel.innerHTML = "";
-  if(groups.length===0){
-    sel.innerHTML = `<option value="">現在貸出中の記録がありません</option>`;
-    return;
-  }
-  groups.forEach((g, i)=>{
-    const opt = document.createElement("option");
-    opt.value = String(i);
-    opt.textContent = `[${spTypeName(g.typeId)}] ${g.siteName}（${g.orderer || "注文者不明"}）－ 現在${g.outstanding}枚`;
-    sel.appendChild(opt);
-  });
-  sel.dataset.groups = JSON.stringify(groups);
-}
-
 let spSelectedType = "lend";
-function applySpTypeUI(){
-  document.getElementById("sp-lend-fields").style.display = spSelectedType==="lend" ? "block" : "none";
-  document.getElementById("sp-return-fields").style.display = spSelectedType==="return" ? "block" : "none";
-  if(spSelectedType==="return"){
-    renderSpReturnSelectOptions();
-    trySelectMatchingReturnGroup();
-  }
-}
-// 貸出タブ側（種類・現場名・注文者）の現在の入力内容に一致する「貸出中グループ」があれば、
-// 返却タブに切り替えた時にそれを自動選択する（貸出⇄返却を行き来しても状態が保たれるように）
-function trySelectMatchingReturnGroup(){
-  const sel = document.getElementById("sp-return-select");
-  const groups = JSON.parse(sel.dataset.groups || "[]");
-  if(groups.length===0) return;
-  const typeId = document.getElementById("sp-plate-select").value;
-  const siteName = document.getElementById("sp-site-input").value.trim();
-  const orderer = document.getElementById("sp-orderer-input").value.trim();
-  if(!siteName) return;
-  let idx = groups.findIndex(g=> g.typeId===typeId && g.siteName===siteName && g.orderer===orderer);
-  if(idx===-1) idx = groups.findIndex(g=> g.typeId===typeId && g.siteName===siteName);
-  if(idx===-1) idx = groups.findIndex(g=> g.siteName===siteName);
-  if(idx!==-1) sel.value = String(idx);
-}
 document.querySelectorAll("#sp-type-toggle .seg-btn").forEach(btn=>{
   btn.addEventListener("click", ()=>{
     spSelectedType = btn.dataset.sptype;
     document.querySelectorAll("#sp-type-toggle .seg-btn").forEach(b=>{
       b.classList.toggle("active", b===btn);
     });
-    applySpTypeUI();
   });
 });
 
-function openSpReturnEditModal(siteName){
-  const leftmostTypeId = spPlateTypesAll[0]?.id || null;
-  // その現場の直近の取引（貸出・返却どちらでも可）から、直近の注文者を拾う
-  // spTransactionsAll は date の新しい順に並んでいる
+// その現場の履歴の中で一番最近の注文者を返す（spTransactionsAll は date の新しい順）
+function lastOrdererForSite(siteName){
   const lastTx = spTransactionsAll.find(tx=> tx.siteName===siteName);
-  const lastOrderer = lastTx ? (lastTx.orderer || "") : "";
+  return lastTx ? (lastTx.orderer || "") : "";
+}
+function setSpOrderer(name){
+  document.getElementById("sp-orderer-input").value = name || "";
+  document.getElementById("sp-orderer-display").textContent = name || "未選択";
+  document.getElementById("sp-orderer-display").style.color = name ? "var(--text)" : "var(--muted)";
+}
 
-  // 貸出タブ側のフィールドにも同じ内容を入れておく。
-  // これにより「返却」表示中に「貸出」へ切り替えても内容が失われず、
-  // 再度「返却」へ戻せば同じ組み合わせが自動選択される。
-  renderSpPlateSelectOptions();
-  if(leftmostTypeId) document.getElementById("sp-plate-select").value = leftmostTypeId;
-  document.getElementById("sp-site-input").value = siteName;
-  document.getElementById("sp-orderer-input").value = lastOrderer;
-  document.getElementById("sp-orderer-display").textContent = lastOrderer || "未選択";
-  document.getElementById("sp-orderer-display").style.color = lastOrderer ? "var(--text)" : "var(--muted)";
-
-  spSelectedType = "return";
+// 保有枚数一覧の数字をクリックした時に開く。1以上なら返却、0なら貸出として、
+// そのマス（現場×種類）の内容と、その現場の直近の注文者をあらかじめ入れておく。
+function openSpCellModal(siteName, typeId, count){
+  spSelectedType = count > 0 ? "return" : "lend";
   document.querySelectorAll("#sp-type-toggle .seg-btn").forEach(b=>{
-    b.classList.toggle("active", b.dataset.sptype==="return");
+    b.classList.toggle("active", b.dataset.sptype===spSelectedType);
   });
-  applySpTypeUI(); // sp-return-select の一覧を作り、上で入れた内容に一致するものを自動選択する
-
+  renderSpPlateSelectOptions();
+  renderSpSiteDatalist();
+  document.getElementById("sp-plate-select").value = typeId;
+  document.getElementById("sp-site-input").value = siteName;
+  setSpOrderer(lastOrdererForSite(siteName));
   document.getElementById("sp-date-input").value = todayStr();
   document.getElementById("sp-count-input").value = "";
   document.getElementById("sp-error").textContent = "";
@@ -5022,12 +4959,9 @@ function openSpModal(){
   });
   renderSpPlateSelectOptions();
   renderSpSiteDatalist();
-  applySpTypeUI();
   document.getElementById("sp-date-input").value = todayStr();
   document.getElementById("sp-site-input").value = "";
-  document.getElementById("sp-orderer-input").value = "";
-  document.getElementById("sp-orderer-display").textContent = "未選択";
-  document.getElementById("sp-orderer-display").style.color = "var(--muted)";
+  setSpOrderer("");
   document.getElementById("sp-count-input").value = "";
   document.getElementById("sp-error").textContent = "";
   document.getElementById("sp-modal").classList.add("show");
@@ -5035,9 +4969,7 @@ function openSpModal(){
 document.getElementById("sp-orderer-pick-btn")?.addEventListener("click", async ()=>{
   const emp = await openEmployeePicker();
   if(emp){
-    document.getElementById("sp-orderer-input").value = emp.name || emp.email;
-    document.getElementById("sp-orderer-display").textContent = emp.name || emp.email;
-    document.getElementById("sp-orderer-display").style.color = "var(--text)";
+    setSpOrderer(emp.name || emp.email);
   }
 });
 document.getElementById("sp-new-btn")?.addEventListener("click", openSpModal);
@@ -5052,22 +4984,15 @@ document.getElementById("sp-save-btn")?.addEventListener("click", async ()=>{
   if(!date){ errEl.textContent = "日付を入力してください。"; return; }
   if(!count || count <= 0){ errEl.textContent = "枚数は1以上の数値で入力してください。"; return; }
 
-  let typeId, siteName, orderer;
-  if(spSelectedType==="lend"){
-    typeId = document.getElementById("sp-plate-select").value;
-    siteName = document.getElementById("sp-site-input").value.trim();
-    orderer = document.getElementById("sp-orderer-input").value.trim();
-    if(!typeId){ errEl.textContent = "鉄板の種類を登録してください（管理者にご連絡ください）。"; return; }
-    if(!siteName){ errEl.textContent = "現場名を入力してください。"; return; }
-  } else {
-    const sel = document.getElementById("sp-return-select");
-    const groups = JSON.parse(sel.dataset.groups || "[]");
-    const group = groups[Number(sel.value)];
-    if(!group){ errEl.textContent = "返却する貸出記録を選択してください。"; return; }
-    if(count > group.outstanding){ errEl.textContent = `返却枚数が貸出中の枚数（${group.outstanding}枚）を超えています。`; return; }
-    typeId = group.typeId;
-    siteName = group.siteName;
-    orderer = group.orderer;
+  const typeId = document.getElementById("sp-plate-select").value;
+  const siteName = document.getElementById("sp-site-input").value.trim();
+  const orderer = document.getElementById("sp-orderer-input").value.trim();
+  if(!typeId){ errEl.textContent = "鉄板の種類を登録してください（管理者にご連絡ください）。"; return; }
+  if(!siteName){ errEl.textContent = "現場名を入力してください。"; return; }
+  if(spSelectedType==="return"){
+    const holding = getSiteHoldings().find(h=>h.siteName===siteName);
+    const outstanding = holding ? (holding.byType.find(x=>x.typeId===typeId)?.count || 0) : 0;
+    if(count > outstanding){ errEl.textContent = `返却枚数が貸出中の枚数（${outstanding}枚）を超えています。`; return; }
   }
 
   const emp = employeesAll.find(e=>e.email===currentUser.email);
