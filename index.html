@@ -628,11 +628,20 @@
           <div class="sp-summary-row" id="sp-summary-row"></div>
           <div class="section-toolbar" style="margin-top:14px;">
             <button class="btn-primary" id="sp-new-btn">＋ 貸出・返却を記録</button>
+            <button class="btn-ghost" id="sp-history-toggle-btn" style="border:1px solid var(--line);">履歴を表示</button>
           </div>
-          <table>
-            <thead><tr><th style="width:100px;">日付</th><th style="width:60px;">種別</th><th>現場名</th><th style="width:120px;">注文者</th><th style="width:80px;">貸出</th><th style="width:80px;">返却</th><th style="width:110px;">記録者</th><th style="width:60px;"></th></tr></thead>
-            <tbody id="sp-tx-list"></tbody>
-          </table>
+          <div id="sp-holdings-section">
+            <table>
+              <thead><tr><th>現場名</th><th style="width:80px;">種別</th><th style="width:100px;">借受数</th></tr></thead>
+              <tbody id="sp-holdings-list"></tbody>
+            </table>
+          </div>
+          <div id="sp-history-section" style="display:none;">
+            <table>
+              <thead><tr><th style="width:100px;">日付</th><th style="width:60px;">種別</th><th>現場名</th><th style="width:120px;">注文者</th><th style="width:80px;">貸出</th><th style="width:80px;">返却</th><th style="width:110px;">記録者</th><th style="width:60px;"></th></tr></thead>
+              <tbody id="sp-tx-list"></tbody>
+            </table>
+          </div>
         </div>
       </section>
 
@@ -1573,6 +1582,7 @@ function renderCheckoutTab(){
     try{
       ensureDefaultSteelPlateTypes();
       renderSteelPlateSummary();
+      renderSpHoldingsList();
       renderSteelPlateTxList();
     }catch(e){ console.error("[敷鉄板の表示エラー]", e); }
     return;
@@ -4621,6 +4631,7 @@ function initSteelPlateTxListener(){
   onSnapshot(q, snap=>{
     spTransactionsAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
     renderSteelPlateSummary();
+    renderSpHoldingsList();
     renderSteelPlateTxList();
   });
 }
@@ -4738,6 +4749,46 @@ function renderSpSiteDatalist(){
   list.innerHTML = names.map(n=>`<option value="${n.replace(/"/g,"&quot;")}"></option>`).join("");
 }
 // 現場名・注文者・鉄板の種類ごとに、貸出枚数−返却枚数（＝現在借りている枚数）を集計する
+// 工事（現場）単位での現在保有枚数の集計（注文者は問わず、現場名＋種類でまとめる）
+function getSiteHoldings(){
+  const map = new Map();
+  spTransactionsAll.forEach(tx=>{
+    const key = `${tx.typeId}__${tx.siteName}`;
+    const cur = map.get(key) || { typeId: tx.typeId, siteName: tx.siteName, outstanding: 0 };
+    cur.outstanding += (tx.type==="lend" ? (Number(tx.count)||0) : -(Number(tx.count)||0));
+    map.set(key, cur);
+  });
+  return [...map.values()].filter(g=>g.outstanding > 0).sort((a,b)=> a.siteName.localeCompare(b.siteName,"ja"));
+}
+function renderSpHoldingsList(){
+  const tbody = document.getElementById("sp-holdings-list");
+  if(!tbody) return;
+  const holdings = getSiteHoldings();
+  tbody.innerHTML = "";
+  if(holdings.length===0){
+    tbody.innerHTML = `<tr><td colspan="3" style="color:var(--muted);text-align:center;padding:16px;">現在、貸出中の現場はありません。</td></tr>`;
+    return;
+  }
+  holdings.forEach(h=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${h.siteName}</td>
+      <td><span class="sp-type-badge">${spTypeName(h.typeId)}</span></td>
+      <td>${h.outstanding} 枚</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+document.getElementById("sp-history-toggle-btn")?.addEventListener("click", ()=>{
+  const btn = document.getElementById("sp-history-toggle-btn");
+  const holdingsSection = document.getElementById("sp-holdings-section");
+  const historySection = document.getElementById("sp-history-section");
+  const showingHistory = historySection.style.display !== "none";
+  historySection.style.display = showingHistory ? "none" : "block";
+  holdingsSection.style.display = showingHistory ? "block" : "none";
+  btn.textContent = showingHistory ? "履歴を表示" : "保有枚数一覧に戻る";
+});
+
 function getOutstandingLoanGroups(){
   const map = new Map();
   spTransactionsAll.forEach(tx=>{
