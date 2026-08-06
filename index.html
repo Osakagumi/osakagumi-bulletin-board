@@ -184,6 +184,9 @@
 
   /* checkout mode (測量機器・ドローン) */
   .checkout-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-bottom:18px;}
+  .emp-picker-listbox{width:100%;height:200px;overflow-y:auto;border:1.5px solid var(--line);border-radius:8px;padding:2px;font-size:14px;}
+  .emp-picker-listbox option{padding:7px 8px;border-radius:5px;}
+  .emp-picker-listbox option:checked{background:var(--brand);color:#fff;}
   .sp-holdings-table{width:100%;min-width:340px;border-collapse:collapse;}
   .sp-holdings-table th, .sp-holdings-table td{border:1px solid var(--line);padding:10px 14px;text-align:left;}
   .sp-holdings-table th.sp-type-th{min-width:85px;position:relative;background:#F8FAFC;vertical-align:top;}
@@ -714,7 +717,7 @@
           </div>
           <div class="field">
             <label>氏名</label>
-            <select id="emp-picker-name-select"></select>
+            <select id="emp-picker-name-select" size="8" class="emp-picker-listbox"></select>
           </div>
           <div id="emp-picker-error" style="color:var(--danger);font-size:12.5px;margin-top:4px;"></div>
           <div class="modal-actions">
