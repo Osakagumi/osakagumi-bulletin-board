@@ -639,7 +639,10 @@
         <div id="checkout-steelplates-panel" style="display:none;">
           <div class="section-toolbar">
             <button class="btn-primary" id="sp-new-btn">＋ 貸出・返却を記録</button>
-            <button class="btn-ghost" id="sp-history-toggle-btn" style="border:1px solid var(--line);">履歴を表示</button>
+            <div class="seg-toggle" id="sp-view-toggle">
+              <button type="button" class="seg-btn active" data-spview="holdings">現場別</button>
+              <button type="button" class="seg-btn" data-spview="history">履歴</button>
+            </div>
             <button class="btn-ghost" id="sp-type-add-btn" style="border:1px solid var(--line);display:none;">＋ 鉄板の種類を追加</button>
           </div>
           <div id="sp-holdings-section" style="overflow-x:auto;">
@@ -674,7 +677,7 @@
           </div>
           <div class="field">
             <label>現場名</label>
-            <input type="text" id="sp-site-input" placeholder="例：本社運輸倉庫前" list="sp-site-datalist">
+            <input type="text" id="sp-site-input" placeholder="例：本社運輸倉庫前" list="sp-site-datalist" autocomplete="off">
             <datalist id="sp-site-datalist"></datalist>
           </div>
           <div class="field">
@@ -687,7 +690,7 @@
           </div>
           <div class="field">
             <label>日付</label>
-            <input type="date" id="sp-date-input">
+            <span class="date-picker-label" id="sp-date-picker"></span>
           </div>
           <div class="field">
             <label>枚数</label>
@@ -4903,14 +4906,15 @@ function renderSpHoldingsList(){
     tbody.appendChild(tr);
   });
 }
-document.getElementById("sp-history-toggle-btn")?.addEventListener("click", ()=>{
-  const btn = document.getElementById("sp-history-toggle-btn");
-  const holdingsSection = document.getElementById("sp-holdings-section");
-  const historySection = document.getElementById("sp-history-section");
-  const showingHistory = historySection.style.display !== "none";
-  historySection.style.display = showingHistory ? "none" : "block";
-  holdingsSection.style.display = showingHistory ? "block" : "none";
-  btn.textContent = showingHistory ? "履歴を表示" : "保有枚数一覧に戻る";
+document.querySelectorAll("#sp-view-toggle .seg-btn").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    document.querySelectorAll("#sp-view-toggle .seg-btn").forEach(b=>{
+      b.classList.toggle("active", b===btn);
+    });
+    const showHistory = btn.dataset.spview==="history";
+    document.getElementById("sp-history-section").style.display = showHistory ? "block" : "none";
+    document.getElementById("sp-holdings-section").style.display = showHistory ? "none" : "block";
+  });
 });
 
 let spSelectedType = "lend";
@@ -4933,6 +4937,16 @@ function setSpOrderer(name){
   document.getElementById("sp-orderer-display").textContent = name || "未選択";
   document.getElementById("sp-orderer-display").style.color = name ? "var(--text)" : "var(--muted)";
 }
+let spSelectedDate = todayStr();
+function setSpDate(dateStr){
+  spSelectedDate = dateStr;
+  document.getElementById("sp-date-picker").textContent = formatDateJP(spSelectedDate);
+}
+document.getElementById("sp-date-picker")?.addEventListener("click", (e)=>{
+  openCalendarPicker(e.currentTarget, spSelectedDate, {
+    onSelect: (dateStr)=>{ if(dateStr) setSpDate(dateStr); }
+  });
+});
 
 // 保有枚数一覧の数字をクリックした時に開く。1以上なら返却、0なら貸出として、
 // そのマス（現場×種類）の内容と、その現場の直近の注文者をあらかじめ入れておく。
@@ -4946,7 +4960,7 @@ function openSpCellModal(siteName, typeId, count){
   document.getElementById("sp-plate-select").value = typeId;
   document.getElementById("sp-site-input").value = siteName;
   setSpOrderer(lastOrdererForSite(siteName));
-  document.getElementById("sp-date-input").value = todayStr();
+  setSpDate(todayStr());
   document.getElementById("sp-count-input").value = "";
   document.getElementById("sp-error").textContent = "";
   document.getElementById("sp-modal").classList.add("show");
@@ -4959,7 +4973,7 @@ function openSpModal(){
   });
   renderSpPlateSelectOptions();
   renderSpSiteDatalist();
-  document.getElementById("sp-date-input").value = todayStr();
+  setSpDate(todayStr());
   document.getElementById("sp-site-input").value = "";
   setSpOrderer("");
   document.getElementById("sp-count-input").value = "";
@@ -4979,7 +4993,7 @@ document.getElementById("sp-cancel-btn")?.addEventListener("click", ()=>{
 document.getElementById("sp-save-btn")?.addEventListener("click", async ()=>{
   const errEl = document.getElementById("sp-error");
   errEl.textContent = "";
-  const date = document.getElementById("sp-date-input").value;
+  const date = spSelectedDate;
   const count = Number(document.getElementById("sp-count-input").value);
   if(!date){ errEl.textContent = "日付を入力してください。"; return; }
   if(!count || count <= 0){ errEl.textContent = "枚数は1以上の数値で入力してください。"; return; }
