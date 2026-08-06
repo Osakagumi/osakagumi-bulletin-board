@@ -675,7 +675,11 @@
             </div>
             <div class="field">
               <label>注文者</label>
-              <input type="text" id="sp-orderer-input" placeholder="例：須藤">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span id="sp-orderer-display" style="flex:1;color:var(--muted);">未選択</span>
+                <button type="button" class="btn-ghost" id="sp-orderer-pick-btn" style="border:1px solid var(--line);">選択</button>
+              </div>
+              <input type="hidden" id="sp-orderer-input">
             </div>
           </div>
           <div id="sp-return-fields" style="display:none;">
@@ -696,6 +700,26 @@
           <div class="modal-actions">
             <button class="btn-ghost" id="sp-cancel-btn" style="border:1px solid var(--line);">キャンセル</button>
             <button class="btn-primary" id="sp-save-btn">保存</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 社員選択ダイアログ（共通部品：所属＋氏名で社員を1人選ぶ） -->
+      <div class="modal-overlay" id="employee-picker-modal">
+        <div class="modal">
+          <h3>社員を選択</h3>
+          <div class="field">
+            <label>所属</label>
+            <select id="emp-picker-dept-select"></select>
+          </div>
+          <div class="field">
+            <label>氏名</label>
+            <select id="emp-picker-name-select"></select>
+          </div>
+          <div id="emp-picker-error" style="color:var(--danger);font-size:12.5px;margin-top:4px;"></div>
+          <div class="modal-actions">
+            <button class="btn-ghost" id="emp-picker-cancel-btn" style="border:1px solid var(--line);">キャンセル</button>
+            <button class="btn-primary" id="emp-picker-select-btn">選択</button>
           </div>
         </div>
       </div>
@@ -3038,6 +3062,70 @@ function departmentName(id){
   const d = departmentsAll.find(x=>x.id===id);
   return d ? d.name : "未所属";
 }
+
+/* ---------- 社員選択ダイアログ（共通部品） ----------
+   使い方: const emp = await openEmployeePicker();
+   選択されればその社員データ（{email, name, ...}）、キャンセルされれば null が返る。 */
+let empPickerResolve = null;
+function openEmployeePicker(){
+  return new Promise((resolve)=>{
+    empPickerResolve = resolve;
+    document.getElementById("emp-picker-error").textContent = "";
+    renderEmpPickerDeptSelect();
+    document.getElementById("employee-picker-modal").classList.add("show");
+  });
+}
+function renderEmpPickerDeptSelect(){
+  const sel = document.getElementById("emp-picker-dept-select");
+  if(!sel) return;
+  sel.innerHTML = "";
+  const allOpt = document.createElement("option");
+  allOpt.value = ""; allOpt.textContent = "すべて";
+  sel.appendChild(allOpt);
+  departmentsAll.forEach(d=>{
+    const opt = document.createElement("option");
+    opt.value = d.id; opt.textContent = d.name;
+    sel.appendChild(opt);
+  });
+  renderEmpPickerNameSelect();
+}
+function renderEmpPickerNameSelect(){
+  const deptSel = document.getElementById("emp-picker-dept-select");
+  const nameSel = document.getElementById("emp-picker-name-select");
+  if(!deptSel || !nameSel) return;
+  const deptId = deptSel.value;
+  const list = employeesAll
+    .filter(e=> !deptId || e.department===deptId)
+    .sort((a,b)=> (a.name||"").localeCompare(b.name||"", "ja"));
+  nameSel.innerHTML = "";
+  if(list.length===0){
+    nameSel.innerHTML = `<option value="">該当する社員がいません</option>`;
+    return;
+  }
+  list.forEach(e=>{
+    const opt = document.createElement("option");
+    opt.value = e.email; opt.textContent = e.name || e.email;
+    nameSel.appendChild(opt);
+  });
+}
+document.getElementById("emp-picker-dept-select")?.addEventListener("change", renderEmpPickerNameSelect);
+document.getElementById("emp-picker-cancel-btn")?.addEventListener("click", ()=>{
+  document.getElementById("employee-picker-modal").classList.remove("show");
+  if(empPickerResolve) empPickerResolve(null);
+  empPickerResolve = null;
+});
+document.getElementById("emp-picker-select-btn")?.addEventListener("click", ()=>{
+  const nameSel = document.getElementById("emp-picker-name-select");
+  const emp = employeesAll.find(e=>e.email===nameSel.value);
+  if(!emp){
+    document.getElementById("emp-picker-error").textContent = "氏名を選択してください。";
+    return;
+  }
+  document.getElementById("employee-picker-modal").classList.remove("show");
+  if(empPickerResolve) empPickerResolve(emp);
+  empPickerResolve = null;
+});
+
 function wbStatusInfo(id){
   return wbStatusesAll.find(x=>x.id===id) || null;
 }
@@ -4880,10 +4968,20 @@ function openSpModal(){
   document.getElementById("sp-date-input").value = todayStr();
   document.getElementById("sp-site-input").value = "";
   document.getElementById("sp-orderer-input").value = "";
+  document.getElementById("sp-orderer-display").textContent = "未選択";
+  document.getElementById("sp-orderer-display").style.color = "var(--muted)";
   document.getElementById("sp-count-input").value = "";
   document.getElementById("sp-error").textContent = "";
   document.getElementById("sp-modal").classList.add("show");
 }
+document.getElementById("sp-orderer-pick-btn")?.addEventListener("click", async ()=>{
+  const emp = await openEmployeePicker();
+  if(emp){
+    document.getElementById("sp-orderer-input").value = emp.name || emp.email;
+    document.getElementById("sp-orderer-display").textContent = emp.name || emp.email;
+    document.getElementById("sp-orderer-display").style.color = "var(--text)";
+  }
+});
 document.getElementById("sp-new-btn")?.addEventListener("click", openSpModal);
 document.getElementById("sp-cancel-btn")?.addEventListener("click", ()=>{
   document.getElementById("sp-modal").classList.remove("show");
