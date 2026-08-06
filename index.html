@@ -185,6 +185,10 @@
   /* checkout mode (測量機器・ドローン) */
   .checkout-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-bottom:18px;}
   .emp-picker-listbox{width:100%;height:200px;overflow-y:auto;border:1.5px solid var(--line);border-radius:8px;padding:2px;font-size:14px;}
+  .autocomplete-list{position:absolute;top:100%;left:0;right:0;z-index:20;background:#fff;border:1.5px solid var(--line);border-radius:8px;max-height:220px;overflow-y:auto;margin-top:4px;box-shadow:0 4px 14px rgba(0,0,0,0.12);}
+  .autocomplete-list .ac-item{padding:9px 12px;font-size:14px;cursor:pointer;}
+  .autocomplete-list .ac-item:hover, .autocomplete-list .ac-item.ac-active{background:#F4F8FC;color:var(--brand-dark);}
+  .autocomplete-list .ac-empty{padding:9px 12px;font-size:13px;color:var(--muted);}
   .emp-picker-listbox option{padding:7px 8px;border-radius:5px;}
   .emp-picker-listbox option:checked{background:var(--brand);color:#fff;}
   .sp-holdings-table{width:100%;min-width:340px;border-collapse:collapse;}
@@ -638,10 +642,12 @@
         </div>
         <div id="checkout-steelplates-panel" style="display:none;">
           <div class="section-toolbar">
-            <button class="btn-primary" id="sp-new-btn">＋ 貸出・返却を記録</button>
-            <div class="seg-toggle" id="sp-view-toggle">
-              <button type="button" class="seg-btn active" data-spview="holdings">現場別</button>
-              <button type="button" class="seg-btn" data-spview="history">履歴</button>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <button class="btn-primary" id="sp-new-btn">＋ 貸出・返却を記録</button>
+              <div class="seg-toggle" id="sp-view-toggle">
+                <button type="button" class="seg-btn active" data-spview="holdings">現場別</button>
+                <button type="button" class="seg-btn" data-spview="history">履歴</button>
+              </div>
             </div>
             <button class="btn-ghost" id="sp-type-add-btn" style="border:1px solid var(--line);display:none;">＋ 鉄板の種類を追加</button>
           </div>
@@ -675,10 +681,10 @@
             <label>鉄板の種類</label>
             <select id="sp-plate-select"></select>
           </div>
-          <div class="field">
+          <div class="field" style="position:relative;">
             <label>現場名</label>
-            <input type="text" id="sp-site-input" placeholder="例：本社運輸倉庫前" list="sp-site-datalist" autocomplete="off">
-            <datalist id="sp-site-datalist"></datalist>
+            <input type="text" id="sp-site-input" placeholder="例：本社運輸倉庫前" autocomplete="off" name="sp-site-nofill">
+            <div id="sp-site-suggestions" class="autocomplete-list" style="display:none;"></div>
           </div>
           <div class="field">
             <label>注文者</label>
@@ -4839,12 +4845,42 @@ function renderSpPlateSelectOptions(){
   if(prev && spPlateTypesAll.some(t=>t.id===prev)) sel.value = prev;
 }
 // 過去に入力した現場名を記憶し、次回以降は候補として選べるようにする
-function renderSpSiteDatalist(){
-  const list = document.getElementById("sp-site-datalist");
-  if(!list) return;
-  const names = [...new Set(spTransactionsAll.map(tx=>tx.siteName).filter(Boolean))].sort();
-  list.innerHTML = names.map(n=>`<option value="${n.replace(/"/g,"&quot;")}"></option>`).join("");
+function knownSpSiteNames(){
+  return [...new Set(spTransactionsAll.map(tx=>tx.siteName).filter(Boolean))].sort((a,b)=> a.localeCompare(b,"ja"));
 }
+function renderSpSiteSuggestions(filterText){
+  const box = document.getElementById("sp-site-suggestions");
+  if(!box) return;
+  const q = (filterText||"").trim();
+  const names = knownSpSiteNames().filter(n=> !q || n.includes(q));
+  box.innerHTML = "";
+  if(names.length===0){
+    box.innerHTML = `<div class="ac-empty">一致する現場名がありません</div>`;
+    box.style.display = "block";
+    return;
+  }
+  names.forEach(n=>{
+    const item = document.createElement("div");
+    item.className = "ac-item";
+    item.textContent = n;
+    // mousedown（blurより先に発火）で選択しないと、inputのblurで先にリストが閉じてクリックが効かない
+    item.addEventListener("mousedown", (e)=>{
+      e.preventDefault();
+      document.getElementById("sp-site-input").value = n;
+      box.style.display = "none";
+    });
+    box.appendChild(item);
+  });
+  box.style.display = "block";
+}
+(function initSpSiteAutocomplete(){
+  const input = document.getElementById("sp-site-input");
+  const box = document.getElementById("sp-site-suggestions");
+  if(!input || !box) return;
+  input.addEventListener("focus", ()=> renderSpSiteSuggestions(input.value));
+  input.addEventListener("input", ()=> renderSpSiteSuggestions(input.value));
+  input.addEventListener("blur", ()=>{ box.style.display = "none"; });
+})();
 // 現場名・注文者・鉄板の種類ごとに、貸出枚数−返却枚数（＝現在借りている枚数）を集計する
 // 工事（現場）単位での現在保有枚数の集計（注文者は問わず、現場名でまとめ、種類ごとの内訳を持つ）
 function getSiteHoldings(){
@@ -4956,7 +4992,6 @@ function openSpCellModal(siteName, typeId, count){
     b.classList.toggle("active", b.dataset.sptype===spSelectedType);
   });
   renderSpPlateSelectOptions();
-  renderSpSiteDatalist();
   document.getElementById("sp-plate-select").value = typeId;
   document.getElementById("sp-site-input").value = siteName;
   setSpOrderer(lastOrdererForSite(siteName));
@@ -4972,7 +5007,6 @@ function openSpModal(){
     b.classList.toggle("active", b.dataset.sptype==="lend");
   });
   renderSpPlateSelectOptions();
-  renderSpSiteDatalist();
   setSpDate(todayStr());
   document.getElementById("sp-site-input").value = "";
   setSpOrderer("");
