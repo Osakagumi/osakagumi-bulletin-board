@@ -573,7 +573,6 @@
       <button class="tab-btn" data-view="whereabouts">行き先</button>
       <button class="tab-btn" data-view="reserve">予約</button>
       <button class="tab-btn" data-view="checkout">貸出</button>
-      <button class="tab-btn" data-view="steelplates">敷鉄板</button>
       <button class="tab-btn" data-view="safety" style="display:none;">安否確認</button>
       <button class="tab-btn" data-view="calendar">カレンダー</button>
       <button class="tab-reorder-btn" id="tab-reorder-toggle" title="タブの並び替え">並び替え</button>
@@ -619,22 +618,26 @@
       </section>
       <div id="reserve-signage-error" style="display:none;padding:40px;text-align:center;font-size:16px;color:var(--muted);"></div>
 
-      <!-- ---- 貸出（測量機器・ドローン） ---- -->
+      <!-- ---- 貸出（測量機器・ドローン／敷鉄板） ---- -->
       <section id="view-checkout" style="display:none;">
-        <div class="cat-row" id="checkout-cat-row"></div>
-        <div class="checkout-grid" id="checkout-eq-grid"></div>
-      </section>
-
-      <!-- ---- 敷鉄板 ---- -->
-      <section id="view-steelplates" style="display:none;">
-        <div class="sp-summary-row" id="sp-summary-row"></div>
-        <div class="section-toolbar" style="margin-top:14px;">
-          <button class="btn-primary" id="sp-new-btn">＋ 貸出・返却を記録</button>
+        <div class="seg-toggle" id="checkout-sub-toggle" style="margin-bottom:14px;">
+          <button type="button" class="seg-btn active" data-checkoutsub="equipment">測量機器</button>
+          <button type="button" class="seg-btn" data-checkoutsub="steelplates">敷鉄板</button>
         </div>
-        <table>
-          <thead><tr><th style="width:100px;">日付</th><th style="width:60px;">種別</th><th>現場名</th><th style="width:120px;">注文者</th><th style="width:80px;">貸出</th><th style="width:80px;">返却</th><th style="width:110px;">記録者</th><th style="width:60px;"></th></tr></thead>
-          <tbody id="sp-tx-list"></tbody>
-        </table>
+        <div id="checkout-equipment-panel">
+          <div class="cat-row" id="checkout-cat-row"></div>
+          <div class="checkout-grid" id="checkout-eq-grid"></div>
+        </div>
+        <div id="checkout-steelplates-panel" style="display:none;">
+          <div class="sp-summary-row" id="sp-summary-row"></div>
+          <div class="section-toolbar" style="margin-top:14px;">
+            <button class="btn-primary" id="sp-new-btn">＋ 貸出・返却を記録</button>
+          </div>
+          <table>
+            <thead><tr><th style="width:100px;">日付</th><th style="width:60px;">種別</th><th>現場名</th><th style="width:120px;">注文者</th><th style="width:80px;">貸出</th><th style="width:80px;">返却</th><th style="width:110px;">記録者</th><th style="width:60px;"></th></tr></thead>
+            <tbody id="sp-tx-list"></tbody>
+          </table>
+        </div>
       </section>
 
       <!-- 敷鉄板 貸出・返却モーダル -->
@@ -1317,7 +1320,7 @@ onAuthStateChanged(auth, async (user)=>{
 });
 
 /* ---------- tabs ---------- */
-const ALL_VIEWS = ["notices","whereabouts","reserve","checkout","steelplates","safety","calendar"];
+const ALL_VIEWS = ["notices","whereabouts","reserve","checkout","safety","calendar"];
 const TAB_ORDER_KEY = "osakagumi-portal-tab-order";
 function switchToTab(viewName){
   document.querySelectorAll(".tab-btn").forEach(b=>{
@@ -1331,14 +1334,34 @@ function switchToTab(viewName){
   if(viewName==="whereabouts"){
     try{ renderWhereabouts(); }catch(e){ console.error("[行き先の表示エラー]", e); }
   }
-  if(viewName==="steelplates"){
-    try{
-      ensureDefaultSteelPlateTypes();
-      renderSteelPlateSummary();
-      renderSteelPlateTxList();
-    }catch(e){ console.error("[敷鉄板の表示エラー]", e); }
+  if(viewName==="checkout"){
+    const activeSub = document.querySelector("#checkout-sub-toggle .seg-btn.active");
+    if(activeSub && activeSub.dataset.checkoutsub==="steelplates"){
+      try{
+        ensureDefaultSteelPlateTypes();
+        renderSteelPlateSummary();
+        renderSteelPlateTxList();
+      }catch(e){ console.error("[敷鉄板の表示エラー]", e); }
+    }
   }
 }
+document.querySelectorAll("#checkout-sub-toggle .seg-btn").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    document.querySelectorAll("#checkout-sub-toggle .seg-btn").forEach(b=>{
+      b.classList.toggle("active", b===btn);
+    });
+    const sub = btn.dataset.checkoutsub;
+    document.getElementById("checkout-equipment-panel").style.display = (sub==="equipment") ? "block" : "none";
+    document.getElementById("checkout-steelplates-panel").style.display = (sub==="steelplates") ? "block" : "none";
+    if(sub==="steelplates"){
+      try{
+        ensureDefaultSteelPlateTypes();
+        renderSteelPlateSummary();
+        renderSteelPlateTxList();
+      }catch(e){ console.error("[敷鉄板の表示エラー]", e); }
+    }
+  });
+});
 document.querySelectorAll(".tab-btn").forEach(btn=>{
   btn.addEventListener("click", ()=>{
     if(document.getElementById("main-tabs").classList.contains("reordering")) return;
