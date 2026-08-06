@@ -3094,9 +3094,8 @@ function renderEmpPickerNameSelect(){
   const nameSel = document.getElementById("emp-picker-name-select");
   if(!deptSel || !nameSel) return;
   const deptId = deptSel.value;
-  const list = employeesAll
-    .filter(e=> !deptId || e.department===deptId)
-    .sort((a,b)=> (a.name||"").localeCompare(b.name||"", "ja"));
+  // 所属(表示)順→社員番号順というアプリ共通の並び順に統一する
+  const list = getSortedEmployees().filter(e=> !deptId || e.department===deptId);
   nameSel.innerHTML = "";
   if(list.length===0){
     nameSel.innerHTML = `<option value="">該当する社員がいません</option>`;
