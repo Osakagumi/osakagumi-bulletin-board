@@ -184,11 +184,11 @@
 
   /* checkout mode (測量機器・ドローン) */
   .checkout-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-bottom:18px;}
-  .sp-holdings-table{width:100%;min-width:520px;border-collapse:collapse;}
+  .sp-holdings-table{width:100%;min-width:340px;border-collapse:collapse;}
   .sp-holdings-table th, .sp-holdings-table td{border:1px solid var(--line);padding:10px 14px;text-align:left;}
-  .sp-holdings-table th.sp-type-th{min-width:170px;position:relative;background:#F8FAFC;vertical-align:top;}
-  .sp-holdings-table th.sp-type-th h4{margin:0 0 8px;font-size:16px;}
-  .sp-holdings-table th.sp-type-th .sp-stat-row{display:flex;justify-content:space-between;font-size:12px;font-weight:400;color:var(--muted);margin-bottom:3px;}
+  .sp-holdings-table th.sp-type-th{min-width:85px;position:relative;background:#F8FAFC;vertical-align:top;}
+  .sp-holdings-table th.sp-type-th h4{margin:0 0 8px;font-size:18px;}
+  .sp-holdings-table th.sp-type-th .sp-stat-row{display:flex;justify-content:space-between;gap:8px;font-size:14px;font-weight:400;color:var(--muted);margin-bottom:4px;}
   .sp-holdings-table th.sp-type-th .sp-stat-row b{color:var(--text);font-weight:700;}
   .sp-holdings-table th.sp-type-th .sp-edit-btn{position:absolute;top:10px;right:10px;border:none;background:none;color:var(--muted);font-size:12px;cursor:pointer;font-weight:400;}
   .sp-holdings-table th.sp-type-th .sp-edit-btn:hover{color:var(--brand);}
@@ -4767,8 +4767,8 @@ function renderSteelPlateSummary(){
     th.innerHTML = `
       <h4>${t.name}</h4>
       <div class="sp-stat-row"><span>総数</span><b>${t.totalCount ?? 0} 枚</b></div>
-      <div class="sp-stat-row"><span>現在貸出枚数</span><b>${outstanding} 枚</b></div>
-      <div class="sp-stat-row"><span>現在在庫</span><b>${stock} 枚</b></div>
+      <div class="sp-stat-row"><span>貸出</span><b>${outstanding} 枚</b></div>
+      <div class="sp-stat-row"><span>在庫</span><b>${stock} 枚</b></div>
       <div class="sp-stat-row"><span>単価</span><b>${t.unitPricePerDay ?? 0} 円/日/枚</b></div>
     `;
     if(isAdmin || isEquipmentManager){
