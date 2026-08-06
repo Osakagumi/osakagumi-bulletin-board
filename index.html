@@ -184,7 +184,7 @@
 
   /* checkout mode (測量機器・ドローン) */
   .checkout-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-bottom:18px;}
-  .sp-holdings-table{width:100%;border-collapse:collapse;}
+  .sp-holdings-table{width:100%;min-width:520px;border-collapse:collapse;}
   .sp-holdings-table th, .sp-holdings-table td{border:1px solid var(--line);padding:10px 14px;text-align:left;}
   .sp-holdings-table th.sp-type-th{min-width:170px;position:relative;background:#F8FAFC;vertical-align:top;}
   .sp-holdings-table th.sp-type-th h4{margin:0 0 8px;font-size:16px;}
@@ -193,7 +193,11 @@
   .sp-holdings-table th.sp-type-th .sp-edit-btn{position:absolute;top:10px;right:10px;border:none;background:none;color:var(--muted);font-size:12px;cursor:pointer;font-weight:400;}
   .sp-holdings-table th.sp-type-th .sp-edit-btn:hover{color:var(--brand);}
   .sp-holdings-table td.sp-count-cell{font-size:22px;font-weight:700;text-align:center;}
-  .sp-holdings-table td.sp-count-cell.sp-count-zero{color:var(--line);font-weight:400;font-size:16px;}
+  .sp-holdings-table td.sp-count-cell.sp-count-zero{color:var(--text);font-weight:400;font-size:16px;}
+  .sp-history-table{width:100%;min-width:760px;border-collapse:collapse;font-size:13px;}
+  .sp-history-table th, .sp-history-table td{border:1px solid var(--line);padding:8px 12px;text-align:left;}
+  .sp-history-table th{background:#F8FAFC;font-weight:700;}
+  .sp-history-table .sp-nowrap, .sp-history-table th.sp-nowrap{white-space:nowrap;}
   .sp-type-badge{display:inline-block;padding:2px 8px;border-radius:10px;background:#EEF3FA;color:var(--brand-dark);font-size:11.5px;font-weight:700;}
   .checkout-card{background:var(--surface);border:1.5px solid var(--line);border-radius:10px;padding:14px;}
   .checkout-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;}
@@ -633,15 +637,15 @@
             <button class="btn-ghost" id="sp-history-toggle-btn" style="border:1px solid var(--line);">履歴を表示</button>
             <button class="btn-ghost" id="sp-type-add-btn" style="border:1px solid var(--line);display:none;">＋ 鉄板の種類を追加</button>
           </div>
-          <div id="sp-holdings-section">
+          <div id="sp-holdings-section" style="overflow-x:auto;">
             <table class="sp-holdings-table">
               <thead id="sp-holdings-thead"></thead>
               <tbody id="sp-holdings-list"></tbody>
             </table>
           </div>
-          <div id="sp-history-section" style="display:none;">
-            <table>
-              <thead><tr><th style="width:100px;">日付</th><th style="width:60px;">種別</th><th>現場名</th><th style="width:120px;">注文者</th><th style="width:80px;">貸出</th><th style="width:80px;">返却</th><th style="width:110px;">記録者</th><th style="width:60px;"></th></tr></thead>
+          <div id="sp-history-section" style="display:none;overflow-x:auto;">
+            <table class="sp-history-table">
+              <thead><tr><th class="sp-nowrap">日付</th><th class="sp-nowrap">種別</th><th>現場名</th><th class="sp-nowrap">注文者</th><th class="sp-nowrap">貸出</th><th class="sp-nowrap">返却</th><th class="sp-nowrap">記録者</th><th></th></tr></thead>
               <tbody id="sp-tx-list"></tbody>
             </table>
           </div>
@@ -4708,13 +4712,13 @@ function renderSteelPlateTxList(){
     const canDelete = isAdmin || isEquipmentManager || tx.createdByEmail===currentUser.email;
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td>${formatDateJP(tx.date)}</td>
-      <td><span class="sp-type-badge">${spTypeName(tx.typeId)}</span></td>
+      <td class="sp-nowrap">${formatDateJP(tx.date)}</td>
+      <td class="sp-nowrap"><span class="sp-type-badge">${spTypeName(tx.typeId)}</span></td>
       <td>${tx.siteName || ""}</td>
-      <td>${tx.orderer || ""}</td>
-      <td>${tx.type==="lend" ? (tx.count+" 枚") : ""}</td>
-      <td>${tx.type==="return" ? (tx.count+" 枚") : ""}</td>
-      <td style="font-size:12px;color:var(--muted);">${tx.createdByName || tx.createdByEmail || ""}</td>
+      <td class="sp-nowrap">${tx.orderer || ""}</td>
+      <td class="sp-nowrap">${tx.type==="lend" ? (tx.count+" 枚") : ""}</td>
+      <td class="sp-nowrap">${tx.type==="return" ? (tx.count+" 枚") : ""}</td>
+      <td class="sp-nowrap" style="font-size:12px;color:var(--muted);">${tx.createdByName || tx.createdByEmail || ""}</td>
       <td></td>
     `;
     if(canDelete){
