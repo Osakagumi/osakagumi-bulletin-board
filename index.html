@@ -620,12 +620,8 @@
 
       <!-- ---- 貸出（測量機器・ドローン／敷鉄板） ---- -->
       <section id="view-checkout" style="display:none;">
-        <div class="seg-toggle" id="checkout-sub-toggle" style="margin-bottom:14px;">
-          <button type="button" class="seg-btn active" data-checkoutsub="equipment">測量機器</button>
-          <button type="button" class="seg-btn" data-checkoutsub="steelplates">敷鉄板</button>
-        </div>
+        <div class="cat-row" id="checkout-cat-row"></div>
         <div id="checkout-equipment-panel">
-          <div class="cat-row" id="checkout-cat-row"></div>
           <div class="checkout-grid" id="checkout-eq-grid"></div>
         </div>
         <div id="checkout-steelplates-panel" style="display:none;">
@@ -1335,33 +1331,9 @@ function switchToTab(viewName){
     try{ renderWhereabouts(); }catch(e){ console.error("[行き先の表示エラー]", e); }
   }
   if(viewName==="checkout"){
-    const activeSub = document.querySelector("#checkout-sub-toggle .seg-btn.active");
-    if(activeSub && activeSub.dataset.checkoutsub==="steelplates"){
-      try{
-        ensureDefaultSteelPlateTypes();
-        renderSteelPlateSummary();
-        renderSteelPlateTxList();
-      }catch(e){ console.error("[敷鉄板の表示エラー]", e); }
-    }
+    try{ renderCheckoutTab(); }catch(e){ console.error("[貸出タブの表示エラー]", e); }
   }
 }
-document.querySelectorAll("#checkout-sub-toggle .seg-btn").forEach(btn=>{
-  btn.addEventListener("click", ()=>{
-    document.querySelectorAll("#checkout-sub-toggle .seg-btn").forEach(b=>{
-      b.classList.toggle("active", b===btn);
-    });
-    const sub = btn.dataset.checkoutsub;
-    document.getElementById("checkout-equipment-panel").style.display = (sub==="equipment") ? "block" : "none";
-    document.getElementById("checkout-steelplates-panel").style.display = (sub==="steelplates") ? "block" : "none";
-    if(sub==="steelplates"){
-      try{
-        ensureDefaultSteelPlateTypes();
-        renderSteelPlateSummary();
-        renderSteelPlateTxList();
-      }catch(e){ console.error("[敷鉄板の表示エラー]", e); }
-    }
-  });
-});
 document.querySelectorAll(".tab-btn").forEach(btn=>{
   btn.addEventListener("click", ()=>{
     if(document.getElementById("main-tabs").classList.contains("reordering")) return;
@@ -1480,8 +1452,8 @@ function renderCheckoutCategoryRow(){
   if(!row) return;
   row.innerHTML = "";
   const cats = categoriesAll.filter(cat=>cat.mode==="checkout");
-  if(selectedCheckoutCategory===null || !cats.some(c=>c.id===selectedCheckoutCategory)){
-    selectedCheckoutCategory = cats[0]?.id || null;
+  if(selectedCheckoutCategory===null || (!cats.some(c=>c.id===selectedCheckoutCategory) && selectedCheckoutCategory!=="__steelplates__")){
+    selectedCheckoutCategory = cats[0]?.id || "__steelplates__";
   }
   cats.forEach(cat=>{
     const pill = document.createElement("button");
@@ -1495,6 +1467,17 @@ function renderCheckoutCategoryRow(){
     });
     row.appendChild(pill);
   });
+  // 敷鉄板は設備カテゴリではないが、貸出タブの並びの一番右に並べて表示する
+  const spPill = document.createElement("button");
+  spPill.className = "cat-pill" + (selectedCheckoutCategory==="__steelplates__" ? " active":"");
+  spPill.style.color = "#6B7280";
+  spPill.innerHTML = `<span class="dot" style="background:#6B7280"></span>敷鉄板`;
+  spPill.addEventListener("click", ()=>{
+    selectedCheckoutCategory = "__steelplates__";
+    renderCheckoutCategoryRow();
+    renderCheckoutTab();
+  });
+  row.appendChild(spPill);
 }
 
 function initCategoriesListener(){
@@ -1581,6 +1564,19 @@ function renderEquipmentGrid(){
 }
 
 function renderCheckoutTab(){
+  const isSteelPlates = selectedCheckoutCategory==="__steelplates__";
+  const equipPanel = document.getElementById("checkout-equipment-panel");
+  const spPanel = document.getElementById("checkout-steelplates-panel");
+  if(equipPanel) equipPanel.style.display = isSteelPlates ? "none" : "block";
+  if(spPanel) spPanel.style.display = isSteelPlates ? "block" : "none";
+  if(isSteelPlates){
+    try{
+      ensureDefaultSteelPlateTypes();
+      renderSteelPlateSummary();
+      renderSteelPlateTxList();
+    }catch(e){ console.error("[敷鉄板の表示エラー]", e); }
+    return;
+  }
   const grid = document.getElementById("checkout-eq-grid");
   if(!grid) return;
   const items = equipmentAll.filter(e=>e.category===selectedCheckoutCategory);
