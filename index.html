@@ -632,7 +632,7 @@
           </div>
           <div id="sp-holdings-section">
             <table>
-              <thead><tr><th>現場名</th><th style="width:80px;">種別</th><th style="width:100px;">借受数</th></tr></thead>
+              <thead><tr><th>現場名</th><th style="width:220px;">借受数</th></tr></thead>
               <tbody id="sp-holdings-list"></tbody>
             </table>
           </div>
@@ -4749,16 +4749,30 @@ function renderSpSiteDatalist(){
   list.innerHTML = names.map(n=>`<option value="${n.replace(/"/g,"&quot;")}"></option>`).join("");
 }
 // 現場名・注文者・鉄板の種類ごとに、貸出枚数−返却枚数（＝現在借りている枚数）を集計する
-// 工事（現場）単位での現在保有枚数の集計（注文者は問わず、現場名＋種類でまとめる）
+// 工事（現場）単位での現在保有枚数の集計（注文者は問わず、現場名でまとめ、種類ごとの内訳を持つ）
 function getSiteHoldings(){
   const map = new Map();
   spTransactionsAll.forEach(tx=>{
-    const key = `${tx.typeId}__${tx.siteName}`;
-    const cur = map.get(key) || { typeId: tx.typeId, siteName: tx.siteName, outstanding: 0 };
-    cur.outstanding += (tx.type==="lend" ? (Number(tx.count)||0) : -(Number(tx.count)||0));
-    map.set(key, cur);
+    const site = map.get(tx.siteName) || { siteName: tx.siteName, byType: new Map() };
+    const cur = site.byType.get(tx.typeId) || 0;
+    site.byType.set(tx.typeId, cur + (tx.type==="lend" ? (Number(tx.count)||0) : -(Number(tx.count)||0)));
+    map.set(tx.siteName, site);
   });
-  return [...map.values()].filter(g=>g.outstanding > 0).sort((a,b)=> a.siteName.localeCompare(b.siteName,"ja"));
+  return [...map.values()]
+    .map(site=>({
+      siteName: site.siteName,
+      byType: [...site.byType.entries()]
+        .filter(([, count])=> count > 0)
+        .map(([typeId, count])=>({ typeId, count }))
+        // spPlateTypesAll の並び順（order）に合わせる
+        .sort((a,b)=>{
+          const ta = spPlateTypesAll.find(t=>t.id===a.typeId);
+          const tb = spPlateTypesAll.find(t=>t.id===b.typeId);
+          return (ta?.order??0) - (tb?.order??0);
+        })
+    }))
+    .filter(site=> site.byType.length > 0)
+    .sort((a,b)=> a.siteName.localeCompare(b.siteName,"ja"));
 }
 function renderSpHoldingsList(){
   const tbody = document.getElementById("sp-holdings-list");
@@ -4766,15 +4780,15 @@ function renderSpHoldingsList(){
   const holdings = getSiteHoldings();
   tbody.innerHTML = "";
   if(holdings.length===0){
-    tbody.innerHTML = `<tr><td colspan="3" style="color:var(--muted);text-align:center;padding:16px;">現在、貸出中の現場はありません。</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="2" style="color:var(--muted);text-align:center;padding:16px;">現在、貸出中の現場はありません。</td></tr>`;
     return;
   }
   holdings.forEach(h=>{
+    const countText = h.byType.map(t=> `${spTypeName(t.typeId)}　${t.count}枚`).join("　　");
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${h.siteName}</td>
-      <td><span class="sp-type-badge">${spTypeName(h.typeId)}</span></td>
-      <td>${h.outstanding} 枚</td>
+      <td>${countText}</td>
     `;
     tbody.appendChild(tr);
   });
