@@ -1,50 +1,77 @@
-// お知らせ添付ファイル用：Cloud Storage for Firebase 連携の共通処理
+// お知らせ添付ファイル用：Google Apps Script（Webアプリ）経由でのGoogleドライブ連携
 // index.html・admin.html の両方から読み込んで使う
 //
-// Googleドライブ連携（gdrive-helper.js）と違い、こちらはこのシステム自体の
-// Firebaseログイン（Firebase Auth）をそのまま使うため、添付・削除のたびに
-// 別サービスへ改めてログインする必要がない。共有アカウントの管理も不要。
-import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
+// osakagumi.sys@gmail.com 名義で動作するApps ScriptのWebアプリを、
+// ただのHTTP通信として呼び出すだけなので、Googleへのログインは一切発生しない。
+// 実際のファイルの持ち主は引き続きosakagumi.sys@gmail.comのドライブ。
+import { GAS_STORAGE_CONFIG } from "./firebase-config.js";
 
-let storageInstance = null;
-
-export function initStorageHelper(app){
-  storageInstance = getStorage(app);
-  return storageInstance;
+export function isStorageConfigured(){
+  return !!(GAS_STORAGE_CONFIG.webAppUrl && !GAS_STORAGE_CONFIG.webAppUrl.startsWith("YOUR_") &&
+            GAS_STORAGE_CONFIG.secret && !GAS_STORAGE_CONFIG.secret.startsWith("YOUR_"));
 }
 
-export function isStorageReady(){
-  return !!storageInstance;
+// この関数はFirebase Storage版との呼び出し互換のために残しているだけで、何もしない
+export function initStorageHelper(){ /* no-op */ }
+
+function fileToBase64(file){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = ()=> resolve(reader.result.split(",")[1]);
+    reader.onerror = ()=> reject(new Error("ファイルの読み込みに失敗しました。"));
+    reader.readAsDataURL(file);
+  });
 }
 
-// ファイル名の衝突・扱いにくい文字を避けるため、保存パスは
-// notice-attachments/{タイムスタンプ}_{元のファイル名} という形にする
-function buildStoragePath(file){
-  const safeName = file.name.replace(/[^\w.\-ぁ-んァ-ヶ一-龠々ー]/g, "_");
-  return `notice-attachments/${Date.now()}_${safeName}`;
+// Apps ScriptのWebアプリを呼び出す。
+// Content-Type を text/plain にしているのは、application/json だとブラウザが
+// CORSのプリフライト（OPTIONS）リクエストを先に送ろうとし、Apps Script側が
+// それにうまく応答できずエラーになることがあるための回避策。
+async function callGasEndpoint(payload){
+  const res = await fetch(GAS_STORAGE_CONFIG.webAppUrl, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify(payload)
+  });
+  if(!res.ok){
+    throw new Error(`通信に失敗しました（${res.status}）。`);
+  }
+  const json = await res.json();
+  if(json.error){
+    throw new Error(`処理に失敗しました：${json.error}`);
+  }
+  return json;
 }
 
-// ファイルをCloud Storageへアップロードし、{path, webViewLink} を返す
+// ファイルをアップロードし、{path, webViewLink} を返す
+// path には（削除時に使う）GoogleドライブのファイルIDを入れている
 export async function uploadFileToStorage(file, onStatus){
-  if(!storageInstance){
-    throw new Error("Cloud Storageが初期化されていません。");
+  if(!isStorageConfigured()){
+    throw new Error("添付ファイル機能が未設定です（firebase-config.jsのGAS_STORAGE_CONFIGを設定してください）。");
   }
   onStatus && onStatus(`アップロード中… (${file.name})`);
-  const path = buildStoragePath(file);
-  const fileRef = ref(storageInstance, path);
-  await uploadBytes(fileRef, file, { contentType: file.type || "application/octet-stream" });
-  const webViewLink = await getDownloadURL(fileRef);
-  return { path, webViewLink };
+  const base64Data = await fileToBase64(file);
+  const json = await callGasEndpoint({
+    action: "upload",
+    secret: GAS_STORAGE_CONFIG.secret,
+    fileName: file.name,
+    mimeType: file.type || "application/octet-stream",
+    base64Data
+  });
+  return { path: json.fileId, webViewLink: json.webViewLink };
 }
 
-// Cloud Storage上のファイルを削除する
+// ファイルを削除する（Googleドライブのゴミ箱に移動。30日後に自動で完全削除される）
 export async function deleteFileFromStorage(path){
-  if(!path || !storageInstance) return;
+  if(!path || !isStorageConfigured()) return;
   try{
-    const fileRef = ref(storageInstance, path);
-    await deleteObject(fileRef);
+    await callGasEndpoint({
+      action: "delete",
+      secret: GAS_STORAGE_CONFIG.secret,
+      fileId: path
+    });
   }catch(e){
-    // 既に削除済み（object-not-found）などは無視してよい
-    if(e && e.code !== "storage/object-not-found") throw e;
+    // 削除に失敗しても、お知らせ自体の削除は続行してよいので握りつぶす
+    console.error("[添付ファイル削除エラー]", e);
   }
 }

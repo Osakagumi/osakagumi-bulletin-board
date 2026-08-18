@@ -61,21 +61,14 @@ export const EMAILJS_CONFIG = {
 // 例）テスト時: "h.ishikawa@osakagumi.co.jp"
 // 例）複数人でテスト: "h.ishikawa@osakagumi.co.jp;n.kasai@osakagumi.co.jp"
 // 本番で全社員に送る場合は必ず "*" に戻してください。
-export const MAIL_SEND_TARGET = "h.ishikawa@osakagumi.co.jp";
+export const MAIL_SEND_TARGET = "h.ishikawa@osakagumi.co.jp;zoom@osakagumi.co.jp";
 
-// お知らせ添付ファイル用：Googleドライブ連携の設定
-// 1. https://console.cloud.google.com で新しいプロジェクトを作成（osakagumi.sys@gmail.comでログインして作成すると管理が楽です）
-// 2. 「APIとサービス」→「ライブラリ」→「Google Drive API」を有効化
-// 3. 「APIとサービス」→「OAuth同意画面」を設定（User Type: External、アプリ名・メールアドレスなどを入力。
-//    drive.fileという権限のみ使うため、Googleの厳しい審査は基本的に不要です）
-// 4. 「APIとサービス」→「認証情報」→「認証情報を作成」→「OAuthクライアントID」→アプリケーションの種類「ウェブアプリケーション」
-//    「承認済みのJavaScript生成元」に、このサイトのURL（例：https://osakagumi.github.io）を追加して作成
-// 5. 発行された「クライアントID」を下のGOOGLE_OAUTH_CLIENT_IDに貼り付け
-// 6. osakagumi.sys@gmail.comのGoogleドライブに「お知らせ添付」などのフォルダを作成し、
-//    フォルダを開いたときのURL（.../folders/フォルダID）からフォルダIDを取得して、下のGDRIVE_UPLOAD_FOLDER_IDに貼り付け
-export const GOOGLE_DRIVE_CONFIG = {
-  clientId: "416929871112-ts7g3b38idqt4dmc7nsso7ankk1qfa84.apps.googleusercontent.com",
-  folderId: "17CbbKVmhGDCohqg88VRmFcSEvDoq68Ju"          // 例）1a2B3c4D5e6F7g8H9iJ0kLmNoPQRstuv
+// お知らせ添付ファイル用：Google Apps Script（Webアプリ）連携の設定。
+// apps-script-storage.gs の手順に沿ってWebアプリを公開し、発行されたURLと、
+// 自分で決めたSECRETをここに設定する。
+export const GAS_STORAGE_CONFIG = {
+  webAppUrl: "YOUR_APPS_SCRIPT_WEB_APP_URL",   // 例）https://script.google.com/macros/s/xxxxx/exec
+  secret: "YOUR_SHARED_SECRET"                  // apps-script-storage.gs の SECRET と同じ値にする
 };
 
 // MAIL_SEND_TARGET の設定内容に応じて、実際の送信先リストを返すヘルパー関数。
