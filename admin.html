@@ -628,10 +628,12 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig, CATEGORIES as SEED_CATEGORIES, EQUIPMENT_STATUSES, SAFETY_STATUSES, EMAILJS_CONFIG, resolveMailRecipients, isMailOverrideActive, MAIL_SEND_TARGET } from "./firebase-config.js";
 import { deleteDriveFile } from "./gdrive-helper.js";
+import { initStorageHelper, deleteFileFromStorage } from "./storage-helper.js";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+initStorageHelper(app);
 
 const emailjsReady = !!(window.emailjs && EMAILJS_CONFIG.publicKey && !EMAILJS_CONFIG.publicKey.startsWith("YOUR_"));
 if(emailjsReady){
@@ -1255,7 +1257,10 @@ let noticesAllAdmin = [];
 let selectedNoticeIds = new Set();
 async function deleteOneNotice(n){
   await deleteDoc(doc(db,"announcements", n.id));
-  if(n.attachmentFileId){
+  if(n.attachmentStoragePath){
+    try{ await deleteFileFromStorage(n.attachmentStoragePath); }catch(e){ /* 削除に失敗しても致命的ではない */ }
+  } else if(n.attachmentFileId){
+    // 旧Googleドライブ連携時代の添付（残っている場合のみ）
     try{ await deleteDriveFile(n.attachmentFileId); }catch(e){ /* 削除に失敗しても致命的ではない */ }
   }
 }

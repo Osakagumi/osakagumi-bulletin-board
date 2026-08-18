@@ -503,15 +503,6 @@
   .modal .row-btns{display:flex;gap:8px;margin-top:6px;}
   .modal .row-btns button{flex:1;padding:10px;border-radius:8px;border:none;font-size:13.5px;font-weight:600;}
   .modal-err{color:var(--danger);font-size:12px;margin-top:8px;min-height:16px;}
-  #notice-drive-quota-bar-track{
-    width:100%;height:8px;border-radius:5px;background:#EEF1F5;overflow:hidden;
-  }
-  #notice-drive-quota-bar-fill{
-    height:100%;border-radius:5px;background:var(--brand);width:0%;
-    transition:width .3s ease, background .3s ease;
-  }
-  #notice-drive-quota-bar-fill.warn{background:#E8A33D;}
-  #notice-drive-quota-bar-fill.danger{background:var(--danger);}
   #notice-dropzone{
     border:2px dashed var(--line);border-radius:10px;padding:28px 14px;text-align:center;color:var(--muted);
     cursor:pointer;transition:border-color .15s,background .15s;
@@ -875,14 +866,8 @@
     <div class="modal">
       <h3>ファイルを添付</h3>
       <p style="font-size:12px;color:var(--muted);margin:-6px 0 12px;">
-        ファイルをドロップすると、Googleドライブへアップロードしてリンクを自動で取得します。初回・時間経過後はGoogleアカウントへのログインを求められます（<b>osakagumi.sys@gmail.com</b>でログインしてください）。
+        ファイルをドロップすると、このシステムのストレージへアップロードしてリンクを自動で取得します。すでにログイン済みのため、別途ログインを求められることはありません。
       </p>
-      <div id="notice-drive-quota-wrap" style="display:none;margin-bottom:14px;">
-        <div id="notice-drive-quota-bar-track">
-          <div id="notice-drive-quota-bar-fill"></div>
-        </div>
-        <div id="notice-drive-quota-label" style="font-size:11.5px;color:var(--muted);margin-top:5px;"></div>
-      </div>
       <div id="notice-dropzone">
         <div id="notice-dropzone-idle">
           <div style="font-size:28px;margin-bottom:8px;">📎</div>
@@ -1096,12 +1081,13 @@ import {
   getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, addDoc, deleteDoc, query, where,
   onSnapshot, orderBy, limit, documentId, arrayUnion, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig, BUSINESS_HOURS, EQUIPMENT_STATUSES, SAFETY_STATUSES, EMAILJS_CONFIG, GOOGLE_DRIVE_CONFIG, resolveMailRecipients, isMailOverrideActive, MAIL_SEND_TARGET } from "./firebase-config.js";
-import { uploadFileToDrive, deleteDriveFile, getDriveStorageQuota, isGoogleDriveConfigured, formatBytes } from "./gdrive-helper.js";
+import { firebaseConfig, BUSINESS_HOURS, EQUIPMENT_STATUSES, SAFETY_STATUSES, EMAILJS_CONFIG, resolveMailRecipients, isMailOverrideActive, MAIL_SEND_TARGET } from "./firebase-config.js";
+import { initStorageHelper, uploadFileToStorage, deleteFileFromStorage } from "./storage-helper.js";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+initStorageHelper(app);
 
 const emailjsReady = !!(window.emailjs && EMAILJS_CONFIG.publicKey && !EMAILJS_CONFIG.publicKey.startsWith("YOUR_"));
 if(emailjsReady){
@@ -1241,7 +1227,7 @@ let wbListColumns = 2;
 let noticesAll = [];
 let myReadNoticeIds = [];
 let editingNoticeId = null;
-let originalAttachmentFileId = null;
+let originalAttachmentStoragePath = null;
 let attachmentUploadFailed = false;
 let activeSafetyCampaign = null;
 let mySafetyResponse = null;
@@ -2562,12 +2548,8 @@ async function cleanupOldNotices(){
       const data = d.data();
       try{
         await deleteDoc(doc(db,"announcements", d.id));
-        if(data.attachmentFileId){
-          // ドライブ側の削除はGoogleへのログインが必要なため、この場では削除待ちリストに記録するだけにする
-          await setDoc(doc(db,"pending_drive_deletes", data.attachmentFileId), {
-            noticeTitle: data.title || "",
-            queuedAt: new Date().toISOString()
-          });
+        if(data.attachmentStoragePath){
+          try{ await deleteFileFromStorage(data.attachmentStoragePath); }catch(e){ /* 添付削除に失敗しても致命的ではない */ }
         }
         count++;
       }catch(e){ /* 1件失敗しても他の削除は続行 */ }
@@ -2663,8 +2645,8 @@ document.getElementById("notice-detail-delete-btn").addEventListener("click", as
   const n = noticeDetailCurrent;
   if(!confirm("このお知らせを削除しますか？")) return;
   await deleteDoc(doc(db,"announcements", n.id));
-  if(n.attachmentFileId){
-    try{ await deleteDriveFile(n.attachmentFileId); }catch(e){ /* 削除に失敗しても致命的ではない */ }
+  if(n.attachmentStoragePath){
+    try{ await deleteFileFromStorage(n.attachmentStoragePath); }catch(e){ /* 削除に失敗しても致命的ではない */ }
   }
   toast("お知らせを削除しました。");
   document.getElementById("notice-detail-modal").classList.remove("show");
@@ -2734,7 +2716,7 @@ document.getElementById("notice-readby-close").addEventListener("click", ()=>{
 
 document.getElementById("notice-new-btn").addEventListener("click", ()=>{
   editingNoticeId = null;
-  originalAttachmentFileId = null;
+  originalAttachmentStoragePath = null;
   document.getElementById("notice-modal-title").textContent = "お知らせを投稿";
   document.getElementById("notice-send-email-row").style.display = "flex";
   document.getElementById("notice-send-email").checked = true;
@@ -2742,7 +2724,7 @@ document.getElementById("notice-new-btn").addEventListener("click", ()=>{
   document.getElementById("notice-title").value = "";
   document.getElementById("notice-body").value = "";
   document.getElementById("notice-attachment-url").value = "";
-  document.getElementById("notice-attachment-url").dataset.fileId = "";
+  document.getElementById("notice-attachment-url").dataset.storagePath = "";
   attachmentUploadFailed = false;
   document.getElementById("notice-error").textContent = "";
   document.getElementById("notice-send-status").textContent = "";
@@ -2751,7 +2733,7 @@ document.getElementById("notice-new-btn").addEventListener("click", ()=>{
 
 function openNoticeEditModal(n){
   editingNoticeId = n.id;
-  originalAttachmentFileId = n.attachmentFileId || null;
+  originalAttachmentStoragePath = n.attachmentStoragePath || null;
   attachmentUploadFailed = false;
   document.getElementById("notice-modal-title").textContent = "お知らせを編集";
   document.getElementById("notice-send-email-row").style.display = "flex";
@@ -2760,14 +2742,14 @@ function openNoticeEditModal(n){
   document.getElementById("notice-title").value = n.title || "";
   document.getElementById("notice-body").value = n.body || "";
   document.getElementById("notice-attachment-url").value = n.attachmentUrl || "";
-  document.getElementById("notice-attachment-url").dataset.fileId = n.attachmentFileId || "";
+  document.getElementById("notice-attachment-url").dataset.storagePath = n.attachmentStoragePath || "";
   document.getElementById("notice-error").textContent = "";
   document.getElementById("notice-send-status").textContent = "";
   noticeModal.classList.add("show");
 }
-// リンク欄を手動で書き換えた場合は、添付ファイルIDとの対応が取れなくなるため紐付けを解除する
+// リンク欄を手動で書き換えた場合は、添付ファイルとの対応が取れなくなるため紐付けを解除する
 document.getElementById("notice-attachment-url").addEventListener("input", (e)=>{
-  e.target.dataset.fileId = "";
+  e.target.dataset.storagePath = "";
   attachmentUploadFailed = false;
 });
 document.getElementById("notice-cancel").addEventListener("click", ()=> noticeModal.classList.remove("show"));
@@ -2775,7 +2757,7 @@ document.getElementById("notice-submit").addEventListener("click", async ()=>{
   const title = document.getElementById("notice-title").value.trim();
   const body = document.getElementById("notice-body").value.trim();
   const attachmentUrl = document.getElementById("notice-attachment-url").value.trim();
-  const attachmentFileId = document.getElementById("notice-attachment-url").dataset.fileId || "";
+  const attachmentStoragePath = document.getElementById("notice-attachment-url").dataset.storagePath || "";
   const errEl = document.getElementById("notice-error");
   const statusEl = document.getElementById("notice-send-status");
   if(!title){ errEl.textContent = "タイトルを入力してください。"; return; }
@@ -2805,12 +2787,12 @@ document.getElementById("notice-submit").addEventListener("click", async ()=>{
   if(editingNoticeId){
     try{
       await updateDoc(doc(db,"announcements", editingNoticeId), {
-        title, body, attachmentUrl, attachmentFileId,
+        title, body, attachmentUrl, attachmentStoragePath,
         updatedAt: Timestamp.now()
       });
       // 添付が別のものに差し替わった／削除された場合は、以前のファイルをドライブから完全削除する
-      if(originalAttachmentFileId && originalAttachmentFileId !== attachmentFileId){
-        try{ await deleteDriveFile(originalAttachmentFileId); }catch(e){ /* 削除に失敗しても更新自体は成功として扱う */ }
+      if(originalAttachmentStoragePath && originalAttachmentStoragePath !== attachmentStoragePath){
+        try{ await deleteFileFromStorage(originalAttachmentStoragePath); }catch(e){ /* 削除に失敗しても更新自体は成功として扱う */ }
       }
       toast("お知らせを更新しました。");
       if(sendEmail){
@@ -2826,7 +2808,7 @@ document.getElementById("notice-submit").addEventListener("click", async ()=>{
   try{
     await addDoc(collection(db,"announcements"), {
       title, body,
-      attachmentUrl, attachmentFileId,
+      attachmentUrl, attachmentStoragePath,
       authorEmail: currentUser.email,
       authorName: myDisplayName(),
       createdAt: Timestamp.now()
@@ -2880,17 +2862,17 @@ async function sendNoticeEmails(title, body, attachmentUrl){
 /* =========================================================
    お知らせ：ファイル添付（Googleドライブへアップロード）
 ========================================================= */
-async function uploadFileToGoogleDrive(file){
+async function uploadFileToNoticeStorage(file){
   const statusEl = document.getElementById("notice-dropzone-status");
   const errEl = document.getElementById("notice-attach-error");
   const busyEl = document.getElementById("notice-dropzone-busy");
   errEl.textContent = "";
   busyEl.style.display = "block";
   try{
-    const { fileId, webViewLink } = await uploadFileToDrive(file, (msg)=>{ statusEl.textContent = msg; });
+    const { path, webViewLink } = await uploadFileToStorage(file, (msg)=>{ statusEl.textContent = msg; });
 
     document.getElementById("notice-attachment-url").value = webViewLink;
-    document.getElementById("notice-attachment-url").dataset.fileId = fileId;
+    document.getElementById("notice-attachment-url").dataset.storagePath = path;
     attachmentUploadFailed = false;
     toast("ファイルをアップロードし、リンクを取得しました。");
     document.getElementById("notice-attach-modal").classList.remove("show");
@@ -2931,26 +2913,6 @@ document.getElementById("notice-attach-btn").addEventListener("click", ()=>{
   document.getElementById("notice-attach-error").textContent = "";
   resetNoticeDropzone();
   document.getElementById("notice-attach-modal").classList.add("show");
-  const quotaWrap = document.getElementById("notice-drive-quota-wrap");
-  const quotaFill = document.getElementById("notice-drive-quota-bar-fill");
-  const quotaLabel = document.getElementById("notice-drive-quota-label");
-  quotaWrap.style.display = "none";
-  if(isGoogleDriveConfigured()){
-    getDriveStorageQuota().then(q=>{
-      if(q.limit){
-        const usedPct = Math.min(100, (q.usage / q.limit) * 100);
-        quotaFill.style.width = `${usedPct}%`;
-        quotaFill.className = usedPct>=90 ? "danger" : (usedPct>=70 ? "warn" : "");
-        quotaLabel.textContent = `使用量 ${formatBytes(q.usage)} / ${formatBytes(q.limit)}（空き ${formatBytes(q.limit - q.usage)}）`;
-        quotaWrap.style.display = "block";
-      } else if(q.usage!==undefined){
-        quotaFill.style.width = "0%";
-        quotaFill.className = "";
-        quotaLabel.textContent = `使用量 ${formatBytes(q.usage)}（上限なし）`;
-        quotaWrap.style.display = "block";
-      }
-    }).catch(()=>{ /* 取得できなくても添付機能自体は使えるので無視 */ });
-  }
 });
 document.getElementById("notice-attach-cancel").addEventListener("click", ()=>{
   document.getElementById("notice-attach-modal").classList.remove("show");
@@ -2979,13 +2941,13 @@ document.getElementById("notice-file-input").addEventListener("change", (e)=>{
 });
 noticeDropzone.addEventListener("drop", (e)=>{
   const file = e.dataTransfer.files && e.dataTransfer.files[0];
-  if(file) uploadFileToGoogleDrive(file);
+  if(file) uploadFileToNoticeStorage(file);
 });
 document.getElementById("notice-upload-confirm-btn").addEventListener("click", ()=>{
   if(!pendingUploadFile) return;
   document.getElementById("notice-dropzone-selected").style.display = "none";
   document.getElementById("notice-upload-confirm-btn").style.display = "none";
-  uploadFileToGoogleDrive(pendingUploadFile);
+  uploadFileToNoticeStorage(pendingUploadFile);
 });
 
 /* =========================================================

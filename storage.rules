@@ -1,0 +1,13 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // お知らせ添付ファイル置き場
+    // 閲覧はリンクを知っていれば誰でも可能（社外の人に共有する場合も想定）
+    // アップロード・削除は、このシステムにログイン済みの人のみ
+    match /notice-attachments/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null;
+      allow delete: if request.auth != null;
+    }
+  }
+}
