@@ -4709,6 +4709,7 @@ function renderSteelPlateSummary(){
   const tr = document.createElement("tr");
   const siteTh = document.createElement("th");
   siteTh.textContent = "現場名";
+  siteTh.style.textAlign = "center";
   tr.appendChild(siteTh);
   spPlateTypesAll.forEach(t=>{
     const outstanding = spOutstandingCount(t.id);
