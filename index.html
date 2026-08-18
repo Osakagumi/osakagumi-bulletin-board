@@ -439,8 +439,6 @@
   #notice-detail-modal .n-detail-actions-left{display:flex;gap:6px;flex-wrap:wrap;}
   #notice-detail-modal .n-detail-actions-left button{border:1px solid var(--danger);color:var(--danger);background:#fff;border-radius:7px;padding:6px 13px;font-size:12px;}
   #notice-detail-modal .n-detail-actions-left button:hover{background:var(--danger);color:#fff;}
-  #notice-detail-modal .n-detail-readby-btn{border:none;color:#fff;background:var(--brand);border-radius:7px;padding:6px 13px;font-size:12px;}
-  #notice-detail-modal .n-detail-readby-btn:hover{background:var(--brand-dark);}
 
   /* ---------- 行き先 ---------- */
   .wb-list-columns{display:grid;grid-template-columns:1fr;gap:14px;align-items:start;}
@@ -907,21 +905,9 @@
           <button id="notice-detail-edit-btn" style="display:none;">編集</button>
           <button id="notice-detail-delete-btn" style="display:none;">削除</button>
         </div>
-        <button class="n-detail-readby-btn" id="notice-detail-readby-btn">既読を確認</button>
       </div>
       <div class="row-btns">
         <button class="btn-ghost" id="notice-detail-close" style="border:1px solid var(--line);">閉じる</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ============ 既読者一覧 ============ -->
-  <div class="modal-overlay" id="notice-readby-modal">
-    <div class="modal">
-      <h3 id="notice-readby-title">既読者一覧</h3>
-      <div id="notice-readby-list" style="max-height:320px;overflow-y:auto;"></div>
-      <div class="row-btns">
-        <button class="btn-ghost" id="notice-readby-close" style="border:1px solid var(--line);">閉じる</button>
       </div>
     </div>
   </div>
@@ -2589,7 +2575,7 @@ function renderNotices(){
       : escapeHtml(n.authorName||"");
     const readByAt = n.readByAt || {};
     const readCount = Object.keys(readByAt).filter(k => k.includes("@")).length;
-    const totalCount = employeesAll.length;
+    const totalCount = employeesAll.filter(e=>!e.hidden).length;
     tr.innerHTML = `
       <td class="n-date-cell">${escapeHtml(tsToStr(n.createdAt))}</td>
       <td class="n-author-cell">${authorNameHtml}</td>
@@ -2612,7 +2598,10 @@ function renderNoticeDetailView(n){
   const authorHtml = n.authorEmail
     ? `<a href="mailto:${escapeHtml(n.authorEmail)}" class="n-author-link">${escapeHtml(n.authorName||n.authorEmail)}</a>`
     : escapeHtml(n.authorName||"");
-  document.getElementById("notice-detail-meta").innerHTML = `${authorHtml} ・ ${escapeHtml(tsToStr(n.createdAt))}`;
+  const readByAt = n.readByAt || {};
+  const readCount = Object.keys(readByAt).filter(k => k.includes("@")).length;
+  const totalCount = employeesAll.filter(e=>!e.hidden).length;
+  document.getElementById("notice-detail-meta").innerHTML = `${authorHtml} ・ ${escapeHtml(tsToStr(n.createdAt))} ・ 既読：${readCount}/${totalCount}`;
   document.getElementById("notice-detail-body").textContent = n.body || "";
   const attEl = document.getElementById("notice-detail-attachment");
   attEl.innerHTML = n.attachmentUrl
@@ -2657,68 +2646,8 @@ document.getElementById("notice-detail-delete-btn").addEventListener("click", as
   toast("お知らせを削除しました。");
   document.getElementById("notice-detail-modal").classList.remove("show");
 });
-let reopenNoticeDetailAfterReadBy = false;
-document.getElementById("notice-detail-readby-btn").addEventListener("click", ()=>{
-  if(!noticeDetailCurrent) return;
-  document.getElementById("notice-detail-modal").classList.remove("show");
-  reopenNoticeDetailAfterReadBy = true;
-  openNoticeReadByModal(noticeDetailCurrent);
-});
 
 const noticeModal = document.getElementById("notice-modal");
-function buildReadByModalHtml(n, empList){
-  const readByAt = n.readByAt || {};
-  // メールアドレス形式でないキー（テスト時の誤登録など）は既読者一覧から除外する
-  const readEmails = Object.keys(readByAt).filter(k => k.includes("@"));
-  const readRows = readEmails.map(email=>{
-    const emp = empList.find(e=>(e.email||"").toLowerCase()===email.toLowerCase());
-    const name = emp?.name || email;
-    const dt = readByAt[email];
-    const parsedDt = dt ? new Date(dt) : null;
-    const dtLabel = (parsedDt && !isNaN(parsedDt.getTime()))
-      ? parsedDt.toLocaleString("ja-JP",{year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"})
-      : "";
-    return { name, email, dtLabel, dt: (parsedDt && !isNaN(parsedDt.getTime())) ? dt : "" };
-  }).sort((a,b)=> a.dt.localeCompare(b.dt));
-
-  const activeEmployees = empList.filter(e=>!e.hidden);
-  const unreadEmployees = activeEmployees.filter(e => !readEmails.some(re=>re.toLowerCase()===(e.email||"").toLowerCase()))
-    .sort((a,b)=> (a.name||"").localeCompare(b.name||"","ja"));
-
-  let html = `<div style="font-size:12.5px;font-weight:700;color:var(--muted);margin:4px 0 6px;">既読者（${readRows.length}名）</div>`;
-  if(readRows.length===0){
-    html += `<div style="font-size:12.5px;color:var(--muted);padding:4px 0 10px;">まだ誰も既読にしていません。</div>`;
-  } else {
-    html += readRows.map(r=>`
-      <div style="display:flex;justify-content:space-between;gap:8px;padding:7px 2px;border-bottom:1px solid var(--line);font-size:13px;">
-        <a href="mailto:${escapeHtml(r.email)}" style="color:var(--text);text-decoration:underline;">${escapeHtml(r.name)}</a>
-        <span style="color:var(--muted);font-size:11.5px;white-space:nowrap;">${escapeHtml(r.dtLabel)}</span>
-      </div>
-    `).join("");
-  }
-  html += `<div style="font-size:12.5px;font-weight:700;color:var(--muted);margin:14px 0 6px;">未読者（${unreadEmployees.length}名）</div>`;
-  if(unreadEmployees.length===0){
-    html += `<div style="font-size:12.5px;color:var(--muted);padding:4px 0;">未読者はいません。</div>`;
-  } else {
-    html += unreadEmployees.map(e=>`<div style="padding:7px 2px;border-bottom:1px solid var(--line);font-size:13px;color:var(--muted);">${escapeHtml(e.name||e.email)}</div>`).join("");
-  }
-  return html;
-}
-function openNoticeReadByModal(n){
-  const listEl = document.getElementById("notice-readby-list");
-  const titleEl = document.getElementById("notice-readby-title");
-  titleEl.textContent = "既読状況";
-  listEl.innerHTML = buildReadByModalHtml(n, employeesAll);
-  document.getElementById("notice-readby-modal").classList.add("show");
-}
-document.getElementById("notice-readby-close").addEventListener("click", ()=>{
-  document.getElementById("notice-readby-modal").classList.remove("show");
-  if(reopenNoticeDetailAfterReadBy && noticeDetailCurrent){
-    renderNoticeDetailView(noticeDetailCurrent);
-    document.getElementById("notice-detail-modal").classList.add("show");
-  }
-  reopenNoticeDetailAfterReadBy = false;
-});
 
 document.getElementById("notice-new-btn").addEventListener("click", ()=>{
   editingNoticeId = null;
@@ -3033,6 +2962,7 @@ function initEmployeesListener(){
   onSnapshot(collection(db,"employees"), snap=>{
     employeesAll = snap.docs.map(d=>({ email:d.id, ...d.data() }));
     renderWhereabouts();
+    renderNotices();
     updateHeaderUserLabel();
   }, (err)=>{ console.error("[社員名簿取得エラー]", err); });
 }
