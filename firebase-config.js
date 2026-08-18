@@ -67,8 +67,8 @@ export const MAIL_SEND_TARGET = "h.ishikawa@osakagumi.co.jp;zoom@osakagumi.co.jp
 // apps-script-storage.gs の手順に沿ってWebアプリを公開し、発行されたURLと、
 // 自分で決めたSECRETをここに設定する。
 export const GAS_STORAGE_CONFIG = {
-  webAppUrl: "YOUR_APPS_SCRIPT_WEB_APP_URL",   // 例）https://script.google.com/macros/s/xxxxx/exec
-  secret: "YOUR_SHARED_SECRET"                  // apps-script-storage.gs の SECRET と同じ値にする
+  webAppUrl: "https://script.google.com/macros/s/AKfycbxN_VDxzHRkVYOPx-06v1aYPRV4uAPfLYBdSyhh9Vop9p57mIxoSRqQ6Uu5VDzJ6iMa5w/exec",   // 例）https://script.google.com/macros/s/xxxxx/exec
+  secret: "pIJHkljhwfeohdskksdglkj9887sgdlksssss"                  // apps-script-storage.gs の SECRET と同じ値にする
 };
 
 // MAIL_SEND_TARGET の設定内容に応じて、実際の送信先リストを返すヘルパー関数。
