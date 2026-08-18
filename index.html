@@ -707,6 +707,7 @@
           </div>
           <div id="sp-error" style="color:var(--danger);font-size:12.5px;margin-top:4px;"></div>
           <div class="modal-actions">
+            <button class="btn-ghost" id="sp-delete-btn" style="border:1px solid var(--danger);color:var(--danger);display:none;">削除</button>
             <button class="btn-ghost" id="sp-cancel-btn" style="border:1px solid var(--line);">キャンセル</button>
             <button class="btn-primary" id="sp-save-btn">保存</button>
           </div>
@@ -4735,7 +4736,7 @@ function renderSteelPlateTxList(){
     return;
   }
   spTransactionsAll.forEach(tx=>{
-    const canDelete = isAdmin || isEquipmentManager || tx.createdByEmail===currentUser.email;
+    const canEdit = isAdmin || isEquipmentManager || tx.createdByEmail===currentUser.email;
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td class="sp-nowrap">${formatDateJP(tx.date)}</td>
@@ -4747,20 +4748,13 @@ function renderSteelPlateTxList(){
       <td class="sp-nowrap" style="font-size:12px;color:var(--muted);">${tx.createdByName || tx.createdByEmail || ""}</td>
       <td></td>
     `;
-    if(canDelete){
-      const delBtn = document.createElement("button");
-      delBtn.className = "icon-btn";
-      delBtn.textContent = "削除";
-      delBtn.style.cssText = "border:none;background:none;color:var(--danger);font-size:12px;cursor:pointer;";
-      delBtn.addEventListener("click", async ()=>{
-        if(!confirm("この記録を削除しますか？")) return;
-        try{
-          await deleteDoc(doc(db,"steel_plate_transactions", tx.id));
-        }catch(e){
-          toast("削除に失敗しました。権限をご確認ください。");
-        }
-      });
-      tr.lastElementChild.appendChild(delBtn);
+    if(canEdit){
+      const editBtn = document.createElement("button");
+      editBtn.className = "icon-btn";
+      editBtn.textContent = "編集";
+      editBtn.style.cssText = "border:1px solid var(--line);background:#fff;border-radius:6px;color:var(--muted);font-size:12px;padding:5px 10px;cursor:pointer;";
+      editBtn.addEventListener("click", ()=> openSpEditTxModal(tx));
+      tr.lastElementChild.appendChild(editBtn);
     }
     tbody.appendChild(tr);
   });
@@ -4816,9 +4810,10 @@ function renderSpSiteSuggestions(filterText){
 })();
 // 現場名・注文者・鉄板の種類ごとに、貸出枚数−返却枚数（＝現在借りている枚数）を集計する
 // 工事（現場）単位での現在保有枚数の集計（注文者は問わず、現場名でまとめ、種類ごとの内訳を持つ）
-function getSiteHoldings(){
+function getSiteHoldings(excludeTxId){
   const map = new Map();
   spTransactionsAll.forEach(tx=>{
+    if(excludeTxId && tx.id===excludeTxId) return;
     const site = map.get(tx.siteName) || { siteName: tx.siteName, byType: new Map() };
     const cur = site.byType.get(tx.typeId) || 0;
     site.byType.set(tx.typeId, cur + (tx.type==="lend" ? (Number(tx.count)||0) : -(Number(tx.count)||0)));
@@ -4920,6 +4915,9 @@ document.getElementById("sp-date-picker")?.addEventListener("click", (e)=>{
 // 保有枚数一覧の数字をクリックした時に開く。1以上なら返却、0なら貸出として、
 // そのマス（現場×種類）の内容と、その現場の直近の注文者をあらかじめ入れておく。
 function openSpCellModal(siteName, typeId, count){
+  spEditingTxId = null;
+  document.getElementById("sp-modal-title").textContent = "貸出・返却を記録";
+  document.getElementById("sp-delete-btn").style.display = "none";
   spSelectedType = count > 0 ? "return" : "lend";
   document.querySelectorAll("#sp-type-toggle .seg-btn").forEach(b=>{
     b.classList.toggle("active", b.dataset.sptype===spSelectedType);
@@ -4935,6 +4933,9 @@ function openSpCellModal(siteName, typeId, count){
 }
 
 function openSpModal(){
+  spEditingTxId = null;
+  document.getElementById("sp-modal-title").textContent = "貸出・返却を記録";
+  document.getElementById("sp-delete-btn").style.display = "none";
   spSelectedType = "lend";
   document.querySelectorAll("#sp-type-toggle .seg-btn").forEach(b=>{
     b.classList.toggle("active", b.dataset.sptype==="lend");
@@ -4947,6 +4948,27 @@ function openSpModal(){
   document.getElementById("sp-error").textContent = "";
   document.getElementById("sp-modal").classList.add("show");
 }
+
+// 履歴一覧の「編集」ボタンから開く。既存の記録の内容をそのまま入れておく。
+let spEditingTxId = null;
+function openSpEditTxModal(tx){
+  spEditingTxId = tx.id;
+  document.getElementById("sp-modal-title").textContent = "記録を編集";
+  document.getElementById("sp-delete-btn").style.display = "inline-block";
+  spSelectedType = tx.type==="return" ? "return" : "lend";
+  document.querySelectorAll("#sp-type-toggle .seg-btn").forEach(b=>{
+    b.classList.toggle("active", b.dataset.sptype===spSelectedType);
+  });
+  renderSpPlateSelectOptions();
+  document.getElementById("sp-plate-select").value = tx.typeId;
+  document.getElementById("sp-site-input").value = tx.siteName || "";
+  setSpOrderer(tx.orderer || "");
+  setSpDate(tx.date || todayStr());
+  document.getElementById("sp-count-input").value = tx.count || "";
+  document.getElementById("sp-error").textContent = "";
+  document.getElementById("sp-modal").classList.add("show");
+}
+
 document.getElementById("sp-orderer-pick-btn")?.addEventListener("click", async ()=>{
   const emp = await openEmployeePicker();
   if(emp){
@@ -4971,23 +4993,42 @@ document.getElementById("sp-save-btn")?.addEventListener("click", async ()=>{
   if(!typeId){ errEl.textContent = "鉄板の種類を登録してください（管理者にご連絡ください）。"; return; }
   if(!siteName){ errEl.textContent = "現場名を入力してください。"; return; }
   if(spSelectedType==="return"){
-    const holding = getSiteHoldings().find(h=>h.siteName===siteName);
+    // 編集中の場合は、その記録自身の分を除いた残高と比較する
+    const holding = getSiteHoldings(spEditingTxId).find(h=>h.siteName===siteName);
     const outstanding = holding ? (holding.byType.find(x=>x.typeId===typeId)?.count || 0) : 0;
     if(count > outstanding){ errEl.textContent = `返却枚数が貸出中の枚数（${outstanding}枚）を超えています。`; return; }
   }
 
-  const emp = employeesAll.find(e=>e.email===currentUser.email);
   try{
-    await addDoc(collection(db,"steel_plate_transactions"), {
-      typeId, type: spSelectedType, count, date, siteName, orderer,
-      createdByEmail: currentUser.email,
-      createdByName: emp?.name || currentUser.email,
-      createdAt: new Date().toISOString()
-    });
+    if(spEditingTxId){
+      await updateDoc(doc(db,"steel_plate_transactions", spEditingTxId), {
+        typeId, type: spSelectedType, count, date, siteName, orderer
+      });
+      toast("更新しました。");
+    } else {
+      const emp = employeesAll.find(e=>e.email===currentUser.email);
+      await addDoc(collection(db,"steel_plate_transactions"), {
+        typeId, type: spSelectedType, count, date, siteName, orderer,
+        createdByEmail: currentUser.email,
+        createdByName: emp?.name || currentUser.email,
+        createdAt: new Date().toISOString()
+      });
+      toast("記録しました。");
+    }
     document.getElementById("sp-modal").classList.remove("show");
-    toast("記録しました。");
   }catch(e){
     errEl.textContent = "保存に失敗しました。権限をご確認ください。";
+  }
+});
+document.getElementById("sp-delete-btn")?.addEventListener("click", async ()=>{
+  if(!spEditingTxId) return;
+  if(!confirm("この記録を削除しますか？")) return;
+  try{
+    await deleteDoc(doc(db,"steel_plate_transactions", spEditingTxId));
+    document.getElementById("sp-modal").classList.remove("show");
+    toast("削除しました。");
+  }catch(e){
+    document.getElementById("sp-error").textContent = "削除に失敗しました。権限をご確認ください。";
   }
 });
 
