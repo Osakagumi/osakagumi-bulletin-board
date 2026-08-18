@@ -271,6 +271,39 @@ admin.htmlの「設備管理」タブ下部「測量機器管理者」から、�
 - **予約時間帯**：デフォルトは6:00〜20:00・30分単位です。`firebase-config.js` の `BUSINESS_HOURS` で変更できます。
 - **安否確認の通知**：EmailJS（無料枠：月200通）を使って、発信時に社員名簿の全員へメール通知できます。設定方法は下記「メール通知（EmailJS）の設定」を参照してください。未設定のままでも動作し、その場合はシステム内表示のみになります。
 
+## 各種上限・制限事項まとめ
+
+制限には大きく2種類あります。①アプリ自身がコード上で明示的にチェックしている上限と、②裏側で使っている外部サービス（Firebase・EmailJS・Googleドライブ）自体の無料枠による上限です。
+
+### ① アプリが自分で設けている上限
+
+| 機能 | 上限 | 超えたときの挙動 |
+|---|---|---|
+| カレンダー | 最大3年度分 | 4年度目を作ろうとすると、どの年度を削除するか選ばせる確認画面が出ます |
+| 安否確認（発信履歴） | 最大5セット | 6セット目を発信すると、一番古いものを自動削除します（回答データも含めて） |
+| 行き先の事前設定 | 最大7日分 | 8日目を追加しようとすると、一番古い日を削除するか確認します |
+| 行き先ボードの表示列数 | 1〜4列 | 管理画面の設定項目としての入力可能範囲です |
+| 行き先ボードの文字サイズ | 10〜40px | 同上 |
+
+### ② 上限を設けていないもの（実質無制限）
+
+利用者（社員）数、設備台数、お知らせ件数、敷鉄板の貸出・返却の記録件数、事前設定のプリセット件数などは、アプリ側では上限を設けていません。増やせる分だけ増やせますが、実質的な上限は下記③の外部サービスの無料枠に依存します。
+
+### ③ 外部サービスの無料枠（アプリ自体の制限ではなくサービス側の制限）
+
+| サービス | 用途 | 無料枠の制限 |
+|---|---|---|
+| Firebase Firestore（Sparkプラン＝無料の場合） | 全データの保存先（社員・設備・お知らせ・安否確認・行き先・敷鉄板など全部） | 1日あたり：読み取り5万回、書き込み2万回、削除2万回。保存容量は合計1GBまで。同時接続数にも制限があります。超えた分の操作（閲覧・保存）はその日のうちは一時的にエラーになり、翌日リセットされます |
+| Firebase Authentication | ログイン | 無料枠は非常に大きく、社内利用の規模では実質的に制限を意識する必要はありません |
+| EmailJS（安否確認・お知らせのメール通知） | メール送信 | 月200通まで無料。テンプレートも無料プランでは最大2個まで（安否確認用・お知らせ用ですでに2個使用しています） |
+| Googleドライブ（お知らせの添付ファイル） | ファイル保存 | 連携したGoogleアカウントのDrive容量に依存します（個人の無料Googleアカウントなら通常15GB、Gmail等と共有）。管理画面に使用量バーが表示され、上限なしのアカウント（Google Workspaceの無制限プランなど）では「上限なし」と表示されます |
+
+### 補足
+
+- 添付ファイル1個あたりのファイルサイズ上限は、アプリ側では設定していません（Googleドライブ自体の上限に準じます）。
+- 名前や備考などの文字数（`maxlength`）も、アプリ側では制限していません。ただしFirestoreの1ドキュメントあたり1MBという制約はあります（通常のテキスト入力では到達しない量です）。
+- 実運用でFirestoreの無料枠（1日の読み書き回数）に近づいてきた場合は、Blazeプラン（従量課金）への切り替えが必要になります。現状の使い方（社員数十名規模）であれば無料枠内で収まる可能性が高いですが、心配であれば実際の読み書き回数をFirebaseコンソールの「使用量」タブで確認することをおすすめします。
+
 ## メール通知（EmailJS）の設定
 
 ### テスト時の誤送信防止（メール送信先の上書き）
@@ -299,20 +332,13 @@ export const MAIL_SEND_TARGET = "*";
      ```html
      <p>{{message}}</p>
      <p>以下のボタンから、そのまま回答できます（未ログインの場合のみログイン画面が挟まります）。</p>
-     <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;max-width:320px;">
-       <tr><td style="padding-bottom:8px;">
-         <a href="{{link_safe}}" style="display:block;width:100%;box-sizing:border-box;background:#2E9E8F;color:#fff;padding:12px 16px;text-decoration:none;border-radius:6px;text-align:center;font-weight:bold;">無事です</a>
-       </td></tr>
-       <tr><td style="padding-bottom:8px;">
-         <a href="{{link_damage}}" style="display:block;width:100%;box-sizing:border-box;background:#C0392B;color:#fff;padding:12px 16px;text-decoration:none;border-radius:6px;text-align:center;font-weight:bold;">被害があります</a>
-       </td></tr>
-       <tr><td>
-         <a href="{{link_unknown}}" style="display:block;width:100%;box-sizing:border-box;background:#E8853F;color:#fff;padding:12px 16px;text-decoration:none;border-radius:6px;text-align:center;font-weight:bold;">わからない・確認中</a>
-       </td></tr>
-     </table>
+     <p>
+       <a href="{{link_safe}}" style="background:#2E9E8F;color:#fff;padding:10px 16px;text-decoration:none;border-radius:6px;margin-right:8px;">無事です</a>
+       <a href="{{link_damage}}" style="background:#C0392B;color:#fff;padding:10px 16px;text-decoration:none;border-radius:6px;margin-right:8px;">被害があります</a>
+       <a href="{{link_unknown}}" style="background:#E8853F;color:#fff;padding:10px 16px;text-decoration:none;border-radius:6px;">わからない・確認中</a>
+     </p>
      <p><a href="{{link}}">システムを開く（回答内容を確認してから送信）</a></p>
      ```
-     ※ すでにテンプレートを作成済みの場合は、EmailJSの管理画面でこのテンプレートを開き、Content（HTML）を上記の内容に貼り替えて保存してください（自動では反映されません）。
    - **To Email** 欄に必ず `{{to_email}}` と入力（これを忘れると全員同じ宛先に届いてしまいます）
    - 保存後の **Template ID** をメモ（この値は`safetyTemplateId`に使います）
 4. 「Account」→「General」から **Public Key** をメモ
