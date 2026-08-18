@@ -1967,8 +1967,19 @@ function openCalendarPicker(anchorEl, initialDateStr, opts){
   const popupWidth = 260;
   let left = rect.left;
   if(left + popupWidth > window.innerWidth - 8){ left = window.innerWidth - popupWidth - 8; }
-  popup.style.top = `${rect.bottom + 6}px`;
   popup.style.left = `${Math.max(8,left)}px`;
+  // 画面下端に収まらない場合は、アンカーの上側に表示する
+  const popupHeight = popup.offsetHeight;
+  const spaceBelow = window.innerHeight - rect.bottom - 6;
+  const spaceAbove = rect.top - 8;
+  if(popupHeight > spaceBelow && spaceAbove > spaceBelow){
+    popup.style.top = `${Math.max(8, rect.top - Math.min(popupHeight, spaceAbove) - 6)}px`;
+    popup.style.maxHeight = `${Math.min(popupHeight, spaceAbove)}px`;
+  } else {
+    popup.style.top = `${rect.bottom + 6}px`;
+    popup.style.maxHeight = `${Math.max(120, spaceBelow)}px`;
+  }
+  popup.style.overflowY = "auto";
 
   setTimeout(()=>{ document.addEventListener("mousedown", onOutsideClickForCalendar, true); }, 0);
 }
@@ -2004,10 +2015,18 @@ function openTimePicker(anchorEl, currentValue, opts){
   const rect = anchorEl.getBoundingClientRect();
   let left = rect.left;
   if(left + popupWidth > window.innerWidth - 8){ left = window.innerWidth - popupWidth - 8; }
-  popup.style.top = `${rect.bottom + 6}px`;
   popup.style.left = `${Math.max(8,left)}px`;
   popup.style.width = `${popupWidth}px`;
-  popup.style.maxHeight = "260px";
+  const maxPopupHeight = 260;
+  const spaceBelow = window.innerHeight - rect.bottom - 6;
+  const spaceAbove = rect.top - 8;
+  if(maxPopupHeight > spaceBelow && spaceAbove > spaceBelow){
+    popup.style.top = `${Math.max(8, rect.top - Math.min(maxPopupHeight, spaceAbove) - 6)}px`;
+    popup.style.maxHeight = `${Math.min(maxPopupHeight, spaceAbove)}px`;
+  } else {
+    popup.style.top = `${rect.bottom + 6}px`;
+    popup.style.maxHeight = `${Math.min(maxPopupHeight, Math.max(120, spaceBelow))}px`;
+  }
   popup.style.overflowY = "auto";
 
   requestAnimationFrame(()=>{
