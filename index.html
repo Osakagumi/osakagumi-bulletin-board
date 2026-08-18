@@ -408,6 +408,7 @@
   .notice-table .n-author-cell{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px;}
   .notice-table .n-author-link{color:var(--muted);text-decoration:underline;}
   .notice-table .n-author-link:hover{color:var(--brand);}
+  .notice-table .n-read-count-cell{font-size:12px;color:var(--muted);font-family:var(--mono);white-space:nowrap;text-align:center;}
   .notice-table .n-detail-btn{border:none;color:#fff;background:var(--brand);border-radius:7px;padding:6px 13px;font-size:12px;white-space:nowrap;}
   .notice-table .n-detail-btn:hover{background:var(--brand-dark);}
   @media (max-width:720px){
@@ -422,7 +423,8 @@
     .notice-table .n-title-cell{ order:1; width:100%; font-size:15px; font-weight:700; white-space:normal; margin-bottom:6px; }
     .notice-table .n-date-cell{ order:2; }
     .notice-table .n-author-cell{ order:3; margin-left:8px; max-width:none; white-space:normal; overflow:visible; text-overflow:clip; }
-    .notice-table td:last-child{ order:4; margin-left:auto; }
+    .notice-table .n-read-count-cell{ order:4; margin-left:8px; }
+    .notice-table td:last-child{ order:5; margin-left:auto; }
     .notice-table td:last-child .n-detail-btn{ padding:7px 16px; font-size:13px; }
   }
   .empty-state{padding:24px;text-align:center;color:var(--muted);font-size:13.5px;}
@@ -753,7 +755,7 @@
           <button class="btn-primary" id="notice-new-btn" style="display:none;">＋ 新規投稿</button>
         </div>
         <table class="notice-table">
-          <thead><tr><th style="width:110px;">投稿日</th><th style="width:140px;">投稿者</th><th>タイトル</th><th style="width:70px;"></th></tr></thead>
+          <thead><tr><th style="width:110px;">投稿日</th><th style="width:140px;">投稿者</th><th>タイトル</th><th style="width:90px;">既読数</th><th style="width:70px;"></th></tr></thead>
           <tbody id="notice-list"></tbody>
         </table>
       </section>
@@ -2576,7 +2578,7 @@ function renderNotices(){
   el.innerHTML = "";
   const visibleNotices = noticesAll.filter(n => !myReadNoticeIds.includes(n.id));
   if(visibleNotices.length===0){
-    el.innerHTML = `<tr><td colspan="4" class="empty-state">${noticesAll.length===0 ? "お知らせはまだありません。" : "未読のお知らせはありません。"}</td></tr>`;
+    el.innerHTML = `<tr><td colspan="5" class="empty-state">${noticesAll.length===0 ? "お知らせはまだありません。" : "未読のお知らせはありません。"}</td></tr>`;
     return;
   }
   visibleNotices.forEach(n=>{
@@ -2585,10 +2587,14 @@ function renderNotices(){
     const authorNameHtml = n.authorEmail
       ? `<a href="mailto:${escapeHtml(n.authorEmail)}" class="n-author-link">${escapeHtml(n.authorName||n.authorEmail)}</a>`
       : escapeHtml(n.authorName||"");
+    const readByAt = n.readByAt || {};
+    const readCount = Object.keys(readByAt).filter(k => k.includes("@")).length;
+    const totalCount = employeesAll.length;
     tr.innerHTML = `
       <td class="n-date-cell">${escapeHtml(tsToStr(n.createdAt))}</td>
       <td class="n-author-cell">${authorNameHtml}</td>
       <td class="n-title-cell">${escapeHtml(n.title)}</td>
+      <td class="n-read-count-cell">${readCount}/${totalCount}</td>
       <td></td>
     `;
     const detailBtn = document.createElement("button");
