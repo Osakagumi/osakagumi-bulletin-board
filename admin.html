@@ -359,7 +359,7 @@
           <button class="btn btn-danger" id="notices-bulk-delete-btn">選択したものを削除</button>
         </div>
         <table>
-          <thead><tr><th style="width:30px;"></th><th>タイトル</th><th>本文</th><th>投稿者</th><th>投稿日時</th><th>操作</th></tr></thead>
+          <thead><tr><th style="width:30px;"></th><th>タイトル</th><th>本文</th><th>投稿者</th><th>投稿日時</th><th style="width:90px;">既読数</th><th>操作</th></tr></thead>
           <tbody id="notices-admin-table-body"></tbody>
         </table>
       </div>
@@ -1190,19 +1190,23 @@ function renderNoticesAdminTable(notices){
   if(!body) return;
   body.innerHTML = "";
   if(notices.length===0){
-    body.innerHTML = `<tr><td colspan="6" class="empty">掲示中のお知らせはありません。</td></tr>`;
+    body.innerHTML = `<tr><td colspan="7" class="empty">掲示中のお知らせはありません。</td></tr>`;
     document.getElementById("notices-select-all").checked = false;
     return;
   }
+  const totalCount = employeesAll.filter(e=>!e.hidden).length;
   notices.forEach(n=>{
     const tr = document.createElement("tr");
     const bodyPreview = (n.body||"").length > 40 ? n.body.slice(0,40)+"…" : (n.body||"");
+    const readByAt = n.readByAt || {};
+    const readCount = Object.keys(readByAt).filter(k => k.includes("@")).length;
     tr.innerHTML = `
       <td><input type="checkbox" class="notice-row-check" data-id="${n.id}" style="width:auto;"${selectedNoticeIds.has(n.id) ? " checked" : ""}></td>
       <td>${escapeHtml(n.title||"")}</td>
       <td style="color:var(--muted);max-width:260px;">${escapeHtml(bodyPreview)}</td>
       <td>${escapeHtml(n.authorName||n.authorEmail||"")}</td>
       <td style="font-size:12px;color:var(--muted);">${escapeHtml(tsToStr(n.createdAt))}</td>
+      <td style="font-size:12px;color:var(--muted);white-space:nowrap;">${readCount}/${totalCount}</td>
       <td class="actions"></td>
     `;
     tr.querySelector(".notice-row-check").addEventListener("change", (e)=>{
@@ -1858,6 +1862,7 @@ function initEmployeesListener(){
     renderPosters(lastPosterEmails);
     renderWbEditors(lastWbEditorEmails);
     renderCalendarEditors(lastCalEditorEmails);
+    renderNoticesAdminTable(noticesAllAdmin);
   });
 }
 function departmentSortIndex(id){
