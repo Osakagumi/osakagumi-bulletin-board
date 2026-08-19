@@ -1566,17 +1566,16 @@ function renderDashboard(){
     badge.title = "クリックして行き先を変更";
     badge.addEventListener("click", ()=> openWbModal(currentUser.email));
     row.appendChild(badge);
-    if(tlText){
-      const tlEl = document.createElement("span");
-      tlEl.style.cssText = "font-size:12px;color:var(--danger);font-weight:700;";
-      tlEl.textContent = tlText;
-      row.appendChild(tlEl);
-    }
     wbBody.appendChild(row);
-    if(baseNote){
+    const combinedNote = [tlText, baseNote].filter(Boolean).join("　");
+    if(combinedNote){
       const noteEl = document.createElement("div");
       noteEl.style.cssText = "font-size:12.5px;color:var(--muted);margin-top:4px;";
-      noteEl.textContent = baseNote;
+      if(tlText){
+        noteEl.innerHTML = `<span style="color:var(--danger);font-weight:700;">${escapeHtml(tlText)}</span>${baseNote ? "　"+escapeHtml(baseNote) : ""}`;
+      } else {
+        noteEl.textContent = combinedNote;
+      }
       wbBody.appendChild(noteEl);
     }
   }
