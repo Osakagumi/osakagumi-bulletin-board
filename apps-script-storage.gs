@@ -57,7 +57,11 @@ function handleUpload(body) {
   var file = folder.createFile(blob);
   // リンクを知っている全員が閲覧できるようにする
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-  return jsonResponse({ fileId: file.getId(), webViewLink: file.getUrl() });
+  // file.getUrl() が返す形式（drive.google.com/file/d/.../view）は、
+  // iPhoneでタップするとGoogleドライブアプリに横取りされ、閉じた後もアプリが
+  // 前面に残ってしまうことがある。かわりに、ブラウザで直接開ける形式のURLを返す。
+  var directUrl = "https://drive.google.com/uc?id=" + file.getId();
+  return jsonResponse({ fileId: file.getId(), webViewLink: directUrl });
 }
 
 function handleDelete(body) {
