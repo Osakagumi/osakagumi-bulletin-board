@@ -5046,7 +5046,7 @@ document.getElementById("sp-cancel-btn")?.addEventListener("click", ()=>{
 
 // フォームの内容を検証し、問題なければ {typeId, type, count, date, siteName, orderer} を返す。
 // 問題があればエラーメッセージを表示して null を返す。
-function validateSpForm(){
+function validateSpForm(excludeTxId){
   const errEl = document.getElementById("sp-error");
   errEl.textContent = "";
   const date = spSelectedDate;
@@ -5060,8 +5060,8 @@ function validateSpForm(){
   if(!typeId){ errEl.textContent = "鉄板の種類を登録してください（管理者にご連絡ください）。"; return null; }
   if(!siteName){ errEl.textContent = "現場名を入力してください。"; return null; }
   if(spSelectedType==="return"){
-    // 編集中の場合は、その記録自身の分を除いた残高と比較する
-    const holding = getSiteHoldings(spEditingTxId).find(h=>h.siteName===siteName);
+    // 更新（確定）の場合はその記録自身の分を除いた残高、複写（新規追加）の場合は元の記録を残したままなので除外しない
+    const holding = getSiteHoldings(excludeTxId).find(h=>h.siteName===siteName);
     const outstanding = holding ? (holding.byType.find(x=>x.typeId===typeId)?.count || 0) : 0;
     if(count > outstanding){ errEl.textContent = `返却枚数が貸出中の枚数（${outstanding}枚）を超えています。`; return null; }
   }
@@ -5078,7 +5078,7 @@ async function createSpTransaction(fields){
 }
 
 document.getElementById("sp-save-btn")?.addEventListener("click", async ()=>{
-  const fields = validateSpForm();
+  const fields = validateSpForm(spEditingTxId);
   if(!fields) return;
   const errEl = document.getElementById("sp-error");
   try{
@@ -5096,7 +5096,7 @@ document.getElementById("sp-save-btn")?.addEventListener("click", async ()=>{
 });
 // 複写：編集中の内容をもとに、既存の記録は変更せず「新しい記録」として保存する
 document.getElementById("sp-duplicate-btn")?.addEventListener("click", async ()=>{
-  const fields = validateSpForm();
+  const fields = validateSpForm(null);
   if(!fields) return;
   const errEl = document.getElementById("sp-error");
   try{
