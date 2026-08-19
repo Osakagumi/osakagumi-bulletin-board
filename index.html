@@ -159,9 +159,10 @@
   }
 
   /* ダッシュボード */
-  .dash-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;}
-  #dash-card-calendar{grid-column:span 2;min-width:0;}
-  @media (max-width:640px){ #dash-card-calendar{grid-column:span 1;} }
+  .dash-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start;}
+  #dash-card-safety{grid-column:1/-1;}
+  .dash-col{display:flex;flex-direction:column;gap:14px;min-width:0;}
+  @media (max-width:720px){ .dash-grid{grid-template-columns:1fr;} }
   .dash-cal-month{margin:0;border:none;padding:0;background:none;}
   .dash-cal-month .cal-month-head{margin-bottom:8px;}
   .dash-card{background:var(--surface);border:1.5px solid var(--line);border-radius:12px;padding:16px;}
@@ -182,6 +183,8 @@
   .dash-stat span{font-size:11px;color:var(--muted);}
   .dash-btn{display:inline-block;margin-top:8px;border:none;background:var(--brand);color:#fff;border-radius:8px;padding:8px 16px;font-size:12.5px;font-weight:700;cursor:pointer;}
   .dash-btn:hover{background:var(--brand-dark);}
+  .dash-wb-badge{display:inline-block;padding:5px 14px;border-radius:14px;font-size:13px;font-weight:700;color:#fff;white-space:nowrap;cursor:pointer;}
+  .dash-wb-badge:hover{opacity:0.85;box-shadow:0 0 0 2px rgba(0,0,0,0.08);}
 
   main{flex:1;padding:16px;max-width:960px;width:100%;margin:0 auto;}
 
@@ -840,40 +843,44 @@
             <h3>⚠ 安否確認</h3>
             <div id="dash-safety-body"></div>
           </div>
-          <div class="dash-card">
-            <div class="dash-card-head">
-              <h3>お知らせ</h3>
-              <span class="dash-card-link" id="dash-notices-link">お知らせを見る →</span>
+          <div class="dash-col dash-col-left">
+            <div class="dash-card">
+              <div class="dash-card-head">
+                <h3>お知らせ</h3>
+                <span class="dash-card-link" id="dash-notices-link">お知らせを見る →</span>
+              </div>
+              <div id="dash-notices-body"></div>
             </div>
-            <div id="dash-notices-body"></div>
+            <div class="dash-card" id="dash-card-calendar">
+              <div class="dash-card-head">
+                <h3>カレンダー</h3>
+                <span class="dash-card-link" id="dash-calendar-link">カレンダーを見る →</span>
+              </div>
+              <div id="dash-calendar-body"></div>
+            </div>
           </div>
-          <div class="dash-card">
-            <div class="dash-card-head">
-              <h3>本日の行き先</h3>
-              <span class="dash-card-link" id="dash-wb-link">行き先を見る →</span>
+          <div class="dash-col dash-col-right">
+            <div class="dash-card">
+              <div class="dash-card-head">
+                <h3>本日の行き先</h3>
+                <span class="dash-card-link" id="dash-wb-link">行き先を見る →</span>
+              </div>
+              <div id="dash-wb-body"></div>
             </div>
-            <div id="dash-wb-body"></div>
-          </div>
-          <div class="dash-card">
-            <div class="dash-card-head">
-              <h3>今後の自分の予約</h3>
-              <span class="dash-card-link" id="dash-reserve-link">予約を見る →</span>
+            <div class="dash-card">
+              <div class="dash-card-head">
+                <h3>今後の自分の予約</h3>
+                <span class="dash-card-link" id="dash-reserve-link">予約を見る →</span>
+              </div>
+              <div id="dash-reserve-body"></div>
             </div>
-            <div id="dash-reserve-body"></div>
-          </div>
-          <div class="dash-card">
-            <div class="dash-card-head">
-              <h3>自分の資機材</h3>
-              <span class="dash-card-link" id="dash-checkout-link">資機材を見る →</span>
+            <div class="dash-card">
+              <div class="dash-card-head">
+                <h3>自分の資機材</h3>
+                <span class="dash-card-link" id="dash-checkout-link">資機材を見る →</span>
+              </div>
+              <div id="dash-checkout-body"></div>
             </div>
-            <div id="dash-checkout-body"></div>
-          </div>
-          <div class="dash-card" id="dash-card-calendar">
-            <div class="dash-card-head">
-              <h3>カレンダー</h3>
-              <span class="dash-card-link" id="dash-calendar-link">カレンダーを見る →</span>
-            </div>
-            <div id="dash-calendar-body"></div>
           </div>
         </div>
       </section>
@@ -1540,7 +1547,7 @@ function renderDashboard(){
     });
   }
 
-  // ---- 自分の行き先（その場で修正可能） ----
+  // ---- 自分の行き先（バッジをクリックでその場で修正） ----
   const wbBody = document.getElementById("dash-wb-body");
   wbBody.innerHTML = "";
   const me = employeesAll.find(e=>(e.email||"").toLowerCase()===(currentUser.email||"").toLowerCase()) || { email: currentUser.email };
@@ -1552,24 +1559,27 @@ function renderDashboard(){
     const { tlText, baseNote } = getWbNoteLines(me);
     const row = document.createElement("div");
     row.style.cssText = "display:flex;align-items:center;gap:10px;margin-bottom:4px;";
-    row.innerHTML = `
-      <span style="display:inline-block;padding:5px 14px;border-radius:14px;font-size:13px;font-weight:700;color:#fff;background:${st ? st.color : "#9CA3AF"};white-space:nowrap;">${st ? escapeHtml(st.name) : "未設定"}</span>
-      ${tlText ? `<span style="font-size:12px;color:var(--danger);font-weight:700;">${escapeHtml(tlText)}</span>` : ""}
-    `;
+    const badge = document.createElement("span");
+    badge.className = "dash-wb-badge";
+    badge.style.background = st ? st.color : "#9CA3AF";
+    badge.textContent = st ? st.name : "未設定";
+    badge.title = "クリックして行き先を変更";
+    badge.addEventListener("click", ()=> openWbModal(currentUser.email));
+    row.appendChild(badge);
+    if(tlText){
+      const tlEl = document.createElement("span");
+      tlEl.style.cssText = "font-size:12px;color:var(--danger);font-weight:700;";
+      tlEl.textContent = tlText;
+      row.appendChild(tlEl);
+    }
     wbBody.appendChild(row);
     if(baseNote){
       const noteEl = document.createElement("div");
-      noteEl.style.cssText = "font-size:12.5px;color:var(--muted);margin-bottom:8px;";
+      noteEl.style.cssText = "font-size:12.5px;color:var(--muted);margin-top:4px;";
       noteEl.textContent = baseNote;
       wbBody.appendChild(noteEl);
     }
   }
-  const wbEditBtn = document.createElement("button");
-  wbEditBtn.className = "dash-btn";
-  wbEditBtn.style.marginTop = "8px";
-  wbEditBtn.textContent = "自分の行き先を変更";
-  wbEditBtn.addEventListener("click", ()=> openWbModal(currentUser.email));
-  wbBody.appendChild(wbEditBtn);
 
   // ---- 今後の自分の予約 ----
   const resBody = document.getElementById("dash-reserve-body");
