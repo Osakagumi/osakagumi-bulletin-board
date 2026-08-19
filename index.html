@@ -996,13 +996,27 @@
       </div>
       <div class="field" id="notice-send-email-row" style="display:flex;align-items:center;gap:6px;">
         <input type="checkbox" id="notice-send-email" checked style="width:auto;">
-        <label id="notice-send-email-label" style="margin:0;font-size:12.5px;color:var(--text);">社員全員に同じ内容をメールでも送信する</label>
+        <label id="notice-send-email-label" style="margin:0;font-size:12.5px;color:var(--text);">社員全員に同じ内容をメールでも送信する（自分のメールソフトが起動します）</label>
       </div>
       <div class="modal-err" id="notice-error"></div>
       <div id="notice-send-status" style="font-size:12px;color:var(--muted);margin-top:6px;"></div>
       <div class="row-btns">
         <button class="btn-ghost" id="notice-cancel" style="border:1px solid var(--line);">キャンセル</button>
         <button class="btn-primary" id="notice-submit">投稿する</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ お知らせメール送信（mailto・分割送信） ============ -->
+  <div class="modal-overlay" id="notice-mailto-modal">
+    <div class="modal">
+      <h3>メールを送信</h3>
+      <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
+        お知らせの投稿・更新は完了しています。下のボタンを順番に押すと、その都度メールソフトが起動し、BCCで宛先が入力された状態になります。開いた画面で内容をご確認のうえ、送信してください。
+      </p>
+      <div id="notice-mailto-batches"></div>
+      <div class="row-btns">
+        <button class="btn-primary" id="notice-mailto-close">閉じる</button>
       </div>
     </div>
   </div>
@@ -3237,7 +3251,7 @@ function openNoticeEditModal(n){
   document.getElementById("notice-modal-title").textContent = "お知らせを編集";
   document.getElementById("notice-send-email-row").style.display = "flex";
   document.getElementById("notice-send-email").checked = false;
-  document.getElementById("notice-send-email-label").textContent = "更新内容を社員全員にメールでも送信する";
+  document.getElementById("notice-send-email-label").textContent = "更新内容を社員全員にメールでも送信する（自分のメールソフトが起動します）";
   document.getElementById("notice-title").value = n.title || "";
   document.getElementById("notice-body").value = n.body || "";
   document.getElementById("notice-attachment-url").value = n.attachmentUrl || "";
@@ -3277,10 +3291,12 @@ document.getElementById("notice-submit").addEventListener("click", async ()=>{
     }catch(e){ /* 取得失敗時はキャッシュのまま表示を続行 */ }
     recipients = resolveMailRecipients(employeesAll);
     const overrideNotice = isMailOverrideActive()
-      ? `\n\n※現在メール送信先が「${MAIL_SEND_TARGET}」に上書き設定されているため、上記の人数・宛先のみに送信されます（全社員には送信されません）。`
+      ? `\n\n※現在メール送信先が「${MAIL_SEND_TARGET}」に上書き設定されているため、上記の人数・宛先のみが対象になります（全社員には送信されません）。`
       : "";
+    const batchCount = Math.ceil(recipients.length / NOTICE_MAIL_BATCH_SIZE) || 0;
+    const batchNotice = batchCount > 1 ? `\n（100人ずつ、${batchCount}回に分けてメールソフトを起動します）` : "";
     const actionLabel = editingNoticeId ? "更新し" : "投稿し";
-    if(!confirm(`このお知らせを${actionLabel}、${recipients.length} 名にメールも送信します。${overrideNotice}\n\nよろしいですか？`)) return;
+    if(!confirm(`このお知らせを${actionLabel}、${recipients.length} 名分の宛先でメールソフトを起動します。${batchNotice}${overrideNotice}\n\nよろしいですか？`)) return;
   }
 
   if(editingNoticeId){
@@ -3294,10 +3310,10 @@ document.getElementById("notice-submit").addEventListener("click", async ()=>{
         try{ await deleteFileFromStorage(originalAttachmentStoragePath); }catch(e){ /* 削除に失敗しても更新自体は成功として扱う */ }
       }
       toast("お知らせを更新しました。");
-      if(sendEmail){
-        await sendNoticeEmails(title, body, attachmentUrl);
-      }
       noticeModal.classList.remove("show");
+      if(sendEmail){
+        openNoticeMailtoModal(recipients, title, body, attachmentUrl);
+      }
     }catch(e){
       errEl.textContent = "更新に失敗しました。権限をご確認ください。";
     }
@@ -3314,49 +3330,58 @@ document.getElementById("notice-submit").addEventListener("click", async ()=>{
     });
     toast("お知らせを投稿しました。");
     cleanupOldNotices();
-    if(sendEmail){
-      await sendNoticeEmails(title, body, attachmentUrl);
-    }
     noticeModal.classList.remove("show");
+    if(sendEmail){
+      openNoticeMailtoModal(recipients, title, body, attachmentUrl);
+    }
   }catch(e){
     errEl.textContent = "投稿に失敗しました。権限をご確認ください。";
   }
 });
 
-async function sendNoticeEmails(title, body, attachmentUrl){
-  const statusEl = document.getElementById("notice-send-status");
-  const noticeTemplateReady = emailjsReady && EMAILJS_CONFIG.noticeTemplateId && !EMAILJS_CONFIG.noticeTemplateId.startsWith("YOUR_");
-  if(!noticeTemplateReady){
-    statusEl.textContent = "（EmailJSのお知らせ用テンプレートが未設定のため、メール送信はスキップされました）";
-    return;
-  }
-  const recipients = resolveMailRecipients(employeesAll);
+// mailtoのURL長制限を避けるため、宛先を100人ずつに分割して送信ボタンを表示する
+const NOTICE_MAIL_BATCH_SIZE = 100;
+function openNoticeMailtoModal(recipients, title, body, attachmentUrl){
+  const wrap = document.getElementById("notice-mailto-batches");
+  wrap.innerHTML = "";
   if(recipients.length===0){
-    statusEl.textContent = "送信先の社員データがありません。";
+    wrap.innerHTML = `<div style="font-size:12.5px;color:var(--muted);">送信先の社員データがありません。</div>`;
+    document.getElementById("notice-mailto-modal").classList.add("show");
     return;
   }
-  let ok = 0, fail = 0;
   const link = indexPageUrl();
-  for(const emp of recipients){
-    try{
-      await window.emailjs.send(EMAILJS_CONFIG.serviceId, EMAILJS_CONFIG.noticeTemplateId, {
-        to_email: emp.email,
-        to_name: emp.name || emp.email,
-        title, message: body,
-        author_name: myDisplayName(),
-        author_email: currentUser.email,
-        attachment_link: attachmentUrl || "",
-        link
-      });
-      ok++;
-    }catch(e){
-      fail++;
-    }
-    statusEl.textContent = `メール送信中… ${ok+fail}/${recipients.length}（成功${ok}・失敗${fail}）`;
-    await new Promise(r=>setTimeout(r, 300));
+  const bodyLines = [
+    body,
+    "",
+    attachmentUrl ? `添付・リンク：${attachmentUrl}` : "",
+    `ポータルサイト：${link}`
+  ].filter(Boolean).join("\n");
+
+  const batches = [];
+  for(let i=0; i<recipients.length; i+=NOTICE_MAIL_BATCH_SIZE){
+    batches.push(recipients.slice(i, i+NOTICE_MAIL_BATCH_SIZE));
   }
-  statusEl.textContent = `メール送信完了：${recipients.length}件中 ${ok}件成功${fail>0 ? `（${fail}件失敗）` : ""}`;
+  batches.forEach((batch, i)=>{
+    const from = i*NOTICE_MAIL_BATCH_SIZE + 1;
+    const to = from + batch.length - 1;
+    const mailtoUrl = `mailto:?bcc=${batch.map(e=>encodeURIComponent(e.email)).join(",")}&subject=${encodeURIComponent(title)}&body=${encodeURIComponent(bodyLines)}`;
+    const row = document.createElement("div");
+    row.style.cssText = "margin-bottom:8px;";
+    const a = document.createElement("a");
+    a.className = "dash-btn";
+    a.style.cssText = "display:inline-block;text-decoration:none;";
+    a.href = mailtoUrl;
+    a.textContent = batches.length > 1
+      ? `${i+1}便目を送信する（${from}〜${to}人目、計${batch.length}名）`
+      : `メールを送信する（${batch.length}名）`;
+    row.appendChild(a);
+    wrap.appendChild(row);
+  });
+  document.getElementById("notice-mailto-modal").classList.add("show");
 }
+document.getElementById("notice-mailto-close").addEventListener("click", ()=>{
+  document.getElementById("notice-mailto-modal").classList.remove("show");
+});
 
 /* =========================================================
    お知らせ：ファイル添付（Googleドライブへアップロード）
