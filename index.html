@@ -1330,6 +1330,7 @@ onAuthStateChanged(auth, async (user)=>{
     initCategoriesListener();
     initEquipmentListener();
     initMyReservationsListener();
+    cleanupPastReservations();
     initNoticesListener();
     cleanupOldNotices();
     initNoticeReadsListener();
@@ -2560,6 +2561,29 @@ function initNoticesListener(){
 }
 
 let noticeCleanupRunning = false;
+// 予約日が過去日になった予約を自動削除する（本人の予約は誰でも、それ以外は管理者のみ削除できる）
+let reservationCleanupRunning = false;
+async function cleanupPastReservations(){
+  if(reservationCleanupRunning) return;
+  reservationCleanupRunning = true;
+  try{
+    const today = todayStr();
+    const snap = await getDocs(query(collection(db,"reservations"), where("date","<", today)));
+    if(snap.empty) return;
+    const targets = isAdmin
+      ? snap.docs
+      : snap.docs.filter(d => d.data().userId === currentUser.uid);
+    if(targets.length===0) return;
+    for(const d of targets){
+      try{ await deleteDoc(doc(db,"reservations", d.id)); }catch(e){ /* 1件失敗しても他の削除は続行 */ }
+    }
+  }catch(e){
+    console.error("[予約自動削除エラー]", e);
+  }finally{
+    reservationCleanupRunning = false;
+  }
+}
+
 async function cleanupOldNotices(){
   if(noticeCleanupRunning) return;
   noticeCleanupRunning = true;
