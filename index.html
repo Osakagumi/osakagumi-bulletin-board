@@ -228,7 +228,8 @@
   .sp-history-table th, .sp-history-table td{border:1px solid var(--line);padding:8px 12px;text-align:left;}
   .sp-history-table th{background:#F8FAFC;font-weight:700;}
   .sp-history-table .sp-nowrap, .sp-history-table th.sp-nowrap{white-space:nowrap;}
-  .sp-type-badge{display:inline-block;padding:2px 8px;border-radius:10px;background:#EEF3FA;color:var(--brand-dark);font-size:11.5px;font-weight:700;}
+  .sp-type-badge{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;}
+  .sp-type-dot{width:7px;height:7px;border-radius:50%;display:inline-block;flex-shrink:0;}
   .checkout-card{background:var(--surface);border:1.5px solid var(--line);border-radius:10px;padding:14px;}
   .checkout-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;}
   .checkout-head .name{font-size:14px;font-weight:700;}
@@ -4781,6 +4782,12 @@ function spTypeName(typeId){
   const t = spPlateTypesAll.find(t=>t.id===typeId);
   return t ? t.name : typeId;
 }
+// 鉄板の種類ごとに、行き先のカテゴリと同じ「ドット＋文字色」方式で色分けする
+const SP_TYPE_COLORS = ["#1C5AA5","#C0392B","#2E9E8F","#8E44AD","#D68910","#16A085","#B03A2E","#2874A6"];
+function spTypeColor(typeId){
+  const idx = spPlateTypesAll.findIndex(t=>t.id===typeId);
+  return idx===-1 ? "#6B7280" : SP_TYPE_COLORS[idx % SP_TYPE_COLORS.length];
+}
 function renderSteelPlateTxList(){
   const tbody = document.getElementById("sp-tx-list");
   if(!tbody) return;
@@ -4794,7 +4801,7 @@ function renderSteelPlateTxList(){
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td class="sp-nowrap">${formatDateJP(tx.date)}</td>
-      <td class="sp-nowrap"><span class="sp-type-badge">${spTypeName(tx.typeId)}</span></td>
+      <td class="sp-nowrap"><span class="sp-type-badge" style="color:${spTypeColor(tx.typeId)};"><span class="sp-type-dot" style="background:${spTypeColor(tx.typeId)};"></span>${spTypeName(tx.typeId)}</span></td>
       <td>${tx.siteName || ""}</td>
       <td class="sp-nowrap">${tx.orderer || ""}</td>
       <td class="sp-nowrap">${tx.type==="lend" ? (tx.count+" 枚") : ""}</td>
