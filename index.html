@@ -442,6 +442,10 @@
   .notice-table .n-detail-btn:hover{background:var(--brand-dark);}
   .notice-table .n-keepvisible-btn{border:1px solid var(--line);background:#fff;color:var(--muted);border-radius:7px;padding:6px 10px;font-size:11.5px;white-space:nowrap;margin-left:6px;cursor:pointer;}
   .notice-table .n-keepvisible-btn:hover{background:#F4F8FC;color:var(--brand-dark);border-color:var(--brand);}
+  .notice-table .n-status-cell{font-size:12px;font-weight:700;white-space:nowrap;}
+  .notice-table .n-status-unread{color:var(--brand-dark);}
+  .notice-table .n-status-read{color:var(--muted);}
+  .notice-table .n-status-hidden{color:#B0B7C3;}
   #notice-showall-btn.active{background:var(--brand);color:#fff;border-color:var(--brand);}
   @media (max-width:720px){
     .notice-table thead{ display:none; }
@@ -808,7 +812,7 @@
           <button class="btn-ghost" id="notice-showall-btn" style="border:1px solid var(--line);">すべて表示</button>
         </div>
         <table class="notice-table">
-          <thead><tr><th style="width:110px;">投稿日</th><th style="width:140px;">投稿者</th><th>タイトル</th><th style="width:90px;">既読数</th><th style="width:70px;"></th></tr></thead>
+          <thead><tr><th style="width:110px;">投稿日</th><th style="width:140px;">投稿者</th><th>タイトル</th><th style="width:90px;">既読数</th><th style="width:70px;" id="notice-status-th">状態</th><th style="width:70px;"></th></tr></thead>
           <tbody id="notice-list"></tbody>
         </table>
       </section>
@@ -958,6 +962,7 @@
         <div class="n-detail-actions-left" id="notice-detail-actions-left">
           <button id="notice-detail-read-hide-btn">既読にして非表示にする</button>
           <button id="notice-detail-read-keep-btn">既読にする（一覧に残す）</button>
+          <button id="notice-detail-togglevisible-btn" style="display:none;"></button>
           <button id="notice-detail-edit-btn" style="display:none;">編集</button>
           <button id="notice-detail-delete-btn" style="display:none;">削除</button>
         </div>
@@ -1123,7 +1128,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, addDoc, deleteDoc, query, where,
-  onSnapshot, orderBy, limit, documentId, arrayUnion, arrayRemove, Timestamp
+  onSnapshot, orderBy, limit, documentId, arrayUnion, arrayRemove, Timestamp, FieldPath
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig, BUSINESS_HOURS, EQUIPMENT_STATUSES, SAFETY_STATUSES, EMAILJS_CONFIG, resolveMailRecipients, isMailOverrideActive, MAIL_SEND_TARGET } from "./firebase-config.js";
 import { initStorageHelper, uploadFileToStorage, deleteFileFromStorage } from "./storage-helper.js";
@@ -2714,7 +2719,7 @@ function initNoticeReadsListener(){
 let noticeShowAllMode = false;
 document.getElementById("notice-showall-btn").addEventListener("click", ()=>{
   noticeShowAllMode = !noticeShowAllMode;
-  document.getElementById("notice-showall-btn").textContent = noticeShowAllMode ? "未読中心の表示に戻す" : "すべて表示";
+  document.getElementById("notice-showall-btn").textContent = noticeShowAllMode ? "戻る" : "すべて表示";
   document.getElementById("notice-showall-btn").classList.toggle("active", noticeShowAllMode);
   renderNotices();
 });
@@ -2736,7 +2741,7 @@ function renderNotices(){
     ? noticesAll
     : noticesAll.filter(n => !myReadNoticeIds.includes(n.id) || myKeepVisibleNoticeIds.includes(n.id));
   if(list.length===0){
-    el.innerHTML = `<tr><td colspan="5" class="empty-state">${noticesAll.length===0 ? "お知らせはまだありません。" : "未読のお知らせはありません。"}</td></tr>`;
+    el.innerHTML = `<tr><td colspan="6" class="empty-state">${noticesAll.length===0 ? "お知らせはまだありません。" : "未読のお知らせはありません。"}</td></tr>`;
     return;
   }
   list.forEach(n=>{
@@ -2750,11 +2755,13 @@ function renderNotices(){
     const readByAt = n.readByAt || {};
     const readCount = Object.keys(readByAt).filter(k => k.includes("@")).length;
     const totalCount = employeesAll.filter(e=>!e.hidden).length;
+    const statusLabel = !isRead ? "未読" : (isKeptVisible ? "既読" : "非表示");
     tr.innerHTML = `
       <td class="n-date-cell">${escapeHtml(tsToStr(n.createdAt))}</td>
       <td class="n-author-cell">${authorNameHtml}</td>
       <td class="n-title-cell">${escapeHtml(n.title)}</td>
       <td class="n-read-count-cell">${readCount}/${totalCount}</td>
+      <td class="n-status-cell n-status-${isRead ? (isKeptVisible?"read":"hidden") : "unread"}">${statusLabel}</td>
       <td></td>
     `;
     const actionsTd = tr.lastElementChild;
@@ -2763,14 +2770,6 @@ function renderNotices(){
     detailBtn.textContent = "詳細";
     detailBtn.addEventListener("click", ()=> openNoticeDetailModal(n));
     actionsTd.appendChild(detailBtn);
-    // 「すべて表示」中の既読お知らせには、通常表示に残すかどうかの切り替えを添える
-    if(noticeShowAllMode && isRead){
-      const toggleBtn = document.createElement("button");
-      toggleBtn.className = "n-keepvisible-btn";
-      toggleBtn.textContent = isKeptVisible ? "一覧から外す" : "一覧に残す（グレー表示）";
-      toggleBtn.addEventListener("click", ()=> setNoticeKeepVisible(n.id, !isKeptVisible));
-      actionsTd.appendChild(toggleBtn);
-    }
     el.appendChild(tr);
   });
 }
@@ -2793,6 +2792,15 @@ function renderNoticeDetailView(n){
   const canManage = isAdmin || n.authorEmail===currentUser.email;
   document.getElementById("notice-detail-edit-btn").style.display = canManage ? "inline-block" : "none";
   document.getElementById("notice-detail-delete-btn").style.display = canManage ? "inline-block" : "none";
+
+  // 未読なら「既読にする」の2択、既読ならこの一覧に残すかどうかの切り替えボタンを出す
+  const isRead = myReadNoticeIds.includes(n.id);
+  const isKeptVisible = myKeepVisibleNoticeIds.includes(n.id);
+  document.getElementById("notice-detail-read-hide-btn").style.display = isRead ? "none" : "inline-block";
+  document.getElementById("notice-detail-read-keep-btn").style.display = isRead ? "none" : "inline-block";
+  const toggleBtn = document.getElementById("notice-detail-togglevisible-btn");
+  toggleBtn.style.display = isRead ? "inline-block" : "none";
+  toggleBtn.textContent = isKeptVisible ? "一覧から外す（非表示にする）" : "一覧に残す（グレー表示）";
 }
 function openNoticeDetailModal(n){
   noticeDetailCurrent = n;
@@ -2802,6 +2810,12 @@ function openNoticeDetailModal(n){
 document.getElementById("notice-detail-close").addEventListener("click", ()=>{
   document.getElementById("notice-detail-modal").classList.remove("show");
 });
+document.getElementById("notice-detail-togglevisible-btn").addEventListener("click", async ()=>{
+  if(!noticeDetailCurrent) return;
+  const isKeptVisible = myKeepVisibleNoticeIds.includes(noticeDetailCurrent.id);
+  await setNoticeKeepVisible(noticeDetailCurrent.id, !isKeptVisible);
+  renderNoticeDetailView(noticeDetailCurrent);
+});
 document.getElementById("notice-detail-read-hide-btn").addEventListener("click", async ()=>{
   if(!noticeDetailCurrent) return;
   const n = noticeDetailCurrent;
@@ -2810,7 +2824,7 @@ document.getElementById("notice-detail-read-hide-btn").addEventListener("click",
       readIds: arrayUnion(n.id),
       keepVisibleIds: arrayRemove(n.id)
     }, { merge:true });
-    await updateDoc(doc(db,"announcements", n.id), { [`readByAt.${currentUser.email}`]: new Date().toISOString() });
+    await setDoc(doc(db,"announcements", n.id), { readByAt: { [currentUser.email]: new Date().toISOString() } }, { merge: true });
     document.getElementById("notice-detail-modal").classList.remove("show");
   }catch(e){
     toast("既読にできませんでした。");
@@ -2824,7 +2838,7 @@ document.getElementById("notice-detail-read-keep-btn").addEventListener("click",
       readIds: arrayUnion(n.id),
       keepVisibleIds: arrayUnion(n.id)
     }, { merge:true });
-    await updateDoc(doc(db,"announcements", n.id), { [`readByAt.${currentUser.email}`]: new Date().toISOString() });
+    await setDoc(doc(db,"announcements", n.id), { readByAt: { [currentUser.email]: new Date().toISOString() } }, { merge: true });
     document.getElementById("notice-detail-modal").classList.remove("show");
   }catch(e){
     toast("既読にできませんでした。");
