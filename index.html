@@ -3113,7 +3113,7 @@ function openNoticeReadByModal(n){
   const mailAllBtn = document.getElementById("notice-readby-mailall-btn");
   const canMailAll = (isAdmin || n.authorEmail===currentUser.email) && unreadEmails.length > 0;
   if(canMailAll){
-    mailAllBtn.href = `mailto:?bcc=${unreadEmails.map(encodeURIComponent).join(",")}&subject=${encodeURIComponent("【" + (n.title||"お知らせ") + "】をご確認ください")}`;
+    mailAllBtn.href = `mailto:?bcc=${unreadEmails.map(encodeURIComponent).join(";")}&subject=${encodeURIComponent("【" + (n.title||"お知らせ") + "】をご確認ください")}`;
     mailAllBtn.style.display = "inline-block";
   } else {
     mailAllBtn.style.display = "none";
@@ -3373,7 +3373,7 @@ function openNoticeMailtoModal(recipients, title, body, attachmentUrl){
   batches.forEach((batch, i)=>{
     const from = i*NOTICE_MAIL_BATCH_SIZE + 1;
     const to = from + batch.length - 1;
-    const mailtoUrl = `mailto:?bcc=${batch.map(e=>encodeURIComponent(e.email)).join(",")}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyLines)}`;
+    const mailtoUrl = `mailto:?bcc=${batch.map(e=>encodeURIComponent(e.email)).join(";")}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyLines)}`;
     const row = document.createElement("div");
     row.style.cssText = "margin-bottom:8px;";
     const a = document.createElement("a");
