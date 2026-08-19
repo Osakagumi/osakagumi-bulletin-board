@@ -5080,6 +5080,8 @@ async function createSpTransaction(fields){
 document.getElementById("sp-save-btn")?.addEventListener("click", async ()=>{
   const fields = validateSpForm(spEditingTxId);
   if(!fields) return;
+  const confirmMsg = spEditingTxId ? "この内容で更新しますか？" : "この内容で保存しますか？";
+  if(!confirm(confirmMsg)) return;
   const errEl = document.getElementById("sp-error");
   try{
     if(spEditingTxId){
@@ -5098,6 +5100,7 @@ document.getElementById("sp-save-btn")?.addEventListener("click", async ()=>{
 document.getElementById("sp-duplicate-btn")?.addEventListener("click", async ()=>{
   const fields = validateSpForm(null);
   if(!fields) return;
+  if(!confirm("この内容を複写して、新しい記録として登録しますか？")) return;
   const errEl = document.getElementById("sp-error");
   try{
     await createSpTransaction(fields);
