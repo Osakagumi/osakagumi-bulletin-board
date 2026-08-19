@@ -227,6 +227,9 @@
   .sp-history-table{width:100%;min-width:760px;border-collapse:collapse;font-size:13px;}
   .sp-history-table th, .sp-history-table td{border:1px solid var(--line);padding:8px 12px;text-align:left;}
   .sp-history-table th{background:#F8FAFC;font-weight:700;}
+  .sp-history-table th.sp-sortable{cursor:pointer;user-select:none;}
+  .sp-history-table th.sp-sortable:hover{background:#EEF3FA;color:var(--brand-dark);}
+  .sp-history-table .sp-sort-arrow{display:inline-block;width:12px;font-size:10px;color:var(--brand);}
   .sp-history-table .sp-nowrap, .sp-history-table th.sp-nowrap{white-space:nowrap;}
   .sp-history-table .sp-date-cell{cursor:pointer;color:var(--brand-dark);text-decoration:underline;}
   .sp-history-table .sp-date-cell:hover{color:var(--brand);}
@@ -674,7 +677,15 @@
           </div>
           <div id="sp-history-section" style="display:none;overflow-x:auto;">
             <table class="sp-history-table">
-              <thead><tr><th class="sp-nowrap">日付</th><th class="sp-nowrap">種別</th><th>現場名</th><th class="sp-nowrap">注文者</th><th class="sp-nowrap">貸出</th><th class="sp-nowrap">返却</th><th class="sp-nowrap">記録者</th></tr></thead>
+              <thead><tr id="sp-history-thead-row">
+                <th class="sp-nowrap sp-sortable" data-sortkey="date">日付<span class="sp-sort-arrow"></span></th>
+                <th class="sp-nowrap sp-sortable" data-sortkey="type">種別<span class="sp-sort-arrow"></span></th>
+                <th class="sp-sortable" data-sortkey="siteName">現場名<span class="sp-sort-arrow"></span></th>
+                <th class="sp-nowrap sp-sortable" data-sortkey="orderer">注文者<span class="sp-sort-arrow"></span></th>
+                <th class="sp-nowrap sp-sortable" data-sortkey="lend">貸出<span class="sp-sort-arrow"></span></th>
+                <th class="sp-nowrap sp-sortable" data-sortkey="return">返却<span class="sp-sort-arrow"></span></th>
+                <th class="sp-nowrap sp-sortable" data-sortkey="createdBy">記録者<span class="sp-sort-arrow"></span></th>
+              </tr></thead>
               <tbody id="sp-tx-list"></tbody>
             </table>
           </div>
@@ -4790,15 +4801,67 @@ function spTypeColor(typeId){
   const idx = spPlateTypesAll.findIndex(t=>t.id===typeId);
   return idx===-1 ? "#6B7280" : SP_TYPE_COLORS[idx % SP_TYPE_COLORS.length];
 }
+let spHistorySortKey = "date";
+let spHistorySortDir = "desc"; // "asc" | "desc"
+function spHistorySortValue(tx, key){
+  switch(key){
+    case "date": return tx.date || "";
+    case "type": return spTypeName(tx.typeId) || "";
+    case "siteName": return tx.siteName || "";
+    case "orderer": return tx.orderer || "";
+    case "lend": return tx.type==="lend" ? Number(tx.count)||0 : null;
+    case "return": return tx.type==="return" ? Number(tx.count)||0 : null;
+    case "createdBy": return tx.createdByName || tx.createdByEmail || "";
+    default: return "";
+  }
+}
+function getSortedSteelPlateTransactions(){
+  const key = spHistorySortKey;
+  const dir = spHistorySortDir==="asc" ? 1 : -1;
+  return [...spTransactionsAll].sort((a,b)=>{
+    const va = spHistorySortValue(a, key);
+    const vb = spHistorySortValue(b, key);
+    // 空欄（貸出/返却で該当しない側など）は並び順に関係なく常に最後にする
+    if(va===null && vb===null) return 0;
+    if(va===null) return 1;
+    if(vb===null) return -1;
+    if(typeof va==="number" && typeof vb==="number") return (va-vb)*dir;
+    return String(va).localeCompare(String(vb), "ja") * dir;
+  });
+}
+function renderSpHistorySortIndicators(){
+  document.querySelectorAll("#sp-history-thead-row .sp-sortable").forEach(th=>{
+    const arrowEl = th.querySelector(".sp-sort-arrow");
+    if(th.dataset.sortkey===spHistorySortKey){
+      arrowEl.textContent = spHistorySortDir==="asc" ? "▲" : "▼";
+    } else {
+      arrowEl.textContent = "";
+    }
+  });
+}
+document.querySelectorAll("#sp-history-thead-row .sp-sortable").forEach(th=>{
+  th.addEventListener("click", ()=>{
+    const key = th.dataset.sortkey;
+    if(spHistorySortKey===key){
+      spHistorySortDir = spHistorySortDir==="asc" ? "desc" : "asc";
+    } else {
+      spHistorySortKey = key;
+      spHistorySortDir = "asc";
+    }
+    renderSteelPlateTxList();
+  });
+});
+
 function renderSteelPlateTxList(){
   const tbody = document.getElementById("sp-tx-list");
   if(!tbody) return;
+  renderSpHistorySortIndicators();
   tbody.innerHTML = "";
   if(spTransactionsAll.length===0){
     tbody.innerHTML = `<tr><td colspan="7" style="color:var(--muted);text-align:center;padding:16px;">まだ記録がありません。</td></tr>`;
     return;
   }
-  spTransactionsAll.forEach(tx=>{
+  getSortedSteelPlateTransactions().forEach(tx=>{
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td class="sp-nowrap sp-date-cell">${formatDateJP(tx.date)}</td>
