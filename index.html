@@ -982,6 +982,7 @@
       <h3 id="notice-readby-title">既読者一覧</h3>
       <div id="notice-readby-list" style="max-height:320px;overflow-y:auto;"></div>
       <div class="row-btns">
+        <a class="btn-ghost" id="notice-readby-mailall-btn" style="border:1px solid var(--line);display:none;text-align:center;text-decoration:none;">全未読者にメール送信</a>
         <button class="btn-ghost" id="notice-readby-close" style="border:1px solid var(--line);">閉じる</button>
       </div>
     </div>
@@ -2824,7 +2825,11 @@ function buildReadByModalHtml(n, empList){
   if(unreadEmployees.length===0){
     html += `<div style="font-size:12.5px;color:var(--muted);padding:4px 0;">未読者はいません。</div>`;
   } else {
-    html += unreadEmployees.map(e=>`<div style="padding:7px 2px;border-bottom:1px solid var(--line);font-size:13px;color:var(--muted);">${escapeHtml(e.name||e.email)}</div>`).join("");
+    html += unreadEmployees.map(e=>`
+      <div style="padding:7px 2px;border-bottom:1px solid var(--line);font-size:13px;">
+        <a href="mailto:${escapeHtml(e.email||"")}" style="color:var(--muted);text-decoration:underline;">${escapeHtml(e.name||e.email)}</a>
+      </div>
+    `).join("");
   }
   return html;
 }
@@ -2834,6 +2839,22 @@ function openNoticeReadByModal(n){
   const titleEl = document.getElementById("notice-readby-title");
   titleEl.textContent = "既読状況";
   listEl.innerHTML = buildReadByModalHtml(n, employeesAll);
+
+  const readByAt = n.readByAt || {};
+  const readEmails = Object.keys(readByAt).filter(k => k.includes("@"));
+  const unreadEmails = employeesAll
+    .filter(e=>!e.hidden)
+    .filter(e => !readEmails.some(re=>re.toLowerCase()===(e.email||"").toLowerCase()))
+    .map(e=>e.email)
+    .filter(Boolean);
+  const mailAllBtn = document.getElementById("notice-readby-mailall-btn");
+  if(unreadEmails.length > 0){
+    mailAllBtn.href = `mailto:?bcc=${unreadEmails.map(encodeURIComponent).join(",")}&subject=${encodeURIComponent("【" + (n.title||"お知らせ") + "】をご確認ください")}`;
+    mailAllBtn.style.display = "inline-block";
+  } else {
+    mailAllBtn.style.display = "none";
+  }
+
   document.getElementById("notice-readby-modal").classList.add("show");
 }
 document.getElementById("notice-detail-readby-btn").addEventListener("click", ()=>{
