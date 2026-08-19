@@ -1558,7 +1558,7 @@ function renderDashboard(){
     const st = myEffStatus ? wbStatusInfo(myEffStatus) : null;
     const { tlText, baseNote } = getWbNoteLines(me);
     const row = document.createElement("div");
-    row.style.cssText = "display:flex;align-items:center;gap:10px;margin-bottom:4px;";
+    row.style.cssText = "display:flex;align-items:center;gap:10px;margin-bottom:4px;flex-wrap:wrap;";
     const badge = document.createElement("span");
     badge.className = "dash-wb-badge";
     badge.style.background = st ? st.color : "#9CA3AF";
@@ -1566,18 +1566,18 @@ function renderDashboard(){
     badge.title = "クリックして行き先を変更";
     badge.addEventListener("click", ()=> openWbModal(currentUser.email));
     row.appendChild(badge);
-    wbBody.appendChild(row);
     const combinedNote = [tlText, baseNote].filter(Boolean).join("　");
     if(combinedNote){
-      const noteEl = document.createElement("div");
-      noteEl.style.cssText = "font-size:12.5px;color:var(--muted);margin-top:4px;";
+      const noteEl = document.createElement("span");
+      noteEl.style.cssText = "font-size:12.5px;color:var(--muted);";
       if(tlText){
         noteEl.innerHTML = `<span style="color:var(--danger);font-weight:700;">${escapeHtml(tlText)}</span>${baseNote ? "　"+escapeHtml(baseNote) : ""}`;
       } else {
         noteEl.textContent = combinedNote;
       }
-      wbBody.appendChild(noteEl);
+      row.appendChild(noteEl);
     }
+    wbBody.appendChild(row);
   }
 
   // ---- 今後の自分の予約 ----
