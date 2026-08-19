@@ -3351,6 +3351,7 @@ function openNoticeMailtoModal(recipients, title, body, attachmentUrl){
   }
   const link = indexPageUrl();
   const subject = `【社内ポータル】 ${title}`;
+  const footerLine = "=".repeat(49);
   const bodyLines = [
     "各位",
     "",
@@ -3359,9 +3360,10 @@ function openNoticeMailtoModal(recipients, title, body, attachmentUrl){
     `【投稿者】 ${myDisplayName()}　${currentUser.email}`,
     `【添　付】 ${attachmentUrl || ""}`,
     "",
-    "-----------------------------",
-    `大坂組社内ポータルサイト　${link}`,
-    "-----------------------------"
+    footerLine,
+    "大坂組社内ポータルサイト – お知らせ",
+    link,
+    footerLine
   ].join("\n");
 
   const batches = [];
