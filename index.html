@@ -228,8 +228,7 @@
   .sp-history-table th, .sp-history-table td{border:1px solid var(--line);padding:8px 12px;text-align:left;}
   .sp-history-table th{background:#F8FAFC;font-weight:700;}
   .sp-history-table .sp-nowrap, .sp-history-table th.sp-nowrap{white-space:nowrap;}
-  .sp-type-badge{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;}
-  .sp-type-dot{width:7px;height:7px;border-radius:50%;display:inline-block;flex-shrink:0;}
+  .sp-type-badge{display:inline-block;padding:4px 10px;border-radius:14px;font-size:11.5px;font-weight:700;color:#fff;white-space:nowrap;}
   .checkout-card{background:var(--surface);border:1.5px solid var(--line);border-radius:10px;padding:14px;}
   .checkout-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;}
   .checkout-head .name{font-size:14px;font-weight:700;}
@@ -602,7 +601,7 @@
       <button class="tab-btn active" data-view="notices">お知らせ</button>
       <button class="tab-btn" data-view="whereabouts">行き先</button>
       <button class="tab-btn" data-view="reserve">予約</button>
-      <button class="tab-btn" data-view="checkout">貸出</button>
+      <button class="tab-btn" data-view="checkout">資機材</button>
       <button class="tab-btn" data-view="safety" style="display:none;">安否確認</button>
       <button class="tab-btn" data-view="calendar">カレンダー</button>
       <button class="tab-reorder-btn" id="tab-reorder-toggle" title="タブの並び替え">並び替え</button>
@@ -648,7 +647,7 @@
       </section>
       <div id="reserve-signage-error" style="display:none;padding:40px;text-align:center;font-size:16px;color:var(--muted);"></div>
 
-      <!-- ---- 貸出（測量機器・ドローン／敷鉄板） ---- -->
+      <!-- ---- 資機材（測量機器・ドローン／敷鉄板） ---- -->
       <section id="view-checkout" style="display:none;">
         <div class="cat-row" id="checkout-cat-row"></div>
         <div id="checkout-equipment-panel">
@@ -4801,7 +4800,7 @@ function renderSteelPlateTxList(){
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td class="sp-nowrap">${formatDateJP(tx.date)}</td>
-      <td class="sp-nowrap"><span class="sp-type-badge" style="color:${spTypeColor(tx.typeId)};"><span class="sp-type-dot" style="background:${spTypeColor(tx.typeId)};"></span>${spTypeName(tx.typeId)}</span></td>
+      <td class="sp-nowrap"><span class="sp-type-badge" style="background:${spTypeColor(tx.typeId)};">${spTypeName(tx.typeId)}</span></td>
       <td>${tx.siteName || ""}</td>
       <td class="sp-nowrap">${tx.orderer || ""}</td>
       <td class="sp-nowrap">${tx.type==="lend" ? (tx.count+" 枚") : ""}</td>
