@@ -811,8 +811,10 @@
       <section id="view-notices">
         <div class="section-toolbar">
           <button class="btn-primary" id="notice-new-btn" style="display:none;">＋ 新規投稿</button>
-          <button class="btn-ghost" id="notice-hide-read-btn" style="border:1px solid var(--line);display:none;">既読分を非表示</button>
-          <button class="btn-ghost" id="notice-showall-btn" style="border:1px solid var(--line);">すべて表示</button>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-left:auto;">
+            <button class="btn-ghost" id="notice-hide-read-btn" style="border:1px solid var(--line);display:none;">既読分を非表示</button>
+            <button class="btn-ghost" id="notice-showall-btn" style="border:1px solid var(--line);">すべて表示</button>
+          </div>
         </div>
         <table class="notice-table">
           <thead><tr><th style="width:110px;">投稿日</th><th style="width:140px;">投稿者</th><th>タイトル</th><th style="width:90px;">既読数</th><th style="width:70px;display:none;" id="notice-status-th">状態</th><th style="width:70px;"></th></tr></thead>
