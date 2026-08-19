@@ -812,7 +812,7 @@
           <button class="btn-ghost" id="notice-showall-btn" style="border:1px solid var(--line);">すべて表示</button>
         </div>
         <table class="notice-table">
-          <thead><tr><th style="width:110px;">投稿日</th><th style="width:140px;">投稿者</th><th>タイトル</th><th style="width:90px;">既読数</th><th style="width:70px;" id="notice-status-th">状態</th><th style="width:70px;"></th></tr></thead>
+          <thead><tr><th style="width:110px;">投稿日</th><th style="width:140px;">投稿者</th><th>タイトル</th><th style="width:90px;">既読数</th><th style="width:70px;display:none;" id="notice-status-th">状態</th><th style="width:70px;"></th></tr></thead>
           <tbody id="notice-list"></tbody>
         </table>
       </section>
@@ -2721,6 +2721,7 @@ document.getElementById("notice-showall-btn").addEventListener("click", ()=>{
   noticeShowAllMode = !noticeShowAllMode;
   document.getElementById("notice-showall-btn").textContent = noticeShowAllMode ? "戻る" : "すべて表示";
   document.getElementById("notice-showall-btn").classList.toggle("active", noticeShowAllMode);
+  document.getElementById("notice-status-th").style.display = noticeShowAllMode ? "" : "none";
   renderNotices();
 });
 
@@ -2761,7 +2762,7 @@ function renderNotices(){
       <td class="n-author-cell">${authorNameHtml}</td>
       <td class="n-title-cell">${escapeHtml(n.title)}</td>
       <td class="n-read-count-cell">${readCount}/${totalCount}</td>
-      <td class="n-status-cell n-status-${isRead ? (isKeptVisible?"read":"hidden") : "unread"}">${statusLabel}</td>
+      <td class="n-status-cell n-status-${isRead ? (isKeptVisible?"read":"hidden") : "unread"}" style="${noticeShowAllMode ? "" : "display:none;"}">${statusLabel}</td>
       <td></td>
     `;
     const actionsTd = tr.lastElementChild;
@@ -2827,6 +2828,7 @@ document.getElementById("notice-detail-read-hide-btn").addEventListener("click",
     await setDoc(doc(db,"announcements", n.id), { readByAt: { [currentUser.email]: new Date().toISOString() } }, { merge: true });
     document.getElementById("notice-detail-modal").classList.remove("show");
   }catch(e){
+    console.error("[既読処理エラー：非表示]", e);
     toast("既読にできませんでした。");
   }
 });
@@ -2841,6 +2843,7 @@ document.getElementById("notice-detail-read-keep-btn").addEventListener("click",
     await setDoc(doc(db,"announcements", n.id), { readByAt: { [currentUser.email]: new Date().toISOString() } }, { merge: true });
     document.getElementById("notice-detail-modal").classList.remove("show");
   }catch(e){
+    console.error("[既読処理エラー：一覧に残す]", e);
     toast("既読にできませんでした。");
   }
 });
