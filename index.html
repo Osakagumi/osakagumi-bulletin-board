@@ -690,6 +690,18 @@
             </table>
           </div>
         </div>
+
+        <!-- ---- マイ資機材情報（借用・点検中の測量機器/ドローン、敷鉄板の現在数量） ---- -->
+        <div class="section-divider" style="margin-top:24px;">自分が持っている資機材</div>
+        <table class="sp-history-table" style="min-width:0;">
+          <thead><tr><th style="width:110px;">日付</th><th style="width:100px;">種別</th><th>設備名</th><th style="width:90px;">状態</th></tr></thead>
+          <tbody id="my-resources-equipment-list"></tbody>
+        </table>
+        <div class="section-divider" style="margin-top:18px;">敷鉄板（自分が注文者になっている貸出中数量）</div>
+        <table class="sp-history-table" style="min-width:0;max-width:320px;">
+          <thead><tr><th>種別</th><th style="width:120px;">保有数量</th></tr></thead>
+          <tbody id="my-resources-steelplate-list"></tbody>
+        </table>
       </section>
 
       <!-- 敷鉄板 貸出・返却モーダル -->
@@ -1628,6 +1640,7 @@ function renderCheckoutTab(){
   const spPanel = document.getElementById("checkout-steelplates-panel");
   if(equipPanel) equipPanel.style.display = isSteelPlates ? "none" : "block";
   if(spPanel) spPanel.style.display = isSteelPlates ? "block" : "none";
+  try{ renderMyResourcesSummary(); }catch(e){ console.error("[マイ資機材情報の表示エラー]", e); }
   if(isSteelPlates){
     try{
       ensureDefaultSteelPlateTypes();
@@ -1641,6 +1654,56 @@ function renderCheckoutTab(){
   if(!grid) return;
   const items = equipmentAll.filter(e=>e.category===selectedCheckoutCategory);
   renderCheckoutGrid(grid, items);
+}
+
+// 資機材タブの一番下に常に表示する「自分が持っている資機材」情報。
+// ・測量機器／ドローン：自分が借用中、または点検に出したまま（holderEmailが自分）のもの
+// ・敷鉄板：現場ごとの個人持ちという概念がないため、種類ごとの「現在の貸出中数量（全体）」を表示する
+function renderMyResourcesSummary(){
+  const eqBody = document.getElementById("my-resources-equipment-list");
+  if(eqBody){
+    const mine = equipmentAll.filter(eq=>
+      (eq.status==="checked_out" || eq.status==="inspecting") &&
+      eq.holderEmail === currentUser.email
+    ).sort((a,b)=> String(b.holderSince||"").localeCompare(String(a.holderSince||"")));
+    eqBody.innerHTML = "";
+    if(mine.length===0){
+      eqBody.innerHTML = `<tr><td colspan="4" style="color:var(--muted);text-align:center;padding:14px;">現在、借用中・点検中の測量機器/ドローンはありません。</td></tr>`;
+    } else {
+      mine.forEach(eq=>{
+        const cat = catInfo(eq.category);
+        const st = equipmentStatusInfo(eq.status);
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td class="sp-nowrap">${eq.holderSince ? formatDateTimeJP(eq.holderSince) : ""}</td>
+          <td class="sp-nowrap"><span class="sp-type-badge" style="background:${cat.color};">${escapeHtml(cat.label)}</span></td>
+          <td>${escapeHtml(eq.name||"")}</td>
+          <td class="sp-nowrap"><span class="sp-type-badge" style="background:${st.color};">${escapeHtml(st.label)}</span></td>
+        `;
+        eqBody.appendChild(tr);
+      });
+    }
+  }
+  const spBody = document.getElementById("my-resources-steelplate-list");
+  if(spBody){
+    spBody.innerHTML = "";
+    const myName = myDisplayName();
+    const myTypes = spPlateTypesAll
+      .map(t=>({ t, outstanding: spOutstandingCountByOrderer(t.id, myName) }))
+      .filter(x=> x.outstanding > 0);
+    if(myTypes.length===0){
+      spBody.innerHTML = `<tr><td colspan="2" style="color:var(--muted);text-align:center;padding:14px;">現在、自分が注文者になっている貸出中の敷鉄板はありません。</td></tr>`;
+    } else {
+      myTypes.forEach(({t, outstanding})=>{
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td><span class="sp-type-badge" style="background:${spTypeColor(t.id)};">${escapeHtml(t.name)}</span></td>
+          <td class="sp-nowrap">${outstanding} 枚</td>
+        `;
+        spBody.appendChild(tr);
+      });
+    }
+  }
 }
 
 /* ---------- 貸出管理（checkoutモード：測量機器・ドローンなど） ---------- */
@@ -4718,6 +4781,7 @@ function initSteelPlateTypesListener(){
     spPlateTypesAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
     renderSteelPlateSummary();
     renderSpPlateSelectOptions();
+    try{ renderMyResourcesSummary(); }catch(e){ /* checkoutタブが未表示なら何もしない */ }
   });
 }
 function initSteelPlateTxListener(){
@@ -4727,6 +4791,7 @@ function initSteelPlateTxListener(){
     renderSteelPlateSummary();
     renderSpHoldingsList();
     renderSteelPlateTxList();
+    try{ renderMyResourcesSummary(); }catch(e){ /* checkoutタブが未表示なら何もしない */ }
   });
 }
 // 初回アクセス時、鉄板の種類が1件も登録されていなければ、
@@ -4745,6 +4810,17 @@ function spOutstandingCount(typeId){
   let lent = 0, returned = 0;
   spTransactionsAll.forEach(tx=>{
     if(tx.typeId !== typeId) return;
+    if(tx.type==="lend") lent += Number(tx.count)||0;
+    else if(tx.type==="return") returned += Number(tx.count)||0;
+  });
+  return lent - returned;
+}
+// 注文者名で絞り込んだ現在の貸出中数量（「自分」の分を出すのに使う）
+function spOutstandingCountByOrderer(typeId, ordererName){
+  let lent = 0, returned = 0;
+  spTransactionsAll.forEach(tx=>{
+    if(tx.typeId !== typeId) return;
+    if((tx.orderer||"") !== ordererName) return;
     if(tx.type==="lend") lent += Number(tx.count)||0;
     else if(tx.type==="return") returned += Number(tx.count)||0;
   });
