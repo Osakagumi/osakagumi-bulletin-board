@@ -811,6 +811,7 @@
       <section id="view-notices">
         <div class="section-toolbar">
           <button class="btn-primary" id="notice-new-btn" style="display:none;">＋ 新規投稿</button>
+          <button class="btn-ghost" id="notice-hide-read-btn" style="border:1px solid var(--line);display:none;">既読分を非表示</button>
           <button class="btn-ghost" id="notice-showall-btn" style="border:1px solid var(--line);">すべて表示</button>
         </div>
         <table class="notice-table">
@@ -2732,6 +2733,16 @@ function initNoticeReadsListener(){
 }
 
 let noticeShowAllMode = false;
+document.getElementById("notice-hide-read-btn").addEventListener("click", async ()=>{
+  if(myKeepVisibleNoticeIds.length===0) return;
+  if(!confirm(`グレー表示中の既読お知らせ ${myKeepVisibleNoticeIds.length}件を、一覧から非表示にしますか？`)) return;
+  try{
+    await setDoc(doc(db,"notice_reads", currentUser.email), { keepVisibleIds: [] }, { merge:true });
+    toast("既読分を非表示にしました。");
+  }catch(e){
+    toast("更新できませんでした。");
+  }
+});
 document.getElementById("notice-showall-btn").addEventListener("click", ()=>{
   noticeShowAllMode = !noticeShowAllMode;
   document.getElementById("notice-showall-btn").textContent = noticeShowAllMode ? "戻る" : "すべて表示";
@@ -2753,6 +2764,7 @@ async function setNoticeKeepVisible(noticeId, keep){
 function renderNotices(){
   const el = document.getElementById("notice-list");
   el.innerHTML = "";
+  document.getElementById("notice-hide-read-btn").style.display = myKeepVisibleNoticeIds.length > 0 ? "inline-block" : "none";
   const list = noticeShowAllMode
     ? noticesAll
     : noticesAll.filter(n => !myReadNoticeIds.includes(n.id) || myKeepVisibleNoticeIds.includes(n.id));
