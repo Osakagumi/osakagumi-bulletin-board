@@ -430,6 +430,9 @@
   .notice-table td{padding:11px 14px;border-bottom:1px solid var(--line);font-size:13.5px;vertical-align:middle;}
   .notice-table tr:last-child td{border-bottom:none;}
   .notice-table tr.notice-row-unread .n-title-cell{font-weight:700;}
+  .notice-table tr.notice-row-read{color:var(--muted);background:#FAFBFC;}
+  .notice-table tr.notice-row-read .n-title-cell{font-weight:400;color:var(--muted);}
+  .notice-table tr.notice-row-read .n-detail-btn{background:var(--muted);}
   .notice-table .n-date-cell{font-size:12px;color:var(--muted);font-family:var(--mono);white-space:nowrap;}
   .notice-table .n-author-cell{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px;}
   .notice-table .n-author-link{color:var(--muted);text-decoration:underline;}
@@ -437,6 +440,9 @@
   .notice-table .n-read-count-cell{font-size:12px;color:var(--muted);font-family:var(--mono);white-space:nowrap;text-align:center;}
   .notice-table .n-detail-btn{border:none;color:#fff;background:var(--brand);border-radius:7px;padding:6px 13px;font-size:12px;white-space:nowrap;}
   .notice-table .n-detail-btn:hover{background:var(--brand-dark);}
+  .notice-table .n-keepvisible-btn{border:1px solid var(--line);background:#fff;color:var(--muted);border-radius:7px;padding:6px 10px;font-size:11.5px;white-space:nowrap;margin-left:6px;cursor:pointer;}
+  .notice-table .n-keepvisible-btn:hover{background:#F4F8FC;color:var(--brand-dark);border-color:var(--brand);}
+  #notice-showall-btn.active{background:var(--brand);color:#fff;border-color:var(--brand);}
   @media (max-width:720px){
     .notice-table thead{ display:none; }
     .notice-table, .notice-table tbody{ display:block; width:100%; }
@@ -799,6 +805,7 @@
       <section id="view-notices">
         <div class="section-toolbar">
           <button class="btn-primary" id="notice-new-btn" style="display:none;">＋ 新規投稿</button>
+          <button class="btn-ghost" id="notice-showall-btn" style="border:1px solid var(--line);">すべて表示</button>
         </div>
         <table class="notice-table">
           <thead><tr><th style="width:110px;">投稿日</th><th style="width:140px;">投稿者</th><th>タイトル</th><th style="width:90px;">既読数</th><th style="width:70px;"></th></tr></thead>
@@ -949,7 +956,8 @@
       <div class="n-detail-attachment" id="notice-detail-attachment"></div>
       <div class="n-detail-actions">
         <div class="n-detail-actions-left" id="notice-detail-actions-left">
-          <button id="notice-detail-read-btn">既読にする</button>
+          <button id="notice-detail-read-hide-btn">既読にして非表示にする</button>
+          <button id="notice-detail-read-keep-btn">既読にする（一覧に残す）</button>
           <button id="notice-detail-edit-btn" style="display:none;">編集</button>
           <button id="notice-detail-delete-btn" style="display:none;">削除</button>
         </div>
@@ -1115,7 +1123,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, addDoc, deleteDoc, query, where,
-  onSnapshot, orderBy, limit, documentId, arrayUnion, Timestamp
+  onSnapshot, orderBy, limit, documentId, arrayUnion, arrayRemove, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig, BUSINESS_HOURS, EQUIPMENT_STATUSES, SAFETY_STATUSES, EMAILJS_CONFIG, resolveMailRecipients, isMailOverrideActive, MAIL_SEND_TARGET } from "./firebase-config.js";
 import { initStorageHelper, uploadFileToStorage, deleteFileFromStorage } from "./storage-helper.js";
@@ -1262,6 +1270,7 @@ let wbStatusesAll = [];
 let wbListColumns = 2;
 let noticesAll = [];
 let myReadNoticeIds = [];
+let myKeepVisibleNoticeIds = [];
 let editingNoticeId = null;
 let originalAttachmentStoragePath = null;
 let attachmentUploadFailed = false;
@@ -2697,21 +2706,44 @@ async function cleanupOldNotices(){
 function initNoticeReadsListener(){
   onSnapshot(doc(db,"notice_reads", currentUser.email), snap=>{
     myReadNoticeIds = (snap.exists() && snap.data().readIds) || [];
+    myKeepVisibleNoticeIds = (snap.exists() && snap.data().keepVisibleIds) || [];
     renderNotices();
   }, (err)=>{ console.error("[お知らせ既読状態取得エラー]", err); });
+}
+
+let noticeShowAllMode = false;
+document.getElementById("notice-showall-btn").addEventListener("click", ()=>{
+  noticeShowAllMode = !noticeShowAllMode;
+  document.getElementById("notice-showall-btn").textContent = noticeShowAllMode ? "未読中心の表示に戻す" : "すべて表示";
+  document.getElementById("notice-showall-btn").classList.toggle("active", noticeShowAllMode);
+  renderNotices();
+});
+
+async function setNoticeKeepVisible(noticeId, keep){
+  try{
+    await setDoc(doc(db,"notice_reads", currentUser.email), {
+      keepVisibleIds: keep ? arrayUnion(noticeId) : arrayRemove(noticeId)
+    }, { merge:true });
+  }catch(e){
+    toast("更新できませんでした。");
+  }
 }
 
 function renderNotices(){
   const el = document.getElementById("notice-list");
   el.innerHTML = "";
-  const visibleNotices = noticesAll.filter(n => !myReadNoticeIds.includes(n.id));
-  if(visibleNotices.length===0){
+  const list = noticeShowAllMode
+    ? noticesAll
+    : noticesAll.filter(n => !myReadNoticeIds.includes(n.id) || myKeepVisibleNoticeIds.includes(n.id));
+  if(list.length===0){
     el.innerHTML = `<tr><td colspan="5" class="empty-state">${noticesAll.length===0 ? "お知らせはまだありません。" : "未読のお知らせはありません。"}</td></tr>`;
     return;
   }
-  visibleNotices.forEach(n=>{
+  list.forEach(n=>{
+    const isRead = myReadNoticeIds.includes(n.id);
+    const isKeptVisible = myKeepVisibleNoticeIds.includes(n.id);
     const tr = document.createElement("tr");
-    tr.className = "notice-row-unread";
+    tr.className = isRead ? "notice-row-read" : "notice-row-unread";
     const authorNameHtml = n.authorEmail
       ? `<a href="mailto:${escapeHtml(n.authorEmail)}" class="n-author-link">${escapeHtml(n.authorName||n.authorEmail)}</a>`
       : escapeHtml(n.authorName||"");
@@ -2725,11 +2757,20 @@ function renderNotices(){
       <td class="n-read-count-cell">${readCount}/${totalCount}</td>
       <td></td>
     `;
+    const actionsTd = tr.lastElementChild;
     const detailBtn = document.createElement("button");
     detailBtn.className = "n-detail-btn";
     detailBtn.textContent = "詳細";
     detailBtn.addEventListener("click", ()=> openNoticeDetailModal(n));
-    tr.lastElementChild.appendChild(detailBtn);
+    actionsTd.appendChild(detailBtn);
+    // 「すべて表示」中の既読お知らせには、通常表示に残すかどうかの切り替えを添える
+    if(noticeShowAllMode && isRead){
+      const toggleBtn = document.createElement("button");
+      toggleBtn.className = "n-keepvisible-btn";
+      toggleBtn.textContent = isKeptVisible ? "一覧から外す" : "一覧に残す（グレー表示）";
+      toggleBtn.addEventListener("click", ()=> setNoticeKeepVisible(n.id, !isKeptVisible));
+      actionsTd.appendChild(toggleBtn);
+    }
     el.appendChild(tr);
   });
 }
@@ -2761,11 +2802,28 @@ function openNoticeDetailModal(n){
 document.getElementById("notice-detail-close").addEventListener("click", ()=>{
   document.getElementById("notice-detail-modal").classList.remove("show");
 });
-document.getElementById("notice-detail-read-btn").addEventListener("click", async ()=>{
+document.getElementById("notice-detail-read-hide-btn").addEventListener("click", async ()=>{
   if(!noticeDetailCurrent) return;
   const n = noticeDetailCurrent;
   try{
-    await setDoc(doc(db,"notice_reads", currentUser.email), { readIds: arrayUnion(n.id) }, { merge:true });
+    await setDoc(doc(db,"notice_reads", currentUser.email), {
+      readIds: arrayUnion(n.id),
+      keepVisibleIds: arrayRemove(n.id)
+    }, { merge:true });
+    await updateDoc(doc(db,"announcements", n.id), { [`readByAt.${currentUser.email}`]: new Date().toISOString() });
+    document.getElementById("notice-detail-modal").classList.remove("show");
+  }catch(e){
+    toast("既読にできませんでした。");
+  }
+});
+document.getElementById("notice-detail-read-keep-btn").addEventListener("click", async ()=>{
+  if(!noticeDetailCurrent) return;
+  const n = noticeDetailCurrent;
+  try{
+    await setDoc(doc(db,"notice_reads", currentUser.email), {
+      readIds: arrayUnion(n.id),
+      keepVisibleIds: arrayUnion(n.id)
+    }, { merge:true });
     await updateDoc(doc(db,"announcements", n.id), { [`readByAt.${currentUser.email}`]: new Date().toISOString() });
     document.getElementById("notice-detail-modal").classList.remove("show");
   }catch(e){
