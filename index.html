@@ -228,7 +228,27 @@
   .sp-history-table th, .sp-history-table td{border:1px solid var(--line);padding:8px 12px;text-align:left;}
   .sp-history-table th{background:#F8FAFC;font-weight:700;}
   .sp-history-table .sp-nowrap, .sp-history-table th.sp-nowrap{white-space:nowrap;}
+  .sp-history-table .sp-history-actions{white-space:nowrap;}
+  .sp-history-btn{border:1px solid var(--line);background:#fff;border-radius:6px;color:var(--muted);font-size:12px;padding:5px 10px;cursor:pointer;margin-right:6px;}
+  .sp-history-btn:last-child{margin-right:0;}
+  .sp-history-btn:hover{background:#F4F8FC;color:var(--brand-dark);border-color:var(--brand);}
   .sp-type-badge{display:inline-block;padding:4px 10px;border-radius:14px;font-size:11.5px;font-weight:700;color:#fff;white-space:nowrap;}
+  @media (max-width:720px){
+    /* スマホでは横スクロールする表ではなく、1件＝1枚のカードとして表示する */
+    #sp-history-section{ overflow-x:visible; }
+    .sp-history-table{ min-width:0; border:none; }
+    .sp-history-table thead{ display:none; }
+    .sp-history-table, .sp-history-table tbody, .sp-history-table tr, .sp-history-table td{ display:block; width:100%; }
+    .sp-history-table tr{ border:1.5px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:10px; background:#fff; }
+    .sp-history-table td{ border:none; padding:4px 0; white-space:normal; }
+    .sp-history-table td[data-label]:not([data-label=""])::before{
+      content:attr(data-label);
+      display:inline-block; min-width:56px;
+      color:var(--muted); font-size:11px; font-weight:700; margin-right:8px;
+    }
+    .sp-history-table td.sp-history-actions{ margin-top:6px; padding-top:8px; border-top:1px solid var(--line); }
+    .sp-history-table td.sp-history-actions .sp-history-btn{ padding:7px 14px; }
+  }
   .checkout-card{background:var(--surface);border:1.5px solid var(--line);border-radius:10px;padding:14px;}
   .checkout-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;}
   .checkout-head .name{font-size:14px;font-weight:700;}
@@ -4799,22 +4819,27 @@ function renderSteelPlateTxList(){
     const canEdit = isAdmin || isEquipmentManager || tx.createdByEmail===currentUser.email;
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td class="sp-nowrap">${formatDateJP(tx.date)}</td>
-      <td class="sp-nowrap"><span class="sp-type-badge" style="background:${spTypeColor(tx.typeId)};">${spTypeName(tx.typeId)}</span></td>
-      <td>${tx.siteName || ""}</td>
-      <td class="sp-nowrap">${tx.orderer || ""}</td>
-      <td class="sp-nowrap">${tx.type==="lend" ? (tx.count+" 枚") : ""}</td>
-      <td class="sp-nowrap">${tx.type==="return" ? (tx.count+" 枚") : ""}</td>
-      <td class="sp-nowrap" style="font-size:12px;color:var(--muted);">${tx.createdByName || tx.createdByEmail || ""}</td>
-      <td></td>
+      <td class="sp-nowrap" data-label="日付">${formatDateJP(tx.date)}</td>
+      <td class="sp-nowrap" data-label="種別"><span class="sp-type-badge" style="background:${spTypeColor(tx.typeId)};">${spTypeName(tx.typeId)}</span></td>
+      <td data-label="現場名">${tx.siteName || ""}</td>
+      <td class="sp-nowrap" data-label="注文者">${tx.orderer || ""}</td>
+      <td class="sp-nowrap" data-label="貸出">${tx.type==="lend" ? (tx.count+" 枚") : ""}</td>
+      <td class="sp-nowrap" data-label="返却">${tx.type==="return" ? (tx.count+" 枚") : ""}</td>
+      <td class="sp-nowrap" data-label="記録者" style="font-size:12px;color:var(--muted);">${tx.createdByName || tx.createdByEmail || ""}</td>
+      <td class="sp-history-actions" data-label=""></td>
     `;
+    const actionsTd = tr.querySelector(".sp-history-actions");
+    const refBtn = document.createElement("button");
+    refBtn.className = "sp-history-btn";
+    refBtn.textContent = "参照";
+    refBtn.addEventListener("click", ()=> openSpDuplicateModal(tx));
+    actionsTd.appendChild(refBtn);
     if(canEdit){
       const editBtn = document.createElement("button");
-      editBtn.className = "icon-btn";
+      editBtn.className = "sp-history-btn";
       editBtn.textContent = "編集";
-      editBtn.style.cssText = "border:1px solid var(--line);background:#fff;border-radius:6px;color:var(--muted);font-size:12px;padding:5px 10px;cursor:pointer;";
       editBtn.addEventListener("click", ()=> openSpEditTxModal(tx));
-      tr.lastElementChild.appendChild(editBtn);
+      actionsTd.appendChild(editBtn);
     }
     tbody.appendChild(tr);
   });
@@ -5025,6 +5050,26 @@ function openSpEditTxModal(tx){
   setSpOrderer(tx.orderer || "");
   setSpDate(tx.date || todayStr());
   document.getElementById("sp-count-input").value = tx.count || "";
+  document.getElementById("sp-error").textContent = "";
+  document.getElementById("sp-modal").classList.add("show");
+}
+
+// 履歴一覧の「参照」から開く。種類・現場名・注文者・区分は引き継ぎ、
+// 日付は本日、枚数は空欄にした「新規登録」として開く（既存の記録は変更しない）。
+function openSpDuplicateModal(tx){
+  spEditingTxId = null;
+  document.getElementById("sp-modal-title").textContent = "この内容で新規登録";
+  document.getElementById("sp-delete-btn").style.display = "none";
+  spSelectedType = tx.type==="return" ? "return" : "lend";
+  document.querySelectorAll("#sp-type-toggle .seg-btn").forEach(b=>{
+    b.classList.toggle("active", b.dataset.sptype===spSelectedType);
+  });
+  renderSpPlateSelectOptions();
+  document.getElementById("sp-plate-select").value = tx.typeId;
+  document.getElementById("sp-site-input").value = tx.siteName || "";
+  setSpOrderer(tx.orderer || "");
+  setSpDate(todayStr());
+  document.getElementById("sp-count-input").value = "";
   document.getElementById("sp-error").textContent = "";
   document.getElementById("sp-modal").classList.add("show");
 }
