@@ -228,27 +228,9 @@
   .sp-history-table th, .sp-history-table td{border:1px solid var(--line);padding:8px 12px;text-align:left;}
   .sp-history-table th{background:#F8FAFC;font-weight:700;}
   .sp-history-table .sp-nowrap, .sp-history-table th.sp-nowrap{white-space:nowrap;}
-  .sp-history-table .sp-history-actions{white-space:nowrap;}
-  .sp-history-btn{border:1px solid var(--line);background:#fff;border-radius:6px;color:var(--muted);font-size:12px;padding:5px 10px;cursor:pointer;margin-right:6px;}
-  .sp-history-btn:last-child{margin-right:0;}
-  .sp-history-btn:hover{background:#F4F8FC;color:var(--brand-dark);border-color:var(--brand);}
+  .sp-history-table .sp-date-cell{cursor:pointer;color:var(--brand-dark);text-decoration:underline;}
+  .sp-history-table .sp-date-cell:hover{color:var(--brand);}
   .sp-type-badge{display:inline-block;padding:4px 10px;border-radius:14px;font-size:11.5px;font-weight:700;color:#fff;white-space:nowrap;}
-  @media (max-width:720px){
-    /* スマホでは横スクロールする表ではなく、1件＝1枚のカードとして表示する */
-    #sp-history-section{ overflow-x:visible; }
-    .sp-history-table{ min-width:0; border:none; }
-    .sp-history-table thead{ display:none; }
-    .sp-history-table, .sp-history-table tbody, .sp-history-table tr, .sp-history-table td{ display:block; width:100%; }
-    .sp-history-table tr{ border:1.5px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:10px; background:#fff; }
-    .sp-history-table td{ border:none; padding:4px 0; white-space:normal; }
-    .sp-history-table td[data-label]:not([data-label=""])::before{
-      content:attr(data-label);
-      display:inline-block; min-width:56px;
-      color:var(--muted); font-size:11px; font-weight:700; margin-right:8px;
-    }
-    .sp-history-table td.sp-history-actions{ margin-top:6px; padding-top:8px; border-top:1px solid var(--line); }
-    .sp-history-table td.sp-history-actions .sp-history-btn{ padding:7px 14px; }
-  }
   .checkout-card{background:var(--surface);border:1.5px solid var(--line);border-radius:10px;padding:14px;}
   .checkout-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;}
   .checkout-head .name{font-size:14px;font-weight:700;}
@@ -692,7 +674,7 @@
           </div>
           <div id="sp-history-section" style="display:none;overflow-x:auto;">
             <table class="sp-history-table">
-              <thead><tr><th class="sp-nowrap">日付</th><th class="sp-nowrap">種別</th><th>現場名</th><th class="sp-nowrap">注文者</th><th class="sp-nowrap">貸出</th><th class="sp-nowrap">返却</th><th class="sp-nowrap">記録者</th><th></th></tr></thead>
+              <thead><tr><th class="sp-nowrap">日付</th><th class="sp-nowrap">種別</th><th>現場名</th><th class="sp-nowrap">注文者</th><th class="sp-nowrap">貸出</th><th class="sp-nowrap">返却</th><th class="sp-nowrap">記録者</th></tr></thead>
               <tbody id="sp-tx-list"></tbody>
             </table>
           </div>
@@ -738,6 +720,7 @@
           <div id="sp-error" style="color:var(--danger);font-size:12.5px;margin-top:4px;"></div>
           <div class="modal-actions">
             <button class="btn-ghost" id="sp-delete-btn" style="border:1px solid var(--danger);color:var(--danger);display:none;">削除</button>
+            <button class="btn-ghost" id="sp-duplicate-btn" style="border:1px solid var(--line);display:none;">複写</button>
             <button class="btn-ghost" id="sp-cancel-btn" style="border:1px solid var(--line);">キャンセル</button>
             <button class="btn-primary" id="sp-save-btn">保存</button>
           </div>
@@ -4812,35 +4795,21 @@ function renderSteelPlateTxList(){
   if(!tbody) return;
   tbody.innerHTML = "";
   if(spTransactionsAll.length===0){
-    tbody.innerHTML = `<tr><td colspan="8" style="color:var(--muted);text-align:center;padding:16px;">まだ記録がありません。</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" style="color:var(--muted);text-align:center;padding:16px;">まだ記録がありません。</td></tr>`;
     return;
   }
   spTransactionsAll.forEach(tx=>{
-    const canEdit = isAdmin || isEquipmentManager || tx.createdByEmail===currentUser.email;
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td class="sp-nowrap" data-label="日付">${formatDateJP(tx.date)}</td>
-      <td class="sp-nowrap" data-label="種別"><span class="sp-type-badge" style="background:${spTypeColor(tx.typeId)};">${spTypeName(tx.typeId)}</span></td>
-      <td data-label="現場名">${tx.siteName || ""}</td>
-      <td class="sp-nowrap" data-label="注文者">${tx.orderer || ""}</td>
-      <td class="sp-nowrap" data-label="貸出">${tx.type==="lend" ? (tx.count+" 枚") : ""}</td>
-      <td class="sp-nowrap" data-label="返却">${tx.type==="return" ? (tx.count+" 枚") : ""}</td>
-      <td class="sp-nowrap" data-label="記録者" style="font-size:12px;color:var(--muted);">${tx.createdByName || tx.createdByEmail || ""}</td>
-      <td class="sp-history-actions" data-label=""></td>
+      <td class="sp-nowrap sp-date-cell">${formatDateJP(tx.date)}</td>
+      <td class="sp-nowrap"><span class="sp-type-badge" style="background:${spTypeColor(tx.typeId)};">${spTypeName(tx.typeId)}</span></td>
+      <td>${tx.siteName || ""}</td>
+      <td class="sp-nowrap">${tx.orderer || ""}</td>
+      <td class="sp-nowrap">${tx.type==="lend" ? (tx.count+" 枚") : ""}</td>
+      <td class="sp-nowrap">${tx.type==="return" ? (tx.count+" 枚") : ""}</td>
+      <td class="sp-nowrap" style="font-size:12px;color:var(--muted);">${tx.createdByName || tx.createdByEmail || ""}</td>
     `;
-    const actionsTd = tr.querySelector(".sp-history-actions");
-    const refBtn = document.createElement("button");
-    refBtn.className = "sp-history-btn";
-    refBtn.textContent = "参照";
-    refBtn.addEventListener("click", ()=> openSpDuplicateModal(tx));
-    actionsTd.appendChild(refBtn);
-    if(canEdit){
-      const editBtn = document.createElement("button");
-      editBtn.className = "sp-history-btn";
-      editBtn.textContent = "編集";
-      editBtn.addEventListener("click", ()=> openSpEditTxModal(tx));
-      actionsTd.appendChild(editBtn);
-    }
+    tr.querySelector(".sp-date-cell").addEventListener("click", ()=> openSpEditTxModal(tx));
     tbody.appendChild(tr);
   });
 }
@@ -5003,6 +4972,9 @@ function openSpCellModal(siteName, typeId, count){
   spEditingTxId = null;
   document.getElementById("sp-modal-title").textContent = "貸出・返却を記録";
   document.getElementById("sp-delete-btn").style.display = "none";
+  document.getElementById("sp-duplicate-btn").style.display = "none";
+  document.getElementById("sp-save-btn").textContent = "保存";
+  document.getElementById("sp-save-btn").style.display = "inline-block";
   spSelectedType = count > 0 ? "return" : "lend";
   document.querySelectorAll("#sp-type-toggle .seg-btn").forEach(b=>{
     b.classList.toggle("active", b.dataset.sptype===spSelectedType);
@@ -5021,6 +4993,9 @@ function openSpModal(){
   spEditingTxId = null;
   document.getElementById("sp-modal-title").textContent = "貸出・返却を記録";
   document.getElementById("sp-delete-btn").style.display = "none";
+  document.getElementById("sp-duplicate-btn").style.display = "none";
+  document.getElementById("sp-save-btn").textContent = "保存";
+  document.getElementById("sp-save-btn").style.display = "inline-block";
   spSelectedType = "lend";
   document.querySelectorAll("#sp-type-toggle .seg-btn").forEach(b=>{
     b.classList.toggle("active", b.dataset.sptype==="lend");
@@ -5034,12 +5009,16 @@ function openSpModal(){
   document.getElementById("sp-modal").classList.add("show");
 }
 
-// 履歴一覧の「編集」ボタンから開く。既存の記録の内容をそのまま入れておく。
+// 履歴一覧の日付をタップすると開く。既存の記録の内容をそのまま入れておく。
 let spEditingTxId = null;
 function openSpEditTxModal(tx){
   spEditingTxId = tx.id;
+  const canEdit = isAdmin || isEquipmentManager || tx.createdByEmail===currentUser.email;
   document.getElementById("sp-modal-title").textContent = "記録を編集";
-  document.getElementById("sp-delete-btn").style.display = "inline-block";
+  document.getElementById("sp-delete-btn").style.display = canEdit ? "inline-block" : "none";
+  document.getElementById("sp-duplicate-btn").style.display = "inline-block";
+  document.getElementById("sp-save-btn").textContent = "確定";
+  document.getElementById("sp-save-btn").style.display = canEdit ? "inline-block" : "none";
   spSelectedType = tx.type==="return" ? "return" : "lend";
   document.querySelectorAll("#sp-type-toggle .seg-btn").forEach(b=>{
     b.classList.toggle("active", b.dataset.sptype===spSelectedType);
@@ -5054,26 +5033,6 @@ function openSpEditTxModal(tx){
   document.getElementById("sp-modal").classList.add("show");
 }
 
-// 履歴一覧の「参照」から開く。種類・現場名・注文者・区分は引き継ぎ、
-// 日付は本日、枚数は空欄にした「新規登録」として開く（既存の記録は変更しない）。
-function openSpDuplicateModal(tx){
-  spEditingTxId = null;
-  document.getElementById("sp-modal-title").textContent = "この内容で新規登録";
-  document.getElementById("sp-delete-btn").style.display = "none";
-  spSelectedType = tx.type==="return" ? "return" : "lend";
-  document.querySelectorAll("#sp-type-toggle .seg-btn").forEach(b=>{
-    b.classList.toggle("active", b.dataset.sptype===spSelectedType);
-  });
-  renderSpPlateSelectOptions();
-  document.getElementById("sp-plate-select").value = tx.typeId;
-  document.getElementById("sp-site-input").value = tx.siteName || "";
-  setSpOrderer(tx.orderer || "");
-  setSpDate(todayStr());
-  document.getElementById("sp-count-input").value = "";
-  document.getElementById("sp-error").textContent = "";
-  document.getElementById("sp-modal").classList.add("show");
-}
-
 document.getElementById("sp-orderer-pick-btn")?.addEventListener("click", async ()=>{
   const emp = await openEmployeePicker();
   if(emp){
@@ -5084,45 +5043,68 @@ document.getElementById("sp-new-btn")?.addEventListener("click", openSpModal);
 document.getElementById("sp-cancel-btn")?.addEventListener("click", ()=>{
   document.getElementById("sp-modal").classList.remove("show");
 });
-document.getElementById("sp-save-btn")?.addEventListener("click", async ()=>{
+
+// フォームの内容を検証し、問題なければ {typeId, type, count, date, siteName, orderer} を返す。
+// 問題があればエラーメッセージを表示して null を返す。
+function validateSpForm(){
   const errEl = document.getElementById("sp-error");
   errEl.textContent = "";
   const date = spSelectedDate;
   const count = Number(document.getElementById("sp-count-input").value);
-  if(!date){ errEl.textContent = "日付を入力してください。"; return; }
-  if(!count || count <= 0){ errEl.textContent = "枚数は1以上の数値で入力してください。"; return; }
+  if(!date){ errEl.textContent = "日付を入力してください。"; return null; }
+  if(!count || count <= 0){ errEl.textContent = "枚数は1以上の数値で入力してください。"; return null; }
 
   const typeId = document.getElementById("sp-plate-select").value;
   const siteName = document.getElementById("sp-site-input").value.trim();
   const orderer = document.getElementById("sp-orderer-input").value.trim();
-  if(!typeId){ errEl.textContent = "鉄板の種類を登録してください（管理者にご連絡ください）。"; return; }
-  if(!siteName){ errEl.textContent = "現場名を入力してください。"; return; }
+  if(!typeId){ errEl.textContent = "鉄板の種類を登録してください（管理者にご連絡ください）。"; return null; }
+  if(!siteName){ errEl.textContent = "現場名を入力してください。"; return null; }
   if(spSelectedType==="return"){
     // 編集中の場合は、その記録自身の分を除いた残高と比較する
     const holding = getSiteHoldings(spEditingTxId).find(h=>h.siteName===siteName);
     const outstanding = holding ? (holding.byType.find(x=>x.typeId===typeId)?.count || 0) : 0;
-    if(count > outstanding){ errEl.textContent = `返却枚数が貸出中の枚数（${outstanding}枚）を超えています。`; return; }
+    if(count > outstanding){ errEl.textContent = `返却枚数が貸出中の枚数（${outstanding}枚）を超えています。`; return null; }
   }
+  return { typeId, type: spSelectedType, count, date, siteName, orderer };
+}
+async function createSpTransaction(fields){
+  const emp = employeesAll.find(e=>e.email===currentUser.email);
+  await addDoc(collection(db,"steel_plate_transactions"), {
+    ...fields,
+    createdByEmail: currentUser.email,
+    createdByName: emp?.name || currentUser.email,
+    createdAt: new Date().toISOString()
+  });
+}
 
+document.getElementById("sp-save-btn")?.addEventListener("click", async ()=>{
+  const fields = validateSpForm();
+  if(!fields) return;
+  const errEl = document.getElementById("sp-error");
   try{
     if(spEditingTxId){
-      await updateDoc(doc(db,"steel_plate_transactions", spEditingTxId), {
-        typeId, type: spSelectedType, count, date, siteName, orderer
-      });
+      await updateDoc(doc(db,"steel_plate_transactions", spEditingTxId), fields);
       toast("更新しました。");
     } else {
-      const emp = employeesAll.find(e=>e.email===currentUser.email);
-      await addDoc(collection(db,"steel_plate_transactions"), {
-        typeId, type: spSelectedType, count, date, siteName, orderer,
-        createdByEmail: currentUser.email,
-        createdByName: emp?.name || currentUser.email,
-        createdAt: new Date().toISOString()
-      });
+      await createSpTransaction(fields);
       toast("記録しました。");
     }
     document.getElementById("sp-modal").classList.remove("show");
   }catch(e){
     errEl.textContent = "保存に失敗しました。権限をご確認ください。";
+  }
+});
+// 複写：編集中の内容をもとに、既存の記録は変更せず「新しい記録」として保存する
+document.getElementById("sp-duplicate-btn")?.addEventListener("click", async ()=>{
+  const fields = validateSpForm();
+  if(!fields) return;
+  const errEl = document.getElementById("sp-error");
+  try{
+    await createSpTransaction(fields);
+    document.getElementById("sp-modal").classList.remove("show");
+    toast("複写して新規登録しました。");
+  }catch(e){
+    errEl.textContent = "登録に失敗しました。権限をご確認ください。";
   }
 });
 document.getElementById("sp-delete-btn")?.addEventListener("click", async ()=>{
