@@ -2862,7 +2862,8 @@ function openNoticeReadByModal(n){
     .map(e=>e.email)
     .filter(Boolean);
   const mailAllBtn = document.getElementById("notice-readby-mailall-btn");
-  if(unreadEmails.length > 0){
+  const canMailAll = (isAdmin || n.authorEmail===currentUser.email) && unreadEmails.length > 0;
+  if(canMailAll){
     mailAllBtn.href = `mailto:?bcc=${unreadEmails.map(encodeURIComponent).join(",")}&subject=${encodeURIComponent("【" + (n.title||"お知らせ") + "】をご確認ください")}`;
     mailAllBtn.style.display = "inline-block";
   } else {
@@ -2903,6 +2904,7 @@ function renderNoticeDetailView(n){
   const canManage = isAdmin || n.authorEmail===currentUser.email;
   document.getElementById("notice-detail-edit-btn").style.display = canManage ? "inline-block" : "none";
   document.getElementById("notice-detail-delete-btn").style.display = canManage ? "inline-block" : "none";
+  document.getElementById("notice-detail-readby-btn").style.display = canManage ? "inline-block" : "none";
 
   // 未読なら「既読にする」の2択、既読ならこの一覧に残すかどうかの切り替えボタンを出す
   const isRead = myReadNoticeIds.includes(n.id);
