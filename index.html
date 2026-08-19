@@ -158,6 +158,27 @@
     font-size:13px;font-weight:700;color:var(--brand-dark);margin:26px 0 12px;padding-top:16px;border-top:1.5px solid var(--line);
   }
 
+  /* ダッシュボード */
+  .dash-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;}
+  .dash-card{background:var(--surface);border:1.5px solid var(--line);border-radius:12px;padding:16px;}
+  .dash-card h3{margin:0;font-size:14.5px;}
+  .dash-card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px;}
+  .dash-card-link{font-size:12px;color:var(--brand);cursor:pointer;white-space:nowrap;}
+  .dash-card-link:hover{color:var(--brand-dark);text-decoration:underline;}
+  #dash-card-safety{background:#FDF2F2;border-color:var(--danger);}
+  #dash-card-safety h3{color:var(--danger);margin-bottom:10px;}
+  .dash-empty{font-size:12.5px;color:var(--muted);padding:6px 0;}
+  .dash-row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px;cursor:pointer;}
+  .dash-row:last-child{border-bottom:none;}
+  .dash-row:hover{color:var(--brand-dark);}
+  .dash-row .dash-row-sub{color:var(--muted);font-size:11.5px;white-space:nowrap;}
+  .dash-stat-grid{display:flex;flex-wrap:wrap;gap:8px;}
+  .dash-stat{flex:1;min-width:70px;text-align:center;background:#F8FAFC;border-radius:8px;padding:8px 6px;}
+  .dash-stat b{display:block;font-size:19px;}
+  .dash-stat span{font-size:11px;color:var(--muted);}
+  .dash-btn{display:inline-block;margin-top:8px;border:none;background:var(--brand);color:#fff;border-radius:8px;padding:8px 16px;font-size:12.5px;font-weight:700;cursor:pointer;}
+  .dash-btn:hover{background:var(--brand-dark);}
+
   main{flex:1;padding:16px;max-width:960px;width:100%;margin:0 auto;}
 
   /* category pills */
@@ -615,7 +636,8 @@
     </header>
 
     <nav class="tabs" id="main-tabs">
-      <button class="tab-btn active" data-view="notices">お知らせ</button>
+      <button class="tab-btn active" data-view="dashboard">ダッシュボード</button>
+      <button class="tab-btn" data-view="notices">お知らせ</button>
       <button class="tab-btn" data-view="whereabouts">行き先</button>
       <button class="tab-btn" data-view="reserve">予約</button>
       <button class="tab-btn" data-view="checkout">資機材</button>
@@ -807,8 +829,53 @@
         </div>
       </div>
 
+      <!-- ---- ダッシュボード ---- -->
+      <section id="view-dashboard">
+        <div class="dash-grid">
+          <div class="dash-card" id="dash-card-safety" style="display:none;">
+            <h3>⚠ 安否確認</h3>
+            <div id="dash-safety-body"></div>
+          </div>
+          <div class="dash-card">
+            <div class="dash-card-head">
+              <h3>お知らせ</h3>
+              <span class="dash-card-link" id="dash-notices-link">お知らせを見る →</span>
+            </div>
+            <div id="dash-notices-body"></div>
+          </div>
+          <div class="dash-card">
+            <div class="dash-card-head">
+              <h3>本日の行き先</h3>
+              <span class="dash-card-link" id="dash-wb-link">行き先を見る →</span>
+            </div>
+            <div id="dash-wb-body"></div>
+          </div>
+          <div class="dash-card">
+            <div class="dash-card-head">
+              <h3>今後の自分の予約</h3>
+              <span class="dash-card-link" id="dash-reserve-link">予約を見る →</span>
+            </div>
+            <div id="dash-reserve-body"></div>
+          </div>
+          <div class="dash-card">
+            <div class="dash-card-head">
+              <h3>自分の資機材</h3>
+              <span class="dash-card-link" id="dash-checkout-link">資機材を見る →</span>
+            </div>
+            <div id="dash-checkout-body"></div>
+          </div>
+          <div class="dash-card">
+            <div class="dash-card-head">
+              <h3>カレンダー</h3>
+              <span class="dash-card-link" id="dash-calendar-link">カレンダーを見る →</span>
+            </div>
+            <div id="dash-calendar-body"></div>
+          </div>
+        </div>
+      </section>
+
       <!-- ---- お知らせ ---- -->
-      <section id="view-notices">
+      <section id="view-notices" style="display:none;">
         <div class="section-toolbar">
           <button class="btn-primary" id="notice-new-btn" style="display:none;">＋ 新規投稿</button>
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-left:auto;">
@@ -1286,6 +1353,10 @@ let selectedCategory = null;
 let selectedCheckoutCategory = null;
 let selectedEquipment = null;
 let myResUnsub = null;
+let myReservationsAll = [];
+let calDaysData = {};          // "YYYY-MM-DD" -> {isHoliday, label}
+let spPlateTypesAll = [];
+let spTransactionsAll = [];
 
 let employeesAll = [];
 let departmentsAll = [];
@@ -1419,8 +1490,170 @@ onAuthStateChanged(auth, async (user)=>{
 });
 
 /* ---------- tabs ---------- */
-const ALL_VIEWS = ["notices","whereabouts","reserve","checkout","safety","calendar"];
+const ALL_VIEWS = ["dashboard","notices","whereabouts","reserve","checkout","safety","calendar"];
 const TAB_ORDER_KEY = "osakagumi-portal-tab-order";
+function refreshDashboardIfActive(){
+  const el = document.getElementById("view-dashboard");
+  if(el && el.style.display !== "none"){
+    try{ renderDashboard(); }catch(e){ /* ignore */ }
+  }
+}
+function renderDashboard(){
+  // ---- 安否確認 ----
+  const safetyCard = document.getElementById("dash-card-safety");
+  if(activeSafetyCampaign){
+    safetyCard.style.display = "block";
+    const body = document.getElementById("dash-safety-body");
+    const answered = !!mySafetyResponse;
+    body.innerHTML = `
+      <div style="font-weight:700;font-size:14px;margin-bottom:6px;">${escapeHtml(activeSafetyCampaign.title||"安否確認")}</div>
+      <div style="font-size:12.5px;color:${answered?"var(--muted)":"var(--danger)"};margin-bottom:8px;">
+        ${answered ? "回答済みです。" : "まだ回答していません。至急ご回答ください。"}
+      </div>
+    `;
+    const btn = document.createElement("button");
+    btn.className = "dash-btn";
+    btn.textContent = answered ? "回答内容を確認する" : "今すぐ回答する";
+    btn.addEventListener("click", ()=> switchToTab("safety"));
+    body.appendChild(btn);
+  } else {
+    safetyCard.style.display = "none";
+  }
+
+  // ---- お知らせ（未読上位） ----
+  const noticesBody = document.getElementById("dash-notices-body");
+  const unread = noticesAll.filter(n => !myReadNoticeIds.includes(n.id));
+  if(unread.length===0){
+    noticesBody.innerHTML = `<div class="dash-empty">未読のお知らせはありません。</div>`;
+  } else {
+    noticesBody.innerHTML = `<div style="font-size:12.5px;color:var(--muted);margin-bottom:6px;">未読 ${unread.length}件</div>`;
+    unread.slice(0,4).forEach(n=>{
+      const row = document.createElement("div");
+      row.className = "dash-row";
+      row.innerHTML = `<span>${escapeHtml(n.title)}</span><span class="dash-row-sub">${escapeHtml(tsToStr(n.createdAt))}</span>`;
+      row.addEventListener("click", ()=>{ switchToTab("notices"); openNoticeDetailModal(n); });
+      noticesBody.appendChild(row);
+    });
+  }
+
+  // ---- 本日の行き先（社内全体の状態内訳） ----
+  const wbBody = document.getElementById("dash-wb-body");
+  const activeEmployees = employeesAll.filter(e=>!e.hidden);
+  const counts = {};
+  activeEmployees.forEach(emp=>{
+    const st = getEffectiveWbStatus(emp);
+    const key = st==="OFFHOURS" ? "OFFHOURS" : (st || "__unset__");
+    counts[key] = (counts[key]||0) + 1;
+  });
+  wbBody.innerHTML = "";
+  if(activeEmployees.length===0){
+    wbBody.innerHTML = `<div class="dash-empty">社員が登録されていません。</div>`;
+  } else if(counts.OFFHOURS && Object.keys(counts).length===1){
+    wbBody.innerHTML = `<div class="dash-empty">現在は就業時間外です。</div>`;
+  } else {
+    const grid = document.createElement("div");
+    grid.className = "dash-stat-grid";
+    wbStatusesAll.forEach(st=>{
+      const c = counts[st.id] || 0;
+      if(c===0) return;
+      const stat = document.createElement("div");
+      stat.className = "dash-stat";
+      stat.innerHTML = `<b style="color:${st.color};">${c}</b><span>${escapeHtml(st.name)}</span>`;
+      grid.appendChild(stat);
+    });
+    if(counts.__unset__){
+      const stat = document.createElement("div");
+      stat.className = "dash-stat";
+      stat.innerHTML = `<b style="color:var(--muted);">${counts.__unset__}</b><span>未設定</span>`;
+      grid.appendChild(stat);
+    }
+    wbBody.appendChild(grid);
+  }
+
+  // ---- 今後の自分の予約 ----
+  const resBody = document.getElementById("dash-reserve-body");
+  const today = todayStr();
+  const upcoming = myReservationsAll.filter(r => (r.date + r.startTime) >= (today + "00:00"));
+  if(upcoming.length===0){
+    resBody.innerHTML = `<div class="dash-empty">今後の予約はありません。</div>`;
+  } else {
+    resBody.innerHTML = "";
+    upcoming.slice(0,4).forEach(r=>{
+      const cat = catInfo(r.category);
+      const row = document.createElement("div");
+      row.className = "dash-row";
+      row.innerHTML = `<span>${escapeHtml(r.equipmentName)} <span style="color:${cat.color};font-size:11px;">[${escapeHtml(cat.label)}]</span></span><span class="dash-row-sub">${formatDateJP(r.date)} ${escapeHtml(r.startTime)}</span>`;
+      row.addEventListener("click", ()=> switchToTab("reserve"));
+      resBody.appendChild(row);
+    });
+  }
+
+  // ---- 自分の資機材（借用中の測量機器/ドローン＋自分が注文者の敷鉄板） ----
+  const checkoutBody = document.getElementById("dash-checkout-body");
+  checkoutBody.innerHTML = "";
+  const myEquip = equipmentAll.filter(eq=>
+    (eq.status==="checked_out" || eq.status==="inspecting") && eq.holderEmail===currentUser.email
+  );
+  const myName = myDisplayName();
+  const mySteel = spPlateTypesAll
+    .map(t=>({ t, outstanding: spOutstandingCountByOrderer(t.id, myName) }))
+    .filter(x=> x.outstanding > 0);
+  if(myEquip.length===0 && mySteel.length===0){
+    checkoutBody.innerHTML = `<div class="dash-empty">現在、借用中の資機材はありません。</div>`;
+  } else {
+    myEquip.forEach(eq=>{
+      const st = equipmentStatusInfo(eq.status);
+      const row = document.createElement("div");
+      row.className = "dash-row";
+      row.innerHTML = `<span>${escapeHtml(eq.name||"")}</span><span class="dash-row-sub" style="color:${st.color};">${escapeHtml(st.label)}</span>`;
+      row.addEventListener("click", ()=> switchToTab("checkout"));
+      checkoutBody.appendChild(row);
+    });
+    mySteel.forEach(({t, outstanding})=>{
+      const row = document.createElement("div");
+      row.className = "dash-row";
+      row.innerHTML = `<span>敷鉄板（${escapeHtml(t.name)}）</span><span class="dash-row-sub">${outstanding} 枚</span>`;
+      row.addEventListener("click", ()=> switchToTab("checkout"));
+      checkoutBody.appendChild(row);
+    });
+  }
+
+  // ---- カレンダー（今日の情報＋直近7日の休日・登録日） ----
+  const calBody = document.getElementById("dash-calendar-body");
+  const todayInfo = calDaysData[today];
+  const upcomingDays = [];
+  for(let i=0;i<7;i++){
+    const d = new Date();
+    d.setDate(d.getDate()+i);
+    const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+    const info = calDaysData[dateStr];
+    if(info && (info.isHoliday || info.label)){
+      upcomingDays.push({ dateStr, info });
+    }
+  }
+  calBody.innerHTML = "";
+  const todayRow = document.createElement("div");
+  todayRow.style.cssText = "font-size:12.5px;color:var(--muted);margin-bottom:6px;";
+  todayRow.textContent = `本日：${formatDateJP(today)}${todayInfo?.isHoliday ? "（休日）" : ""}${todayInfo?.label ? " "+todayInfo.label : ""}`;
+  calBody.appendChild(todayRow);
+  if(upcomingDays.length===0){
+    calBody.innerHTML += `<div class="dash-empty">今週、休日・登録日の予定はありません。</div>`;
+  } else {
+    upcomingDays.slice(0,5).forEach(({dateStr, info})=>{
+      const row = document.createElement("div");
+      row.className = "dash-row";
+      row.innerHTML = `<span>${escapeHtml(info.label || (info.isHoliday ? "休日" : ""))}</span><span class="dash-row-sub">${formatDateJP(dateStr)}</span>`;
+      row.addEventListener("click", ()=> switchToTab("calendar"));
+      calBody.appendChild(row);
+    });
+  }
+}
+document.getElementById("dash-notices-link").addEventListener("click", ()=> switchToTab("notices"));
+document.getElementById("dash-wb-link").addEventListener("click", ()=> switchToTab("whereabouts"));
+document.getElementById("dash-reserve-link").addEventListener("click", ()=> switchToTab("reserve"));
+document.getElementById("dash-checkout-link").addEventListener("click", ()=> switchToTab("checkout"));
+document.getElementById("dash-calendar-link").addEventListener("click", ()=> switchToTab("calendar"));
+
 function switchToTab(viewName){
   document.querySelectorAll(".tab-btn").forEach(b=>{
     b.classList.toggle("active", b.dataset.view===viewName);
@@ -1435,6 +1668,9 @@ function switchToTab(viewName){
   }
   if(viewName==="checkout"){
     try{ renderCheckoutTab(); }catch(e){ console.error("[貸出タブの表示エラー]", e); }
+  }
+  if(viewName==="dashboard"){
+    try{ renderDashboard(); }catch(e){ console.error("[ダッシュボードの表示エラー]", e); }
   }
 }
 document.querySelectorAll(".tab-btn").forEach(btn=>{
@@ -2591,7 +2827,9 @@ function initMyReservationsListener(){
   myResUnsub = onSnapshot(q, snap=>{
     const list = snap.docs.map(d=>({id:d.id, ...d.data()}));
     list.sort((a,b)=> (a.date+a.startTime).localeCompare(b.date+b.startTime));
+    myReservationsAll = list;
     renderMyReservations(list);
+    refreshDashboardIfActive();
   });
 }
 
@@ -2666,6 +2904,7 @@ function initNoticesListener(){
   onSnapshot(q, snap=>{
     noticesAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
     renderNotices();
+    refreshDashboardIfActive();
   }, (err)=>{ console.error("[お知らせ取得エラー]", err); });
 }
 
@@ -3293,6 +3532,7 @@ function initEmployeesListener(){
     renderWhereabouts();
     renderNotices();
     updateHeaderUserLabel();
+    refreshDashboardIfActive();
   }, (err)=>{ console.error("[社員名簿取得エラー]", err); });
 }
 
@@ -4418,6 +4658,7 @@ function initSafetyCampaignListener(){
       mySafetyResponse = null;
       updateSafetyTabVisibility();
       renderSafety();
+      refreshDashboardIfActive();
       return;
     }
     const d = snap.docs[0];
@@ -4428,6 +4669,7 @@ function initSafetyCampaignListener(){
     }catch(e){ mySafetyResponse = null; }
     updateSafetyTabVisibility();
     renderSafety();
+    refreshDashboardIfActive();
   }, (err)=>{ console.error("[安否確認取得エラー]", err); });
 }
 
@@ -4535,7 +4777,6 @@ function renderSafety(){
    カレンダー（年間休日カレンダー）
 ========================================================= */
 let calFiscalYearStart = null; // 例: 2026 → 2026/4〜2027/3
-let calDaysData = {};          // "YYYY-MM-DD" -> {isHoliday, label}
 let calDaysUnsub = null;
 
 function defaultFiscalYearStart(){
@@ -4957,8 +5198,6 @@ async function editCalLabel(dateStr){
 }
 
 /* ---------- 敷鉄板（貸出・返却管理） ---------- */
-let spPlateTypesAll = [];
-let spTransactionsAll = [];
 let spTypesSeeded = false;
 let spEditingTypeId = null;
 
