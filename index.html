@@ -1950,19 +1950,18 @@ function renderMyResourcesSummary(){
     });
   });
 
-  // 敷鉄板（在庫数管理）：自分が注文者になっている貸出中数量
+  // 敷鉄板（在庫数管理）：自分が注文者になっている貸出取引を、1件＝1行で表示
   const myName = myDisplayName();
-  const mySteel = spPlateTypesAll
-    .map(t=>({ t, outstanding: spOutstandingCountByOrderer(t.id, myName) }))
-    .filter(x=> x.outstanding > 0);
-  mySteel.forEach(({t, outstanding})=>{
-    const cat = catInfo(t.category);
+  const myLends = spTransactionsAll.filter(tx=> tx.type==="lend" && tx.orderer===myName);
+  myLends.forEach(tx=>{
+    const t = spPlateTypesAll.find(pt=>pt.id===tx.typeId);
+    const cat = t ? catInfo(t.category) : { label:"敷鉄板", color:"#8B5E3C" };
     rows.push({
-      dateLabel: "",
+      dateLabel: tx.date || "",
       catLabel: cat.label, catColor: cat.color,
-      assetNo: t.assetNo || "",
-      name: t.name || "",
-      statusHtml: `${outstanding} 枚`
+      assetNo: t?.assetNo || "",
+      name: (t?.name || spTypeName(tx.typeId)) + (tx.siteName ? `（${tx.siteName}）` : ""),
+      statusHtml: `${tx.count} 枚`
     });
   });
 
