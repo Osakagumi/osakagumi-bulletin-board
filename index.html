@@ -1500,6 +1500,7 @@ onAuthStateChanged(auth, async (user)=>{
     initCalendarTab();
     initWbPresetsListener();
     initSteelPlateTxListener();
+    ensureSteelPlateCategoryAndMigrate();
 
     if(urlPreselect.campaign){
       switchToTab("safety");
