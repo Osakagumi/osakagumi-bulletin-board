@@ -757,7 +757,7 @@
             </div>
           </div>
           <div class="field">
-            <label>鉄板の種類</label>
+            <label id="sp-plate-select-label">鉄板の種類</label>
             <select id="sp-plate-select"></select>
           </div>
           <div class="field" style="position:relative;">
@@ -1381,6 +1381,7 @@ let myResUnsub = null;
 let myReservationsAll = [];
 let calDaysData = {};          // "YYYY-MM-DD" -> {isHoliday, label}
 let spPlateTypesAll = [];
+let spAllInventoryTypes = [];
 let spTransactionsAll = [];
 
 let employeesAll = [];
@@ -1619,7 +1620,7 @@ function renderDashboard(){
     (eq.status==="checked_out" || eq.status==="inspecting") && eq.holderEmail===currentUser.email
   );
   const myName = myDisplayName();
-  const mySteel = spPlateTypesAll
+  const mySteel = spAllInventoryTypes
     .map(t=>({ t, outstanding: spOutstandingCountByOrderer(t.id, myName) }))
     .filter(x=> x.outstanding > 0);
   if(myEquip.length===0 && mySteel.length===0){
@@ -1807,6 +1808,7 @@ function renderCheckoutCategoryRow(){
     pill.innerHTML = `<span class="dot" style="background:${cat.color}"></span>${cat.label}`;
     pill.addEventListener("click", ()=>{
       selectedCheckoutCategory = cat.id;
+      recomputeSpPlateTypes();
       renderCheckoutCategoryRow();
       renderCheckoutTab();
     });
@@ -1950,9 +1952,9 @@ function renderMyResourcesSummary(){
     });
   });
 
-  // 敷鉄板（在庫数管理）：自分が注文者になっている貸出中数量（借用数－返却数）。0枚は表示しない。
+  // 在庫数管理カテゴリ（敷鉄板・H鋼・単管など）：自分が注文者になっている貸出中数量（借用数－返却数）。0枚は表示しない。
   const myName = myDisplayName();
-  spPlateTypesAll.forEach(t=>{
+  spAllInventoryTypes.forEach(t=>{
     const outstanding = spOutstandingCountByOrderer(t.id, myName);
     if(outstanding <= 0) return;
     const cat = catInfo(t.category);
@@ -5251,12 +5253,17 @@ function steelPlateLabeledCategoryId(){
   const cat = categoriesAll.find(c=>c.label==="敷鉄板");
   return cat ? cat.id : null;
 }
-// equipmentAll（設備管理と共通）から、敷鉄板カテゴリに属するものだけを取り出して
-// spPlateTypesAll を作り直す。専用のコレクションは持たず、設備データをそのまま使う。
+// equipmentAll（設備管理と共通）から、「現在選んでいる」在庫数管理カテゴリに属するものだけを
+// 取り出して spPlateTypesAll を作り直す（貸出タブのパネル表示・チェック用）。
+// 敷鉄板に限らず、H鋼・単管など他の在庫数管理カテゴリを選んでいる場合もこれで対応する。
 function recomputeSpPlateTypes(){
-  const catId = inventoryModeCategoryId();
+  const selCat = categoriesAll.find(c=>c.id===selectedCheckoutCategory);
+  const catId = (selCat && selCat.mode==="inventory") ? selCat.id : null;
   spPlateTypesAll = catId ? equipmentAll.filter(e=>e.category===catId) : [];
   spPlateTypesAll.sort((a,b)=> (a.order??0)-(b.order??0));
+  // ダッシュボード・「自分の資機材」集計用：在庫数管理カテゴリ全部をまとめたもの
+  const allInvCatIds = categoriesAll.filter(c=>c.mode==="inventory").map(c=>c.id);
+  spAllInventoryTypes = equipmentAll.filter(e=> allInvCatIds.includes(e.category));
 }
 function initSteelPlateTxListener(){
   const q = query(collection(db,"steel_plate_transactions"), orderBy("date","desc"));
@@ -5314,9 +5321,10 @@ async function ensureSteelPlateCategoryAndMigrate(){
     }
   }catch(e){ console.error("[敷鉄板の移行処理エラー]", e); }
 }
-function spOutstandingCount(typeId){
+function spOutstandingCount(typeId, excludeTxId){
   let lent = 0, returned = 0;
   spTransactionsAll.forEach(tx=>{
+    if(excludeTxId && tx.id===excludeTxId) return;
     if(tx.typeId !== typeId) return;
     if(tx.type==="lend") lent += Number(tx.count)||0;
     else if(tx.type==="return") returned += Number(tx.count)||0;
@@ -5374,6 +5382,12 @@ function renderSteelPlateSummary(){
   });
   thead.appendChild(tr);
   document.getElementById("sp-type-add-btn").style.display = (isAdmin || isEquipmentManager) ? "inline-block" : "none";
+  document.getElementById("sp-type-add-btn").textContent = `＋ ${selectedInventoryCategoryLabel()}の種類を追加`;
+}
+// 貸出タブで現在選んでいる「在庫数管理」カテゴリの名前（敷鉄板・H鋼・単管など）を返す
+function selectedInventoryCategoryLabel(){
+  const cat = categoriesAll.find(c=>c.id===selectedCheckoutCategory);
+  return (cat && cat.label) || "資機材";
 }
 function spTypeName(typeId){
   const t = spPlateTypesAll.find(t=>t.id===typeId);
@@ -5463,6 +5477,8 @@ function renderSteelPlateTxList(){
 function renderSpPlateSelectOptions(){
   const sel = document.getElementById("sp-plate-select");
   if(!sel) return;
+  const labelEl = document.getElementById("sp-plate-select-label");
+  if(labelEl) labelEl.textContent = `${selectedInventoryCategoryLabel()}の種類`;
   const prev = sel.value;
   sel.innerHTML = "";
   spPlateTypesAll.forEach(t=>{
@@ -5511,6 +5527,18 @@ function renderSpSiteSuggestions(filterText){
 })();
 // 現場名・注文者・鉄板の種類ごとに、貸出枚数−返却枚数（＝現在借りている枚数）を集計する
 // 工事（現場）単位での現在保有枚数の集計（注文者は問わず、現場名でまとめ、種類ごとの内訳を持つ）
+// 指定した日付「時点」での、現場×種類の残高を計算する（それより後の日付の取引は含めない）。
+// 返却の日付が、対応する貸出より前になっている入力ミスも、この計算なら検出できる。
+function siteOutstandingAsOfDate(siteName, typeId, asOfDate, excludeTxId){
+  let balance = 0;
+  spTransactionsAll.forEach(tx=>{
+    if(excludeTxId && tx.id===excludeTxId) return;
+    if(tx.siteName !== siteName || tx.typeId !== typeId) return;
+    if(tx.date > asOfDate) return; // その日付より後の取引は含めない
+    balance += (tx.type==="lend" ? (Number(tx.count)||0) : -(Number(tx.count)||0));
+  });
+  return balance;
+}
 function getSiteHoldings(excludeTxId){
   const map = new Map();
   spTransactionsAll.forEach(tx=>{
@@ -5543,7 +5571,7 @@ function renderSpHoldingsList(){
   const colCount = 1 + spPlateTypesAll.length;
   tbody.innerHTML = "";
   if(spPlateTypesAll.length===0){
-    tbody.innerHTML = `<tr><td style="color:var(--muted);text-align:center;padding:16px;">鉄板の種類がまだ登録されていません。「＋鉄板の種類を追加」から登録してください。</td></tr>`;
+    tbody.innerHTML = `<tr><td style="color:var(--muted);text-align:center;padding:16px;">${selectedInventoryCategoryLabel()}の種類がまだ登録されていません。「＋${selectedInventoryCategoryLabel()}の種類を追加」から登録してください。</td></tr>`;
     return;
   }
   if(holdings.length===0){
@@ -5704,14 +5732,46 @@ function validateSpForm(excludeTxId){
   const typeId = document.getElementById("sp-plate-select").value;
   const siteName = document.getElementById("sp-site-input").value.trim();
   const orderer = document.getElementById("sp-orderer-input").value.trim();
-  if(!typeId){ errEl.textContent = "鉄板の種類を登録してください（管理者にご連絡ください）。"; return null; }
+  if(!typeId){ errEl.textContent = `${selectedInventoryCategoryLabel()}の種類を登録してください（管理者にご連絡ください）。`; return null; }
   if(!siteName){ errEl.textContent = "現場名を入力してください。"; return null; }
-  if(spSelectedType==="return"){
-    // 更新（確定）の場合はその記録自身の分を除いた残高、複写（新規追加）の場合は元の記録を残したままなので除外しない
-    const holding = getSiteHoldings(excludeTxId).find(h=>h.siteName===siteName);
-    const outstanding = holding ? (holding.byType.find(x=>x.typeId===typeId)?.count || 0) : 0;
-    if(count > outstanding){ errEl.textContent = `返却枚数が貸出中の枚数（${outstanding}枚）を超えています。`; return null; }
+
+  if(spSelectedType==="lend"){
+    // ①総数超過チェック：この貸出を加えると、全現場合計の貸出中数量が総数を超えないか
+    const t = spPlateTypesAll.find(pt=>pt.id===typeId);
+    if(t){
+      const currentTotalOutstanding = spOutstandingCount(typeId, excludeTxId);
+      const totalCount = Number(t.totalCount)||0;
+      if(currentTotalOutstanding + count > totalCount){
+        const remaining = totalCount - currentTotalOutstanding;
+        errEl.textContent = `総数（${totalCount}枚）を超えています。現在の貸出可能な残数は${Math.max(0,remaining)}枚です。`;
+        return null;
+      }
+    }
+  } else {
+    // ②③現場別残高チェック：この返却の「日付時点」で、その現場に返却できるだけの貸出残があるか
+    // （貸出0件のまま返却しようとしている場合も、この計算で自動的に検出される）
+    const outstandingAsOfDate = siteOutstandingAsOfDate(siteName, typeId, date, excludeTxId);
+    if(count > outstandingAsOfDate){
+      if(outstandingAsOfDate <= 0){
+        errEl.textContent = `この現場・この日付時点では、この種類の貸出記録がありません（貸出残0枚）。現場名や日付をご確認ください。`;
+      } else {
+        errEl.textContent = `返却枚数が、この日付時点の貸出中の枚数（${outstandingAsOfDate}枚）を超えています。`;
+      }
+      return null;
+    }
   }
+
+  // ⑦重複登録チェック：同じ内容の記録が既に無いか（編集中の記録自身は除く）
+  const isDuplicate = spTransactionsAll.some(tx=>
+    tx.id!==excludeTxId &&
+    tx.type===spSelectedType && tx.typeId===typeId && tx.date===date &&
+    tx.siteName===siteName && (tx.orderer||"")===orderer && Number(tx.count)===count
+  );
+  if(isDuplicate){
+    const confirmMsg = "同じ内容（日付・現場名・注文者・枚数・区分）の記録が既に存在します。\n二重登録の可能性がありますが、このまま保存しますか？";
+    if(!confirm(confirmMsg)) return null;
+  }
+
   return { typeId, type: spSelectedType, count, date, siteName, orderer };
 }
 async function createSpTransaction(fields){
@@ -5772,7 +5832,7 @@ document.getElementById("sp-delete-btn")?.addEventListener("click", async ()=>{
 function openSpTypeModal(typeId){
   spEditingTypeId = typeId || null;
   const t = typeId ? spPlateTypesAll.find(t=>t.id===typeId) : null;
-  document.getElementById("sp-type-modal-title").textContent = t ? "鉄板の設定" : "鉄板の種類を追加";
+  document.getElementById("sp-type-modal-title").textContent = t ? `${selectedInventoryCategoryLabel()}の設定` : `＋ ${selectedInventoryCategoryLabel()}の種類を追加`;
   document.getElementById("sp-type-name-input").value = t?.name || "";
   document.getElementById("sp-type-total-input").value = t?.totalCount ?? "";
   document.getElementById("sp-type-price-input").value = t?.unitPricePerDay ?? "";
