@@ -354,7 +354,8 @@
     .cal-month-block[data-cal-month-index="10"]{order:10;}
     .cal-month-block[data-cal-month-index="11"]{order:11;}
   }
-  .cal-month-block{background:var(--surface);border:1.5px solid var(--line);border-radius:10px;padding:10px;}
+  .cal-month-block{background:var(--surface);border:1.5px solid var(--line);border-radius:10px;padding:10px;transition:background-color .3s ease, box-shadow .3s ease;}
+  .cal-month-block.cal-flash{background-color:#FFF3CD;box-shadow:0 0 0 2px var(--brand);}
   .cal-month-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px;padding:0 2px;}
   .cal-month-head .cal-month-name{font-size:14px;font-weight:700;color:var(--brand-dark);}
   .cal-month-head .cal-month-count{font-size:11px;color:var(--muted);font-family:var(--mono);}
@@ -5056,10 +5057,16 @@ document.getElementById("cal-next-year").addEventListener("click", ()=>{
   calFiscalYearStart++;
   loadCalendarYear(calFiscalYearStart);
 });
-function scrollToCalMonth(ym, attemptsLeft=20){
-  const block = document.querySelector(`.cal-month-block[data-cal-ym="${ym}"]`);
+function scrollToCalMonth(ym, attemptsLeft=40){
+  const wrap = document.getElementById("cal-grid-wrap");
+  const block = wrap && wrap.querySelector(`.cal-month-block[data-cal-ym="${ym}"]`);
   if(block){
     block.scrollIntoView({ behavior:"smooth", block:"center" });
+    // スクロール距離が小さい・ゼロの場合でも、押した結果が分かるよう一瞬ハイライトする
+    block.classList.remove("cal-flash");
+    void block.offsetWidth; // アニメーションを再トリガーするための強制リフロー
+    block.classList.add("cal-flash");
+    setTimeout(()=> block.classList.remove("cal-flash"), 1200);
   } else if(attemptsLeft>0){
     setTimeout(()=> scrollToCalMonth(ym, attemptsLeft-1), 100);
   }
