@@ -5235,6 +5235,11 @@ function inventoryModeCategoryId(){
   const cat = categoriesAll.find(c=>c.mode==="inventory");
   return cat ? cat.id : null;
 }
+// 名前が「敷鉄板」のカテゴリを探す（方式が誤って別の値になっている場合の重複作成防止に使う）
+function steelPlateLabeledCategoryId(){
+  const cat = categoriesAll.find(c=>c.label==="敷鉄板");
+  return cat ? cat.id : null;
+}
 // equipmentAll（設備管理と共通）から、敷鉄板カテゴリに属するものだけを取り出して
 // spPlateTypesAll を作り直す。専用のコレクションは持たず、設備データをそのまま使う。
 function recomputeSpPlateTypes(){
@@ -5263,9 +5268,13 @@ async function ensureSteelPlateCategoryAndMigrate(){
   if(spMigrationChecked || !isAdmin) return;
   spMigrationChecked = true;
   try{
-    let catId = inventoryModeCategoryId();
+    // categoriesAll（画面表示用のリアルタイム監視データ）はまだ読み込み中の可能性があるため、
+    // ここでは必ずFirestoreへ直接問い合わせて、最新の実データで重複の有無を確認する。
+    const allCatsSnap = await getDocs(collection(db,"equipment_categories"));
+    const allCats = allCatsSnap.docs.map(d=>({id:d.id, ...d.data()}));
+    let catId = (allCats.find(c=>c.mode==="inventory") || allCats.find(c=>c.label==="敷鉄板"))?.id || null;
     if(!catId){
-      const maxOrder = categoriesAll.reduce((m,c)=>Math.max(m,c.order??0),0);
+      const maxOrder = allCats.reduce((m,c)=>Math.max(m,c.order??0),0);
       const newCatRef = await addDoc(collection(db,"equipment_categories"), {
         label:"敷鉄板", color:"#8B5E3C", mode:"inventory", order:maxOrder+10
       });
@@ -5780,7 +5789,7 @@ document.getElementById("sp-type-save-btn")?.addEventListener("click", async ()=
         errEl.textContent = "同じ名称の種類がすでに登録されています。";
         return;
       }
-      let catId = inventoryModeCategoryId();
+      let catId = inventoryModeCategoryId() || steelPlateLabeledCategoryId();
       if(!catId){
         const maxOrder = categoriesAll.reduce((m,c)=>Math.max(m,c.order??0),0);
         const newCatRef = await addDoc(collection(db,"equipment_categories"), {

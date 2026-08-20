@@ -684,7 +684,7 @@ function renderCategoriesTable(){
     tr.innerHTML = `
       <td>${escapeHtml(c.label)}</td>
       <td><span style="display:inline-block;width:16px;height:16px;border-radius:4px;background:${c.color};vertical-align:middle;"></span></td>
-      <td>${c.mode==="checkout" ? "貸出管理" : "時間枠予約"}</td>
+      <td>${c.mode==="checkout" ? "貸出管理" : (c.mode==="inventory" ? "在庫数管理" : "時間枠予約")}</td>
       <td></td>
       <td class="actions"></td>
     `;
