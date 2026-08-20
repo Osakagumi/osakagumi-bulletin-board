@@ -140,7 +140,7 @@ service cloud.firestore {
     // それ以外は測量機器管理者、または現在の借用者本人が可能。
     match /equipment/{equipmentId} {
       allow read: if isSignedIn();
-      allow create, delete: if isAdmin();
+      allow create, delete: if isAdmin() || isEquipmentManager();
       allow update: if isSignedIn() &&
         (isAdmin() || isEquipmentManager() ||
           !("status" in resource.data) ||

@@ -1499,7 +1499,6 @@ onAuthStateChanged(auth, async (user)=>{
     initEmployeesListener();
     initCalendarTab();
     initWbPresetsListener();
-    initSteelPlateTypesListener();
     initSteelPlateTxListener();
 
     if(urlPreselect.campaign){
@@ -1801,9 +1800,9 @@ function renderCheckoutCategoryRow(){
   const row = document.getElementById("checkout-cat-row");
   if(!row) return;
   row.innerHTML = "";
-  const cats = categoriesAll.filter(cat=>cat.mode==="checkout");
-  if(selectedCheckoutCategory===null || (!cats.some(c=>c.id===selectedCheckoutCategory) && selectedCheckoutCategory!=="__steelplates__")){
-    selectedCheckoutCategory = cats[0]?.id || "__steelplates__";
+  const cats = categoriesAll.filter(cat=>cat.mode==="checkout" || cat.mode==="inventory");
+  if(selectedCheckoutCategory===null || !cats.some(c=>c.id===selectedCheckoutCategory)){
+    selectedCheckoutCategory = cats[0]?.id || null;
   }
   cats.forEach(cat=>{
     const pill = document.createElement("button");
@@ -1817,23 +1816,13 @@ function renderCheckoutCategoryRow(){
     });
     row.appendChild(pill);
   });
-  // 敷鉄板は設備カテゴリではないが、貸出タブの並びの一番右に並べて表示する
-  const spPill = document.createElement("button");
-  spPill.className = "cat-pill" + (selectedCheckoutCategory==="__steelplates__" ? " active":"");
-  spPill.style.color = "#6B7280";
-  spPill.innerHTML = `<span class="dot" style="background:#6B7280"></span>敷鉄板`;
-  spPill.addEventListener("click", ()=>{
-    selectedCheckoutCategory = "__steelplates__";
-    renderCheckoutCategoryRow();
-    renderCheckoutTab();
-  });
-  row.appendChild(spPill);
 }
 
 function initCategoriesListener(){
   onSnapshot(collection(db,"equipment_categories"), snap=>{
     categoriesAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
     categoriesAll.sort((a,b)=> (a.order??0)-(b.order??0));
+    recomputeSpPlateTypes();
     renderCategoryRow();
     renderEquipmentGrid();
     renderCheckoutCategoryRow();
@@ -1846,6 +1835,7 @@ function initEquipmentListener(){
   onSnapshot(q, snap=>{
     equipmentAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
     equipmentAll.sort((a,b)=> (a.order??0)-(b.order??0) || a.name.localeCompare(b.name,"ja"));
+    recomputeSpPlateTypes();
     if(reserveSignageEquipmentId){
       initReserveSignageMode();
       return;
@@ -1914,7 +1904,8 @@ function renderEquipmentGrid(){
 }
 
 function renderCheckoutTab(){
-  const isSteelPlates = selectedCheckoutCategory==="__steelplates__";
+  const selCat = categoriesAll.find(c=>c.id===selectedCheckoutCategory);
+  const isSteelPlates = selCat && selCat.mode==="inventory";
   const equipPanel = document.getElementById("checkout-equipment-panel");
   const spPanel = document.getElementById("checkout-steelplates-panel");
   if(equipPanel) equipPanel.style.display = isSteelPlates ? "none" : "block";
@@ -1922,7 +1913,8 @@ function renderCheckoutTab(){
   try{ renderMyResourcesSummary(); }catch(e){ console.error("[マイ資機材情報の表示エラー]", e); }
   if(isSteelPlates){
     try{
-      ensureDefaultSteelPlateTypes();
+      ensureSteelPlateCategoryAndMigrate();
+      recomputeSpPlateTypes();
       renderSteelPlateSummary();
       renderSpHoldingsList();
       renderSteelPlateTxList();
@@ -5234,18 +5226,20 @@ async function editCalLabel(dateStr){
   }
 }
 
-/* ---------- 敷鉄板（貸出・返却管理） ---------- */
-let spTypesSeeded = false;
+/* ---------- 敷鉄板（貸出・返却管理／設備管理の「在庫数管理」カテゴリと統合） ---------- */
 let spEditingTypeId = null;
 
-function initSteelPlateTypesListener(){
-  const q = query(collection(db,"steel_plate_types"), orderBy("order","asc"));
-  onSnapshot(q, snap=>{
-    spPlateTypesAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
-    renderSteelPlateSummary();
-    renderSpPlateSelectOptions();
-    try{ renderMyResourcesSummary(); }catch(e){ /* checkoutタブが未表示なら何もしない */ }
-  });
+// 「在庫数管理」方式のカテゴリID（＝敷鉄板カテゴリ）を返す。複数あっても最初の1つを使う。
+function inventoryModeCategoryId(){
+  const cat = categoriesAll.find(c=>c.mode==="inventory");
+  return cat ? cat.id : null;
+}
+// equipmentAll（設備管理と共通）から、敷鉄板カテゴリに属するものだけを取り出して
+// spPlateTypesAll を作り直す。専用のコレクションは持たず、設備データをそのまま使う。
+function recomputeSpPlateTypes(){
+  const catId = inventoryModeCategoryId();
+  spPlateTypesAll = catId ? equipmentAll.filter(e=>e.category===catId) : [];
+  spPlateTypesAll.sort((a,b)=> (a.order??0)-(b.order??0));
 }
 function initSteelPlateTxListener(){
   const q = query(collection(db,"steel_plate_transactions"), orderBy("date","desc"));
@@ -5257,17 +5251,47 @@ function initSteelPlateTxListener(){
     try{ renderMyResourcesSummary(); }catch(e){ /* checkoutタブが未表示なら何もしない */ }
   });
 }
-// 初回アクセス時、鉄板の種類が1件も登録されていなければ、
-// 敷鉄板_出庫管理表.xlsx にあった6m・3mの初期値で自動登録する（管理者のみ）
-async function ensureDefaultSteelPlateTypes(){
-  if(spTypesSeeded || !isAdmin) return;
-  spTypesSeeded = true;
+// 初回アクセス時（管理者のみ、1回だけ）：
+// ①「敷鉄板」カテゴリ（在庫数管理）が無ければ作成
+// ②旧 steel_plate_types のデータが残っていれば、同じドキュメントID（6m・3m）のまま
+//   equipment コレクションへ移す。IDを引き継ぐことで、既存の steel_plate_transactions
+//   （typeIdで6m・3mを参照している過去の記録）はそのまま動き続ける。
+// ③旧データも無い全くの新規導入であれば、6m・3mの初期値を作成する。
+let spMigrationChecked = false;
+async function ensureSteelPlateCategoryAndMigrate(){
+  if(spMigrationChecked || !isAdmin) return;
+  spMigrationChecked = true;
   try{
-    const snap = await getDocs(collection(db,"steel_plate_types"));
-    if(!snap.empty) return;
-    await setDoc(doc(db,"steel_plate_types","6m"), { name:"6m", totalCount:278, unitPricePerDay:25, order:1 });
-    await setDoc(doc(db,"steel_plate_types","3m"), { name:"3m", totalCount:27, unitPricePerDay:15, order:2 });
-  }catch(e){ /* 権限がなければ何もしない */ }
+    let catId = inventoryModeCategoryId();
+    if(!catId){
+      const maxOrder = categoriesAll.reduce((m,c)=>Math.max(m,c.order??0),0);
+      const newCatRef = await addDoc(collection(db,"equipment_categories"), {
+        label:"敷鉄板", color:"#8B5E3C", mode:"inventory", order:maxOrder+10
+      });
+      catId = newCatRef.id;
+    }
+    const oldTypesSnap = await getDocs(collection(db,"steel_plate_types"));
+    for(const d of oldTypesSnap.docs){
+      const existing = await getDoc(doc(db,"equipment", d.id));
+      if(!existing.exists()){
+        const data = d.data();
+        await setDoc(doc(db,"equipment", d.id), {
+          name: data.name, category: catId,
+          totalCount: data.totalCount ?? 0,
+          unitPricePerDay: data.unitPricePerDay ?? 0,
+          order: data.order ?? 0,
+          active: true
+        });
+      }
+    }
+    if(oldTypesSnap.empty){
+      const existingInCat = await getDocs(query(collection(db,"equipment"), where("category","==",catId)));
+      if(existingInCat.empty){
+        await setDoc(doc(db,"equipment","6m"), { name:"6m", category:catId, totalCount:278, unitPricePerDay:25, order:1, active:true });
+        await setDoc(doc(db,"equipment","3m"), { name:"3m", category:catId, totalCount:27, unitPricePerDay:15, order:2, active:true });
+      }
+    }
+  }catch(e){ console.error("[敷鉄板の移行処理エラー]", e); }
 }
 function spOutstandingCount(typeId){
   let lent = 0, returned = 0;
@@ -5748,15 +5772,23 @@ document.getElementById("sp-type-save-btn")?.addEventListener("click", async ()=
   if(!name){ errEl.textContent = "名称を入力してください。"; return; }
   try{
     if(spEditingTypeId){
-      await updateDoc(doc(db,"steel_plate_types", spEditingTypeId), { name, totalCount, unitPricePerDay });
+      await updateDoc(doc(db,"equipment", spEditingTypeId), { name, totalCount, unitPricePerDay });
       toast("更新しました。");
     } else {
       if(spPlateTypesAll.some(t=>t.name===name)){
         errEl.textContent = "同じ名称の種類がすでに登録されています。";
         return;
       }
+      let catId = inventoryModeCategoryId();
+      if(!catId){
+        const maxOrder = categoriesAll.reduce((m,c)=>Math.max(m,c.order??0),0);
+        const newCatRef = await addDoc(collection(db,"equipment_categories"), {
+          label:"敷鉄板", color:"#8B5E3C", mode:"inventory", order:maxOrder+10
+        });
+        catId = newCatRef.id;
+      }
       const nextOrder = spPlateTypesAll.reduce((max,t)=> Math.max(max, t.order??0), 0) + 1;
-      await addDoc(collection(db,"steel_plate_types"), { name, totalCount, unitPricePerDay, order: nextOrder });
+      await addDoc(collection(db,"equipment"), { name, category: catId, totalCount, unitPricePerDay, order: nextOrder, active: true });
       toast("追加しました。");
     }
     document.getElementById("sp-type-modal").classList.remove("show");
@@ -5778,7 +5810,7 @@ document.getElementById("sp-type-delete-btn")?.addEventListener("click", async (
   }
   if(!confirm(msg)) return;
   try{
-    await deleteDoc(doc(db,"steel_plate_types", spEditingTypeId));
+    await deleteDoc(doc(db,"equipment", spEditingTypeId));
     document.getElementById("sp-type-modal").classList.remove("show");
     toast("削除しました。");
   }catch(e){

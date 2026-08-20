@@ -140,6 +140,7 @@
             <select id="cat-mode">
               <option value="timeline">時間枠予約（会議室・車輌など）</option>
               <option value="checkout">貸出管理（測量機器・ドローンなど）</option>
+              <option value="inventory">在庫数管理（敷鉄板など）</option>
             </select>
           </div>
           <div class="field">
@@ -178,15 +179,23 @@
             <label>表示順（小さいほど上に表示）</label>
             <input type="number" id="eq-order" value="0">
           </div>
-          <div class="field">
+          <div class="field" id="eq-inventory-fields-1" style="display:none;">
+            <label>総数</label>
+            <input type="number" id="eq-total-count" min="0" step="1" placeholder="例）278">
+          </div>
+          <div class="field" id="eq-inventory-fields-2" style="display:none;">
+            <label>単価（円/日/枚）</label>
+            <input type="number" id="eq-unit-price" min="0" step="1" placeholder="例）25">
+          </div>
+          <div class="field" id="eq-last-inspection-field">
             <label>前回点検日</label>
             <input type="date" id="eq-last-inspection">
           </div>
-          <div class="field" style="display:flex;align-items:center;gap:6px;padding-top:20px;">
+          <div class="field" id="eq-active-field" style="display:flex;align-items:center;gap:6px;padding-top:20px;">
             <input type="checkbox" id="eq-active" checked style="width:auto;">
             <label style="margin:0;font-size:12.5px;color:var(--text);">予約対象として表示する</label>
           </div>
-          <div class="field" style="display:flex;align-items:center;gap:6px;padding-top:20px;">
+          <div class="field" id="eq-signage-field" style="display:flex;align-items:center;gap:6px;padding-top:20px;">
             <input type="checkbox" id="eq-signage" style="width:auto;">
             <label style="margin:0;font-size:12.5px;color:var(--text);">サイネージモードを使用する</label>
           </div>
@@ -651,6 +660,7 @@ function initCategoriesListener(){
     categoriesAll.sort((a,b)=> (a.order??0)-(b.order??0));
     renderCategoriesTable();
     populateCategorySelects();
+    applyEquipmentFormModeUI();
     renderEquipmentTable();
   });
 }
@@ -930,9 +940,15 @@ function renderEquipmentTable(){
   equipmentAll.forEach(eq=>{
     const cat = catInfo(eq.category);
     const isCheckoutMode = cat.mode === "checkout";
+    const isInventoryMode = cat.mode === "inventory";
     const st = EQUIPMENT_STATUSES.find(s=>s.id===(eq.status||"in_stock"));
     const tr = document.createElement("tr");
     if(eq.active===false) tr.classList.add("muted-row");
+    const statusCellHtml = isCheckoutMode && st
+      ? `<span class="tag" style="background:${st.color}">${st.label}</span>`
+      : (isInventoryMode
+        ? `<span style="font-size:12px;color:var(--muted);">総数${eq.totalCount??0} / ${eq.unitPricePerDay??0}円</span>`
+        : "-");
     tr.innerHTML = `
       <td>${escapeHtml(eq.name)}</td>
       <td style="color:var(--muted);">${escapeHtml(eq.assetNo||"")}</td>
@@ -940,7 +956,7 @@ function renderEquipmentTable(){
       <td style="color:var(--muted);max-width:220px;">${escapeHtml(eq.note||"")}</td>
       <td></td>
       <td>${eq.active===false ? "非表示" : "表示中"}</td>
-      <td>${isCheckoutMode && st ? `<span class="tag" style="background:${st.color}">${st.label}</span>` : "-"}</td>
+      <td>${statusCellHtml}</td>
       <td>${eq.signageEnabled ? `<a href="${indexPageUrl()}?reserveSignage=${encodeURIComponent(eq.id)}" target="_blank" rel="noopener noreferrer">画面を開く</a>` : "-"}</td>
       <td class="actions"></td>
     `;
@@ -977,9 +993,20 @@ function maxOrderInCategory(categoryId){
   if(inCat.length===0) return 0;
   return Math.max(...inCat.map(e=>e.order??0));
 }
+function applyEquipmentFormModeUI(){
+  const cat = categoriesAll.find(c=>c.id===document.getElementById("eq-category").value);
+  const isInventory = cat && cat.mode==="inventory";
+  document.getElementById("eq-inventory-fields-1").style.display = isInventory ? "block" : "none";
+  document.getElementById("eq-inventory-fields-2").style.display = isInventory ? "block" : "none";
+  document.getElementById("eq-last-inspection-field").style.display = isInventory ? "none" : "block";
+  document.getElementById("eq-signage-field").style.display = isInventory ? "none" : "flex";
+  const activeLabel = document.querySelector("#eq-active-field label");
+  if(activeLabel) activeLabel.textContent = isInventory ? "資機材タブに表示する" : "予約対象として表示する";
+}
 document.getElementById("eq-category").addEventListener("change", ()=>{
   if(editingEquipmentId) return; // 編集中はカテゴリを変えても自動採番しない
   document.getElementById("eq-order").value = maxOrderInCategory(document.getElementById("eq-category").value) + 10;
+  applyEquipmentFormModeUI();
 });
 
 function startEditEquipment(eq){
@@ -993,6 +1020,9 @@ function startEditEquipment(eq){
   document.getElementById("eq-last-inspection").value = eq.lastInspectionDate || "";
   document.getElementById("eq-active").checked = eq.active !== false;
   document.getElementById("eq-signage").checked = eq.signageEnabled === true;
+  document.getElementById("eq-total-count").value = eq.totalCount ?? "";
+  document.getElementById("eq-unit-price").value = eq.unitPricePerDay ?? "";
+  applyEquipmentFormModeUI();
   document.getElementById("eq-save-btn").textContent = "変更を保存";
   document.getElementById("eq-cancel-edit").style.display = "inline-block";
   window.scrollTo({top:0, behavior:"smooth"});
@@ -1007,7 +1037,10 @@ function resetEquipmentForm(){
   document.getElementById("eq-note").value = "";
   document.getElementById("eq-order").value = maxOrderInCategory(document.getElementById("eq-category").value) + 10;
   document.getElementById("eq-last-inspection").value = "";
+  document.getElementById("eq-total-count").value = "";
+  document.getElementById("eq-unit-price").value = "";
   document.getElementById("eq-active").checked = true;
+  applyEquipmentFormModeUI();
   document.getElementById("eq-signage").checked = false;
   document.getElementById("eq-save-btn").textContent = "追加する";
   document.getElementById("eq-cancel-edit").style.display = "none";
@@ -1016,20 +1049,30 @@ function resetEquipmentForm(){
 document.getElementById("eq-save-btn").addEventListener("click", async ()=>{
   const name = document.getElementById("eq-name").value.trim();
   if(!name){ toast("設備名を入力してください。"); return; }
+  const selectedCat = categoriesAll.find(c=>c.id===document.getElementById("eq-category").value);
+  const isInventory = selectedCat && selectedCat.mode==="inventory";
   const payload = {
     name,
     assetNo: document.getElementById("eq-asset-no").value.trim(),
     category: document.getElementById("eq-category").value,
     note: document.getElementById("eq-note").value.trim(),
     order: Number(document.getElementById("eq-order").value)||0,
-    lastInspectionDate: document.getElementById("eq-last-inspection").value || "",
-    active: document.getElementById("eq-active").checked,
-    signageEnabled: document.getElementById("eq-signage").checked
+    active: document.getElementById("eq-active").checked
   };
+  if(isInventory){
+    payload.totalCount = Number(document.getElementById("eq-total-count").value)||0;
+    payload.unitPricePerDay = Number(document.getElementById("eq-unit-price").value)||0;
+  } else {
+    payload.lastInspectionDate = document.getElementById("eq-last-inspection").value || "";
+    payload.signageEnabled = document.getElementById("eq-signage").checked;
+  }
   try{
     if(editingEquipmentId){
       await updateDoc(doc(db,"equipment", editingEquipmentId), payload);
       toast("設備情報を更新しました。");
+    } else if(isInventory){
+      await addDoc(collection(db,"equipment"), payload);
+      toast("設備を追加しました。");
     } else {
       // 貸出管理（測量機器・ドローンなど）用フィールドの初期値
       payload.status = "in_stock";
