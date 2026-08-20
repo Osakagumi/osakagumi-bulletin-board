@@ -1950,18 +1950,20 @@ function renderMyResourcesSummary(){
     });
   });
 
-  // 敷鉄板（在庫数管理）：自分が注文者になっている貸出取引を、1件＝1行で表示
+  // 敷鉄板（在庫数管理）：自分が注文者になっている貸出中数量（借用数－返却数）。0枚は表示しない。
   const myName = myDisplayName();
-  const myLends = spTransactionsAll.filter(tx=> tx.type==="lend" && tx.orderer===myName);
-  myLends.forEach(tx=>{
-    const t = spPlateTypesAll.find(pt=>pt.id===tx.typeId);
-    const cat = t ? catInfo(t.category) : { label:"敷鉄板", color:"#8B5E3C" };
+  spPlateTypesAll.forEach(t=>{
+    const outstanding = spOutstandingCountByOrderer(t.id, myName);
+    if(outstanding <= 0) return;
+    const cat = catInfo(t.category);
+    // spTransactionsAll は日付の新しい順なので、先頭が一番最近の借用日
+    const lastLend = spTransactionsAll.find(tx=> tx.type==="lend" && tx.typeId===t.id && tx.orderer===myName);
     rows.push({
-      dateLabel: tx.date || "",
+      dateLabel: lastLend ? lastLend.date : "",
       catLabel: cat.label, catColor: cat.color,
-      assetNo: t?.assetNo || "",
-      name: (t?.name || spTypeName(tx.typeId)) + (tx.siteName ? `（${tx.siteName}）` : ""),
-      statusHtml: `${tx.count} 枚`
+      assetNo: t.assetNo || "",
+      name: t.name || "",
+      statusHtml: `${outstanding} 枚`
     });
   });
 
