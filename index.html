@@ -2557,13 +2557,13 @@ function setDateFieldValue(el, dateStr){
   }
 }
 
-function setTimeFieldValue(el, timeStr){
+function setTimeFieldValue(el, timeStr, placeholderText){
   el.dataset.value = timeStr || "";
   if(timeStr){
     el.textContent = timeStr;
     el.classList.remove("placeholder");
   } else {
-    el.textContent = "未設定（タップして選択）";
+    el.textContent = placeholderText || "未設定（タップして選択）";
     el.classList.add("placeholder");
   }
 }
@@ -6153,12 +6153,12 @@ function setContractStartTime(timeStr){
 }
 function setContractEndDate(dateStr){
   contractEndDate = dateStr || "";
-  document.getElementById("contract-end-date-picker").textContent = dateStr ? formatDateJP(dateStr) : "未設定（任意）";
+  document.getElementById("contract-end-date-picker").textContent = dateStr ? formatDateJP(dateStr) : "未設定";
 }
 function setContractEndTime(timeStr){
   const el = document.getElementById("contract-end-time-btn");
   contractEndTime = timeStr || "";
-  setTimeFieldValue(el, timeStr);
+  setTimeFieldValue(el, timeStr, "未設定");
 }
 document.getElementById("contract-start-date-picker")?.addEventListener("click", (e)=>{
   openCalendarPicker(e.currentTarget, contractStartDate || todayStr(), {
@@ -6168,7 +6168,7 @@ document.getElementById("contract-start-date-picker")?.addEventListener("click",
 document.getElementById("contract-start-time-btn")?.addEventListener("click", (e)=>{
   const el = e.currentTarget;
   openTimePicker(el, el.dataset.value, {
-    stepMinutes: 5, maxTime: "23:55",
+    stepMinutes: 5, minTime: "06:00", maxTime: "20:00",
     onSelect: (val)=> setContractStartTime(val)
   });
 });
@@ -6181,7 +6181,7 @@ document.getElementById("contract-end-date-picker")?.addEventListener("click", (
 document.getElementById("contract-end-time-btn")?.addEventListener("click", (e)=>{
   const el = e.currentTarget;
   openTimePicker(el, el.dataset.value, {
-    stepMinutes: 5, maxTime: "23:55",
+    stepMinutes: 5, minTime: "06:00", maxTime: "20:00",
     onSelect: (val)=> setContractEndTime(val)
   });
 });
