@@ -5097,6 +5097,7 @@ function loadCalendarYear(year){
     calDaysData = {};
     snap.docs.forEach(d=>{ calDaysData[d.id] = d.data(); });
     renderCalendar();
+    refreshDashboardIfActive();
   }, (err)=>{ console.error("[カレンダー取得エラー]", err); });
 }
 
