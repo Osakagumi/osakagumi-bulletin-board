@@ -925,6 +925,13 @@
               </div>
               <div id="dash-reserve-body"></div>
             </div>
+            <div class="dash-card" id="dash-card-contracts">
+              <div class="dash-card-head">
+                <h3>入札</h3>
+                <span class="dash-card-link" id="dash-contracts-link" title="入札を見る">▶</span>
+              </div>
+              <div id="dash-contracts-body"></div>
+            </div>
             <div class="dash-card" id="dash-card-checkout">
               <div class="dash-card-head">
                 <h3>借用中の資機材</h3>
@@ -1664,7 +1671,8 @@ const DASH_CARD_BY_VIEW = {
   calendar: "dash-card-calendar",
   whereabouts: "dash-card-whereabouts",
   reserve: "dash-card-reserve",
-  checkout: "dash-card-checkout"
+  checkout: "dash-card-checkout",
+  contracts: "dash-card-contracts"
 };
 // 管理者がユーザー毎に設定した「非表示にするタブ」を、自分のタブ・ダッシュボードのカードに反映する
 function applyMyHiddenTabs(){
@@ -1783,6 +1791,29 @@ function renderDashboard(){
     });
   }
 
+  // ---- 入札（直近1週間以内に開始するもの） ----
+  const contractsBody = document.getElementById("dash-contracts-body");
+  contractsBody.innerHTML = "";
+  const weekLaterForDash = new Date(Date.now() + 7*24*60*60*1000);
+  const upcomingContracts = contractsAll
+    .filter(c=>{
+      const d = new Date(c.startAt);
+      return !isNaN(d.getTime()) && d >= new Date() && d <= weekLaterForDash;
+    })
+    .sort((a,b)=> new Date(a.startAt) - new Date(b.startAt));
+  if(upcomingContracts.length===0){
+    contractsBody.innerHTML = `<div class="dash-empty">直近1週間以内の入札はありません。</div>`;
+  } else {
+    upcomingContracts.slice(0,5).forEach(c=>{
+      const row = document.createElement("div");
+      row.className = "dash-row";
+      const statusLabel = contractStatusLabel(c.status) || (c.format==="paper" ? "入札" : "参加");
+      row.innerHTML = `<span>${escapeHtml(c.projectName||"")} <span style="color:${contractFormatColor(c.format)};font-size:11px;">[${escapeHtml(contractFormatLabel(c.format))}]</span></span><span class="dash-row-sub" style="color:${contractStatusColor(c.status)};">${escapeHtml(statusLabel)}</span>`;
+      row.addEventListener("click", ()=> switchToTab("contracts"));
+      contractsBody.appendChild(row);
+    });
+  }
+
   // ---- 自分の資機材（借用中の測量機器/ドローン＋自分が注文者の敷鉄板） ----
   const checkoutBody = document.getElementById("dash-checkout-body");
   checkoutBody.innerHTML = "";
@@ -1855,6 +1886,7 @@ document.getElementById("dash-cal-today-btn").addEventListener("click", ()=>{
 document.getElementById("dash-notices-link").addEventListener("click", ()=> switchToTab("notices"));
 document.getElementById("dash-wb-link").addEventListener("click", ()=> switchToTab("whereabouts"));
 document.getElementById("dash-reserve-link").addEventListener("click", ()=> switchToTab("reserve"));
+document.getElementById("dash-contracts-link").addEventListener("click", ()=> switchToTab("contracts"));
 document.getElementById("dash-checkout-link").addEventListener("click", ()=> switchToTab("checkout"));
 document.getElementById("dash-calendar-link").addEventListener("click", ()=> switchToTab("calendar"));
 
@@ -6155,6 +6187,7 @@ function initContractsListener(){
     if(document.getElementById("view-contracts").style.display !== "none"){
       renderContractsTab();
     }
+    refreshDashboardIfActive();
   }, (err)=>{ console.error("[契約情報取得エラー]", err); });
 }
 // 入札管理画面（admin.html）で設定された「対応部門」の初期値。社員選択モーダルの所属の初期選択に使う。
