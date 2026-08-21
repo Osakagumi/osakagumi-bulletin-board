@@ -823,6 +823,10 @@
             <select id="emp-picker-dept-select"></select>
           </div>
           <div class="field">
+            <label>氏名で絞り込み（前方一致）</label>
+            <input type="text" id="emp-picker-search-input" placeholder="例：山田">
+          </div>
+          <div class="field">
             <label>氏名</label>
             <select id="emp-picker-name-select" size="8" class="emp-picker-listbox"></select>
           </div>
@@ -1478,6 +1482,7 @@ let isWhereaboutsEditor = false;
 let isEquipmentManager = false;
 let isCalendarEditor = false;
 let isContractEditor = false;
+let contractDefaultDepartmentId = null;
 let contractsAll = [];
 let editingContractId = null;
 let equipmentAll = [];
@@ -1610,6 +1615,7 @@ onAuthStateChanged(auth, async (user)=>{
     initWbPresetsListener();
     initSteelPlateTxListener();
     initContractsListener();
+    initContractSettingsListener();
     ensureSteelPlateCategoryAndMigrate();
 
     if(urlPreselect.campaign){
@@ -3733,16 +3739,35 @@ function departmentName(id){
   const d = departmentsAll.find(x=>x.id===id);
   return d ? d.name : "未所属";
 }
+// 複数所属に対応：新形式(departments配列)を優先し、旧形式(department単一)にもフォールバックする
+function empDepartments(emp){
+  if(Array.isArray(emp.departments) && emp.departments.length) return emp.departments;
+  return emp.department ? [emp.department] : [];
+}
+function departmentNamesJoined(emp){
+  const ids = empDepartments(emp);
+  if(ids.length===0) return "未所属";
+  return ids.map(id=>departmentName(id)).join("・");
+}
 
 /* ---------- 社員選択ダイアログ（共通部品） ----------
    使い方: const emp = await openEmployeePicker();
    選択されればその社員データ（{email, name, ...}）、キャンセルされれば null が返る。 */
 let empPickerResolve = null;
-function openEmployeePicker(){
+function openEmployeePicker(opts){
   return new Promise((resolve)=>{
     empPickerResolve = resolve;
     document.getElementById("emp-picker-error").textContent = "";
+    document.getElementById("emp-picker-search-input").value = "";
     renderEmpPickerDeptSelect();
+    const defaultDeptId = opts?.defaultDeptId;
+    if(defaultDeptId){
+      const deptSel = document.getElementById("emp-picker-dept-select");
+      if([...deptSel.options].some(o=>o.value===defaultDeptId)){
+        deptSel.value = defaultDeptId;
+        renderEmpPickerNameSelect();
+      }
+    }
     document.getElementById("employee-picker-modal").classList.add("show");
   });
 }
@@ -3763,10 +3788,15 @@ function renderEmpPickerDeptSelect(){
 function renderEmpPickerNameSelect(){
   const deptSel = document.getElementById("emp-picker-dept-select");
   const nameSel = document.getElementById("emp-picker-name-select");
+  const searchInput = document.getElementById("emp-picker-search-input");
   if(!deptSel || !nameSel) return;
   const deptId = deptSel.value;
+  const searchText = (searchInput?.value || "").trim();
   // 所属(表示)順→社員番号順というアプリ共通の並び順に統一する
-  const list = getSortedEmployees().filter(e=> !deptId || e.department===deptId);
+  let list = getSortedEmployees().filter(e=> !deptId || empDepartments(e).includes(deptId));
+  if(searchText){
+    list = list.filter(e=> (e.name||"").startsWith(searchText));
+  }
   nameSel.innerHTML = "";
   if(list.length===0){
     nameSel.innerHTML = `<option value="">該当する社員がいません</option>`;
@@ -3778,6 +3808,7 @@ function renderEmpPickerNameSelect(){
     nameSel.appendChild(opt);
   });
 }
+document.getElementById("emp-picker-search-input")?.addEventListener("input", renderEmpPickerNameSelect);
 document.getElementById("emp-picker-dept-select")?.addEventListener("change", renderEmpPickerNameSelect);
 document.getElementById("emp-picker-cancel-btn")?.addEventListener("click", ()=>{
   document.getElementById("employee-picker-modal").classList.remove("show");
@@ -3937,8 +3968,8 @@ function departmentSortIndex(id){
 }
 function getSortedEmployees(){
   return employeesAll.filter(e=>!e.hidden).slice().sort((a,b)=>{
-    const da = departmentSortIndex(a.department);
-    const db = departmentSortIndex(b.department);
+    const da = departmentSortIndex(empDepartments(a)[0]);
+    const db = departmentSortIndex(empDepartments(b)[0]);
     if(da!==db) return da-db;
     const na = a.employeeNo ? Number(a.employeeNo) : null;
     const nb = b.employeeNo ? Number(b.employeeNo) : null;
@@ -4015,7 +4046,7 @@ function renderWbList(){
     const st = effStatus==="OFFHOURS" ? { name:"時間外", color:"#8A8F98" } : wbStatusInfo(effStatus);
     const tr = document.createElement("tr");
     const tdDept = document.createElement("td");
-    tdDept.textContent = emp.department ? departmentName(emp.department) : "未所属";
+    tdDept.textContent = departmentNamesJoined(emp);
     const tdName = document.createElement("td");
     tdName.textContent = emp.name || emp.email;
     const tdStatus = document.createElement("td");
@@ -4382,7 +4413,7 @@ function renderWbPresetTable(){
       const st = effective ? wbStatusInfo(effective.status) : null;
       const tr = document.createElement("tr");
       const tdDept = document.createElement("td");
-      tdDept.textContent = emp.department ? departmentName(emp.department) : "未所属";
+      tdDept.textContent = departmentNamesJoined(emp);
       const tdName = document.createElement("td");
       tdName.textContent = emp.name || emp.email;
       const tdStatus = document.createElement("td");
@@ -6057,6 +6088,12 @@ function initContractsListener(){
     }
   }, (err)=>{ console.error("[契約情報取得エラー]", err); });
 }
+// 入札管理画面（admin.html）で設定された「対応部門」の初期値。社員選択モーダルの所属の初期選択に使う。
+function initContractSettingsListener(){
+  onSnapshot(doc(db,"app_settings","contract_defaults"), snap=>{
+    contractDefaultDepartmentId = (snap.exists() && snap.data().defaultDepartmentId) || null;
+  }, (err)=>{ console.error("[入札設定取得エラー]", err); });
+}
 function contractFormatLabel(format){ return format==="electronic" ? "電子" : "紙"; }
 function contractStatusLabel(status){
   return { join:"参加", bid:"入札", open:"開札" }[status] || "";
@@ -6281,7 +6318,7 @@ function setContractAssignee(name){
   document.getElementById("contract-assignee-display").style.color = name ? "var(--text)" : "var(--muted)";
 }
 document.getElementById("contract-assignee-pick-btn")?.addEventListener("click", async ()=>{
-  const emp = await openEmployeePicker();
+  const emp = await openEmployeePicker({ defaultDeptId: contractDefaultDepartmentId });
   if(emp){ setContractAssignee(emp.name || emp.email); }
 });
 function isoToDateStr(iso){

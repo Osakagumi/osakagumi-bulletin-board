@@ -145,6 +145,12 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // 入札の対応部門などのアプリ全体設定: 全員が読める。書き込みは管理者 or 契約編集権限者のみ。
+    match /app_settings/{settingId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isContractEditor();
+    }
+
     // 契約（入札関係情報）: 全員が読める（公開）。作成・更新・削除は管理者 or 契約編集権限者のみ。
     match /contracts/{contractId} {
       allow read: if isSignedIn();

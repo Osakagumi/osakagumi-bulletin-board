@@ -304,7 +304,7 @@
           列の順番：<b>社員番号, 氏名, 所属, 管理者フラグ, お知らせ投稿フラグ, メールアドレス, パスワード, 電話番号, 備考</b><br>
           必須は「メールアドレス」「パスワード」のみで、他は省略可です。<br>
           管理者フラグ・お知らせ投稿フラグは <code>1</code> / <code>TRUE</code> / <code>○</code> / <code>はい</code> のいずれかを入れると有効になります（空欄は無効）。<br>
-          所属欄には「ユーザー管理」タブで登録済みの部署名をそのまま入力してください（一致しない場合は未所属として登録されます）。
+          所属欄には「ユーザー管理」タブで登録済みの部署名をそのまま入力してください（一致しない場合は未所属として登録されます）。複数の部署に所属させたい場合は「、」または「/」区切りで入力してください（例：役員、営業部）。
         </p>
         <div class="field full" style="margin-bottom:12px;">
           <label>サンプル</label>
@@ -535,6 +535,19 @@
 
     <!-- ============ 契約管理 ============ -->
     <section id="view-contracts" style="display:none;">
+      <div class="panel">
+        <h2>入札の対応部門</h2>
+        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
+          「入札」タブで対応者を選ぶ際、社員選択モーダルの「所属」の初期選択に使う部門を指定します（未指定の場合は「すべて」になります）。
+        </p>
+        <div class="form-grid">
+          <div class="field full">
+            <label>対応部門</label>
+            <select id="contract-default-dept-select"></select>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="contract-default-dept-save-btn">保存</button>
+      </div>
       <div class="panel">
         <h2>入札編集権限者（入札関係情報の追加・編集・削除ができる人）</h2>
         <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
@@ -844,6 +857,7 @@ onAuthStateChanged(auth, async (user)=>{
   initCalendarEditorsListener();
   initCalendarYearsListener();
   initContractEditorsListener();
+  initContractSettingsListener();
   initEmployeesListener();
   initSafetyCampaignsListener();
 });
@@ -1480,6 +1494,7 @@ function initDepartmentsListener(){
     departmentsAll.sort((a,b)=> (a.order??0)-(b.order??0));
     renderDepartments();
     renderEmployees();
+    renderContractDefaultDeptSelect();
   });
 }
 function renderDepartments(){
@@ -1723,6 +1738,36 @@ function initContractEditorsListener(){
     renderContractEditors(snap.docs.map(d=>d.id));
   });
 }
+let contractDefaultDepartmentIdAdmin = null;
+function initContractSettingsListener(){
+  onSnapshot(doc(db,"app_settings","contract_defaults"), snap=>{
+    contractDefaultDepartmentIdAdmin = (snap.exists() && snap.data().defaultDepartmentId) || "";
+    renderContractDefaultDeptSelect();
+  }, (err)=>{ console.error("[入札設定取得エラー]", err); });
+}
+function renderContractDefaultDeptSelect(){
+  const sel = document.getElementById("contract-default-dept-select");
+  if(!sel) return;
+  sel.innerHTML = "";
+  const allOpt = document.createElement("option");
+  allOpt.value = ""; allOpt.textContent = "すべて（指定なし）";
+  sel.appendChild(allOpt);
+  departmentsAll.forEach(d=>{
+    const opt = document.createElement("option");
+    opt.value = d.id; opt.textContent = d.name;
+    sel.appendChild(opt);
+  });
+  sel.value = contractDefaultDepartmentIdAdmin || "";
+}
+document.getElementById("contract-default-dept-save-btn")?.addEventListener("click", async ()=>{
+  const deptId = document.getElementById("contract-default-dept-select").value;
+  try{
+    await setDoc(doc(db,"app_settings","contract_defaults"), { defaultDepartmentId: deptId }, { merge:true });
+    toast("保存しました。");
+  }catch(e){
+    toast("保存に失敗しました。権限をご確認ください。");
+  }
+});
 function renderContractEditors(list){
   const body = document.getElementById("contracteditor-table-body");
   body.innerHTML = "";
@@ -1976,8 +2021,8 @@ function departmentSortIndex(id){
 }
 function sortByDeptAndEmployeeNo(list){
   return list.slice().sort((a,b)=>{
-    const da = departmentSortIndex(a.department);
-    const db = departmentSortIndex(b.department);
+    const da = departmentSortIndex(empDepartmentsAdmin(a)[0]);
+    const db = departmentSortIndex(empDepartmentsAdmin(b)[0]);
     if(da!==db) return da-db;
     const na = a.employeeNo ? Number(a.employeeNo) : null;
     const nb = b.employeeNo ? Number(b.employeeNo) : null;
@@ -2017,13 +2062,15 @@ function renderEmployees(){
 
     const tdDept = document.createElement("td");
     const deptSelect = document.createElement("select");
-    const noneOpt = document.createElement("option");
-    noneOpt.value = ""; noneOpt.textContent = "未所属";
-    deptSelect.appendChild(noneOpt);
+    deptSelect.multiple = true;
+    deptSelect.size = Math.min(4, Math.max(2, departmentsAll.length));
+    deptSelect.style.minWidth = "120px";
+    deptSelect.title = "Ctrl（Macは⌘）を押しながらクリックで複数選択できます";
+    const empCurrentDepts = empDepartmentsAdmin(emp);
     departmentsAll.forEach(dep=>{
       const opt = document.createElement("option");
       opt.value = dep.id; opt.textContent = dep.name;
-      if(emp.department===dep.id) opt.selected = true;
+      if(empCurrentDepts.includes(dep.id)) opt.selected = true;
       deptSelect.appendChild(opt);
     });
     tdDept.appendChild(deptSelect);
@@ -2048,11 +2095,13 @@ function renderEmployees(){
     const saveBtn = document.createElement("button");
     saveBtn.className = "btn btn-primary"; saveBtn.textContent = "保存";
     saveBtn.addEventListener("click", async ()=>{
+      const selectedDepts = [...deptSelect.selectedOptions].map(o=>o.value);
       try{
         await updateDoc(doc(db,"employees", emp.email), {
           employeeNo: noInput.value.trim(),
           name: nameInput.value.trim() || emp.email,
-          department: deptSelect.value,
+          departments: selectedDepts,
+          department: selectedDepts[0] || "", // 旧バージョン互換用（先頭の所属を単一値としても保持）
           order: Number(orderInput.value)||0,
           phone: phoneInput.value.trim(),
           memo: memoInput.value.trim()
@@ -2201,6 +2250,16 @@ function departmentNameById(id){
   const d = departmentsAll.find(x=>x.id===id);
   return d ? d.name : "未所属";
 }
+// 複数所属に対応：新形式(departments配列)を優先し、旧形式(department単一)にもフォールバックする
+function empDepartmentsAdmin(emp){
+  if(Array.isArray(emp.departments) && emp.departments.length) return emp.departments;
+  return emp.department ? [emp.department] : [];
+}
+function departmentNamesJoinedAdmin(emp){
+  const ids = empDepartmentsAdmin(emp);
+  if(ids.length===0) return "未所属";
+  return ids.map(id=>departmentNameById(id)).join("・");
+}
 
 function renderSafetyDashboard(responses){
   const body = document.getElementById("safety-table-body");
@@ -2229,7 +2288,7 @@ function renderSafetyDashboard(responses){
       : `<span style="color:var(--muted);font-size:12px;">未回答</span>`;
     tr.innerHTML = `
       <td>${escapeHtml(emp.name||emp.email)}</td>
-      <td>${escapeHtml(departmentNameById(emp.department))}</td>
+      <td>${escapeHtml(departmentNamesJoinedAdmin(emp))}</td>
       <td>${statusCell}</td>
       <td style="color:var(--muted);max-width:200px;">${escapeHtml(resp?.comment||"")}</td>
       <td style="font-size:12px;color:var(--muted);">${resp ? tsToStr(resp.respondedAt) : ""}</td>
@@ -2395,6 +2454,14 @@ function departmentIdByName(name){
   const dep = departmentsAll.find(d=>d.name===name);
   return dep ? dep.id : "";
 }
+// CSVの「所属」欄に複数の部署名が「、」「/」区切りで入っている場合に対応する
+function departmentNamesFromCell(cellText){
+  if(!cellText) return [];
+  return cellText.split(/[、,\/]/).map(s=>s.trim()).filter(Boolean);
+}
+function departmentIdsByNames(cellText){
+  return departmentNamesFromCell(cellText).map(n=>departmentIdByName(n)).filter(Boolean);
+}
 
 document.getElementById("userimport-preview-btn").addEventListener("click", async ()=>{
   const fileInput = document.getElementById("userimport-file");
@@ -2416,12 +2483,15 @@ function renderUserImportPreview(){
     return;
   }
   userImportRows.forEach(row=>{
-    const deptId = departmentIdByName(row.department);
+    const deptNames = departmentNamesFromCell(row.department);
+    const deptCellHtml = deptNames.length===0
+      ? "未所属"
+      : deptNames.map(n=> escapeHtml(n) + (departmentIdByName(n) ? "" : "（未登録・未所属になります）")).join("、");
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${escapeHtml(row.employeeNo)}</td>
       <td>${escapeHtml(row.name || "（未入力）")}</td>
-      <td>${row.department ? escapeHtml(row.department) + (deptId ? "" : "（未登録・未所属になります）") : "未所属"}</td>
+      <td>${deptCellHtml}</td>
       <td>${row.isAdmin ? "○" : ""}</td>
       <td>${row.isPoster ? "○" : ""}</td>
       <td>${escapeHtml(row.email)}</td>
@@ -2470,7 +2540,8 @@ document.getElementById("userimport-execute-btn").addEventListener("click", asyn
         employeeNo: row.employeeNo,
         name: row.name || row.email.split("@")[0],
         email: row.email,
-        department: departmentIdByName(row.department),
+        departments: departmentIdsByNames(row.department),
+        department: departmentIdsByNames(row.department)[0] || "", // 旧バージョン互換用
         phone: row.phone,
         memo: row.memo,
         order: 0,
