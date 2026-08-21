@@ -890,7 +890,7 @@
             <div id="dash-safety-body"></div>
           </div>
           <div class="dash-col dash-col-left">
-            <div class="dash-card">
+            <div class="dash-card" id="dash-card-notices">
               <div class="dash-card-head">
                 <h3>お知らせ</h3>
                 <span class="dash-card-link" id="dash-notices-link" title="お知らせを見る">▶</span>
@@ -911,21 +911,21 @@
             </div>
           </div>
           <div class="dash-col dash-col-right">
-            <div class="dash-card">
+            <div class="dash-card" id="dash-card-whereabouts">
               <div class="dash-card-head">
                 <h3>行き先</h3>
                 <span class="dash-card-link" id="dash-wb-link" title="行き先を見る">▶</span>
               </div>
               <div id="dash-wb-body"></div>
             </div>
-            <div class="dash-card">
+            <div class="dash-card" id="dash-card-reserve">
               <div class="dash-card-head">
                 <h3>予約済の設備</h3>
                 <span class="dash-card-link" id="dash-reserve-link" title="予約を見る">▶</span>
               </div>
               <div id="dash-reserve-body"></div>
             </div>
-            <div class="dash-card">
+            <div class="dash-card" id="dash-card-checkout">
               <div class="dash-card-head">
                 <h3>借用中の資機材</h3>
                 <span class="dash-card-link" id="dash-checkout-link" title="資機材を見る">▶</span>
@@ -1658,6 +1658,35 @@ onAuthStateChanged(auth, async (user)=>{
 
 /* ---------- tabs ---------- */
 const ALL_VIEWS = ["dashboard","notices","whereabouts","reserve","checkout","safety","calendar","contracts"];
+// タブ名 → 対応するダッシュボードのカードID（ダッシュボード自体と安否確認は常時表示なので対象外）
+const DASH_CARD_BY_VIEW = {
+  notices: "dash-card-notices",
+  calendar: "dash-card-calendar",
+  whereabouts: "dash-card-whereabouts",
+  reserve: "dash-card-reserve",
+  checkout: "dash-card-checkout"
+};
+// 管理者がユーザー毎に設定した「非表示にするタブ」を、自分のタブ・ダッシュボードのカードに反映する
+function applyMyHiddenTabs(){
+  const me = employeesAll.find(e=>(e.email||"").toLowerCase()===(currentUser?.email||"").toLowerCase());
+  const hidden = (me && Array.isArray(me.hiddenTabs)) ? me.hiddenTabs : [];
+  document.querySelectorAll("#main-tabs .tab-btn[data-view]").forEach(btn=>{
+    const view = btn.dataset.view;
+    if(view==="dashboard" || view==="safety") return; // 常時表示
+    if(hidden.includes(view)) btn.style.display = "none";
+    else if(btn.style.display==="none") btn.style.display = "";
+  });
+  Object.entries(DASH_CARD_BY_VIEW).forEach(([view, cardId])=>{
+    const card = document.getElementById(cardId);
+    if(card) card.style.display = hidden.includes(view) ? "none" : "";
+  });
+  // 今表示中のタブが非表示になった場合は、見えている一番左のタブに切り替える
+  const activeBtn = document.querySelector("#main-tabs .tab-btn.active");
+  if(activeBtn && activeBtn.style.display==="none"){
+    const firstVisible = Array.from(document.querySelectorAll("#main-tabs .tab-btn")).find(b=> b.style.display !== "none");
+    if(firstVisible) switchToTab(firstVisible.dataset.view);
+  }
+}
 const TAB_ORDER_KEY = "osakagumi-portal-tab-order";
 function refreshDashboardIfActive(){
   const el = document.getElementById("view-dashboard");
@@ -3753,6 +3782,7 @@ function initEmployeesListener(){
     renderNotices();
     updateHeaderUserLabel();
     refreshDashboardIfActive();
+    applyMyHiddenTabs();
   }, (err)=>{ console.error("[社員名簿取得エラー]", err); });
 }
 
