@@ -279,13 +279,14 @@
   .contract-card .contract-meta b{color:var(--text);font-weight:600;}
   .contract-card .contract-note{font-size:12px;color:var(--muted);margin-top:6px;max-width:640px;}
   .contract-card .contract-actions{flex-shrink:0;}
+  .contract-card-urgent{border-color:var(--danger);border-width:2px;}
+  .contract-period-urgent{font-weight:700;color:var(--danger);}
+  .contract-period-urgent .contract-inline-field:not(.readonly):hover{background:rgba(192,57,43,.1);}
   .contract-badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11.5px;font-weight:700;color:#fff;white-space:nowrap;}
   .contract-period{display:inline-flex;align-items:center;flex-wrap:wrap;gap:2px;}
   .contract-inline-field{cursor:pointer;padding:1px 4px;border-radius:4px;}
   .contract-inline-field:not(.readonly):hover{background:#EEF3FA;color:var(--brand-dark);text-decoration:underline;}
   .contract-inline-field.readonly{cursor:default;}
-  .contract-add-end{color:var(--brand);font-weight:600;}
-  .contract-add-end:hover{text-decoration:underline;}
   .checkout-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;}
   .checkout-head .name{font-size:14px;font-weight:700;}
   .checkout-status-badge{font-size:11px;font-weight:700;color:#fff;padding:3px 9px;border-radius:12px;white-space:nowrap;}
@@ -1052,12 +1053,14 @@
         <input type="text" id="contract-projectname-input" placeholder="例：〇〇道路改良工事">
       </div>
       <div class="field">
-        <label>工事区分</label>
+        <label>区分</label>
         <select id="contract-projecttype-input">
           <option value="土木">土木</option>
           <option value="舗装">舗装</option>
           <option value="建築">建築</option>
+          <option value="__other__">その他</option>
         </select>
+        <input type="text" id="contract-projecttype-other-input" placeholder="区分を入力してください" style="display:none;margin-top:8px;">
       </div>
       <div class="field">
         <label>備考</label>
@@ -6069,10 +6072,18 @@ function contractFormatColor(format){ return format==="electronic" ? "#2E6FA3" :
 function contractStatusColor(status){
   return { join:"#8A8F98", bid:"#E8853F", open:"#2E9E8F" }[status] || "#8A8F98";
 }
-const CONTRACT_STATUS_CYCLE = ["join","bid","open"];
 async function cycleContractStatus(c){
-  const curIdx = CONTRACT_STATUS_CYCLE.indexOf(c.status);
-  const next = CONTRACT_STATUS_CYCLE[(curIdx+1) % CONTRACT_STATUS_CYCLE.length];
+  if(c.status==="open"){
+    if(!confirm(`「${c.projectName||""}」を削除しますか？`)) return;
+    try{
+      await deleteDoc(doc(db,"contracts", c.id));
+      toast("削除しました。");
+    }catch(e){
+      toast("削除に失敗しました。権限をご確認ください。");
+    }
+    return;
+  }
+  const next = c.status==="bid" ? "open" : "bid";
   try{
     await updateDoc(doc(db,"contracts", c.id), { status: next });
   }catch(e){
@@ -6107,7 +6118,11 @@ function renderContractsTab(){
   }
   contractsAll.forEach(c=>{
     const card = document.createElement("div");
-    card.className = "contract-card";
+    const now = new Date();
+    const weekLater = new Date(now.getTime() + 7*24*60*60*1000);
+    const startDateObj = new Date(c.startAt);
+    const isUpcomingWithinWeek = !isNaN(startDateObj.getTime()) && startDateObj >= now && startDateObj <= weekLater;
+    card.className = "contract-card" + (isUpcomingWithinWeek ? " contract-card-urgent" : "");
 
     const main = document.createElement("div");
     main.className = "contract-main";
@@ -6130,7 +6145,7 @@ function renderContractsTab(){
       statusBadge.textContent = contractStatusLabel(c.status) || "参加";
       if(isContractEditor){
         statusBadge.style.cursor = "pointer";
-        statusBadge.title = "クリックで状態を切り替え（参加→入札→開札）";
+        statusBadge.title = "クリックで状態を進めます（参加→入札→開札）。開札の状態でクリックすると削除できます。";
         statusBadge.addEventListener("click", ()=> cycleContractStatus(c));
       }
       titleRow.appendChild(statusBadge);
@@ -6142,7 +6157,7 @@ function renderContractsTab(){
     metaRow.className = "contract-meta";
 
     const periodWrap = document.createElement("span");
-    periodWrap.className = "contract-period";
+    periodWrap.className = "contract-period" + (isUpcomingWithinWeek ? " contract-period-urgent" : "");
     const startDateEl = document.createElement("span");
     startDateEl.className = "contract-inline-field";
     startDateEl.textContent = formatDateJP(isoToDateStr(c.startAt));
@@ -6177,18 +6192,6 @@ function renderContractsTab(){
           });
         });
       }
-    } else {
-      const addEndEl = document.createElement("span");
-      addEndEl.className = "contract-inline-field contract-add-end";
-      addEndEl.textContent = " ＋終了日時を設定";
-      if(isContractEditor){
-        addEndEl.addEventListener("click", (e)=>{
-          openCalendarPicker(e.currentTarget, isoToDateStr(c.startAt), {
-            onSelect: (v)=> v && updateContractDateTime(c, "endDate", v)
-          });
-        });
-      }
-      periodWrap.appendChild(addEndEl);
     }
     if(isContractEditor){
       startDateEl.addEventListener("click", (e)=>{
@@ -6254,6 +6257,10 @@ function renderContractsTab(){
 }
 
 let contractSelectedFormat = "paper";
+const CONTRACT_FIXED_PROJECT_TYPES = ["土木","舗装","建築"];
+document.getElementById("contract-projecttype-input")?.addEventListener("change", (e)=>{
+  document.getElementById("contract-projecttype-other-input").style.display = e.target.value==="__other__" ? "block" : "none";
+});
 document.querySelectorAll("#contract-format-toggle .seg-btn").forEach(btn=>{
   btn.addEventListener("click", ()=>{
     contractSelectedFormat = btn.dataset.format;
@@ -6261,6 +6268,9 @@ document.querySelectorAll("#contract-format-toggle .seg-btn").forEach(btn=>{
       b.classList.toggle("active", b===btn);
     });
     document.getElementById("contract-status-field").style.display = contractSelectedFormat==="electronic" ? "block" : "none";
+    if(contractSelectedFormat==="electronic" && !document.getElementById("contract-status-select").value){
+      document.getElementById("contract-status-select").value = "join";
+    }
     document.getElementById("contract-assignee-field").style.display = contractSelectedFormat==="electronic" ? "none" : "block";
     if(contractSelectedFormat==="electronic") setContractAssignee("");
   });
@@ -6348,7 +6358,16 @@ function openContractModal(c){
   setContractEndTime(c ? isoToTimeStr(c.endAt) : "");
   setContractAssignee(contractSelectedFormat==="electronic" ? "" : (c ? (c.assignee || "") : ""));
   document.getElementById("contract-projectname-input").value = (c && c.projectName) || "";
-  document.getElementById("contract-projecttype-input").value = (c && c.projectType) || "";
+  const projectType = (c && c.projectType) || "";
+  if(projectType && !CONTRACT_FIXED_PROJECT_TYPES.includes(projectType)){
+    document.getElementById("contract-projecttype-input").value = "__other__";
+    document.getElementById("contract-projecttype-other-input").value = projectType;
+    document.getElementById("contract-projecttype-other-input").style.display = "block";
+  } else {
+    document.getElementById("contract-projecttype-input").value = projectType;
+    document.getElementById("contract-projecttype-other-input").value = "";
+    document.getElementById("contract-projecttype-other-input").style.display = "none";
+  }
   document.getElementById("contract-note-input").value = (c && c.note) || "";
   document.getElementById("contract-error").textContent = "";
   document.getElementById("contract-modal").classList.add("show");
@@ -6368,6 +6387,12 @@ document.getElementById("contract-save-btn")?.addEventListener("click", async ()
     return;
   }
   if(!projectName){ errEl.textContent = "工事名を入力してください。"; return; }
+  const projectTypeSelectVal = document.getElementById("contract-projecttype-input").value;
+  let projectType = projectTypeSelectVal;
+  if(projectTypeSelectVal==="__other__"){
+    projectType = document.getElementById("contract-projecttype-other-input").value.trim();
+    if(!projectType){ errEl.textContent = "区分「その他」の内容を入力してください。"; return; }
+  }
   const startAt = new Date(`${contractStartDate}T${contractStartTime}`).toISOString();
   const endAt = (contractEndDate && contractEndTime) ? new Date(`${contractEndDate}T${contractEndTime}`).toISOString() : "";
   if(endAt && endAt < startAt){ errEl.textContent = "終了日時が開始日時より前になっています。"; return; }
@@ -6377,7 +6402,7 @@ document.getElementById("contract-save-btn")?.addEventListener("click", async ()
     status: contractSelectedFormat==="electronic" ? document.getElementById("contract-status-select").value : "",
     assignee: contractSelectedFormat==="electronic" ? "" : document.getElementById("contract-assignee-input").value.trim(),
     projectName,
-    projectType: document.getElementById("contract-projecttype-input").value.trim(),
+    projectType,
     note: document.getElementById("contract-note-input").value.trim()
   };
   try{
