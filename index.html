@@ -1024,6 +1024,10 @@
       <section id="view-contracts" style="display:none;">
         <div class="section-toolbar">
           <button class="btn-primary" id="contract-new-btn" style="display:none;">＋ 追加</button>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text);cursor:pointer;">
+            <input type="checkbox" id="contract-show-resolved-check" checked style="width:auto;">
+            開札後のデータを表示する
+          </label>
         </div>
         <div id="contract-list"></div>
       </section>
@@ -6241,11 +6245,17 @@ function renderContractsTab(){
   const body = document.getElementById("contract-list");
   if(!body) return;
   body.innerHTML = "";
+  const showResolved = document.getElementById("contract-show-resolved-check")?.checked !== false;
+  const visibleContracts = showResolved ? contractsAll : contractsAll.filter(c=> !isContractResolved(c));
   if(contractsAll.length===0){
     body.innerHTML = `<div style="color:var(--muted);text-align:center;padding:24px;">入札情報はまだ登録されていません。</div>`;
     return;
   }
-  contractsAll.forEach(c=>{
+  if(visibleContracts.length===0){
+    body.innerHTML = `<div style="color:var(--muted);text-align:center;padding:24px;">表示できる入札情報がありません。</div>`;
+    return;
+  }
+  visibleContracts.forEach(c=>{
     const card = document.createElement("div");
     const now = new Date();
     const weekLater = new Date(now.getTime() + 7*24*60*60*1000);
@@ -6527,6 +6537,7 @@ function openContractModal(c){
   document.getElementById("contract-modal").classList.add("show");
 }
 document.getElementById("contract-new-btn")?.addEventListener("click", ()=> openContractModal(null));
+document.getElementById("contract-show-resolved-check")?.addEventListener("change", renderContractsTab);
 document.getElementById("contract-cancel-btn")?.addEventListener("click", ()=>{
   document.getElementById("contract-modal").classList.remove("show");
 });
