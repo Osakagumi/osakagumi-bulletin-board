@@ -110,6 +110,11 @@ service cloud.firestore {
       allow read, write: if isSignedIn() && request.auth.token.email == email;
     }
 
+    // 個人ごとの画面設定（アカウントに紐づけて保存する好み設定）: 本人のみ読み書き可能。
+    match /user_prefs/{email} {
+      allow read, write: if isSignedIn() && request.auth.token.email == email;
+    }
+
     // 行き先ステータスマスタ（在席・外出・現場・休みなど）: 全員が読める。管理は管理者のみ。
     match /wb_statuses/{statusId} {
       allow read: if isSignedIn();

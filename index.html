@@ -1635,6 +1635,7 @@ onAuthStateChanged(auth, async (user)=>{
     initSteelPlateTxListener();
     initContractsListener();
     initContractSettingsListener();
+    initUserPrefsListener();
     cleanupResolvedContracts();
     ensureSteelPlateCategoryAndMigrate();
 
@@ -6114,6 +6115,19 @@ function initContractSettingsListener(){
     contractDefaultDepartmentId = (snap.exists() && snap.data().defaultDepartmentId) || null;
   }, (err)=>{ console.error("[入札設定取得エラー]", err); });
 }
+// 個人ごとの画面設定（アカウントに紐づけて保存する好み設定）。どの端末からログインしても引き継がれる。
+function initUserPrefsListener(){
+  onSnapshot(doc(db,"user_prefs", currentUser.email), snap=>{
+    const prefs = snap.exists() ? snap.data() : {};
+    const check = document.getElementById("contract-show-resolved-check");
+    if(check && typeof prefs.contractShowResolved === "boolean"){
+      check.checked = prefs.contractShowResolved;
+    }
+    if(document.getElementById("view-contracts").style.display !== "none"){
+      renderContractsTab();
+    }
+  }, (err)=>{ console.error("[個人設定取得エラー]", err); });
+}
 // 開札結果が確定した入札情報を、入札管理画面で指定されたタイミングで自動的にまとめて削除する。
 // サーバー側のスケジューラは使わず、権限のある人がログインしたタイミングで1回だけ実行する
 // （お知らせの自動削除などと同じ方式）。
@@ -6537,7 +6551,10 @@ function openContractModal(c){
   document.getElementById("contract-modal").classList.add("show");
 }
 document.getElementById("contract-new-btn")?.addEventListener("click", ()=> openContractModal(null));
-document.getElementById("contract-show-resolved-check")?.addEventListener("change", renderContractsTab);
+document.getElementById("contract-show-resolved-check")?.addEventListener("change", (e)=>{
+  renderContractsTab();
+  setDoc(doc(db,"user_prefs", currentUser.email), { contractShowResolved: e.target.checked }, { merge:true }).catch(()=>{});
+});
 document.getElementById("contract-cancel-btn")?.addEventListener("click", ()=>{
   document.getElementById("contract-modal").classList.remove("show");
 });
