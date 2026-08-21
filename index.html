@@ -268,6 +268,18 @@
   .sp-history-table .sp-date-cell:hover{color:var(--brand);}
   .sp-type-badge{display:inline-block;padding:4px 10px;border-radius:14px;font-size:11.5px;font-weight:700;color:#fff;white-space:nowrap;}
   .checkout-card{background:var(--surface);border:1.5px solid var(--line);border-radius:10px;padding:14px;}
+  /* 契約（入札関係情報）：横長カード形式 */
+  .contract-card{
+    background:var(--surface);border:1.5px solid var(--line);border-radius:10px;
+    padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:18px;flex-wrap:wrap;
+  }
+  .contract-card .contract-main{flex:1;min-width:220px;}
+  .contract-card .contract-title{font-size:14.5px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .contract-card .contract-meta{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);}
+  .contract-card .contract-meta b{color:var(--text);font-weight:600;}
+  .contract-card .contract-note{font-size:12px;color:var(--muted);margin-top:6px;max-width:640px;}
+  .contract-card .contract-actions{flex-shrink:0;}
+  .contract-badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11.5px;font-weight:700;color:#fff;white-space:nowrap;}
   .checkout-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;}
   .checkout-head .name{font-size:14px;font-weight:700;}
   .checkout-status-badge{font-size:11px;font-weight:700;color:#fff;padding:3px 9px;border-radius:12px;white-space:nowrap;}
@@ -983,22 +995,7 @@
         <div class="section-toolbar">
           <button class="btn-primary" id="contract-new-btn" style="display:none;">＋ 追加</button>
         </div>
-        <div style="overflow-x:auto;">
-          <table class="sp-history-table">
-            <thead><tr>
-              <th class="sp-nowrap">開始日時</th>
-              <th class="sp-nowrap">終了日時</th>
-              <th class="sp-nowrap">形式</th>
-              <th class="sp-nowrap">状態</th>
-              <th class="sp-nowrap">対応者</th>
-              <th>工事名</th>
-              <th class="sp-nowrap">工事区分</th>
-              <th>備考</th>
-              <th style="width:110px;"></th>
-            </tr></thead>
-            <tbody id="contract-list"></tbody>
-          </table>
-        </div>
+        <div id="contract-list"></div>
       </section>
     </main>
   </div>
@@ -1030,7 +1027,7 @@
           <option value="open">開札</option>
         </select>
       </div>
-      <div class="field">
+      <div class="field" id="contract-assignee-field">
         <label>対応者</label>
         <div style="display:flex;align-items:center;gap:8px;">
           <span id="contract-assignee-display" style="flex:1;color:var(--muted);">未選択</span>
@@ -6055,35 +6052,51 @@ function formatContractDateTime(iso){
   const labels = ["日","月","火","水","木","金","土"];
   return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}(${labels[d.getDay()]}) ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
+function contractFormatColor(format){ return format==="electronic" ? "#2E6FA3" : "#8B6A4A"; }
+function contractStatusColor(status){
+  return { join:"#8A8F98", bid:"#E8853F", open:"#2E9E8F" }[status] || "#8A8F98";
+}
 function renderContractsTab(){
   const body = document.getElementById("contract-list");
   if(!body) return;
   body.innerHTML = "";
   if(contractsAll.length===0){
-    body.innerHTML = `<tr><td colspan="9" style="color:var(--muted);text-align:center;padding:16px;">契約情報はまだ登録されていません。</td></tr>`;
+    body.innerHTML = `<div style="color:var(--muted);text-align:center;padding:24px;">契約情報はまだ登録されていません。</div>`;
     return;
   }
   contractsAll.forEach(c=>{
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td class="sp-nowrap">${formatContractDateTime(c.startAt)}</td>
-      <td class="sp-nowrap">${formatContractDateTime(c.endAt)}</td>
-      <td class="sp-nowrap">${escapeHtml(contractFormatLabel(c.format))}</td>
-      <td class="sp-nowrap">${c.format==="electronic" ? escapeHtml(contractStatusLabel(c.status)) : ""}</td>
-      <td class="sp-nowrap">${escapeHtml(c.assignee||"")}</td>
-      <td>${escapeHtml(c.projectName||"")}</td>
-      <td class="sp-nowrap">${escapeHtml(c.projectType||"")}</td>
-      <td style="color:var(--muted);max-width:220px;">${escapeHtml(c.note||"")}</td>
-      <td class="actions"></td>
+    const card = document.createElement("div");
+    card.className = "contract-card";
+    const periodText = c.endAt
+      ? `${formatContractDateTime(c.startAt)} 〜 ${formatContractDateTime(c.endAt)}`
+      : `${formatContractDateTime(c.startAt)} 〜`;
+    const statusBadgeHtml = c.format==="electronic" && c.status
+      ? `<span class="contract-badge" style="background:${contractStatusColor(c.status)};">${escapeHtml(contractStatusLabel(c.status))}</span>`
+      : "";
+    card.innerHTML = `
+      <div class="contract-main">
+        <div class="contract-title">
+          <span>${escapeHtml(c.projectName||"")}</span>
+          <span class="contract-badge" style="background:${contractFormatColor(c.format)};">${escapeHtml(contractFormatLabel(c.format))}</span>
+          ${statusBadgeHtml}
+        </div>
+        <div class="contract-meta">
+          <span>${escapeHtml(periodText)}</span>
+          <span>区分：<b>${escapeHtml(c.projectType||"")}</b></span>
+          ${c.assignee ? `<span>対応者：<b>${escapeHtml(c.assignee)}</b></span>` : ""}
+        </div>
+        ${c.note ? `<div class="contract-note">${escapeHtml(c.note)}</div>` : ""}
+      </div>
+      <div class="contract-actions"></div>
     `;
     if(isContractEditor){
       const editBtn = document.createElement("button");
       editBtn.textContent = "編集";
-      editBtn.style.cssText = "border:1px solid var(--line);background:#fff;border-radius:6px;color:var(--muted);font-size:12px;padding:5px 10px;cursor:pointer;";
+      editBtn.style.cssText = "border:1px solid var(--line);background:#fff;border-radius:6px;color:var(--muted);font-size:12px;padding:7px 16px;cursor:pointer;";
       editBtn.addEventListener("click", ()=> openContractModal(c));
-      tr.querySelector(".actions").appendChild(editBtn);
+      card.querySelector(".contract-actions").appendChild(editBtn);
     }
-    body.appendChild(tr);
+    body.appendChild(card);
   });
 }
 
@@ -6095,6 +6108,8 @@ document.querySelectorAll("#contract-format-toggle .seg-btn").forEach(btn=>{
       b.classList.toggle("active", b===btn);
     });
     document.getElementById("contract-status-field").style.display = contractSelectedFormat==="electronic" ? "block" : "none";
+    document.getElementById("contract-assignee-field").style.display = contractSelectedFormat==="electronic" ? "none" : "block";
+    if(contractSelectedFormat==="electronic") setContractAssignee("");
   });
 });
 function setContractAssignee(name){
@@ -6122,9 +6137,10 @@ function openContractModal(c){
   });
   document.getElementById("contract-status-field").style.display = contractSelectedFormat==="electronic" ? "block" : "none";
   document.getElementById("contract-status-select").value = (c && c.status) || "join";
+  document.getElementById("contract-assignee-field").style.display = contractSelectedFormat==="electronic" ? "none" : "block";
   document.getElementById("contract-start-input").value = c ? isoToDatetimeLocal(c.startAt) : "";
   document.getElementById("contract-end-input").value = c ? isoToDatetimeLocal(c.endAt) : "";
-  setContractAssignee(c ? (c.assignee || "") : "");
+  setContractAssignee(contractSelectedFormat==="electronic" ? "" : (c ? (c.assignee || "") : ""));
   document.getElementById("contract-projectname-input").value = (c && c.projectName) || "";
   document.getElementById("contract-projecttype-input").value = (c && c.projectType) || "";
   document.getElementById("contract-note-input").value = (c && c.note) || "";
@@ -6150,7 +6166,7 @@ document.getElementById("contract-save-btn")?.addEventListener("click", async ()
     startAt, endAt,
     format: contractSelectedFormat,
     status: contractSelectedFormat==="electronic" ? document.getElementById("contract-status-select").value : "",
-    assignee: document.getElementById("contract-assignee-input").value.trim(),
+    assignee: contractSelectedFormat==="electronic" ? "" : document.getElementById("contract-assignee-input").value.trim(),
     projectName,
     projectType: document.getElementById("contract-projecttype-input").value.trim(),
     note: document.getElementById("contract-note-input").value.trim()
