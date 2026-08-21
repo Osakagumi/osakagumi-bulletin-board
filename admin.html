@@ -549,6 +549,30 @@
         <button class="btn btn-primary" id="contract-default-dept-save-btn">保存</button>
       </div>
       <div class="panel">
+        <h2>開札結果確定後の自動削除タイミング</h2>
+        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
+          「入札」タブで開札結果（落札・敗退・辞退）が確定した情報は、一覧上にグレーアウトして残ります。ここで指定したタイミングで自動的にまとめて削除されます（権限を持つ人がログインしたタイミングでチェックされます）。
+        </p>
+        <div class="form-grid">
+          <div class="field">
+            <label>削除方法</label>
+            <select id="contract-cleanup-mode-select">
+              <option value="afterDays">結果確定から◯日後に削除</option>
+              <option value="monthlyOnDay">毎月◯日にまとめて削除</option>
+            </select>
+          </div>
+          <div class="field" id="contract-cleanup-afterdays-field">
+            <label>日数</label>
+            <input type="number" id="contract-cleanup-afterdays-input" min="1" value="30">
+          </div>
+          <div class="field" id="contract-cleanup-dayofmonth-field" style="display:none;">
+            <label>削除日（毎月）</label>
+            <input type="number" id="contract-cleanup-dayofmonth-input" min="1" max="31" value="1">
+          </div>
+        </div>
+        <button class="btn btn-primary" id="contract-cleanup-save-btn">保存</button>
+      </div>
+      <div class="panel">
         <h2>入札編集権限者（入札関係情報の追加・編集・削除ができる人）</h2>
         <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
           「入札」タブで入札関係情報を追加・編集・削除できる人を登録します（主に営業部を想定）。管理者は常にこれらの操作が可能です。閲覧自体は社員全員ができます。
@@ -858,6 +882,7 @@ onAuthStateChanged(auth, async (user)=>{
   initCalendarYearsListener();
   initContractEditorsListener();
   initContractSettingsListener();
+  initContractCleanupListener();
   initEmployeesListener();
   initSafetyCampaignsListener();
 });
@@ -1768,6 +1793,34 @@ document.getElementById("contract-default-dept-save-btn")?.addEventListener("cli
     toast("保存に失敗しました。権限をご確認ください。");
   }
 });
+
+function initContractCleanupListener(){
+  onSnapshot(doc(db,"app_settings","contract_cleanup"), snap=>{
+    const settings = snap.exists() ? snap.data() : { mode:"afterDays", afterDays:30, dayOfMonth:1 };
+    document.getElementById("contract-cleanup-mode-select").value = settings.mode || "afterDays";
+    document.getElementById("contract-cleanup-afterdays-input").value = settings.afterDays ?? 30;
+    document.getElementById("contract-cleanup-dayofmonth-input").value = settings.dayOfMonth ?? 1;
+    applyContractCleanupModeUI();
+  }, (err)=>{ console.error("[入札自動削除設定取得エラー]", err); });
+}
+function applyContractCleanupModeUI(){
+  const mode = document.getElementById("contract-cleanup-mode-select").value;
+  document.getElementById("contract-cleanup-afterdays-field").style.display = mode==="afterDays" ? "block" : "none";
+  document.getElementById("contract-cleanup-dayofmonth-field").style.display = mode==="monthlyOnDay" ? "block" : "none";
+}
+document.getElementById("contract-cleanup-mode-select")?.addEventListener("change", applyContractCleanupModeUI);
+document.getElementById("contract-cleanup-save-btn")?.addEventListener("click", async ()=>{
+  const mode = document.getElementById("contract-cleanup-mode-select").value;
+  const afterDays = Number(document.getElementById("contract-cleanup-afterdays-input").value) || 30;
+  const dayOfMonth = Math.min(31, Math.max(1, Number(document.getElementById("contract-cleanup-dayofmonth-input").value) || 1));
+  try{
+    await setDoc(doc(db,"app_settings","contract_cleanup"), { mode, afterDays, dayOfMonth }, { merge:true });
+    toast("保存しました。");
+  }catch(e){
+    toast("保存に失敗しました。権限をご確認ください。");
+  }
+});
+
 function renderContractEditors(list){
   const body = document.getElementById("contracteditor-table-body");
   body.innerHTML = "";

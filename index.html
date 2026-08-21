@@ -280,6 +280,8 @@
   .contract-card .contract-note{font-size:12px;color:var(--muted);margin-top:6px;max-width:640px;}
   .contract-card .contract-actions{flex-shrink:0;}
   .contract-card-urgent{border-color:var(--danger);border-width:2px;}
+  .contract-card-resolved{opacity:0.55;}
+  .contract-card-resolved:hover{opacity:0.8;}
   .contract-period-urgent{font-weight:700;color:var(--danger);}
   .contract-period-urgent .contract-inline-field:not(.readonly):hover{background:rgba(192,57,43,.1);}
   .contract-badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11.5px;font-weight:700;color:#fff;white-space:nowrap;}
@@ -1616,6 +1618,7 @@ onAuthStateChanged(auth, async (user)=>{
     initSteelPlateTxListener();
     initContractsListener();
     initContractSettingsListener();
+    cleanupResolvedContracts();
     ensureSteelPlateCategoryAndMigrate();
 
     if(urlPreselect.campaign){
@@ -6094,6 +6097,41 @@ function initContractSettingsListener(){
     contractDefaultDepartmentId = (snap.exists() && snap.data().defaultDepartmentId) || null;
   }, (err)=>{ console.error("[入札設定取得エラー]", err); });
 }
+// 開札結果が確定した入札情報を、入札管理画面で指定されたタイミングで自動的にまとめて削除する。
+// サーバー側のスケジューラは使わず、権限のある人がログインしたタイミングで1回だけ実行する
+// （お知らせの自動削除などと同じ方式）。
+let contractCleanupChecked = false;
+async function cleanupResolvedContracts(){
+  if(contractCleanupChecked || !isContractEditor) return;
+  contractCleanupChecked = true;
+  try{
+    const settingsSnap = await getDoc(doc(db,"app_settings","contract_cleanup"));
+    const settings = settingsSnap.exists() ? settingsSnap.data() : { mode:"afterDays", afterDays:30 };
+    const now = new Date();
+    const snap = await getDocs(query(collection(db,"contracts"), where("result","in",["won","lost","withdrawn"])));
+    for(const d of snap.docs){
+      const data = d.data();
+      if(!data.resolvedAt) continue;
+      const resolvedDate = new Date(data.resolvedAt);
+      if(isNaN(resolvedDate.getTime())) continue;
+      let shouldDelete = false;
+      if(settings.mode==="monthlyOnDay"){
+        const targetDay = settings.dayOfMonth || 1;
+        if(now.getDate() >= targetDay){
+          const thisMonthTarget = new Date(now.getFullYear(), now.getMonth(), targetDay);
+          shouldDelete = resolvedDate < thisMonthTarget;
+        }
+      } else {
+        const afterDays = settings.afterDays || 30;
+        const dueDate = new Date(resolvedDate.getTime() + afterDays*24*60*60*1000);
+        shouldDelete = now >= dueDate;
+      }
+      if(shouldDelete){
+        try{ await deleteDoc(doc(db,"contracts", d.id)); }catch(e){ /* 1件失敗しても続行 */ }
+      }
+    }
+  }catch(e){ console.error("[入札の自動削除エラー]", e); }
+}
 function contractFormatLabel(format){ return format==="electronic" ? "電子" : "紙"; }
 function contractStatusLabel(status){
   return { join:"参加", bid:"入札", open:"開札" }[status] || "";
@@ -6109,23 +6147,67 @@ function contractFormatColor(format){ return format==="electronic" ? "#2E6FA3" :
 function contractStatusColor(status){
   return { join:"#8A8F98", bid:"#E8853F", open:"#2E9E8F" }[status] || "#8A8F98";
 }
-async function cycleContractStatus(c){
-  if(c.status==="open"){
-    if(!confirm(`「${c.projectName||""}」を削除しますか？`)) return;
-    try{
-      await deleteDoc(doc(db,"contracts", c.id));
-      toast("削除しました。");
-    }catch(e){
-      toast("削除に失敗しました。権限をご確認ください。");
-    }
-    return;
-  }
-  const next = c.status==="bid" ? "open" : "bid";
+function contractResultLabel(result){
+  return { won:"落札", lost:"敗退", withdrawn:"辞退" }[result] || "";
+}
+function contractResultColor(result){
+  return { won:"#2E9E8F", lost:"#C0392B", withdrawn:"#8A8F98" }[result] || "#8A8F98";
+}
+async function setContractResult(c, result){
   try{
-    await updateDoc(doc(db,"contracts", c.id), { status: next });
+    await updateDoc(doc(db,"contracts", c.id), { result, resolvedAt: new Date().toISOString() });
   }catch(e){
     toast("更新に失敗しました。権限をご確認ください。");
   }
+}
+function openContractResultPicker(anchorEl, onSelect){
+  closeCalendarPopup();
+  const popup = document.createElement("div");
+  popup.className = "calendar-popup";
+  document.body.appendChild(popup);
+  calendarPopupEl = popup;
+
+  const title = document.createElement("div");
+  title.style.cssText = "font-size:12.5px;font-weight:700;color:var(--muted);margin-bottom:8px;";
+  title.textContent = "開札結果を選択";
+  popup.appendChild(title);
+
+  const list = document.createElement("div");
+  list.style.cssText = "display:flex;flex-direction:column;gap:6px;width:160px;";
+  [["won","落札"],["lost","敗退"],["withdrawn","辞退"]].forEach(([val,label])=>{
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = label;
+    btn.style.cssText = "padding:8px 14px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;font-size:13px;text-align:left;";
+    btn.addEventListener("mouseenter", ()=>{ btn.style.background = "#F4F8FC"; });
+    btn.addEventListener("mouseleave", ()=>{ btn.style.background = "#fff"; });
+    btn.addEventListener("click", ()=>{ onSelect(val); closeCalendarPopup(); });
+    list.appendChild(btn);
+  });
+  popup.appendChild(list);
+
+  const rect = anchorEl.getBoundingClientRect();
+  const popupWidth = 190;
+  let left = rect.left;
+  if(left + popupWidth > window.innerWidth - 8){ left = window.innerWidth - popupWidth - 8; }
+  popup.style.left = `${Math.max(8,left)}px`;
+  popup.style.top = `${rect.bottom + 6}px`;
+
+  setTimeout(()=>{ document.addEventListener("mousedown", onOutsideClickForCalendar, true); }, 0);
+}
+function onContractStatusBadgeClick(c, badgeEl){
+  if(c.format==="paper"){
+    openContractResultPicker(badgeEl, (result)=> setContractResult(c, result));
+    return;
+  }
+  if(c.status==="open"){
+    openContractResultPicker(badgeEl, (result)=> setContractResult(c, result));
+    return;
+  }
+  const next = c.status==="bid" ? "open" : "bid";
+  updateDoc(doc(db,"contracts", c.id), { status: next }).catch(()=>{
+    toast("更新に失敗しました。権限をご確認ください。");
+  });
 }
 async function updateContractDateTime(c, field, value){
   // field: "startDate" | "startTime" | "endDate" | "endTime"
@@ -6158,13 +6240,14 @@ function renderContractsTab(){
     const now = new Date();
     const weekLater = new Date(now.getTime() + 7*24*60*60*1000);
     const startDateObj = new Date(c.startAt);
-    const isUpcomingWithinWeek = !isNaN(startDateObj.getTime()) && startDateObj >= now && startDateObj <= weekLater;
-    card.className = "contract-card" + (isUpcomingWithinWeek ? " contract-card-urgent" : "");
+    const isResolved = !!c.result;
+    const isUpcomingWithinWeek = !isResolved && !isNaN(startDateObj.getTime()) && startDateObj >= now && startDateObj <= weekLater;
+    card.className = "contract-card" + (isUpcomingWithinWeek ? " contract-card-urgent" : "") + (isResolved ? " contract-card-resolved" : "");
 
     const main = document.createElement("div");
     main.className = "contract-main";
 
-    // ---- タイトル行：工事名 ＋ 形式バッジ ＋ 状態バッジ（クリックで循環） ----
+    // ---- タイトル行：工事名 ＋ 形式バッジ ＋ 状態／結果バッジ ----
     const titleRow = document.createElement("div");
     titleRow.className = "contract-title";
     const nameEl = document.createElement("span");
@@ -6175,15 +6258,28 @@ function renderContractsTab(){
     formatBadge.style.background = contractFormatColor(c.format);
     formatBadge.textContent = contractFormatLabel(c.format);
     titleRow.appendChild(formatBadge);
-    if(c.format==="electronic"){
+    if(isResolved){
+      const resultBadge = document.createElement("span");
+      resultBadge.className = "contract-badge";
+      resultBadge.style.background = contractResultColor(c.result);
+      resultBadge.textContent = contractResultLabel(c.result);
+      titleRow.appendChild(resultBadge);
+    } else {
       const statusBadge = document.createElement("span");
       statusBadge.className = "contract-badge";
-      statusBadge.style.background = contractStatusColor(c.status);
-      statusBadge.textContent = contractStatusLabel(c.status) || "参加";
+      if(c.format==="paper"){
+        statusBadge.style.background = contractStatusColor("bid");
+        statusBadge.textContent = "入札";
+      } else {
+        statusBadge.style.background = contractStatusColor(c.status);
+        statusBadge.textContent = contractStatusLabel(c.status) || "参加";
+      }
       if(isContractEditor){
         statusBadge.style.cursor = "pointer";
-        statusBadge.title = "クリックで状態を進めます（参加→入札→開札）。開札の状態でクリックすると削除できます。";
-        statusBadge.addEventListener("click", ()=> cycleContractStatus(c));
+        statusBadge.title = (c.format==="paper" || c.status==="open")
+          ? "クリックして開札結果を選択（落札・敗退・辞退）"
+          : "クリックで状態を進めます（参加→入札→開札）";
+        statusBadge.addEventListener("click", ()=> onContractStatusBadgeClick(c, statusBadge));
       }
       titleRow.appendChild(statusBadge);
     }
@@ -6192,7 +6288,7 @@ function renderContractsTab(){
     // ---- 日時行：開始・終了とも、クリックでその場で日付・時刻を変更 ----
     const metaRow = document.createElement("div");
     metaRow.className = "contract-meta";
-    const canInlineEditDateTime = isContractEditor && c.format==="electronic";
+    const canInlineEditDateTime = isContractEditor && c.format==="electronic" && !isResolved;
 
     const periodWrap = document.createElement("span");
     periodWrap.className = "contract-period" + (isUpcomingWithinWeek ? " contract-period-urgent" : "");
