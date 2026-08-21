@@ -568,6 +568,7 @@
     position:fixed;inset:0;background:rgba(15,25,40,.45);display:none;align-items:center;justify-content:center;padding:20px;z-index:50;
   }
   .modal-overlay.show{display:flex;}
+  #employee-picker-modal{z-index:60;}
   .modal{background:#fff;border-radius:12px;padding:22px;width:100%;max-width:380px;max-height:calc(100vh - 40px);overflow-y:auto;}
   .modal h3{margin:0 0 4px;font-size:16px;}
   .modal .sub{font-size:12px;color:var(--muted);font-family:var(--mono);margin-bottom:16px;}
@@ -1011,7 +1012,7 @@
         <input type="datetime-local" id="contract-start-input">
       </div>
       <div class="field">
-        <label>終了日時</label>
+        <label>終了日時（任意）</label>
         <input type="datetime-local" id="contract-end-input">
       </div>
       <div class="field">
@@ -1043,7 +1044,11 @@
       </div>
       <div class="field">
         <label>工事区分</label>
-        <input type="text" id="contract-projecttype-input" placeholder="例：土木一式">
+        <select id="contract-projecttype-input">
+          <option value="土木">土木</option>
+          <option value="舗装">舗装</option>
+          <option value="建築">建築</option>
+        </select>
       </div>
       <div class="field">
         <label>備考</label>
@@ -6137,11 +6142,10 @@ document.getElementById("contract-save-btn")?.addEventListener("click", async ()
   const endVal = document.getElementById("contract-end-input").value;
   const projectName = document.getElementById("contract-projectname-input").value.trim();
   if(!startVal){ errEl.textContent = "開始日時を入力してください。"; return; }
-  if(!endVal){ errEl.textContent = "終了日時を入力してください。"; return; }
   if(!projectName){ errEl.textContent = "工事名を入力してください。"; return; }
   const startAt = new Date(startVal).toISOString();
-  const endAt = new Date(endVal).toISOString();
-  if(endAt < startAt){ errEl.textContent = "終了日時が開始日時より前になっています。"; return; }
+  const endAt = endVal ? new Date(endVal).toISOString() : "";
+  if(endAt && endAt < startAt){ errEl.textContent = "終了日時が開始日時より前になっています。"; return; }
   const fields = {
     startAt, endAt,
     format: contractSelectedFormat,
