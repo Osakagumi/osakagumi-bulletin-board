@@ -280,6 +280,12 @@
   .contract-card .contract-note{font-size:12px;color:var(--muted);margin-top:6px;max-width:640px;}
   .contract-card .contract-actions{flex-shrink:0;}
   .contract-badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11.5px;font-weight:700;color:#fff;white-space:nowrap;}
+  .contract-period{display:inline-flex;align-items:center;flex-wrap:wrap;gap:2px;}
+  .contract-inline-field{cursor:pointer;padding:1px 4px;border-radius:4px;}
+  .contract-inline-field:not(.readonly):hover{background:#EEF3FA;color:var(--brand-dark);text-decoration:underline;}
+  .contract-inline-field.readonly{cursor:default;}
+  .contract-add-end{color:var(--brand);font-weight:600;}
+  .contract-add-end:hover{text-decoration:underline;}
   .checkout-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;}
   .checkout-head .name{font-size:14px;font-weight:700;}
   .checkout-status-badge{font-size:11px;font-weight:700;color:#fff;padding:3px 9px;border-radius:12px;white-space:nowrap;}
@@ -6063,6 +6069,34 @@ function contractFormatColor(format){ return format==="electronic" ? "#2E6FA3" :
 function contractStatusColor(status){
   return { join:"#8A8F98", bid:"#E8853F", open:"#2E9E8F" }[status] || "#8A8F98";
 }
+const CONTRACT_STATUS_CYCLE = ["join","bid","open"];
+async function cycleContractStatus(c){
+  const curIdx = CONTRACT_STATUS_CYCLE.indexOf(c.status);
+  const next = CONTRACT_STATUS_CYCLE[(curIdx+1) % CONTRACT_STATUS_CYCLE.length];
+  try{
+    await updateDoc(doc(db,"contracts", c.id), { status: next });
+  }catch(e){
+    toast("更新に失敗しました。権限をご確認ください。");
+  }
+}
+async function updateContractDateTime(c, field, value){
+  // field: "startDate" | "startTime" | "endDate" | "endTime"
+  let sd = isoToDateStr(c.startAt), st = isoToTimeStr(c.startAt);
+  let ed = isoToDateStr(c.endAt), et = isoToTimeStr(c.endAt);
+  if(field==="startDate") sd = value;
+  if(field==="startTime") st = value;
+  if(field==="endDate") ed = value;
+  if(field==="endTime") et = value;
+  if(!sd || !st){ toast("開始日・開始時刻の両方が必要です。"); return; }
+  const startAt = new Date(`${sd}T${st}`).toISOString();
+  const endAt = (ed && et) ? new Date(`${ed}T${et}`).toISOString() : "";
+  if(endAt && endAt < startAt){ toast("終了日時が開始日時より前になっています。"); return; }
+  try{
+    await updateDoc(doc(db,"contracts", c.id), { startAt, endAt });
+  }catch(e){
+    toast("更新に失敗しました。権限をご確認ください。");
+  }
+}
 function renderContractsTab(){
   const body = document.getElementById("contract-list");
   if(!body) return;
@@ -6074,35 +6108,147 @@ function renderContractsTab(){
   contractsAll.forEach(c=>{
     const card = document.createElement("div");
     card.className = "contract-card";
-    const periodText = c.endAt
-      ? `${formatContractDateTime(c.startAt)} 〜 ${formatContractDateTime(c.endAt)}`
-      : formatContractDateTime(c.startAt);
-    const statusBadgeHtml = c.format==="electronic" && c.status
-      ? `<span class="contract-badge" style="background:${contractStatusColor(c.status)};">${escapeHtml(contractStatusLabel(c.status))}</span>`
-      : "";
-    card.innerHTML = `
-      <div class="contract-main">
-        <div class="contract-title">
-          <span>${escapeHtml(c.projectName||"")}</span>
-          <span class="contract-badge" style="background:${contractFormatColor(c.format)};">${escapeHtml(contractFormatLabel(c.format))}</span>
-          ${statusBadgeHtml}
-        </div>
-        <div class="contract-meta">
-          <span>${escapeHtml(periodText)}</span>
-          <span>区分：<b>${escapeHtml(c.projectType||"")}</b></span>
-          ${c.assignee ? `<span>対応者：<b>${escapeHtml(c.assignee)}</b></span>` : ""}
-        </div>
-        ${c.note ? `<div class="contract-note">${escapeHtml(c.note)}</div>` : ""}
-      </div>
-      <div class="contract-actions"></div>
-    `;
+
+    const main = document.createElement("div");
+    main.className = "contract-main";
+
+    // ---- タイトル行：工事名 ＋ 形式バッジ ＋ 状態バッジ（クリックで循環） ----
+    const titleRow = document.createElement("div");
+    titleRow.className = "contract-title";
+    const nameEl = document.createElement("span");
+    nameEl.textContent = c.projectName || "";
+    titleRow.appendChild(nameEl);
+    const formatBadge = document.createElement("span");
+    formatBadge.className = "contract-badge";
+    formatBadge.style.background = contractFormatColor(c.format);
+    formatBadge.textContent = contractFormatLabel(c.format);
+    titleRow.appendChild(formatBadge);
+    if(c.format==="electronic"){
+      const statusBadge = document.createElement("span");
+      statusBadge.className = "contract-badge";
+      statusBadge.style.background = contractStatusColor(c.status);
+      statusBadge.textContent = contractStatusLabel(c.status) || "参加";
+      if(isContractEditor){
+        statusBadge.style.cursor = "pointer";
+        statusBadge.title = "クリックで状態を切り替え（参加→入札→開札）";
+        statusBadge.addEventListener("click", ()=> cycleContractStatus(c));
+      }
+      titleRow.appendChild(statusBadge);
+    }
+    main.appendChild(titleRow);
+
+    // ---- 日時行：開始・終了とも、クリックでその場で日付・時刻を変更 ----
+    const metaRow = document.createElement("div");
+    metaRow.className = "contract-meta";
+
+    const periodWrap = document.createElement("span");
+    periodWrap.className = "contract-period";
+    const startDateEl = document.createElement("span");
+    startDateEl.className = "contract-inline-field";
+    startDateEl.textContent = formatDateJP(isoToDateStr(c.startAt));
+    const startTimeEl = document.createElement("span");
+    startTimeEl.className = "contract-inline-field";
+    startTimeEl.textContent = isoToTimeStr(c.startAt);
+    periodWrap.appendChild(startDateEl);
+    periodWrap.appendChild(startTimeEl);
+    if(c.endAt){
+      const sep = document.createElement("span");
+      sep.textContent = " 〜 ";
+      periodWrap.appendChild(sep);
+      const endDateEl = document.createElement("span");
+      endDateEl.className = "contract-inline-field";
+      endDateEl.textContent = formatDateJP(isoToDateStr(c.endAt));
+      const endTimeEl = document.createElement("span");
+      endTimeEl.className = "contract-inline-field";
+      endTimeEl.textContent = isoToTimeStr(c.endAt);
+      periodWrap.appendChild(endDateEl);
+      periodWrap.appendChild(endTimeEl);
+      if(isContractEditor){
+        endDateEl.addEventListener("click", (e)=>{
+          openCalendarPicker(e.currentTarget, isoToDateStr(c.endAt), {
+            allowClear: true,
+            onSelect: (v)=> updateContractDateTime(c, "endDate", v)
+          });
+        });
+        endTimeEl.addEventListener("click", (e)=>{
+          openTimePicker(e.currentTarget, isoToTimeStr(c.endAt), {
+            stepMinutes: 5, minTime: "06:00", maxTime: "20:00",
+            onSelect: (v)=> updateContractDateTime(c, "endTime", v)
+          });
+        });
+      }
+    } else {
+      const addEndEl = document.createElement("span");
+      addEndEl.className = "contract-inline-field contract-add-end";
+      addEndEl.textContent = " ＋終了日時を設定";
+      if(isContractEditor){
+        addEndEl.addEventListener("click", (e)=>{
+          openCalendarPicker(e.currentTarget, isoToDateStr(c.startAt), {
+            onSelect: (v)=> v && updateContractDateTime(c, "endDate", v)
+          });
+        });
+      }
+      periodWrap.appendChild(addEndEl);
+    }
+    if(isContractEditor){
+      startDateEl.addEventListener("click", (e)=>{
+        openCalendarPicker(e.currentTarget, isoToDateStr(c.startAt), {
+          onSelect: (v)=> v && updateContractDateTime(c, "startDate", v)
+        });
+      });
+      startTimeEl.addEventListener("click", (e)=>{
+        openTimePicker(e.currentTarget, isoToTimeStr(c.startAt), {
+          stepMinutes: 5, minTime: "06:00", maxTime: "20:00",
+          onSelect: (v)=> v && updateContractDateTime(c, "startTime", v)
+        });
+      });
+    } else {
+      startDateEl.classList.add("readonly");
+      startTimeEl.classList.add("readonly");
+    }
+    metaRow.appendChild(periodWrap);
+
+    const typeEl = document.createElement("span");
+    typeEl.innerHTML = `区分：<b>${escapeHtml(c.projectType||"")}</b>`;
+    metaRow.appendChild(typeEl);
+    if(c.assignee){
+      const assigneeEl = document.createElement("span");
+      assigneeEl.innerHTML = `対応者：<b>${escapeHtml(c.assignee)}</b>`;
+      metaRow.appendChild(assigneeEl);
+    }
+    main.appendChild(metaRow);
+
+    if(c.note){
+      const noteEl = document.createElement("div");
+      noteEl.className = "contract-note";
+      noteEl.textContent = c.note;
+      main.appendChild(noteEl);
+    }
+    card.appendChild(main);
+
+    const actions = document.createElement("div");
+    actions.className = "contract-actions";
     if(isContractEditor){
       const editBtn = document.createElement("button");
       editBtn.textContent = "編集";
-      editBtn.style.cssText = "border:1px solid var(--line);background:#fff;border-radius:6px;color:var(--muted);font-size:12px;padding:7px 16px;cursor:pointer;";
+      editBtn.style.cssText = "border:1px solid var(--line);background:#fff;border-radius:6px;color:var(--muted);font-size:12px;padding:7px 16px;cursor:pointer;margin-right:6px;";
       editBtn.addEventListener("click", ()=> openContractModal(c));
-      card.querySelector(".contract-actions").appendChild(editBtn);
+      actions.appendChild(editBtn);
+      const deleteBtn = document.createElement("button");
+      deleteBtn.textContent = "削除";
+      deleteBtn.style.cssText = "border:1px solid var(--danger);background:#fff;border-radius:6px;color:var(--danger);font-size:12px;padding:7px 16px;cursor:pointer;";
+      deleteBtn.addEventListener("click", async ()=>{
+        if(!confirm(`「${c.projectName||""}」を削除しますか？`)) return;
+        try{
+          await deleteDoc(doc(db,"contracts", c.id));
+          toast("削除しました。");
+        }catch(e){
+          toast("削除に失敗しました。権限をご確認ください。");
+        }
+      });
+      actions.appendChild(deleteBtn);
     }
+    card.appendChild(actions);
     body.appendChild(card);
   });
 }
