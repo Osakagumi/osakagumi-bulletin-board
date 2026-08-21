@@ -282,6 +282,8 @@
   .contract-card-urgent{border-color:var(--danger);border-width:2px;}
   .contract-card-resolved{opacity:0.55;}
   .contract-card-resolved:hover{opacity:0.8;}
+  .contract-card-resolved .contract-title,
+  .contract-card-resolved .contract-meta b{font-weight:400;}
   .contract-period-urgent{font-weight:700;color:var(--danger);}
   .contract-period-urgent .contract-inline-field:not(.readonly):hover{background:rgba(192,57,43,.1);}
   .contract-badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11.5px;font-weight:700;color:#fff;white-space:nowrap;}
@@ -1038,13 +1040,9 @@
           <button type="button" class="seg-btn" data-format="electronic">電子</button>
         </div>
       </div>
-      <div class="field" id="contract-status-field" style="display:none;">
+      <div class="field" id="contract-status-field">
         <label>状態</label>
-        <select id="contract-status-select">
-          <option value="join">参加</option>
-          <option value="bid">入札</option>
-          <option value="open">開札</option>
-        </select>
+        <select id="contract-status-select"></select>
       </div>
       <div class="field" id="contract-assignee-field">
         <label>対応者</label>
@@ -6108,7 +6106,7 @@ async function cleanupResolvedContracts(){
     const settingsSnap = await getDoc(doc(db,"app_settings","contract_cleanup"));
     const settings = settingsSnap.exists() ? settingsSnap.data() : { mode:"afterDays", afterDays:30 };
     const now = new Date();
-    const snap = await getDocs(query(collection(db,"contracts"), where("result","in",["won","lost","withdrawn"])));
+    const snap = await getDocs(query(collection(db,"contracts"), where("status","in",["won","lost","withdrawn"])));
     for(const d of snap.docs){
       const data = d.data();
       if(!data.resolvedAt) continue;
@@ -6134,7 +6132,7 @@ async function cleanupResolvedContracts(){
 }
 function contractFormatLabel(format){ return format==="electronic" ? "電子" : "紙"; }
 function contractStatusLabel(status){
-  return { join:"参加", bid:"入札", open:"開札" }[status] || "";
+  return { join:"参加", bid:"入札", open:"開札", won:"落札", lost:"敗退", withdrawn:"辞退" }[status] || "";
 }
 function formatContractDateTime(iso){
   if(!iso) return "";
@@ -6145,17 +6143,14 @@ function formatContractDateTime(iso){
 }
 function contractFormatColor(format){ return format==="electronic" ? "#2E6FA3" : "#8B6A4A"; }
 function contractStatusColor(status){
-  return { join:"#8A8F98", bid:"#E8853F", open:"#2E9E8F" }[status] || "#8A8F98";
+  return { join:"#8A8F98", bid:"#E8853F", open:"#2E9E8F", won:"#2E9E8F", lost:"#C0392B", withdrawn:"#8A8F98" }[status] || "#8A8F98";
 }
-function contractResultLabel(result){
-  return { won:"落札", lost:"敗退", withdrawn:"辞退" }[result] || "";
-}
-function contractResultColor(result){
-  return { won:"#2E9E8F", lost:"#C0392B", withdrawn:"#8A8F98" }[result] || "#8A8F98";
+function isContractResolved(c){
+  return ["won","lost","withdrawn"].includes(c.status);
 }
 async function setContractResult(c, result){
   try{
-    await updateDoc(doc(db,"contracts", c.id), { result, resolvedAt: new Date().toISOString() });
+    await updateDoc(doc(db,"contracts", c.id), { status: result, resolvedAt: new Date().toISOString() });
   }catch(e){
     toast("更新に失敗しました。権限をご確認ください。");
   }
@@ -6240,14 +6235,14 @@ function renderContractsTab(){
     const now = new Date();
     const weekLater = new Date(now.getTime() + 7*24*60*60*1000);
     const startDateObj = new Date(c.startAt);
-    const isResolved = !!c.result;
+    const isResolved = isContractResolved(c);
     const isUpcomingWithinWeek = !isResolved && !isNaN(startDateObj.getTime()) && startDateObj >= now && startDateObj <= weekLater;
     card.className = "contract-card" + (isUpcomingWithinWeek ? " contract-card-urgent" : "") + (isResolved ? " contract-card-resolved" : "");
 
     const main = document.createElement("div");
     main.className = "contract-main";
 
-    // ---- タイトル行：工事名 ＋ 形式バッジ ＋ 状態／結果バッジ ----
+    // ---- タイトル行：工事名 ＋ 形式バッジ ＋ 状態バッジ ----
     const titleRow = document.createElement("div");
     titleRow.className = "contract-title";
     const nameEl = document.createElement("span");
@@ -6258,31 +6253,18 @@ function renderContractsTab(){
     formatBadge.style.background = contractFormatColor(c.format);
     formatBadge.textContent = contractFormatLabel(c.format);
     titleRow.appendChild(formatBadge);
-    if(isResolved){
-      const resultBadge = document.createElement("span");
-      resultBadge.className = "contract-badge";
-      resultBadge.style.background = contractResultColor(c.result);
-      resultBadge.textContent = contractResultLabel(c.result);
-      titleRow.appendChild(resultBadge);
-    } else {
-      const statusBadge = document.createElement("span");
-      statusBadge.className = "contract-badge";
-      if(c.format==="paper"){
-        statusBadge.style.background = contractStatusColor("bid");
-        statusBadge.textContent = "入札";
-      } else {
-        statusBadge.style.background = contractStatusColor(c.status);
-        statusBadge.textContent = contractStatusLabel(c.status) || "参加";
-      }
-      if(isContractEditor){
-        statusBadge.style.cursor = "pointer";
-        statusBadge.title = (c.format==="paper" || c.status==="open")
-          ? "クリックして開札結果を選択（落札・敗退・辞退）"
-          : "クリックで状態を進めます（参加→入札→開札）";
-        statusBadge.addEventListener("click", ()=> onContractStatusBadgeClick(c, statusBadge));
-      }
-      titleRow.appendChild(statusBadge);
+    const statusBadge = document.createElement("span");
+    statusBadge.className = "contract-badge";
+    statusBadge.style.background = contractStatusColor(c.status);
+    statusBadge.textContent = contractStatusLabel(c.status) || (c.format==="paper" ? "入札" : "参加");
+    if(!isResolved && isContractEditor){
+      statusBadge.style.cursor = "pointer";
+      statusBadge.title = (c.format==="paper" || c.status==="open")
+        ? "クリックして開札結果を選択（落札・敗退・辞退）"
+        : "クリックで状態を進めます（参加→入札→開札）";
+      statusBadge.addEventListener("click", ()=> onContractStatusBadgeClick(c, statusBadge));
     }
+    titleRow.appendChild(statusBadge);
     main.appendChild(titleRow);
 
     // ---- 日時行：開始・終了とも、クリックでその場で日付・時刻を変更 ----
@@ -6398,16 +6380,29 @@ const CONTRACT_FIXED_PROJECT_TYPES = ["土木","舗装","建築"];
 document.getElementById("contract-projecttype-input")?.addEventListener("change", (e)=>{
   document.getElementById("contract-projecttype-other-input").style.display = e.target.value==="__other__" ? "block" : "none";
 });
+const CONTRACT_STATUS_OPTIONS = {
+  paper: [["bid","入札"],["won","落札"],["lost","敗退"],["withdrawn","辞退"]],
+  electronic: [["join","参加"],["bid","入札"],["open","開札"],["won","落札"],["lost","敗退"],["withdrawn","辞退"]]
+};
+function populateContractStatusSelect(format, currentValue){
+  const sel = document.getElementById("contract-status-select");
+  const options = CONTRACT_STATUS_OPTIONS[format] || CONTRACT_STATUS_OPTIONS.paper;
+  sel.innerHTML = "";
+  options.forEach(([val,label])=>{
+    const opt = document.createElement("option");
+    opt.value = val; opt.textContent = label;
+    sel.appendChild(opt);
+  });
+  const defaultVal = format==="electronic" ? "join" : "bid";
+  sel.value = options.some(([val])=>val===currentValue) ? currentValue : defaultVal;
+}
 document.querySelectorAll("#contract-format-toggle .seg-btn").forEach(btn=>{
   btn.addEventListener("click", ()=>{
     contractSelectedFormat = btn.dataset.format;
     document.querySelectorAll("#contract-format-toggle .seg-btn").forEach(b=>{
       b.classList.toggle("active", b===btn);
     });
-    document.getElementById("contract-status-field").style.display = contractSelectedFormat==="electronic" ? "block" : "none";
-    if(contractSelectedFormat==="electronic" && !document.getElementById("contract-status-select").value){
-      document.getElementById("contract-status-select").value = "join";
-    }
+    populateContractStatusSelect(contractSelectedFormat, document.getElementById("contract-status-select").value);
     document.getElementById("contract-assignee-field").style.display = contractSelectedFormat==="electronic" ? "none" : "block";
     if(contractSelectedFormat==="electronic") setContractAssignee("");
   });
@@ -6486,8 +6481,7 @@ function openContractModal(c){
   document.querySelectorAll("#contract-format-toggle .seg-btn").forEach(b=>{
     b.classList.toggle("active", b.dataset.format===contractSelectedFormat);
   });
-  document.getElementById("contract-status-field").style.display = contractSelectedFormat==="electronic" ? "block" : "none";
-  document.getElementById("contract-status-select").value = (c && c.status) || "join";
+  populateContractStatusSelect(contractSelectedFormat, c ? c.status : "");
   document.getElementById("contract-assignee-field").style.display = contractSelectedFormat==="electronic" ? "none" : "block";
   setContractStartDate(c ? isoToDateStr(c.startAt) : todayStr());
   setContractStartTime(c ? isoToTimeStr(c.startAt) : "");
@@ -6533,10 +6527,13 @@ document.getElementById("contract-save-btn")?.addEventListener("click", async ()
   const startAt = new Date(`${contractStartDate}T${contractStartTime}`).toISOString();
   const endAt = (contractEndDate && contractEndTime) ? new Date(`${contractEndDate}T${contractEndTime}`).toISOString() : "";
   if(endAt && endAt < startAt){ errEl.textContent = "終了日時が開始日時より前になっています。"; return; }
+  const selectedStatus = document.getElementById("contract-status-select").value;
+  const isResolvedStatus = ["won","lost","withdrawn"].includes(selectedStatus);
   const fields = {
     startAt, endAt,
     format: contractSelectedFormat,
-    status: contractSelectedFormat==="electronic" ? document.getElementById("contract-status-select").value : "",
+    status: selectedStatus,
+    resolvedAt: isResolvedStatus ? new Date().toISOString() : "",
     assignee: contractSelectedFormat==="electronic" ? "" : document.getElementById("contract-assignee-input").value.trim(),
     projectName,
     projectType,
