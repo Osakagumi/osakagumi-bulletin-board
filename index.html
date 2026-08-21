@@ -670,7 +670,7 @@
       <button class="tab-btn" data-view="checkout">資機材</button>
       <button class="tab-btn" data-view="safety" style="display:none;">安否確認</button>
       <button class="tab-btn" data-view="calendar">カレンダー</button>
-      <button class="tab-btn" data-view="contracts">契約</button>
+      <button class="tab-btn" data-view="contracts">入札</button>
       <button class="tab-reorder-btn" id="tab-reorder-toggle" title="タブの並び替え">並び替え</button>
     </nav>
 
@@ -1003,20 +1003,20 @@
   <!-- ============ 契約 追加・編集モーダル ============ -->
   <div class="modal-overlay" id="contract-modal">
     <div class="modal">
-      <h3 id="contract-modal-title">契約情報を追加</h3>
+      <h3 id="contract-modal-title">入札情報を追加</h3>
       <div class="field">
         <label>開始日時</label>
-        <input type="datetime-local" id="contract-start-input">
+        <input type="datetime-local" id="contract-start-input" step="1800">
       </div>
       <div class="field">
         <label>終了日時（任意）</label>
-        <input type="datetime-local" id="contract-end-input">
+        <input type="datetime-local" id="contract-end-input" step="1800">
       </div>
       <div class="field">
         <label>形式</label>
         <div class="seg-toggle" id="contract-format-toggle">
           <button type="button" class="seg-btn active" data-format="paper">紙</button>
-          <button type="button" class="seg-btn" data-format="electronic">電</button>
+          <button type="button" class="seg-btn" data-format="electronic">電子</button>
         </div>
       </div>
       <div class="field" id="contract-status-field" style="display:none;">
@@ -6041,7 +6041,7 @@ function initContractsListener(){
     }
   }, (err)=>{ console.error("[契約情報取得エラー]", err); });
 }
-function contractFormatLabel(format){ return format==="electronic" ? "電" : "紙"; }
+function contractFormatLabel(format){ return format==="electronic" ? "電子" : "紙"; }
 function contractStatusLabel(status){
   return { join:"参加", bid:"入札", open:"開札" }[status] || "";
 }
@@ -6061,7 +6061,7 @@ function renderContractsTab(){
   if(!body) return;
   body.innerHTML = "";
   if(contractsAll.length===0){
-    body.innerHTML = `<div style="color:var(--muted);text-align:center;padding:24px;">契約情報はまだ登録されていません。</div>`;
+    body.innerHTML = `<div style="color:var(--muted);text-align:center;padding:24px;">入札情報はまだ登録されていません。</div>`;
     return;
   }
   contractsAll.forEach(c=>{
@@ -6069,7 +6069,7 @@ function renderContractsTab(){
     card.className = "contract-card";
     const periodText = c.endAt
       ? `${formatContractDateTime(c.startAt)} 〜 ${formatContractDateTime(c.endAt)}`
-      : `${formatContractDateTime(c.startAt)} 〜`;
+      : formatContractDateTime(c.startAt);
     const statusBadgeHtml = c.format==="electronic" && c.status
       ? `<span class="contract-badge" style="background:${contractStatusColor(c.status)};">${escapeHtml(contractStatusLabel(c.status))}</span>`
       : "";
@@ -6129,7 +6129,7 @@ function isoToDatetimeLocal(iso){
 }
 function openContractModal(c){
   editingContractId = c ? c.id : null;
-  document.getElementById("contract-modal-title").textContent = c ? "契約情報を編集" : "契約情報を追加";
+  document.getElementById("contract-modal-title").textContent = c ? "入札情報を編集" : "入札情報を追加";
   document.getElementById("contract-delete-btn").style.display = c ? "inline-block" : "none";
   contractSelectedFormat = (c && c.format) || "paper";
   document.querySelectorAll("#contract-format-toggle .seg-btn").forEach(b=>{
@@ -6191,7 +6191,7 @@ document.getElementById("contract-save-btn")?.addEventListener("click", async ()
 });
 document.getElementById("contract-delete-btn")?.addEventListener("click", async ()=>{
   if(!editingContractId) return;
-  if(!confirm("この契約情報を削除しますか？")) return;
+  if(!confirm("この入札情報を削除しますか？")) return;
   try{
     await deleteDoc(doc(db,"contracts", editingContractId));
     document.getElementById("contract-modal").classList.remove("show");
