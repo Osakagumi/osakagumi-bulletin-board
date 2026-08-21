@@ -657,6 +657,7 @@
       <button class="tab-btn" data-view="checkout">資機材</button>
       <button class="tab-btn" data-view="safety" style="display:none;">安否確認</button>
       <button class="tab-btn" data-view="calendar">カレンダー</button>
+      <button class="tab-btn" data-view="contracts">契約</button>
       <button class="tab-reorder-btn" id="tab-reorder-toggle" title="タブの並び替え">並び替え</button>
     </nav>
 
@@ -975,7 +976,86 @@
         </div>
         <div class="cal-grid-wrap" id="cal-grid-wrap"></div>
       </section>
+
+      <!-- ---- 契約（入札関係情報） ---- -->
+      <section id="view-contracts" style="display:none;">
+        <div class="section-toolbar">
+          <button class="btn-primary" id="contract-new-btn" style="display:none;">＋ 追加</button>
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="sp-history-table">
+            <thead><tr>
+              <th class="sp-nowrap">開始日時</th>
+              <th class="sp-nowrap">終了日時</th>
+              <th class="sp-nowrap">形式</th>
+              <th class="sp-nowrap">状態</th>
+              <th class="sp-nowrap">対応者</th>
+              <th>工事名</th>
+              <th class="sp-nowrap">工事区分</th>
+              <th>備考</th>
+              <th style="width:110px;"></th>
+            </tr></thead>
+            <tbody id="contract-list"></tbody>
+          </table>
+        </div>
+      </section>
     </main>
+  </div>
+
+  <!-- ============ 契約 追加・編集モーダル ============ -->
+  <div class="modal-overlay" id="contract-modal">
+    <div class="modal">
+      <h3 id="contract-modal-title">契約情報を追加</h3>
+      <div class="field">
+        <label>開始日時</label>
+        <input type="datetime-local" id="contract-start-input">
+      </div>
+      <div class="field">
+        <label>終了日時</label>
+        <input type="datetime-local" id="contract-end-input">
+      </div>
+      <div class="field">
+        <label>形式</label>
+        <div class="seg-toggle" id="contract-format-toggle">
+          <button type="button" class="seg-btn active" data-format="paper">紙</button>
+          <button type="button" class="seg-btn" data-format="electronic">電</button>
+        </div>
+      </div>
+      <div class="field" id="contract-status-field" style="display:none;">
+        <label>状態</label>
+        <select id="contract-status-select">
+          <option value="join">参加</option>
+          <option value="bid">入札</option>
+          <option value="open">開札</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>対応者</label>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span id="contract-assignee-display" style="flex:1;color:var(--muted);">未選択</span>
+          <button type="button" class="btn-ghost" id="contract-assignee-pick-btn" style="border:1px solid var(--line);">選択</button>
+        </div>
+        <input type="hidden" id="contract-assignee-input">
+      </div>
+      <div class="field">
+        <label>工事名</label>
+        <input type="text" id="contract-projectname-input" placeholder="例：〇〇道路改良工事">
+      </div>
+      <div class="field">
+        <label>工事区分</label>
+        <input type="text" id="contract-projecttype-input" placeholder="例：土木一式">
+      </div>
+      <div class="field">
+        <label>備考</label>
+        <textarea id="contract-note-input" placeholder="任意"></textarea>
+      </div>
+      <div id="contract-error" style="color:var(--danger);font-size:12.5px;margin-top:4px;"></div>
+      <div class="modal-actions">
+        <button class="btn-ghost" id="contract-delete-btn" style="border:1px solid var(--danger);color:var(--danger);display:none;">削除</button>
+        <button class="btn-ghost" id="contract-cancel-btn" style="border:1px solid var(--line);">キャンセル</button>
+        <button class="btn-primary" id="contract-save-btn">保存</button>
+      </div>
+    </div>
   </div>
 
   <!-- ============ NOTICE MODAL ============ -->
@@ -1380,6 +1460,9 @@ let isPoster = false;
 let isWhereaboutsEditor = false;
 let isEquipmentManager = false;
 let isCalendarEditor = false;
+let isContractEditor = false;
+let contractsAll = [];
+let editingContractId = null;
 let equipmentAll = [];
 let selectedCategory = null;
 let selectedCheckoutCategory = null;
@@ -1473,20 +1556,23 @@ onAuthStateChanged(auth, async (user)=>{
     updateHeaderUserLabel();
     // 権限チェックは直列でawaitすると往復通信が5回分積み重なり、
     // 回線が遅いと数秒〜十数秒のロスになる。並列で一度に取得する。
-    const [adminDoc, posterDoc, wbEditorDoc, eqManagerDoc, calEditorDoc] = await Promise.all([
+    const [adminDoc, posterDoc, wbEditorDoc, eqManagerDoc, calEditorDoc, contractEditorDoc] = await Promise.all([
       getDoc(doc(db, "admins", user.email)).catch(()=>null),
       getDoc(doc(db, "announcement_posters", user.email)).catch(()=>null),
       getDoc(doc(db, "whereabouts_editors", user.email)).catch(()=>null),
       getDoc(doc(db, "equipment_managers", user.email)).catch(()=>null),
-      getDoc(doc(db, "calendar_editors", user.email)).catch(()=>null)
+      getDoc(doc(db, "calendar_editors", user.email)).catch(()=>null),
+      getDoc(doc(db, "contract_editors", user.email)).catch(()=>null)
     ]);
     isAdmin = !!(adminDoc && adminDoc.exists());
     isPoster = isAdmin || !!(posterDoc && posterDoc.exists());
     isWhereaboutsEditor = isAdmin || !!(wbEditorDoc && wbEditorDoc.exists());
     isEquipmentManager = isAdmin || !!(eqManagerDoc && eqManagerDoc.exists());
     isCalendarEditor = isAdmin || !!(calEditorDoc && calEditorDoc.exists());
+    isContractEditor = isAdmin || !!(contractEditorDoc && contractEditorDoc.exists());
     document.getElementById("admin-link").style.display = isAdmin ? "inline-block" : "none";
     document.getElementById("notice-new-btn").style.display = isPoster ? "inline-block" : "none";
+    document.getElementById("contract-new-btn").style.display = isContractEditor ? "inline-block" : "none";
     document.getElementById("wb-preset-tab-btn").style.display = (!isDisplayMode && (isAdmin || isWhereaboutsEditor)) ? "inline-block" : "none";
     // 安否確認のメールリンクから来た場合に画面が出るまでを速くするため、
     // 表示に必須ではない社員レコード作成はawaitせずバックグラウンドで行う
@@ -1506,6 +1592,7 @@ onAuthStateChanged(auth, async (user)=>{
     initCalendarTab();
     initWbPresetsListener();
     initSteelPlateTxListener();
+    initContractsListener();
     ensureSteelPlateCategoryAndMigrate();
 
     if(urlPreselect.campaign){
@@ -1526,7 +1613,7 @@ onAuthStateChanged(auth, async (user)=>{
 });
 
 /* ---------- tabs ---------- */
-const ALL_VIEWS = ["dashboard","notices","whereabouts","reserve","checkout","safety","calendar"];
+const ALL_VIEWS = ["dashboard","notices","whereabouts","reserve","checkout","safety","calendar","contracts"];
 const TAB_ORDER_KEY = "osakagumi-portal-tab-order";
 function refreshDashboardIfActive(){
   const el = document.getElementById("view-dashboard");
@@ -1715,6 +1802,9 @@ function switchToTab(viewName){
   }
   if(viewName==="dashboard"){
     try{ renderDashboard(); }catch(e){ console.error("[ダッシュボードの表示エラー]", e); }
+  }
+  if(viewName==="contracts"){
+    try{ renderContractsTab(); }catch(e){ console.error("[契約タブの表示エラー]", e); }
   }
 }
 document.querySelectorAll(".tab-btn").forEach(btn=>{
@@ -5934,6 +6024,160 @@ document.getElementById("sp-type-delete-btn")?.addEventListener("click", async (
     toast("削除しました。");
   }catch(e){
     document.getElementById("sp-type-error").textContent = "削除に失敗しました。権限をご確認ください。";
+  }
+});
+
+/* =========================================================
+   契約（入札関係情報）
+========================================================= */
+function initContractsListener(){
+  const q = query(collection(db,"contracts"), orderBy("startAt","desc"));
+  onSnapshot(q, snap=>{
+    contractsAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    if(document.getElementById("view-contracts").style.display !== "none"){
+      renderContractsTab();
+    }
+  }, (err)=>{ console.error("[契約情報取得エラー]", err); });
+}
+function contractFormatLabel(format){ return format==="electronic" ? "電" : "紙"; }
+function contractStatusLabel(status){
+  return { join:"参加", bid:"入札", open:"開札" }[status] || "";
+}
+function formatContractDateTime(iso){
+  if(!iso) return "";
+  const d = new Date(iso);
+  if(isNaN(d.getTime())) return "";
+  const labels = ["日","月","火","水","木","金","土"];
+  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}(${labels[d.getDay()]}) ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+function renderContractsTab(){
+  const body = document.getElementById("contract-list");
+  if(!body) return;
+  body.innerHTML = "";
+  if(contractsAll.length===0){
+    body.innerHTML = `<tr><td colspan="9" style="color:var(--muted);text-align:center;padding:16px;">契約情報はまだ登録されていません。</td></tr>`;
+    return;
+  }
+  contractsAll.forEach(c=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="sp-nowrap">${formatContractDateTime(c.startAt)}</td>
+      <td class="sp-nowrap">${formatContractDateTime(c.endAt)}</td>
+      <td class="sp-nowrap">${escapeHtml(contractFormatLabel(c.format))}</td>
+      <td class="sp-nowrap">${c.format==="electronic" ? escapeHtml(contractStatusLabel(c.status)) : ""}</td>
+      <td class="sp-nowrap">${escapeHtml(c.assignee||"")}</td>
+      <td>${escapeHtml(c.projectName||"")}</td>
+      <td class="sp-nowrap">${escapeHtml(c.projectType||"")}</td>
+      <td style="color:var(--muted);max-width:220px;">${escapeHtml(c.note||"")}</td>
+      <td class="actions"></td>
+    `;
+    if(isContractEditor){
+      const editBtn = document.createElement("button");
+      editBtn.textContent = "編集";
+      editBtn.style.cssText = "border:1px solid var(--line);background:#fff;border-radius:6px;color:var(--muted);font-size:12px;padding:5px 10px;cursor:pointer;";
+      editBtn.addEventListener("click", ()=> openContractModal(c));
+      tr.querySelector(".actions").appendChild(editBtn);
+    }
+    body.appendChild(tr);
+  });
+}
+
+let contractSelectedFormat = "paper";
+document.querySelectorAll("#contract-format-toggle .seg-btn").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    contractSelectedFormat = btn.dataset.format;
+    document.querySelectorAll("#contract-format-toggle .seg-btn").forEach(b=>{
+      b.classList.toggle("active", b===btn);
+    });
+    document.getElementById("contract-status-field").style.display = contractSelectedFormat==="electronic" ? "block" : "none";
+  });
+});
+function setContractAssignee(name){
+  document.getElementById("contract-assignee-input").value = name || "";
+  document.getElementById("contract-assignee-display").textContent = name || "未選択";
+  document.getElementById("contract-assignee-display").style.color = name ? "var(--text)" : "var(--muted)";
+}
+document.getElementById("contract-assignee-pick-btn")?.addEventListener("click", async ()=>{
+  const emp = await openEmployeePicker();
+  if(emp){ setContractAssignee(emp.name || emp.email); }
+});
+function isoToDatetimeLocal(iso){
+  if(!iso) return "";
+  const d = new Date(iso);
+  if(isNaN(d.getTime())) return "";
+  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+function openContractModal(c){
+  editingContractId = c ? c.id : null;
+  document.getElementById("contract-modal-title").textContent = c ? "契約情報を編集" : "契約情報を追加";
+  document.getElementById("contract-delete-btn").style.display = c ? "inline-block" : "none";
+  contractSelectedFormat = (c && c.format) || "paper";
+  document.querySelectorAll("#contract-format-toggle .seg-btn").forEach(b=>{
+    b.classList.toggle("active", b.dataset.format===contractSelectedFormat);
+  });
+  document.getElementById("contract-status-field").style.display = contractSelectedFormat==="electronic" ? "block" : "none";
+  document.getElementById("contract-status-select").value = (c && c.status) || "join";
+  document.getElementById("contract-start-input").value = c ? isoToDatetimeLocal(c.startAt) : "";
+  document.getElementById("contract-end-input").value = c ? isoToDatetimeLocal(c.endAt) : "";
+  setContractAssignee(c ? (c.assignee || "") : "");
+  document.getElementById("contract-projectname-input").value = (c && c.projectName) || "";
+  document.getElementById("contract-projecttype-input").value = (c && c.projectType) || "";
+  document.getElementById("contract-note-input").value = (c && c.note) || "";
+  document.getElementById("contract-error").textContent = "";
+  document.getElementById("contract-modal").classList.add("show");
+}
+document.getElementById("contract-new-btn")?.addEventListener("click", ()=> openContractModal(null));
+document.getElementById("contract-cancel-btn")?.addEventListener("click", ()=>{
+  document.getElementById("contract-modal").classList.remove("show");
+});
+document.getElementById("contract-save-btn")?.addEventListener("click", async ()=>{
+  const errEl = document.getElementById("contract-error");
+  errEl.textContent = "";
+  const startVal = document.getElementById("contract-start-input").value;
+  const endVal = document.getElementById("contract-end-input").value;
+  const projectName = document.getElementById("contract-projectname-input").value.trim();
+  if(!startVal){ errEl.textContent = "開始日時を入力してください。"; return; }
+  if(!endVal){ errEl.textContent = "終了日時を入力してください。"; return; }
+  if(!projectName){ errEl.textContent = "工事名を入力してください。"; return; }
+  const startAt = new Date(startVal).toISOString();
+  const endAt = new Date(endVal).toISOString();
+  if(endAt < startAt){ errEl.textContent = "終了日時が開始日時より前になっています。"; return; }
+  const fields = {
+    startAt, endAt,
+    format: contractSelectedFormat,
+    status: contractSelectedFormat==="electronic" ? document.getElementById("contract-status-select").value : "",
+    assignee: document.getElementById("contract-assignee-input").value.trim(),
+    projectName,
+    projectType: document.getElementById("contract-projecttype-input").value.trim(),
+    note: document.getElementById("contract-note-input").value.trim()
+  };
+  try{
+    if(editingContractId){
+      await updateDoc(doc(db,"contracts", editingContractId), fields);
+      toast("更新しました。");
+    } else {
+      await addDoc(collection(db,"contracts"), {
+        ...fields,
+        createdByEmail: currentUser.email,
+        createdByName: myDisplayName(),
+        createdAt: new Date().toISOString()
+      });
+      toast("追加しました。");
+    }
+    document.getElementById("contract-modal").classList.remove("show");
+  }catch(e){
+    errEl.textContent = "保存に失敗しました。権限をご確認ください。";
+  }
+});
+document.getElementById("contract-delete-btn")?.addEventListener("click", async ()=>{
+  if(!editingContractId) return;
+  if(!confirm("この契約情報を削除しますか？")) return;
+  try{
+    await deleteDoc(doc(db,"contracts", editingContractId));
+    document.getElementById("contract-modal").classList.remove("show");
+    toast("削除しました。");
+  }catch(e){
+    document.getElementById("contract-error").textContent = "削除に失敗しました。権限をご確認ください。";
   }
 });
 

@@ -117,6 +117,7 @@
     <button class="tab-btn" data-view="notices">お知らせ管理</button>
     <button class="tab-btn" data-view="whereabouts">行き先管理</button>
     <button class="tab-btn" data-view="safety">安否確認管理</button>
+    <button class="tab-btn" data-view="contracts">契約管理</button>
     <button class="tab-btn" data-view="calendar">カレンダー管理</button>
     <button class="tab-reorder-btn" id="tab-reorder-toggle" title="タブの並び替え">並び替え</button>
   </nav>
@@ -532,6 +533,27 @@
       </div>
     </section>
 
+    <!-- ============ 契約管理 ============ -->
+    <section id="view-contracts" style="display:none;">
+      <div class="panel">
+        <h2>契約編集権限者（入札関係情報の追加・編集・削除ができる人）</h2>
+        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
+          「契約」タブで入札関係情報を追加・編集・削除できる人を登録します（主に営業部を想定）。管理者は常にこれらの操作が可能です。閲覧自体は社員全員ができます。
+        </p>
+        <div class="form-grid">
+          <div class="field full">
+            <label>メールアドレス</label>
+            <input type="email" id="contracteditor-email-input" placeholder="you@osakagumi.co.jp">
+          </div>
+        </div>
+        <button class="btn btn-primary" id="contracteditor-add-btn">権限を追加</button>
+        <table style="margin-top:14px;">
+          <thead><tr><th>メールアドレス</th><th>操作</th></tr></thead>
+          <tbody id="contracteditor-table-body"></tbody>
+        </table>
+      </div>
+    </section>
+
     <!-- ============ カレンダー管理 ============ -->
     <section id="view-calendar" style="display:none;">
       <div class="panel">
@@ -821,12 +843,13 @@ onAuthStateChanged(auth, async (user)=>{
   initEquipmentManagersListener();
   initCalendarEditorsListener();
   initCalendarYearsListener();
+  initContractEditorsListener();
   initEmployeesListener();
   initSafetyCampaignsListener();
 });
 
 /* ---------- tabs ---------- */
-const ADMIN_VIEWS = ["equipment","reservations","admins","userimport","notices","whereabouts","safety","calendar"];
+const ADMIN_VIEWS = ["equipment","reservations","admins","userimport","notices","whereabouts","safety","calendar","contracts"];
 function switchToAdminTab(viewName){
   document.querySelectorAll(".tab-btn").forEach(b=>{
     b.classList.toggle("active", b.dataset.view===viewName);
@@ -1686,6 +1709,47 @@ document.getElementById("eqmanager-add-btn").addEventListener("click", async ()=
   try{
     await setDoc(doc(db,"equipment_managers", email), { addedBy: currentUser.email, addedAt: new Date().toISOString() });
     document.getElementById("eqmanager-email-input").value = "";
+    toast("権限を追加しました。");
+  }catch(e){
+    toast("追加に失敗しました。");
+  }
+});
+
+/* ============================================================
+   契約編集権限者
+============================================================ */
+function initContractEditorsListener(){
+  onSnapshot(collection(db,"contract_editors"), snap=>{
+    renderContractEditors(snap.docs.map(d=>d.id));
+  });
+}
+function renderContractEditors(list){
+  const body = document.getElementById("contracteditor-table-body");
+  body.innerHTML = "";
+  if(list.length===0){
+    body.innerHTML = `<tr><td colspan="2" class="empty">管理者以外の権限者はいません。</td></tr>`;
+    return;
+  }
+  list.forEach(email=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${escapeHtml(email)}</td><td class="actions"></td>`;
+    const btn = document.createElement("button");
+    btn.className = "btn btn-danger"; btn.textContent = "削除";
+    btn.addEventListener("click", async ()=>{
+      if(!confirm(`${email} の権限を削除しますか？`)) return;
+      await deleteDoc(doc(db,"contract_editors", email));
+      toast("権限を削除しました。");
+    });
+    tr.querySelector(".actions").appendChild(btn);
+    body.appendChild(tr);
+  });
+}
+document.getElementById("contracteditor-add-btn").addEventListener("click", async ()=>{
+  const email = document.getElementById("contracteditor-email-input").value.trim();
+  if(!email){ toast("メールアドレスを入力してください。"); return; }
+  try{
+    await setDoc(doc(db,"contract_editors", email), { addedBy: currentUser.email, addedAt: new Date().toISOString() });
+    document.getElementById("contracteditor-email-input").value = "";
     toast("権限を追加しました。");
   }catch(e){
     toast("追加に失敗しました。");

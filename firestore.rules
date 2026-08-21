@@ -38,6 +38,11 @@ service cloud.firestore {
         (isSignedIn() &&
           exists(/databases/$(database)/documents/equipment_managers/$(request.auth.token.email)));
     }
+    function isContractEditor() {
+      return isAdmin() ||
+        (isSignedIn() &&
+          exists(/databases/$(database)/documents/contract_editors/$(request.auth.token.email)));
+    }
 
     function isCalendarEditor() {
       return isAdmin() ||
@@ -132,6 +137,18 @@ service cloud.firestore {
     match /equipment_managers/{email} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
+    }
+
+    // 契約（入札関係情報）の編集権限者一覧: 全員が読める。書き込みは管理者のみ。
+    match /contract_editors/{email} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // 契約（入札関係情報）: 全員が読める（公開）。作成・更新・削除は管理者 or 契約編集権限者のみ。
+    match /contracts/{contractId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isSignedIn() && isContractEditor();
     }
 
     // 設備マスタ: ログインしていれば読める。
