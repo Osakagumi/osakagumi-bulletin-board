@@ -272,6 +272,7 @@
   .contract-card{
     background:var(--surface);border:1.5px solid var(--line);border-radius:10px;
     padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:18px;flex-wrap:wrap;
+    position:relative;overflow:hidden;
   }
   .contract-card .contract-main{flex:1;min-width:220px;}
   .contract-card .contract-title{font-size:14.5px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
@@ -280,10 +281,24 @@
   .contract-card .contract-note{font-size:12px;color:var(--muted);margin-top:6px;max-width:640px;}
   .contract-card .contract-actions{flex-shrink:0;}
   .contract-card-urgent{border-color:var(--danger);border-width:2px;}
-  .contract-card-resolved{opacity:0.55;}
-  .contract-card-resolved:hover{opacity:0.8;}
+  .contract-card-resolved{opacity:0.75;}
+  .contract-card-resolved:hover{opacity:0.95;}
   .contract-card-resolved .contract-title,
   .contract-card-resolved .contract-meta b{font-weight:400;}
+  .contract-stamp{
+    position:absolute;top:50%;right:100px;
+    width:76px;height:76px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    border:3.5px double currentColor;
+    font-weight:900;font-size:16px;letter-spacing:1px;
+    font-family:var(--mono);
+    transform:translateY(-50%) rotate(-14deg);
+    opacity:0.8;pointer-events:none;
+    box-shadow:0 0 0 1px rgba(255,255,255,.4) inset;
+  }
+  @media (max-width:640px){
+    .contract-stamp{ position:static; transform:rotate(-10deg); margin:6px auto 0; width:60px;height:60px;font-size:13px; }
+  }
   .contract-period-urgent{font-weight:700;color:var(--danger);}
   .contract-period-urgent .contract-inline-field:not(.readonly):hover{background:rgba(192,57,43,.1);}
   .contract-badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11.5px;font-weight:700;color:#fff;white-space:nowrap;}
@@ -6253,18 +6268,26 @@ function renderContractsTab(){
     formatBadge.style.background = contractFormatColor(c.format);
     formatBadge.textContent = contractFormatLabel(c.format);
     titleRow.appendChild(formatBadge);
-    const statusBadge = document.createElement("span");
-    statusBadge.className = "contract-badge";
-    statusBadge.style.background = contractStatusColor(c.status);
-    statusBadge.textContent = contractStatusLabel(c.status) || (c.format==="paper" ? "入札" : "参加");
-    if(!isResolved && isContractEditor){
-      statusBadge.style.cursor = "pointer";
-      statusBadge.title = (c.format==="paper" || c.status==="open")
-        ? "クリックして開札結果を選択（落札・敗退・辞退）"
-        : "クリックで状態を進めます（参加→入札→開札）";
-      statusBadge.addEventListener("click", ()=> onContractStatusBadgeClick(c, statusBadge));
+    if(isResolved){
+      const stamp = document.createElement("div");
+      stamp.className = "contract-stamp";
+      stamp.style.color = contractStatusColor(c.status);
+      stamp.textContent = contractStatusLabel(c.status);
+      card.appendChild(stamp);
+    } else {
+      const statusBadge = document.createElement("span");
+      statusBadge.className = "contract-badge";
+      statusBadge.style.background = contractStatusColor(c.status);
+      statusBadge.textContent = contractStatusLabel(c.status) || (c.format==="paper" ? "入札" : "参加");
+      if(isContractEditor){
+        statusBadge.style.cursor = "pointer";
+        statusBadge.title = (c.format==="paper" || c.status==="open")
+          ? "クリックして開札結果を選択（落札・敗退・辞退）"
+          : "クリックで状態を進めます（参加→入札→開札）";
+        statusBadge.addEventListener("click", ()=> onContractStatusBadgeClick(c, statusBadge));
+      }
+      titleRow.appendChild(statusBadge);
     }
-    titleRow.appendChild(statusBadge);
     main.appendChild(titleRow);
 
     // ---- 日時行：開始・終了とも、クリックでその場で日付・時刻を変更 ----
