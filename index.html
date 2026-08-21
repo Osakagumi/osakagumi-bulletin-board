@@ -2567,7 +2567,7 @@ function setDateFieldValue(el, dateStr){
     el.textContent = formatDateJP(dateStr);
     el.classList.remove("placeholder");
   } else {
-    el.textContent = "未設定（タップして選択）";
+    el.textContent = "未設定";
     el.classList.add("placeholder");
   }
 }
@@ -2578,7 +2578,7 @@ function setTimeFieldValue(el, timeStr, placeholderText){
     el.textContent = timeStr;
     el.classList.remove("placeholder");
   } else {
-    el.textContent = placeholderText || "未設定（タップして選択）";
+    el.textContent = placeholderText || "未設定";
     el.classList.add("placeholder");
   }
 }
@@ -6192,6 +6192,7 @@ function renderContractsTab(){
     // ---- 日時行：開始・終了とも、クリックでその場で日付・時刻を変更 ----
     const metaRow = document.createElement("div");
     metaRow.className = "contract-meta";
+    const canInlineEditDateTime = isContractEditor && c.format==="electronic";
 
     const periodWrap = document.createElement("span");
     periodWrap.className = "contract-period" + (isUpcomingWithinWeek ? " contract-period-urgent" : "");
@@ -6215,7 +6216,7 @@ function renderContractsTab(){
       endTimeEl.textContent = isoToTimeStr(c.endAt);
       periodWrap.appendChild(endDateEl);
       periodWrap.appendChild(endTimeEl);
-      if(isContractEditor){
+      if(canInlineEditDateTime){
         endDateEl.addEventListener("click", (e)=>{
           openCalendarPicker(e.currentTarget, isoToDateStr(c.endAt), {
             allowClear: true,
@@ -6228,9 +6229,12 @@ function renderContractsTab(){
             onSelect: (v)=> updateContractDateTime(c, "endTime", v)
           });
         });
+      } else {
+        endDateEl.classList.add("readonly");
+        endTimeEl.classList.add("readonly");
       }
     }
-    if(isContractEditor){
+    if(canInlineEditDateTime){
       startDateEl.addEventListener("click", (e)=>{
         openCalendarPicker(e.currentTarget, isoToDateStr(c.startAt), {
           onSelect: (v)=> v && updateContractDateTime(c, "startDate", v)
@@ -6337,7 +6341,7 @@ let contractStartDate = "", contractStartTime = "";
 let contractEndDate = "", contractEndTime = "";
 function setContractStartDate(dateStr){
   contractStartDate = dateStr || "";
-  document.getElementById("contract-start-date-picker").textContent = dateStr ? formatDateJP(dateStr) : "日付を選択";
+  document.getElementById("contract-start-date-picker").textContent = dateStr ? formatDateJP(dateStr) : "未設定";
 }
 function setContractStartTime(timeStr){
   const el = document.getElementById("contract-start-time-btn");
