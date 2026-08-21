@@ -164,6 +164,7 @@
   .dash-col{display:flex;flex-direction:column;gap:14px;min-width:0;}
   @media (max-width:720px){ .dash-grid{grid-template-columns:1fr;} }
   .dash-cal-month{margin:0;border:none;padding:0;background:none;}
+  .dash-cal-nav{display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:10px;}
   .dash-cal-month .cal-month-head{margin-bottom:8px;}
   .dash-card{background:var(--surface);border:1.5px solid var(--line);border-radius:12px;padding:16px;}
   .dash-card h3{margin:0;font-size:14.5px;}
@@ -338,6 +339,7 @@
 
   /* ---------- カレンダー ---------- */
   .date-nav-btn{border:1px solid var(--line);background:#fff;border-radius:6px;width:30px;height:30px;font-size:14px;}
+  .date-nav-btn:disabled{opacity:0.35;cursor:not-allowed;}
   .cal-grid-wrap{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
   @media (max-width:900px){
     .cal-grid-wrap{grid-template-columns:1fr;}
@@ -855,6 +857,11 @@
               <div class="dash-card-head">
                 <h3>カレンダー</h3>
                 <span class="dash-card-link" id="dash-calendar-link" title="カレンダーを見る">▶</span>
+              </div>
+              <div class="dash-cal-nav">
+                <button type="button" class="date-nav-btn" id="dash-cal-prev-btn">◀</button>
+                <button type="button" class="btn-ghost" id="dash-cal-today-btn" style="border:1px solid var(--line);padding:5px 14px;font-size:12.5px;">今日</button>
+                <button type="button" class="date-nav-btn" id="dash-cal-next-btn">▶</button>
               </div>
               <div id="dash-calendar-body"></div>
             </div>
@@ -1382,6 +1389,9 @@ let myReservationsAll = [];
 let calDaysData = {};          // "YYYY-MM-DD" -> {isHoliday, label}
 let spPlateTypesAll = [];
 let spAllInventoryTypes = [];
+const dashCalInitial = new Date();
+let dashCalYear = dashCalInitial.getFullYear();
+let dashCalMonth = dashCalInitial.getMonth()+1;
 let spTransactionsAll = [];
 
 let employeesAll = [];
@@ -1643,18 +1653,45 @@ function renderDashboard(){
     });
   }
 
-  // ---- カレンダー（本日を含む月の月間カレンダー） ----
+  // ---- カレンダー（月を前後に移動できる月間カレンダー。作成済みの年度の範囲内のみ） ----
+  const fyStart = calFiscalYearStart ?? defaultFiscalYearStart();
+  // 年度の範囲：{fyStart}年4月 〜 {fyStart+1}年3月
+  const minYm = fyStart*12 + 4;
+  const maxYm = (fyStart+1)*12 + 3;
+  let curYm = dashCalYear*12 + dashCalMonth;
+  if(curYm < minYm){ curYm = minYm; }
+  if(curYm > maxYm){ curYm = maxYm; }
+  dashCalYear = Math.floor((curYm-1)/12);
+  dashCalMonth = curYm - dashCalYear*12;
+
   const calBody = document.getElementById("dash-calendar-body");
   calBody.innerHTML = "";
-  const now = new Date();
   try{
-    const monthBlock = buildCalMonthBlock(now.getFullYear(), now.getMonth()+1);
+    const monthBlock = buildCalMonthBlock(dashCalYear, dashCalMonth);
     monthBlock.classList.add("dash-cal-month");
     calBody.appendChild(monthBlock);
   }catch(e){
     calBody.innerHTML = `<div class="dash-empty">カレンダーを表示できませんでした。</div>`;
   }
+  document.getElementById("dash-cal-prev-btn").disabled = (curYm <= minYm);
+  document.getElementById("dash-cal-next-btn").disabled = (curYm >= maxYm);
 }
+document.getElementById("dash-cal-prev-btn").addEventListener("click", ()=>{
+  dashCalMonth--;
+  if(dashCalMonth < 1){ dashCalMonth = 12; dashCalYear--; }
+  renderDashboard();
+});
+document.getElementById("dash-cal-next-btn").addEventListener("click", ()=>{
+  dashCalMonth++;
+  if(dashCalMonth > 12){ dashCalMonth = 1; dashCalYear++; }
+  renderDashboard();
+});
+document.getElementById("dash-cal-today-btn").addEventListener("click", ()=>{
+  const now = new Date();
+  dashCalYear = now.getFullYear();
+  dashCalMonth = now.getMonth()+1;
+  renderDashboard();
+});
 document.getElementById("dash-notices-link").addEventListener("click", ()=> switchToTab("notices"));
 document.getElementById("dash-wb-link").addEventListener("click", ()=> switchToTab("whereabouts"));
 document.getElementById("dash-reserve-link").addEventListener("click", ()=> switchToTab("reserve"));
