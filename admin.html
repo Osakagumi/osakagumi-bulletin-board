@@ -78,16 +78,12 @@
   td.actions{white-space:nowrap;}
   td.actions button{margin-right:6px;}
   .tag{font-size:10.5px;font-weight:700;color:#fff;padding:2px 7px;border-radius:4px;font-family:var(--mono);white-space:nowrap;display:inline-block;}
-  .emp-card{background:var(--surface,#fff);border:1.5px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:10px;}
+  .emp-card{background:var(--surface,#fff);border:1.5px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:8px;}
   .emp-card.emp-card-hidden{opacity:0.45;}
-  .emp-card-head{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;}
-  .emp-card-head .emp-card-name-input{font-size:14.5px;font-weight:700;width:160px;}
+  .emp-card-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .emp-card-head .emp-card-name-text{font-size:14px;font-weight:700;}
   .emp-card-head .emp-card-email{font-size:12px;color:var(--muted);}
-  .emp-card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:12px;}
-  .emp-card-grid .field{margin:0;}
-  .emp-card-grid label{display:block;font-size:11.5px;color:var(--muted);margin-bottom:4px;}
-  .emp-card-multiselect{width:100%;min-width:0;}
-  .emp-card-actions{display:flex;gap:8px;flex-wrap:wrap;}
+  .emp-card-summary{font-size:12px;color:var(--muted);margin-top:5px;line-height:1.6;}
   .muted-row{opacity:.5;}
   .filter-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:flex-end;}
   .filter-row .field{min-width:140px;}
@@ -341,10 +337,56 @@
 
       <div class="panel">
         <h2>社員一覧（氏名・所属・タブ表示・並び順・電話番号・備考の編集）</h2>
-        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">ログインすると自動的にここへ追加されます。CSV一括登録した場合は社員番号・電話番号・備考も反映されています。</p>
+        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">ログインすると自動的にここへ追加されます。CSV一括登録した場合は社員番号・電話番号・備考も反映されています。「編集」から詳細を変更できます。</p>
         <div id="emp-card-list"></div>
       </div>
     </section>
+
+    <!-- ============ 社員情報 編集モーダル ============ -->
+    <div class="modal-overlay" id="emp-edit-modal">
+      <div class="modal" style="max-width:460px;">
+        <h3 id="emp-edit-modal-title">社員情報を編集</h3>
+        <div class="field">
+          <label>氏名</label>
+          <input type="text" id="emp-edit-name-input">
+        </div>
+        <div class="field">
+          <label>メールアドレス</label>
+          <div id="emp-edit-email-display" style="font-size:12.5px;color:var(--muted);"></div>
+        </div>
+        <div class="field">
+          <label>社員番号</label>
+          <input type="text" id="emp-edit-no-input">
+        </div>
+        <div class="field">
+          <label>所属</label>
+          <div id="emp-edit-dept-checks" style="display:flex;flex-wrap:wrap;gap:10px;border:1px solid var(--line);border-radius:8px;padding:10px;max-height:150px;overflow-y:auto;"></div>
+        </div>
+        <div class="field">
+          <label>非表示にするタブ</label>
+          <div id="emp-edit-hiddentabs-checks" style="display:flex;flex-wrap:wrap;gap:10px;border:1px solid var(--line);border-radius:8px;padding:10px;"></div>
+        </div>
+        <div class="field">
+          <label>並び順</label>
+          <input type="number" id="emp-edit-order-input">
+        </div>
+        <div class="field">
+          <label>電話番号</label>
+          <input type="text" id="emp-edit-phone-input">
+        </div>
+        <div class="field">
+          <label>備考</label>
+          <input type="text" id="emp-edit-memo-input">
+        </div>
+        <div class="row-btns" style="justify-content:space-between;">
+          <button class="btn btn-ghost" id="emp-edit-hide-btn" style="border:1px solid var(--danger);color:var(--danger);"></button>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-ghost" id="emp-edit-cancel-btn" style="border:1px solid var(--line);">キャンセル</button>
+            <button class="btn btn-primary" id="emp-edit-save-btn">保存</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- ============ お知らせ管理 ============ -->
     <section id="view-notices" style="display:none;">
@@ -2117,10 +2159,10 @@ function renderEmployees(){
 
     const head = document.createElement("div");
     head.className = "emp-card-head";
-    const nameInput = document.createElement("input");
-    nameInput.type = "text"; nameInput.value = emp.name || ""; nameInput.className = "emp-card-name-input";
-    nameInput.placeholder = "氏名";
-    head.appendChild(nameInput);
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "emp-card-name-text";
+    nameSpan.textContent = emp.name || emp.email;
+    head.appendChild(nameSpan);
     const emailSpan = document.createElement("span");
     emailSpan.className = "emp-card-email";
     emailSpan.textContent = emp.email;
@@ -2131,126 +2173,116 @@ function renderEmployees(){
       hiddenTag.textContent = "非表示中";
       head.appendChild(hiddenTag);
     }
+    const editBtn = document.createElement("button");
+    editBtn.className = "btn btn-ghost"; editBtn.textContent = "編集";
+    editBtn.style.marginLeft = "auto"; editBtn.style.border = "1px solid var(--line)";
+    editBtn.addEventListener("click", ()=> openEmpEditModal(emp));
+    head.appendChild(editBtn);
     card.appendChild(head);
 
-    const grid = document.createElement("div");
-    grid.className = "emp-card-grid";
-
-    const noField = document.createElement("div");
-    noField.className = "field";
-    noField.innerHTML = `<label>社員番号</label>`;
-    const noInput = document.createElement("input");
-    noInput.type = "text"; noInput.value = emp.employeeNo || "";
-    noField.appendChild(noInput);
-    grid.appendChild(noField);
-
-    const deptField = document.createElement("div");
-    deptField.className = "field";
-    deptField.innerHTML = `<label>所属（Ctrl/⌘+クリックで複数選択）</label>`;
-    const deptSelect = document.createElement("select");
-    deptSelect.multiple = true;
-    deptSelect.size = Math.min(4, Math.max(2, departmentsAll.length));
-    deptSelect.className = "emp-card-multiselect";
-    const empCurrentDepts = empDepartmentsAdmin(emp);
-    departmentsAll.forEach(dep=>{
-      const opt = document.createElement("option");
-      opt.value = dep.id; opt.textContent = dep.name;
-      if(empCurrentDepts.includes(dep.id)) opt.selected = true;
-      deptSelect.appendChild(opt);
-    });
-    deptField.appendChild(deptSelect);
-    grid.appendChild(deptField);
-
-    const hiddenTabsField = document.createElement("div");
-    hiddenTabsField.className = "field";
-    hiddenTabsField.innerHTML = `<label>非表示にするタブ（Ctrl/⌘+クリックで複数選択）</label>`;
-    const hiddenTabsSelect = document.createElement("select");
-    hiddenTabsSelect.multiple = true;
-    hiddenTabsSelect.size = Math.min(4, Math.max(2, HIDEABLE_TABS.length));
-    hiddenTabsSelect.className = "emp-card-multiselect";
-    const empHiddenTabs = Array.isArray(emp.hiddenTabs) ? emp.hiddenTabs : [];
-    HIDEABLE_TABS.forEach(t=>{
-      const opt = document.createElement("option");
-      opt.value = t.id; opt.textContent = t.label;
-      if(empHiddenTabs.includes(t.id)) opt.selected = true;
-      hiddenTabsSelect.appendChild(opt);
-    });
-    hiddenTabsField.appendChild(hiddenTabsSelect);
-    grid.appendChild(hiddenTabsField);
-
-    const orderField = document.createElement("div");
-    orderField.className = "field";
-    orderField.innerHTML = `<label>並び順</label>`;
-    const orderInput = document.createElement("input");
-    orderInput.type = "number"; orderInput.value = emp.order ?? 0;
-    orderField.appendChild(orderInput);
-    grid.appendChild(orderField);
-
-    const phoneField = document.createElement("div");
-    phoneField.className = "field";
-    phoneField.innerHTML = `<label>電話番号</label>`;
-    const phoneInput = document.createElement("input");
-    phoneInput.type = "text"; phoneInput.value = emp.phone || "";
-    phoneField.appendChild(phoneInput);
-    grid.appendChild(phoneField);
-
-    const memoField = document.createElement("div");
-    memoField.className = "field";
-    memoField.innerHTML = `<label>備考</label>`;
-    const memoInput = document.createElement("input");
-    memoInput.type = "text"; memoInput.value = emp.memo || "";
-    memoField.appendChild(memoInput);
-    grid.appendChild(memoField);
-
-    card.appendChild(grid);
-
-    const actions = document.createElement("div");
-    actions.className = "emp-card-actions";
-    const saveBtn = document.createElement("button");
-    saveBtn.className = "btn btn-primary"; saveBtn.textContent = "保存";
-    saveBtn.addEventListener("click", async ()=>{
-      const selectedDepts = [...deptSelect.selectedOptions].map(o=>o.value);
-      const selectedHiddenTabs = [...hiddenTabsSelect.selectedOptions].map(o=>o.value);
-      try{
-        await updateDoc(doc(db,"employees", emp.email), {
-          employeeNo: noInput.value.trim(),
-          name: nameInput.value.trim() || emp.email,
-          departments: selectedDepts,
-          department: selectedDepts[0] || "", // 旧バージョン互換用（先頭の所属を単一値としても保持）
-          hiddenTabs: selectedHiddenTabs,
-          order: Number(orderInput.value)||0,
-          phone: phoneInput.value.trim(),
-          memo: memoInput.value.trim()
-        });
-        toast("社員情報を更新しました。");
-      }catch(e){
-        toast("更新に失敗しました。");
-      }
-    });
-    actions.appendChild(saveBtn);
-    const hideBtn = document.createElement("button");
-    hideBtn.className = emp.hidden ? "btn btn-ghost" : "btn btn-danger";
-    hideBtn.style.border = emp.hidden ? "1px solid var(--line)" : "";
-    hideBtn.textContent = emp.hidden ? "表示に戻す" : "非表示";
-    hideBtn.addEventListener("click", async ()=>{
-      const willHide = !emp.hidden;
-      const msg = willHide
-        ? `${emp.name || emp.email}（${emp.email}）を非表示にしますか？\n行き先など、社内システム上では存在しない扱いになります。\n※ログイン用のアカウント自体は削除されません。`
-        : `${emp.name || emp.email}（${emp.email}）の非表示を解除しますか？`;
-      if(!confirm(msg)) return;
-      try{
-        await updateDoc(doc(db,"employees", emp.email), { hidden: willHide });
-        toast(willHide ? "非表示にしました。" : "表示に戻しました。");
-      }catch(e){
-        toast("更新に失敗しました。");
-      }
-    });
-    actions.appendChild(hideBtn);
-    card.appendChild(actions);
+    const deptNames = empDepartmentsAdmin(emp).map(id=>departmentNameById(id));
+    const hiddenTabNames = (Array.isArray(emp.hiddenTabs) ? emp.hiddenTabs : [])
+      .map(id=> HIDEABLE_TABS.find(t=>t.id===id)?.label).filter(Boolean);
+    const summaryLine = document.createElement("div");
+    summaryLine.className = "emp-card-summary";
+    summaryLine.textContent =
+      `社員番号：${emp.employeeNo || "未設定"}　／　所属：${deptNames.length ? deptNames.join("・") : "未所属"}　／　` +
+      `非表示タブ：${hiddenTabNames.length ? hiddenTabNames.join("・") : "なし"}　／　並び順：${emp.order ?? 0}　／　` +
+      `電話：${emp.phone || "未設定"}　／　備考：${emp.memo || "なし"}`;
+    card.appendChild(summaryLine);
 
     body.appendChild(card);
   });
 }
+
+let editingEmpEmail = null;
+function openEmpEditModal(emp){
+  editingEmpEmail = emp.email;
+  document.getElementById("emp-edit-modal-title").textContent = "社員情報を編集：" + (emp.name || emp.email);
+  document.getElementById("emp-edit-name-input").value = emp.name || "";
+  document.getElementById("emp-edit-email-display").textContent = emp.email;
+  document.getElementById("emp-edit-no-input").value = emp.employeeNo || "";
+  document.getElementById("emp-edit-order-input").value = emp.order ?? 0;
+  document.getElementById("emp-edit-phone-input").value = emp.phone || "";
+  document.getElementById("emp-edit-memo-input").value = emp.memo || "";
+
+  const empCurrentDepts = empDepartmentsAdmin(emp);
+  const deptChecksEl = document.getElementById("emp-edit-dept-checks");
+  deptChecksEl.innerHTML = "";
+  if(departmentsAll.length===0){
+    deptChecksEl.innerHTML = `<span style="font-size:12.5px;color:var(--muted);">部署が登録されていません。</span>`;
+  }
+  departmentsAll.forEach(dep=>{
+    const label = document.createElement("label");
+    label.style.cssText = "display:flex;align-items:center;gap:5px;font-size:12.5px;cursor:pointer;";
+    const cb = document.createElement("input");
+    cb.type = "checkbox"; cb.value = dep.id; cb.style.width = "auto";
+    cb.checked = empCurrentDepts.includes(dep.id);
+    cb.className = "emp-edit-dept-check";
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(dep.name));
+    deptChecksEl.appendChild(label);
+  });
+
+  const empHiddenTabs = Array.isArray(emp.hiddenTabs) ? emp.hiddenTabs : [];
+  const hiddenTabsChecksEl = document.getElementById("emp-edit-hiddentabs-checks");
+  hiddenTabsChecksEl.innerHTML = "";
+  HIDEABLE_TABS.forEach(t=>{
+    const label = document.createElement("label");
+    label.style.cssText = "display:flex;align-items:center;gap:5px;font-size:12.5px;cursor:pointer;";
+    const cb = document.createElement("input");
+    cb.type = "checkbox"; cb.value = t.id; cb.style.width = "auto";
+    cb.checked = empHiddenTabs.includes(t.id);
+    cb.className = "emp-edit-hiddentab-check";
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(t.label));
+    hiddenTabsChecksEl.appendChild(label);
+  });
+
+  const hideBtn = document.getElementById("emp-edit-hide-btn");
+  hideBtn.textContent = emp.hidden ? "表示に戻す" : "非表示にする";
+  hideBtn.onclick = async ()=>{
+    const willHide = !emp.hidden;
+    const msg = willHide
+      ? `${emp.name || emp.email}（${emp.email}）を非表示にしますか？\n行き先など、社内システム上では存在しない扱いになります。\n※ログイン用のアカウント自体は削除されません。`
+      : `${emp.name || emp.email}（${emp.email}）の非表示を解除しますか？`;
+    if(!confirm(msg)) return;
+    try{
+      await updateDoc(doc(db,"employees", emp.email), { hidden: willHide });
+      toast(willHide ? "非表示にしました。" : "表示に戻しました。");
+      document.getElementById("emp-edit-modal").classList.remove("show");
+    }catch(e){
+      toast("更新に失敗しました。");
+    }
+  };
+
+  document.getElementById("emp-edit-modal").classList.add("show");
+}
+document.getElementById("emp-edit-cancel-btn")?.addEventListener("click", ()=>{
+  document.getElementById("emp-edit-modal").classList.remove("show");
+});
+document.getElementById("emp-edit-save-btn")?.addEventListener("click", async ()=>{
+  if(!editingEmpEmail) return;
+  const selectedDepts = [...document.querySelectorAll(".emp-edit-dept-check:checked")].map(cb=>cb.value);
+  const selectedHiddenTabs = [...document.querySelectorAll(".emp-edit-hiddentab-check:checked")].map(cb=>cb.value);
+  const name = document.getElementById("emp-edit-name-input").value.trim();
+  try{
+    await updateDoc(doc(db,"employees", editingEmpEmail), {
+      employeeNo: document.getElementById("emp-edit-no-input").value.trim(),
+      name: name || editingEmpEmail,
+      departments: selectedDepts,
+      department: selectedDepts[0] || "", // 旧バージョン互換用（先頭の所属を単一値としても保持）
+      hiddenTabs: selectedHiddenTabs,
+      order: Number(document.getElementById("emp-edit-order-input").value)||0,
+      phone: document.getElementById("emp-edit-phone-input").value.trim(),
+      memo: document.getElementById("emp-edit-memo-input").value.trim()
+    });
+    toast("社員情報を更新しました。");
+    document.getElementById("emp-edit-modal").classList.remove("show");
+  }catch(e){
+    toast("更新に失敗しました。");
+  }
+});
 
 /* ============================================================
    安否確認管理
