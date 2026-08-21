@@ -1859,18 +1859,25 @@ document.querySelectorAll(".tab-btn").forEach(btn=>{
 });
 
 /* ---------- タブの並び替え ---------- */
-function applySavedTabOrder(){
-  let saved;
-  try{ saved = JSON.parse(localStorage.getItem(TAB_ORDER_KEY) || "null"); }catch(e){ saved = null; }
+function applyTabOrderArray(order){
   const nav = document.getElementById("main-tabs");
   const reorderBtn = document.getElementById("tab-reorder-toggle");
-  if(saved && Array.isArray(saved)){
-    saved.forEach(viewName=>{
+  if(order && Array.isArray(order)){
+    order.forEach(viewName=>{
       const btn = nav.querySelector(`.tab-btn[data-view="${viewName}"]`);
       if(btn) nav.insertBefore(btn, reorderBtn);
     });
   }
+}
+function applySavedTabOrder(){
+  // ページ読み込み直後（まだログイン処理中でアカウント保存分は取得できない）は、
+  // 前回このブラウザで見えていた並び順をひとまず即時反映しておく（チラつき防止のフォールバック）。
+  // ログインが完了しアカウント保存分が取得できたら、initUserPrefsListener() 側で上書きする。
+  let saved;
+  try{ saved = JSON.parse(localStorage.getItem(TAB_ORDER_KEY) || "null"); }catch(e){ saved = null; }
+  applyTabOrderArray(saved);
   // 並び替え結果に関わらず、一番左の「表示されている」タブを初期表示にする
+  const nav = document.getElementById("main-tabs");
   const firstBtn = Array.from(nav.querySelectorAll(".tab-btn")).find(b => b.style.display !== "none");
   if(firstBtn) switchToTab(firstBtn.dataset.view);
 }
@@ -1878,7 +1885,11 @@ function currentTabOrder(){
   return Array.from(document.querySelectorAll("#main-tabs .tab-btn")).map(b=>b.dataset.view);
 }
 function saveTabOrder(){
-  localStorage.setItem(TAB_ORDER_KEY, JSON.stringify(currentTabOrder()));
+  const order = currentTabOrder();
+  localStorage.setItem(TAB_ORDER_KEY, JSON.stringify(order));
+  if(currentUser){
+    setDoc(doc(db,"user_prefs", currentUser.email), { tabOrder: order }, { merge:true }).catch(()=>{});
+  }
 }
 function moveTab(viewName, direction){
   const nav = document.getElementById("main-tabs");
@@ -6125,6 +6136,11 @@ function initUserPrefsListener(){
     }
     if(document.getElementById("view-contracts").style.display !== "none"){
       renderContractsTab();
+    }
+    if(Array.isArray(prefs.tabOrder) && !document.getElementById("main-tabs").classList.contains("reordering")){
+      applyTabOrderArray(prefs.tabOrder);
+      localStorage.setItem(TAB_ORDER_KEY, JSON.stringify(prefs.tabOrder));
+      // 現在表示中のタブが並び替えでも変わらず見えるよう、選択状態だけ保つ（初期表示のやり直しはしない）
     }
   }, (err)=>{ console.error("[個人設定取得エラー]", err); });
 }
