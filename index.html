@@ -2497,6 +2497,7 @@ function openTimePicker(anchorEl, currentValue, opts){
   const onSelect = opts?.onSelect || (()=>{});
   const minTime = opts?.minTime || "00:00";
   const maxTime = opts?.maxTime || "23:30";
+  const stepMinutes = opts?.stepMinutes || 30;
 
   const popup = document.createElement("div");
   popup.className = "calendar-popup time-popup";
@@ -2506,16 +2507,16 @@ function openTimePicker(anchorEl, currentValue, opts){
   const list = document.createElement("div");
   list.className = "time-list";
   for(let h=0; h<24; h++){
-    [0,30].forEach(m=>{
+    for(let m=0; m<60; m+=stepMinutes){
       const val = `${pad2(h)}:${pad2(m)}`;
-      if(val < minTime || val > maxTime) return;
+      if(val < minTime || val > maxTime) continue;
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "time-slot" + (val===currentValue ? " selected" : "");
       btn.textContent = val;
       btn.addEventListener("click", ()=>{ onSelect(val); closeCalendarPopup(); });
       list.appendChild(btn);
-    });
+    }
   }
   popup.appendChild(list);
 
@@ -6167,6 +6168,7 @@ document.getElementById("contract-start-date-picker")?.addEventListener("click",
 document.getElementById("contract-start-time-btn")?.addEventListener("click", (e)=>{
   const el = e.currentTarget;
   openTimePicker(el, el.dataset.value, {
+    stepMinutes: 5, maxTime: "23:55",
     onSelect: (val)=> setContractStartTime(val)
   });
 });
@@ -6179,6 +6181,7 @@ document.getElementById("contract-end-date-picker")?.addEventListener("click", (
 document.getElementById("contract-end-time-btn")?.addEventListener("click", (e)=>{
   const el = e.currentTarget;
   openTimePicker(el, el.dataset.value, {
+    stepMinutes: 5, maxTime: "23:55",
     onSelect: (val)=> setContractEndTime(val)
   });
 });
