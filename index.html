@@ -1006,11 +1006,17 @@
       <h3 id="contract-modal-title">入札情報を追加</h3>
       <div class="field">
         <label>開始日時</label>
-        <input type="datetime-local" id="contract-start-input" step="1800">
+        <div style="display:flex;gap:8px;">
+          <span class="date-picker-label" id="contract-start-date-picker" style="flex:1;"></span>
+          <button type="button" class="date-field-btn placeholder" id="contract-start-time-btn" data-value="" style="flex:1;"></button>
+        </div>
       </div>
       <div class="field">
         <label>終了日時（任意）</label>
-        <input type="datetime-local" id="contract-end-input" step="1800">
+        <div style="display:flex;gap:8px;">
+          <span class="date-picker-label" id="contract-end-date-picker" style="flex:1;"></span>
+          <button type="button" class="date-field-btn placeholder" id="contract-end-time-btn" data-value="" style="flex:1;"></button>
+        </div>
       </div>
       <div class="field">
         <label>形式</label>
@@ -6121,12 +6127,61 @@ document.getElementById("contract-assignee-pick-btn")?.addEventListener("click",
   const emp = await openEmployeePicker();
   if(emp){ setContractAssignee(emp.name || emp.email); }
 });
-function isoToDatetimeLocal(iso){
+function isoToDateStr(iso){
   if(!iso) return "";
   const d = new Date(iso);
   if(isNaN(d.getTime())) return "";
-  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
 }
+function isoToTimeStr(iso){
+  if(!iso) return "";
+  const d = new Date(iso);
+  if(isNaN(d.getTime())) return "";
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+let contractStartDate = "", contractStartTime = "";
+let contractEndDate = "", contractEndTime = "";
+function setContractStartDate(dateStr){
+  contractStartDate = dateStr || "";
+  document.getElementById("contract-start-date-picker").textContent = dateStr ? formatDateJP(dateStr) : "日付を選択";
+}
+function setContractStartTime(timeStr){
+  const el = document.getElementById("contract-start-time-btn");
+  contractStartTime = timeStr || "";
+  setTimeFieldValue(el, timeStr);
+}
+function setContractEndDate(dateStr){
+  contractEndDate = dateStr || "";
+  document.getElementById("contract-end-date-picker").textContent = dateStr ? formatDateJP(dateStr) : "未設定（任意）";
+}
+function setContractEndTime(timeStr){
+  const el = document.getElementById("contract-end-time-btn");
+  contractEndTime = timeStr || "";
+  setTimeFieldValue(el, timeStr);
+}
+document.getElementById("contract-start-date-picker")?.addEventListener("click", (e)=>{
+  openCalendarPicker(e.currentTarget, contractStartDate || todayStr(), {
+    onSelect: (dateStr)=>{ if(dateStr) setContractStartDate(dateStr); }
+  });
+});
+document.getElementById("contract-start-time-btn")?.addEventListener("click", (e)=>{
+  const el = e.currentTarget;
+  openTimePicker(el, el.dataset.value, {
+    onSelect: (val)=> setContractStartTime(val)
+  });
+});
+document.getElementById("contract-end-date-picker")?.addEventListener("click", (e)=>{
+  openCalendarPicker(e.currentTarget, contractEndDate || contractStartDate || todayStr(), {
+    allowClear: true,
+    onSelect: (dateStr)=> setContractEndDate(dateStr || "")
+  });
+});
+document.getElementById("contract-end-time-btn")?.addEventListener("click", (e)=>{
+  const el = e.currentTarget;
+  openTimePicker(el, el.dataset.value, {
+    onSelect: (val)=> setContractEndTime(val)
+  });
+});
 function openContractModal(c){
   editingContractId = c ? c.id : null;
   document.getElementById("contract-modal-title").textContent = c ? "入札情報を編集" : "入札情報を追加";
@@ -6138,8 +6193,10 @@ function openContractModal(c){
   document.getElementById("contract-status-field").style.display = contractSelectedFormat==="electronic" ? "block" : "none";
   document.getElementById("contract-status-select").value = (c && c.status) || "join";
   document.getElementById("contract-assignee-field").style.display = contractSelectedFormat==="electronic" ? "none" : "block";
-  document.getElementById("contract-start-input").value = c ? isoToDatetimeLocal(c.startAt) : "";
-  document.getElementById("contract-end-input").value = c ? isoToDatetimeLocal(c.endAt) : "";
+  setContractStartDate(c ? isoToDateStr(c.startAt) : todayStr());
+  setContractStartTime(c ? isoToTimeStr(c.startAt) : "");
+  setContractEndDate(c ? isoToDateStr(c.endAt) : "");
+  setContractEndTime(c ? isoToTimeStr(c.endAt) : "");
   setContractAssignee(contractSelectedFormat==="electronic" ? "" : (c ? (c.assignee || "") : ""));
   document.getElementById("contract-projectname-input").value = (c && c.projectName) || "";
   document.getElementById("contract-projecttype-input").value = (c && c.projectType) || "";
@@ -6154,13 +6211,16 @@ document.getElementById("contract-cancel-btn")?.addEventListener("click", ()=>{
 document.getElementById("contract-save-btn")?.addEventListener("click", async ()=>{
   const errEl = document.getElementById("contract-error");
   errEl.textContent = "";
-  const startVal = document.getElementById("contract-start-input").value;
-  const endVal = document.getElementById("contract-end-input").value;
   const projectName = document.getElementById("contract-projectname-input").value.trim();
-  if(!startVal){ errEl.textContent = "開始日時を入力してください。"; return; }
+  if(!contractStartDate){ errEl.textContent = "開始日を選択してください。"; return; }
+  if(!contractStartTime){ errEl.textContent = "開始時刻を選択してください。"; return; }
+  if((contractEndDate && !contractEndTime) || (!contractEndDate && contractEndTime)){
+    errEl.textContent = "終了日時は、日付・時刻の両方を選択するか、両方とも空欄にしてください。";
+    return;
+  }
   if(!projectName){ errEl.textContent = "工事名を入力してください。"; return; }
-  const startAt = new Date(startVal).toISOString();
-  const endAt = endVal ? new Date(endVal).toISOString() : "";
+  const startAt = new Date(`${contractStartDate}T${contractStartTime}`).toISOString();
+  const endAt = (contractEndDate && contractEndTime) ? new Date(`${contractEndDate}T${contractEndTime}`).toISOString() : "";
   if(endAt && endAt < startAt){ errEl.textContent = "終了日時が開始日時より前になっています。"; return; }
   const fields = {
     startAt, endAt,
