@@ -1052,6 +1052,30 @@
     </main>
   </div>
 
+  <!-- ============ 入札 状態を進めるモーダル ============ -->
+  <div class="modal-overlay" id="contract-status-modal">
+    <div class="modal">
+      <h3>状態を更新</h3>
+      <div class="field">
+        <label>次の状態</label>
+        <div id="contract-status-modal-next" style="font-weight:700;font-size:14px;padding:4px 0;"></div>
+      </div>
+      <div class="field">
+        <label>日付</label>
+        <span class="date-picker-label" id="contract-status-modal-date-picker"></span>
+      </div>
+      <div class="field">
+        <label>時刻</label>
+        <button type="button" class="date-field-btn placeholder" id="contract-status-modal-time-btn" data-value=""></button>
+      </div>
+      <div id="contract-status-modal-error" style="color:var(--danger);font-size:12.5px;margin-top:4px;"></div>
+      <div class="row-btns">
+        <button class="btn-ghost" id="contract-status-modal-cancel" style="border:1px solid var(--line);">キャンセル</button>
+        <button class="btn-primary" id="contract-status-modal-save">保存</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ============ 契約 追加・編集モーダル ============ -->
   <div class="modal-overlay" id="contract-modal">
     <div class="modal">
@@ -6406,10 +6430,56 @@ function onContractStatusBadgeClick(c, badgeEl){
     return;
   }
   const next = c.status==="bid" ? "open" : "bid";
-  updateDoc(doc(db,"contracts", c.id), { status: next }).catch(()=>{
-    toast("更新に失敗しました。権限をご確認ください。");
-  });
+  openContractStatusModal(c, next);
 }
+let contractStatusModalTarget = null;
+let contractStatusModalDate = "", contractStatusModalTime = "";
+function updateContractStatusModalDateDisplay(){
+  document.getElementById("contract-status-modal-date-picker").textContent = contractStatusModalDate ? formatDateJP(contractStatusModalDate) : "未設定";
+}
+function updateContractStatusModalTimeDisplay(){
+  setTimeFieldValue(document.getElementById("contract-status-modal-time-btn"), contractStatusModalTime, "未設定");
+}
+function openContractStatusModal(c, nextStatus){
+  contractStatusModalTarget = { c, nextStatus };
+  document.getElementById("contract-status-modal-next").textContent = contractStatusLabel(nextStatus);
+  contractStatusModalDate = isoToDateStr(c.startAt) || todayStr();
+  contractStatusModalTime = isoToTimeStr(c.startAt);
+  updateContractStatusModalDateDisplay();
+  updateContractStatusModalTimeDisplay();
+  document.getElementById("contract-status-modal-error").textContent = "";
+  document.getElementById("contract-status-modal").classList.add("show");
+}
+document.getElementById("contract-status-modal-date-picker")?.addEventListener("click", (e)=>{
+  openCalendarPicker(e.currentTarget, contractStatusModalDate || todayStr(), {
+    onSelect: (v)=>{ if(v){ contractStatusModalDate = v; updateContractStatusModalDateDisplay(); } }
+  });
+});
+document.getElementById("contract-status-modal-time-btn")?.addEventListener("click", (e)=>{
+  openTimePicker(e.currentTarget, contractStatusModalTime, {
+    stepMinutes: 5, minTime: "06:00", maxTime: "20:00",
+    onSelect: (v)=>{ contractStatusModalTime = v; updateContractStatusModalTimeDisplay(); }
+  });
+});
+document.getElementById("contract-status-modal-cancel")?.addEventListener("click", ()=>{
+  document.getElementById("contract-status-modal").classList.remove("show");
+});
+document.getElementById("contract-status-modal-save")?.addEventListener("click", async ()=>{
+  if(!contractStatusModalTarget) return;
+  const errEl = document.getElementById("contract-status-modal-error");
+  if(!contractStatusModalDate || !contractStatusModalTime){
+    errEl.textContent = "日付・時刻の両方を設定してください。";
+    return;
+  }
+  const { c, nextStatus } = contractStatusModalTarget;
+  const startAt = new Date(`${contractStatusModalDate}T${contractStatusModalTime}`).toISOString();
+  try{
+    await updateDoc(doc(db,"contracts", c.id), { status: nextStatus, startAt });
+    document.getElementById("contract-status-modal").classList.remove("show");
+  }catch(e){
+    errEl.textContent = "更新に失敗しました。権限をご確認ください。";
+  }
+});
 async function updateContractDateTime(c, field, value){
   // field: "startDate" | "startTime" | "endDate" | "endTime"
   let sd = isoToDateStr(c.startAt), st = isoToTimeStr(c.startAt);
