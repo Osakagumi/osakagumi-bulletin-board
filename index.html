@@ -2202,7 +2202,7 @@ async function ensureEmployeeRecord(){
 function renderCategoryRow(){
   const row = document.getElementById("cat-row");
   row.innerHTML = "";
-  const cats = categoriesAll.filter(cat=>cat.mode==="timeline");
+  const cats = categoriesAll.filter(cat=>cat.mode==="timeline" && equipmentAll.some(e=>e.category===cat.id));
   if(selectedCategory===null || !cats.some(c=>c.id===selectedCategory)){
     selectedCategory = cats[0]?.id || null;
   }
