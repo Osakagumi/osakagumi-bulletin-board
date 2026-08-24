@@ -168,7 +168,12 @@
   .dash-cal-month .cal-month-head{margin-bottom:8px;}
   .dash-card{background:var(--surface);border:1.5px solid var(--line);border-radius:12px;padding:16px;}
   .dash-card h3{margin:0;font-size:14.5px;}
-  .dash-card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px;}
+  .dash-card-head{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+  .dash-card-head .dash-card-link{margin-left:auto;}
+  .dash-drag-handle{cursor:grab;color:var(--muted);font-size:16px;line-height:1;user-select:none;margin-right:-4px;}
+  .dash-drag-handle:active{cursor:grabbing;}
+  .dash-card-dragging{opacity:0.4;}
+  .dash-col.dash-col-dragover{background:rgba(28,90,165,0.04);border-radius:12px;}
   .dash-card-link{
     display:inline-flex;align-items:center;justify-content:center;
     width:26px;height:26px;border-radius:50%;
@@ -889,9 +894,10 @@
             <h3>⚠ 安否確認</h3>
             <div id="dash-safety-body"></div>
           </div>
-          <div class="dash-col dash-col-left">
+          <div class="dash-col dash-col-left" id="dash-col-left">
             <div class="dash-card" id="dash-card-calendar">
               <div class="dash-card-head">
+                <span class="dash-drag-handle" title="ドラッグして並び替え">⠿</span>
                 <h3>カレンダー</h3>
                 <div class="dash-cal-nav">
                   <button type="button" class="date-nav-btn" id="dash-cal-prev-btn">◀</button>
@@ -904,15 +910,17 @@
             </div>
             <div class="dash-card" id="dash-card-notices">
               <div class="dash-card-head">
+                <span class="dash-drag-handle" title="ドラッグして並び替え">⠿</span>
                 <h3>お知らせ</h3>
                 <span class="dash-card-link" id="dash-notices-link" title="お知らせを見る">▶</span>
               </div>
               <div id="dash-notices-body"></div>
             </div>
           </div>
-          <div class="dash-col dash-col-right">
+          <div class="dash-col dash-col-right" id="dash-col-right">
             <div class="dash-card" id="dash-card-whereabouts">
               <div class="dash-card-head">
+                <span class="dash-drag-handle" title="ドラッグして並び替え">⠿</span>
                 <h3>行き先</h3>
                 <span class="dash-card-link" id="dash-wb-link" title="行き先を見る">▶</span>
               </div>
@@ -920,6 +928,7 @@
             </div>
             <div class="dash-card" id="dash-card-reserve">
               <div class="dash-card-head">
+                <span class="dash-drag-handle" title="ドラッグして並び替え">⠿</span>
                 <h3>予約済の設備</h3>
                 <span class="dash-card-link" id="dash-reserve-link" title="予約を見る">▶</span>
               </div>
@@ -927,6 +936,7 @@
             </div>
             <div class="dash-card" id="dash-card-contracts">
               <div class="dash-card-head">
+                <span class="dash-drag-handle" title="ドラッグして並び替え">⠿</span>
                 <h3>入札</h3>
                 <span class="dash-card-link" id="dash-contracts-link" title="入札を見る">▶</span>
               </div>
@@ -934,6 +944,7 @@
             </div>
             <div class="dash-card" id="dash-card-checkout">
               <div class="dash-card-head">
+                <span class="dash-drag-handle" title="ドラッグして並び替え">⠿</span>
                 <h3>借用中の資機材</h3>
                 <span class="dash-card-link" id="dash-checkout-link" title="資機材を見る">▶</span>
               </div>
@@ -1643,6 +1654,7 @@ onAuthStateChanged(auth, async (user)=>{
     initContractsListener();
     initContractSettingsListener();
     initUserPrefsListener();
+    initDashCardDragDrop();
     cleanupResolvedContracts();
     ensureSteelPlateCategoryAndMigrate();
 
@@ -1695,6 +1707,78 @@ function applyMyHiddenTabs(){
     if(firstVisible) switchToTab(firstVisible.dataset.view);
   }
 }
+/* ---------- ダッシュボードのカードをドラッグ＆ドロップで並び替え ---------- */
+let dashDnDInitialized = false;
+function initDashCardDragDrop(){
+  if(dashDnDInitialized) return; // カードのDOM要素自体は毎回作り直さないので、1回だけ配線すればよい
+  dashDnDInitialized = true;
+  const cols = [document.getElementById("dash-col-left"), document.getElementById("dash-col-right")];
+  cols.forEach(col=>{
+    if(!col) return;
+    col.addEventListener("dragover", (e)=>{
+      const dragging = document.querySelector(".dash-card-dragging");
+      if(!dragging) return;
+      e.preventDefault();
+      col.classList.add("dash-col-dragover");
+      const afterEl = dashCardAfterElement(col, e.clientY);
+      if(afterEl==null) col.appendChild(dragging);
+      else col.insertBefore(dragging, afterEl);
+    });
+    col.addEventListener("dragleave", (e)=>{
+      if(e.target===col) col.classList.remove("dash-col-dragover");
+    });
+    col.addEventListener("drop", (e)=>{
+      e.preventDefault();
+      col.classList.remove("dash-col-dragover");
+    });
+  });
+  document.querySelectorAll(".dash-col .dash-card").forEach(card=>{
+    card.setAttribute("draggable", "true");
+    card.addEventListener("dragstart", ()=>{
+      card.classList.add("dash-card-dragging");
+    });
+    card.addEventListener("dragend", ()=>{
+      card.classList.remove("dash-card-dragging");
+      document.querySelectorAll(".dash-col").forEach(c=>c.classList.remove("dash-col-dragover"));
+      saveDashCardOrder();
+    });
+  });
+}
+function dashCardAfterElement(container, y){
+  const cards = [...container.querySelectorAll(".dash-card:not(.dash-card-dragging)")];
+  return cards.reduce((closest, child)=>{
+    const box = child.getBoundingClientRect();
+    const offset = y - box.top - box.height/2;
+    if(offset < 0 && offset > closest.offset) return { offset, element: child };
+    return closest;
+  }, { offset: -Infinity, element: null }).element;
+}
+function currentDashCardOrder(){
+  return {
+    left: [...document.querySelectorAll("#dash-col-left .dash-card")].map(c=>c.id),
+    right: [...document.querySelectorAll("#dash-col-right .dash-card")].map(c=>c.id)
+  };
+}
+function saveDashCardOrder(){
+  const order = currentDashCardOrder();
+  if(currentUser){
+    setDoc(doc(db,"user_prefs", currentUser.email), { dashboardCardOrder: order }, { merge:true }).catch(()=>{});
+  }
+}
+function applyDashCardOrder(order){
+  if(!order) return;
+  const leftCol = document.getElementById("dash-col-left");
+  const rightCol = document.getElementById("dash-col-right");
+  (order.left||[]).forEach(id=>{
+    const el = document.getElementById(id);
+    if(el && leftCol) leftCol.appendChild(el);
+  });
+  (order.right||[]).forEach(id=>{
+    const el = document.getElementById(id);
+    if(el && rightCol) rightCol.appendChild(el);
+  });
+}
+
 const TAB_ORDER_KEY = "osakagumi-portal-tab-order";
 function refreshDashboardIfActive(){
   const el = document.getElementById("view-dashboard");
@@ -6211,6 +6295,9 @@ function initUserPrefsListener(){
       applyTabOrderArray(prefs.tabOrder);
       localStorage.setItem(TAB_ORDER_KEY, JSON.stringify(prefs.tabOrder));
       // 現在表示中のタブが並び替えでも変わらず見えるよう、選択状態だけ保つ（初期表示のやり直しはしない）
+    }
+    if(prefs.dashboardCardOrder){
+      applyDashCardOrder(prefs.dashboardCardOrder);
     }
   }, (err)=>{ console.error("[個人設定取得エラー]", err); });
 }
