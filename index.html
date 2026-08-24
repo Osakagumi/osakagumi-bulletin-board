@@ -4054,9 +4054,9 @@ function openEmployeePicker(opts){
       const deptSel = document.getElementById("emp-picker-dept-select");
       if([...deptSel.options].some(o=>o.value===defaultDeptId)){
         deptSel.value = defaultDeptId;
-        renderEmpPickerNameSelect();
       }
     }
+    renderEmpPickerNameSelect();
     document.getElementById("employee-picker-modal").classList.add("show");
   });
 }
