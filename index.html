@@ -2095,6 +2095,7 @@ function switchToTab(viewName){
       document.getElementById("chat-thread-view").style.display = "none";
       document.getElementById("chat-list-view").style.display = "block";
       chatCurrentConversationId = null;
+      renderChatConversationList();
     }
     cleanupOldChatMessages();
   }
