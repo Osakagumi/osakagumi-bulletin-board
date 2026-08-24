@@ -309,6 +309,8 @@
   .contract-badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11.5px;font-weight:700;color:#fff;white-space:nowrap;}
   /* チャット */
   .chat-conv-row{display:flex;align-items:center;gap:10px;padding:12px 14px;border:1.5px solid var(--line);border-radius:10px;margin-bottom:8px;cursor:pointer;background:var(--surface);}
+  .chat-conv-delete-btn{border:1px solid var(--danger);color:var(--danger);background:#fff;border-radius:6px;font-size:11.5px;padding:6px 10px;cursor:pointer;flex-shrink:0;}
+  .chat-conv-delete-btn:hover{background:var(--danger);color:#fff;}
   .chat-conv-row:hover{border-color:var(--brand);}
   .chat-conv-row.chat-conv-unread{border-color:var(--brand);background:#F4F8FC;}
   .chat-conv-avatar{width:36px;height:36px;border-radius:50%;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0;}
@@ -6977,6 +6979,24 @@ function rebuildChatConversations(){
     updateChatThreadTitleAndUnread();
   }
 }
+// 一覧の「削除」ボタンから、その会話の全メッセージを削除する（相手側からも見えなくなる）
+async function deleteChatConversation(conv){
+  if(!confirm(`${conv.otherName} さんとの会話を削除しますか？\nメッセージは相手からも見えなくなります。`)) return;
+  try{
+    const myEmail = currentUser.email;
+    const [sentSnap, receivedSnap] = await Promise.all([
+      getDocs(query(collection(db,"direct_messages"), where("conversationId","==",conv.conversationId), where("senderEmail","==",myEmail))),
+      getDocs(query(collection(db,"direct_messages"), where("conversationId","==",conv.conversationId), where("recipientEmail","==",myEmail)))
+    ]);
+    const ids = new Set([...sentSnap.docs, ...receivedSnap.docs].map(d=>d.id));
+    for(const id of ids){
+      try{ await deleteDoc(doc(db,"direct_messages", id)); }catch(e){ /* 1件失敗しても続行 */ }
+    }
+    toast("削除しました。");
+  }catch(e){
+    toast("削除に失敗しました。");
+  }
+}
 function renderChatConversationList(){
   const body = document.getElementById("chat-conversation-list");
   body.innerHTML = "";
@@ -6999,8 +7019,13 @@ function renderChatConversationList(){
         <span class="chat-conv-time">${escapeHtml(timeLabel)}</span>
         ${conv.unread ? `<span class="chat-conv-dot"></span>` : ""}
       </div>
+      <button type="button" class="chat-conv-delete-btn" title="この会話を削除">削除</button>
     `;
     row.addEventListener("click", ()=> openChatThread(conv.otherEmail, conv.otherName));
+    row.querySelector(".chat-conv-delete-btn").addEventListener("click", (e)=>{
+      e.stopPropagation();
+      deleteChatConversation(conv);
+    });
     body.appendChild(row);
   });
 }
