@@ -1596,6 +1596,10 @@ let isContractEditor = false;
 let chatConversations = []; // [{conversationId, otherEmail, otherName, lastText, lastAt, lastSenderEmail, unread}]
 let chatCurrentConversationId = null;
 let chatCurrentOtherEmail = null;
+let chatCurrentOtherName = null;
+let chatLastLeftAt = 0;
+let chatLastConvEmail = null;
+let chatLastConvName = null;
 let chatThreadUnsub = null;
 let contractDefaultDepartmentId = null;
 let contractsAll = [];
@@ -2054,6 +2058,14 @@ document.getElementById("dash-checkout-link").addEventListener("click", ()=> swi
 document.getElementById("dash-calendar-link").addEventListener("click", ()=> switchToTab("calendar"));
 
 function switchToTab(viewName){
+  const previousView = document.querySelector(".tab-btn.active")?.dataset.view;
+  if(previousView==="chat" && viewName!=="chat" && chatCurrentConversationId &&
+     document.getElementById("chat-thread-view").style.display !== "none"){
+    // チャットの会話画面から離れる瞬間を記録しておく（30分以内に戻ってきたら同じ会話を再度開く）
+    chatLastLeftAt = Date.now();
+    chatLastConvEmail = chatCurrentOtherEmail;
+    chatLastConvName = chatCurrentOtherName;
+  }
   document.querySelectorAll(".tab-btn").forEach(b=>{
     b.classList.toggle("active", b.dataset.view===viewName);
   });
@@ -2075,10 +2087,15 @@ function switchToTab(viewName){
     try{ renderContractsTab(); }catch(e){ console.error("[契約タブの表示エラー]", e); }
   }
   if(viewName==="chat"){
-    document.getElementById("chat-thread-view").style.display = "none";
-    document.getElementById("chat-list-view").style.display = "block";
-    chatCurrentConversationId = null;
+    const canResume = chatLastConvEmail && (Date.now() - chatLastLeftAt < 30*60*1000);
     if(chatThreadUnsub){ chatThreadUnsub(); chatThreadUnsub = null; }
+    if(canResume){
+      openChatThread(chatLastConvEmail, chatLastConvName);
+    } else {
+      document.getElementById("chat-thread-view").style.display = "none";
+      document.getElementById("chat-list-view").style.display = "block";
+      chatCurrentConversationId = null;
+    }
     cleanupOldChatMessages();
   }
 }
@@ -7039,6 +7056,7 @@ function formatChatTime(iso){
 function openChatThread(otherEmail, otherName){
   chatCurrentConversationId = chatConversationId(currentUser.email, otherEmail);
   chatCurrentOtherEmail = otherEmail;
+  chatCurrentOtherName = otherName;
   document.getElementById("chat-thread-title").textContent = `${otherName}さんとの会話`;
   document.getElementById("chat-list-view").style.display = "none";
   document.getElementById("chat-thread-view").style.display = "block";
@@ -7083,6 +7101,7 @@ function updateChatThreadTitleAndUnread(){
 document.getElementById("chat-back-btn")?.addEventListener("click", ()=>{
   if(chatThreadUnsub){ chatThreadUnsub(); chatThreadUnsub = null; }
   chatCurrentConversationId = null;
+  chatLastConvEmail = null; // 手動で一覧に戻った場合は、タブ再訪時に自動で会話を再表示しない
   document.getElementById("chat-thread-view").style.display = "none";
   document.getElementById("chat-list-view").style.display = "block";
   renderChatConversationList();
