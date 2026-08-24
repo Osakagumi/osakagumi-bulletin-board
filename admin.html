@@ -363,7 +363,7 @@
           <div id="emp-edit-dept-checks" style="display:flex;flex-wrap:wrap;gap:10px;border:1px solid var(--line);border-radius:8px;padding:10px;max-height:150px;overflow-y:auto;"></div>
         </div>
         <div class="field">
-          <label>非表示にするタブ</label>
+          <label>表示するタブ</label>
           <div id="emp-edit-hiddentabs-checks" style="display:flex;flex-wrap:wrap;gap:10px;border:1px solid var(--line);border-radius:8px;padding:10px;"></div>
         </div>
         <div class="field">
@@ -2315,8 +2315,8 @@ function openEmpEditModal(emp){
     label.style.cssText = "display:flex;align-items:center;gap:5px;font-size:12.5px;cursor:pointer;";
     const cb = document.createElement("input");
     cb.type = "checkbox"; cb.value = t.id; cb.style.width = "auto";
-    cb.checked = empHiddenTabs.includes(t.id);
-    cb.className = "emp-edit-hiddentab-check";
+    cb.checked = !empHiddenTabs.includes(t.id); // チェック＝表示する（未チェック＝非表示）
+    cb.className = "emp-edit-visibletab-check";
     label.appendChild(cb);
     label.appendChild(document.createTextNode(t.label));
     hiddenTabsChecksEl.appendChild(label);
@@ -2347,7 +2347,10 @@ document.getElementById("emp-edit-cancel-btn")?.addEventListener("click", ()=>{
 document.getElementById("emp-edit-save-btn")?.addEventListener("click", async ()=>{
   if(!editingEmpEmail) return;
   const selectedDepts = [...document.querySelectorAll(".emp-edit-dept-check:checked")].map(cb=>cb.value);
-  const selectedHiddenTabs = [...document.querySelectorAll(".emp-edit-hiddentab-check:checked")].map(cb=>cb.value);
+  const selectedHiddenTabs = HIDEABLE_TABS.map(t=>t.id).filter(id=>{
+    const cb = document.querySelector(`.emp-edit-visibletab-check[value="${id}"]`);
+    return cb && !cb.checked;
+  });
   const name = document.getElementById("emp-edit-name-input").value.trim();
   try{
     await updateDoc(doc(db,"employees", editingEmpEmail), {
