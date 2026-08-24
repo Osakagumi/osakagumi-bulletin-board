@@ -7039,7 +7039,7 @@ function formatChatTime(iso){
 function openChatThread(otherEmail, otherName){
   chatCurrentConversationId = chatConversationId(currentUser.email, otherEmail);
   chatCurrentOtherEmail = otherEmail;
-  document.getElementById("chat-thread-title").textContent = otherName;
+  document.getElementById("chat-thread-title").textContent = `${otherName}さんとの会話`;
   document.getElementById("chat-list-view").style.display = "none";
   document.getElementById("chat-thread-view").style.display = "block";
   document.getElementById("chat-messages").innerHTML = "";
