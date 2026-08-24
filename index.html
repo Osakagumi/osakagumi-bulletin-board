@@ -7062,11 +7062,28 @@ document.getElementById("chat-back-btn")?.addEventListener("click", ()=>{
   document.getElementById("chat-list-view").style.display = "block";
   renderChatConversationList();
 });
+function appendOptimisticChatBubble(text){
+  const body = document.getElementById("chat-messages");
+  const row = document.createElement("div");
+  row.className = "chat-bubble-row chat-mine";
+  const timeLabel = formatChatTime(new Date().toISOString());
+  row.innerHTML = `
+    <div class="chat-bubble-wrap">
+      <div class="chat-bubble">${escapeHtml(text)}</div>
+      <div class="chat-bubble-time">${escapeHtml(timeLabel)}</div>
+    </div>
+  `;
+  body.appendChild(row);
+  body.scrollTop = body.scrollHeight;
+}
 async function sendChatMessage(){
   const input = document.getElementById("chat-input");
   const text = input.value.trim();
   if(!text || !chatCurrentOtherEmail) return;
   input.value = "";
+  // Firestoreからの反映を待たず、その場で自分の吹き出しを表示する
+  // （実際のデータが届き次第、renderChatMessages() が正しい内容で描画し直すので二重表示にはならない）
+  appendOptimisticChatBubble(text);
   const otherEmp = employeesAll.find(e=>(e.email||"").toLowerCase()===chatCurrentOtherEmail.toLowerCase());
   try{
     await addDoc(collection(db,"direct_messages"), {
