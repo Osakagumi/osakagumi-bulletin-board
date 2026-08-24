@@ -162,6 +162,15 @@ service cloud.firestore {
       allow create, update, delete: if isSignedIn() && isContractEditor();
     }
 
+    // ダイレクトメッセージ（1対1）: 送信者・受信者本人のみ読み書き可能。1日経過後に自動削除される。
+    match /direct_messages/{messageId} {
+      allow read: if isSignedIn() &&
+        (resource.data.senderEmail == request.auth.token.email || resource.data.recipientEmail == request.auth.token.email);
+      allow create: if isSignedIn() && request.resource.data.senderEmail == request.auth.token.email;
+      allow delete: if isSignedIn() &&
+        (resource.data.senderEmail == request.auth.token.email || resource.data.recipientEmail == request.auth.token.email);
+    }
+
     // 設備マスタ: ログインしていれば読める。
     // 追加・削除・基本情報の編集は管理者のみ。
     // 状態変更（在庫中・貸出中・点検中・故障中）は、在庫中からの操作は誰でも、

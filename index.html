@@ -307,6 +307,27 @@
   .contract-period-urgent{font-weight:700;color:var(--danger);}
   .contract-period-urgent .contract-inline-field:not(.readonly):hover{background:rgba(192,57,43,.1);}
   .contract-badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11.5px;font-weight:700;color:#fff;white-space:nowrap;}
+  /* チャット */
+  .chat-conv-row{display:flex;align-items:center;gap:10px;padding:12px 14px;border:1.5px solid var(--line);border-radius:10px;margin-bottom:8px;cursor:pointer;background:var(--surface);}
+  .chat-conv-row:hover{border-color:var(--brand);}
+  .chat-conv-row.chat-conv-unread{border-color:var(--brand);background:#F4F8FC;}
+  .chat-conv-avatar{width:36px;height:36px;border-radius:50%;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0;}
+  .chat-conv-main{flex:1;min-width:0;}
+  .chat-conv-name{font-size:13.5px;font-weight:700;}
+  .chat-conv-preview{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
+  .chat-conv-time{font-size:11px;color:var(--muted);white-space:nowrap;flex-shrink:0;}
+  .chat-conv-dot{width:9px;height:9px;border-radius:50%;background:var(--brand);flex-shrink:0;}
+  .chat-messages{display:flex;flex-direction:column;gap:8px;padding:10px 4px;min-height:300px;max-height:55vh;overflow-y:auto;}
+  .chat-bubble-row{display:flex;}
+  .chat-bubble-row.chat-mine{justify-content:flex-end;}
+  .chat-bubble{max-width:72%;padding:9px 13px;border-radius:14px;font-size:13.5px;line-height:1.5;white-space:pre-wrap;word-break:break-word;}
+  .chat-bubble-row.chat-mine .chat-bubble{background:var(--brand);color:#fff;border-bottom-right-radius:4px;}
+  .chat-bubble-row:not(.chat-mine) .chat-bubble{background:#F0F2F5;color:var(--text);border-bottom-left-radius:4px;}
+  .chat-bubble-time{font-size:10px;color:var(--muted);margin-top:3px;text-align:right;}
+  .chat-bubble-row:not(.chat-mine) .chat-bubble-time{text-align:left;}
+  .chat-input-row{display:flex;gap:8px;margin-top:10px;}
+  .chat-input-row input{flex:1;padding:10px 14px;border:1px solid var(--line);border-radius:20px;font-size:13.5px;}
+  .chat-input-row button{border-radius:20px;padding:10px 20px;}
   .contract-period{display:inline-flex;align-items:center;flex-wrap:wrap;gap:2px;}
   .contract-inline-field{cursor:pointer;padding:1px 4px;border-radius:4px;}
   .contract-inline-field:not(.readonly):hover{background:#EEF3FA;color:var(--brand-dark);text-decoration:underline;}
@@ -702,6 +723,7 @@
       <button class="tab-btn" data-view="safety" style="display:none;">安否確認</button>
       <button class="tab-btn" data-view="calendar">カレンダー</button>
       <button class="tab-btn" data-view="contracts">入札</button>
+      <button class="tab-btn" data-view="chat">チャット<span id="chat-tab-badge" class="chat-conv-dot" style="display:none;margin-left:5px;vertical-align:middle;"></span></button>
       <button class="tab-reorder-btn" id="tab-reorder-toggle" title="タブの並び替え">並び替え</button>
     </nav>
 
@@ -1048,6 +1070,28 @@
           </label>
         </div>
         <div id="contract-list"></div>
+      </section>
+
+      <!-- ---- チャット（1対1・当日分のみ保持） ---- -->
+      <section id="view-chat" style="display:none;">
+        <div id="chat-list-view">
+          <div class="section-toolbar">
+            <button class="btn-primary" id="chat-new-btn">＋ 新しいメッセージ</button>
+          </div>
+          <p style="font-size:12px;color:var(--muted);margin:-6px 0 12px;">メッセージは24時間経過すると自動的に削除されます。</p>
+          <div id="chat-conversation-list"></div>
+        </div>
+        <div id="chat-thread-view" style="display:none;">
+          <div class="section-toolbar">
+            <button class="btn-ghost" id="chat-back-btn" style="border:1px solid var(--line);">← 一覧に戻る</button>
+            <div id="chat-thread-title" style="font-weight:700;font-size:14.5px;"></div>
+          </div>
+          <div id="chat-messages" class="chat-messages"></div>
+          <div class="chat-input-row">
+            <input type="text" id="chat-input" placeholder="メッセージを入力…" maxlength="1000">
+            <button class="btn-primary" id="chat-send-btn">送信</button>
+          </div>
+        </div>
       </section>
     </main>
   </div>
@@ -1543,6 +1587,10 @@ let isWhereaboutsEditor = false;
 let isEquipmentManager = false;
 let isCalendarEditor = false;
 let isContractEditor = false;
+let chatConversations = []; // [{conversationId, otherEmail, otherName, lastText, lastAt, lastSenderEmail, unread}]
+let chatCurrentConversationId = null;
+let chatCurrentOtherEmail = null;
+let chatThreadUnsub = null;
 let contractDefaultDepartmentId = null;
 let contractsAll = [];
 let editingContractId = null;
@@ -1676,6 +1724,7 @@ onAuthStateChanged(auth, async (user)=>{
     initWbPresetsListener();
     initSteelPlateTxListener();
     initContractsListener();
+    initChatListeners();
     initContractSettingsListener();
     initUserPrefsListener();
     initDashCardDragDrop();
@@ -1700,7 +1749,7 @@ onAuthStateChanged(auth, async (user)=>{
 });
 
 /* ---------- tabs ---------- */
-const ALL_VIEWS = ["dashboard","notices","whereabouts","reserve","checkout","safety","calendar","contracts"];
+const ALL_VIEWS = ["dashboard","notices","whereabouts","reserve","checkout","safety","calendar","contracts","chat"];
 // タブ名 → 対応するダッシュボードのカードID（ダッシュボード自体と安否確認は常時表示なので対象外）
 const DASH_CARD_BY_VIEW = {
   notices: "dash-card-notices",
@@ -2018,6 +2067,13 @@ function switchToTab(viewName){
   }
   if(viewName==="contracts"){
     try{ renderContractsTab(); }catch(e){ console.error("[契約タブの表示エラー]", e); }
+  }
+  if(viewName==="chat"){
+    document.getElementById("chat-thread-view").style.display = "none";
+    document.getElementById("chat-list-view").style.display = "block";
+    chatCurrentConversationId = null;
+    if(chatThreadUnsub){ chatThreadUnsub(); chatThreadUnsub = null; }
+    cleanupOldChatMessages();
   }
 }
 document.querySelectorAll(".tab-btn").forEach(btn=>{
@@ -6862,6 +6918,199 @@ document.getElementById("contract-delete-btn")?.addEventListener("click", async 
     document.getElementById("contract-error").textContent = "削除に失敗しました。権限をご確認ください。";
   }
 });
+
+/* =========================================================
+   チャット（1対1・当日分のみ保持）
+========================================================= */
+function chatConversationId(emailA, emailB){
+  return [emailA.toLowerCase(), emailB.toLowerCase()].sort().join("__");
+}
+let chatSentUnsub = null, chatReceivedUnsub = null;
+let chatSentMsgs = [], chatReceivedMsgs = [];
+function initChatListeners(){
+  const myEmail = currentUser.email;
+  chatSentUnsub = onSnapshot(
+    query(collection(db,"direct_messages"), where("senderEmail","==",myEmail)),
+    snap=>{ chatSentMsgs = snap.docs.map(d=>({id:d.id, ...d.data()})); rebuildChatConversations(); },
+    (err)=>{ console.error("[チャット取得エラー：送信分]", err); }
+  );
+  chatReceivedUnsub = onSnapshot(
+    query(collection(db,"direct_messages"), where("recipientEmail","==",myEmail)),
+    snap=>{ chatReceivedMsgs = snap.docs.map(d=>({id:d.id, ...d.data()})); rebuildChatConversations(); },
+    (err)=>{ console.error("[チャット取得エラー：受信分]", err); }
+  );
+}
+function rebuildChatConversations(){
+  const myEmail = currentUser.email;
+  const all = [...chatSentMsgs, ...chatReceivedMsgs];
+  const map = new Map();
+  all.forEach(m=>{
+    const isMine = m.senderEmail===myEmail;
+    const otherEmail = isMine ? m.recipientEmail : m.senderEmail;
+    const otherName = isMine ? (m.recipientName||m.recipientEmail) : (m.senderName||m.senderEmail);
+    const convId = m.conversationId || chatConversationId(myEmail, otherEmail);
+    const existing = map.get(convId);
+    if(!existing || m.createdAt > existing.lastAt){
+      map.set(convId, {
+        conversationId: convId, otherEmail, otherName,
+        lastText: m.text || "", lastAt: m.createdAt || "",
+        lastSenderEmail: m.senderEmail,
+        unread: (!isMine && !m.read) || (existing?.unread && existing.conversationId===convId ? existing.unread : false)
+      });
+    }
+  });
+  // 未読は「相手からの、まだreadされていないメッセージが1件でもあるか」で判定し直す
+  map.forEach(conv=>{
+    conv.unread = chatReceivedMsgs.some(m=> (m.conversationId===conv.conversationId) && !m.read);
+  });
+  chatConversations = [...map.values()].sort((a,b)=> String(b.lastAt).localeCompare(String(a.lastAt)));
+  const badge = document.getElementById("chat-tab-badge");
+  if(badge) badge.style.display = chatConversations.some(c=>c.unread) ? "inline-block" : "none";
+  if(document.getElementById("view-chat").style.display !== "none" && document.getElementById("chat-list-view").style.display !== "none"){
+    renderChatConversationList();
+  }
+  if(chatCurrentConversationId){
+    updateChatThreadTitleAndUnread();
+  }
+}
+function renderChatConversationList(){
+  const body = document.getElementById("chat-conversation-list");
+  body.innerHTML = "";
+  if(chatConversations.length===0){
+    body.innerHTML = `<div style="color:var(--muted);text-align:center;padding:24px;">まだメッセージはありません。「＋新しいメッセージ」から始められます。</div>`;
+    return;
+  }
+  chatConversations.forEach(conv=>{
+    const row = document.createElement("div");
+    row.className = "chat-conv-row" + (conv.unread ? " chat-conv-unread" : "");
+    const initial = (conv.otherName||"?").charAt(0);
+    const timeLabel = conv.lastAt ? formatChatTime(conv.lastAt) : "";
+    row.innerHTML = `
+      <div class="chat-conv-avatar">${escapeHtml(initial)}</div>
+      <div class="chat-conv-main">
+        <div class="chat-conv-name">${escapeHtml(conv.otherName)}</div>
+        <div class="chat-conv-preview">${escapeHtml(conv.lastText)}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
+        <span class="chat-conv-time">${escapeHtml(timeLabel)}</span>
+        ${conv.unread ? `<span class="chat-conv-dot"></span>` : ""}
+      </div>
+    `;
+    row.addEventListener("click", ()=> openChatThread(conv.otherEmail, conv.otherName));
+    body.appendChild(row);
+  });
+}
+function formatChatTime(iso){
+  const d = new Date(iso);
+  if(isNaN(d.getTime())) return "";
+  const now = new Date();
+  const sameDay = d.toDateString()===now.toDateString();
+  return sameDay ? `${pad2(d.getHours())}:${pad2(d.getMinutes())}` : `${pad2(d.getMonth()+1)}/${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+function openChatThread(otherEmail, otherName){
+  chatCurrentConversationId = chatConversationId(currentUser.email, otherEmail);
+  chatCurrentOtherEmail = otherEmail;
+  document.getElementById("chat-thread-title").textContent = otherName;
+  document.getElementById("chat-list-view").style.display = "none";
+  document.getElementById("chat-thread-view").style.display = "block";
+  document.getElementById("chat-messages").innerHTML = "";
+  if(chatThreadUnsub){ chatThreadUnsub(); chatThreadUnsub = null; }
+  const q = query(collection(db,"direct_messages"), where("conversationId","==",chatCurrentConversationId), orderBy("createdAt","asc"));
+  chatThreadUnsub = onSnapshot(q, snap=>{
+    const msgs = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    renderChatMessages(msgs);
+    markChatMessagesRead(msgs);
+  }, (err)=>{ console.error("[チャットスレッド取得エラー]", err); });
+  setTimeout(()=> document.getElementById("chat-input")?.focus(), 100);
+}
+function renderChatMessages(msgs){
+  const body = document.getElementById("chat-messages");
+  const wasAtBottom = body.scrollTop + body.clientHeight >= body.scrollHeight - 20;
+  body.innerHTML = "";
+  msgs.forEach(m=>{
+    const isMine = m.senderEmail===currentUser.email;
+    const row = document.createElement("div");
+    row.className = "chat-bubble-row" + (isMine ? " chat-mine" : "");
+    const timeLabel = formatChatTime(m.createdAt);
+    row.innerHTML = `
+      <div>
+        <div class="chat-bubble">${escapeHtml(m.text||"")}</div>
+        <div class="chat-bubble-time">${escapeHtml(timeLabel)}</div>
+      </div>
+    `;
+    body.appendChild(row);
+  });
+  body.scrollTop = body.scrollHeight;
+}
+async function markChatMessagesRead(msgs){
+  const toMark = msgs.filter(m=> m.recipientEmail===currentUser.email && !m.read);
+  for(const m of toMark){
+    try{ await updateDoc(doc(db,"direct_messages", m.id), { read: true }); }catch(e){ /* 1件失敗しても続行 */ }
+  }
+}
+function updateChatThreadTitleAndUnread(){
+  // 現在開いているスレッドの未読ドットを消すため、一覧の再描画は openChatThread 側のリアルタイム反映に任せる
+}
+document.getElementById("chat-back-btn")?.addEventListener("click", ()=>{
+  if(chatThreadUnsub){ chatThreadUnsub(); chatThreadUnsub = null; }
+  chatCurrentConversationId = null;
+  document.getElementById("chat-thread-view").style.display = "none";
+  document.getElementById("chat-list-view").style.display = "block";
+  renderChatConversationList();
+});
+async function sendChatMessage(){
+  const input = document.getElementById("chat-input");
+  const text = input.value.trim();
+  if(!text || !chatCurrentOtherEmail) return;
+  input.value = "";
+  const otherEmp = employeesAll.find(e=>(e.email||"").toLowerCase()===chatCurrentOtherEmail.toLowerCase());
+  try{
+    await addDoc(collection(db,"direct_messages"), {
+      conversationId: chatCurrentConversationId,
+      senderEmail: currentUser.email,
+      senderName: myDisplayName(),
+      recipientEmail: chatCurrentOtherEmail,
+      recipientName: otherEmp?.name || chatCurrentOtherEmail,
+      text,
+      read: false,
+      createdAt: new Date().toISOString()
+    });
+  }catch(e){
+    toast("送信に失敗しました。");
+    input.value = text;
+  }
+}
+document.getElementById("chat-send-btn")?.addEventListener("click", sendChatMessage);
+document.getElementById("chat-input")?.addEventListener("keydown", (e)=>{
+  if(e.key==="Enter" && !e.shiftKey){ e.preventDefault(); sendChatMessage(); }
+});
+document.getElementById("chat-new-btn")?.addEventListener("click", async ()=>{
+  const emp = await openEmployeePicker();
+  if(emp && emp.email !== currentUser.email){
+    openChatThread(emp.email, emp.name || emp.email);
+  } else if(emp){
+    toast("自分自身とはチャットできません。");
+  }
+});
+// メッセージは24時間経過すると自動的に削除される（自分が送った分・受け取った分の両方を、
+// 開いた本人が削除できる権限で処理する。お知らせなどと同じ「誰かが開いたときに実行」方式）
+let chatCleanupChecked = false;
+async function cleanupOldChatMessages(){
+  if(chatCleanupChecked) return;
+  chatCleanupChecked = true;
+  try{
+    const cutoff = new Date(Date.now() - 24*60*60*1000).toISOString();
+    const myEmail = currentUser.email;
+    const [sentOld, receivedOld] = await Promise.all([
+      getDocs(query(collection(db,"direct_messages"), where("senderEmail","==",myEmail), where("createdAt","<",cutoff))),
+      getDocs(query(collection(db,"direct_messages"), where("recipientEmail","==",myEmail), where("createdAt","<",cutoff)))
+    ]);
+    const ids = new Set([...sentOld.docs, ...receivedOld.docs].map(d=>d.id));
+    for(const id of ids){
+      try{ await deleteDoc(doc(db,"direct_messages", id)); }catch(e){ /* 1件失敗しても続行 */ }
+    }
+  }catch(e){ console.error("[チャット自動削除エラー]", e); }
+}
 
 </script>
 </body>
