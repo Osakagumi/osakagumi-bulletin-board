@@ -167,6 +167,8 @@ service cloud.firestore {
       allow read: if isSignedIn() &&
         (resource.data.senderEmail == request.auth.token.email || resource.data.recipientEmail == request.auth.token.email);
       allow create: if isSignedIn() && request.resource.data.senderEmail == request.auth.token.email;
+      allow update: if isSignedIn() &&
+        (resource.data.senderEmail == request.auth.token.email || resource.data.recipientEmail == request.auth.token.email);
       allow delete: if isSignedIn() &&
         (resource.data.senderEmail == request.auth.token.email || resource.data.recipientEmail == request.auth.token.email);
     }

@@ -1877,6 +1877,7 @@ function refreshDashboardIfActive(){
   }
 }
 function renderDashboard(){
+  if(!currentUser) return; // ログイン処理が終わる前に呼ばれた場合は何もしない（ログイン完了後、改めて描画される）
   // ---- 安否確認 ----
   const safetyCard = document.getElementById("dash-card-safety");
   if(activeSafetyCampaign){
@@ -2095,7 +2096,7 @@ function switchToTab(viewName){
   }
   if(viewName==="chat"){
     const canResume = chatLastConvEmail && (Date.now() - chatLastLeftAt < 30*60*1000);
-    if(chatThreadUnsub){ chatThreadUnsub(); chatThreadUnsub = null; }
+    stopChatThreadListeners();
     if(canResume){
       openChatThread(chatLastConvEmail, chatLastConvName);
     } else {
@@ -2279,6 +2280,7 @@ function initEquipmentListener(){
     renderCategoryRow();
     renderEquipmentGrid();
     renderCheckoutCategoryRow();
+    populateCheckoutManagingDeptFilter();
     renderCheckoutTab();
   });
 }
@@ -2344,12 +2346,14 @@ function populateCheckoutManagingDeptFilter(){
   if(!sel) return;
   const prev = sel.value;
   sel.innerHTML = '<option value="">すべて</option>';
-  departmentsAll.forEach(d=>{
+  const usedDeptIds = new Set(equipmentAll.map(e=>e.managingDepartment).filter(Boolean));
+  const usedDepts = departmentsAll.filter(d=> usedDeptIds.has(d.id));
+  usedDepts.forEach(d=>{
     const opt = document.createElement("option");
     opt.value = d.id; opt.textContent = d.name;
     sel.appendChild(opt);
   });
-  if(departmentsAll.some(d=>d.id===prev)) sel.value = prev;
+  if(usedDepts.some(d=>d.id===prev)) sel.value = prev;
 }
 document.getElementById("checkout-managing-dept-filter")?.addEventListener("change", ()=> renderCheckoutTab());
 function renderCheckoutTab(){
@@ -7094,6 +7098,12 @@ function formatChatTime(iso){
   const sameDay = d.toDateString()===now.toDateString();
   return sameDay ? `${pad2(d.getHours())}:${pad2(d.getMinutes())}` : `${pad2(d.getMonth()+1)}/${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
+let chatThreadSentUnsub = null, chatThreadReceivedUnsub = null;
+let chatThreadSentMsgs = [], chatThreadReceivedMsgs = [];
+function stopChatThreadListeners(){
+  if(chatThreadSentUnsub){ chatThreadSentUnsub(); chatThreadSentUnsub = null; }
+  if(chatThreadReceivedUnsub){ chatThreadReceivedUnsub(); chatThreadReceivedUnsub = null; }
+}
 function openChatThread(otherEmail, otherName){
   chatCurrentConversationId = chatConversationId(currentUser.email, otherEmail);
   chatCurrentOtherEmail = otherEmail;
@@ -7102,13 +7112,29 @@ function openChatThread(otherEmail, otherName){
   document.getElementById("chat-list-view").style.display = "none";
   document.getElementById("chat-thread-view").style.display = "block";
   document.getElementById("chat-messages").innerHTML = "";
-  if(chatThreadUnsub){ chatThreadUnsub(); chatThreadUnsub = null; }
-  const q = query(collection(db,"direct_messages"), where("conversationId","==",chatCurrentConversationId), orderBy("createdAt","asc"));
-  chatThreadUnsub = onSnapshot(q, snap=>{
-    const msgs = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  stopChatThreadListeners();
+  chatThreadSentMsgs = [];
+  chatThreadReceivedMsgs = [];
+  const myEmail = currentUser.email;
+  const renderAndMark = ()=>{
+    const msgs = [...chatThreadSentMsgs, ...chatThreadReceivedMsgs]
+      .filter(m=> m.conversationId===chatCurrentConversationId)
+      .sort((a,b)=> String(a.createdAt).localeCompare(String(b.createdAt)));
     renderChatMessages(msgs);
     markChatMessagesRead(msgs);
-  }, (err)=>{ console.error("[チャットスレッド取得エラー]", err); });
+  };
+  // conversationIdだけで絞り込むクエリは、Firestoreのセキュリティルール（送信者/受信者チェック）と
+  // 一致しないため「list」操作として権限エラーになる。ルールに合わせて送信分・受信分を分けて取得する。
+  chatThreadSentUnsub = onSnapshot(
+    query(collection(db,"direct_messages"), where("conversationId","==",chatCurrentConversationId), where("senderEmail","==",myEmail)),
+    snap=>{ chatThreadSentMsgs = snap.docs.map(d=>({id:d.id, ...d.data()})); renderAndMark(); },
+    (err)=>{ console.error("[チャットスレッド取得エラー：送信分]", err); }
+  );
+  chatThreadReceivedUnsub = onSnapshot(
+    query(collection(db,"direct_messages"), where("conversationId","==",chatCurrentConversationId), where("recipientEmail","==",myEmail)),
+    snap=>{ chatThreadReceivedMsgs = snap.docs.map(d=>({id:d.id, ...d.data()})); renderAndMark(); },
+    (err)=>{ console.error("[チャットスレッド取得エラー：受信分]", err); }
+  );
   setTimeout(()=> document.getElementById("chat-input")?.focus(), 100);
 }
 function renderChatMessages(msgs){
@@ -7140,7 +7166,7 @@ function updateChatThreadTitleAndUnread(){
   // 現在開いているスレッドの未読ドットを消すため、一覧の再描画は openChatThread 側のリアルタイム反映に任せる
 }
 document.getElementById("chat-back-btn")?.addEventListener("click", ()=>{
-  if(chatThreadUnsub){ chatThreadUnsub(); chatThreadUnsub = null; }
+  stopChatThreadListeners();
   chatCurrentConversationId = null;
   chatLastConvEmail = null; // 手動で一覧に戻った場合は、タブ再訪時に自動で会話を再表示しない
   document.getElementById("chat-thread-view").style.display = "none";
