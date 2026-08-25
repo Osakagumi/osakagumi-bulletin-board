@@ -779,7 +779,10 @@
 
       <!-- ---- 資機材（測量機器・ドローン／敷鉄板） ---- -->
       <section id="view-checkout" style="display:none;">
-        <div class="cat-row" id="checkout-cat-row"></div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
+          <div class="cat-row" id="checkout-cat-row" style="margin-bottom:0;flex:1;"></div>
+          <select id="checkout-managing-dept-filter" style="margin-left:auto;"></select>
+        </div>
         <div id="checkout-equipment-panel">
           <div class="checkout-grid" id="checkout-eq-grid"></div>
         </div>
@@ -2336,6 +2339,19 @@ function renderEquipmentGrid(){
   });
 }
 
+function populateCheckoutManagingDeptFilter(){
+  const sel = document.getElementById("checkout-managing-dept-filter");
+  if(!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">すべて</option>';
+  departmentsAll.forEach(d=>{
+    const opt = document.createElement("option");
+    opt.value = d.id; opt.textContent = d.name;
+    sel.appendChild(opt);
+  });
+  if(departmentsAll.some(d=>d.id===prev)) sel.value = prev;
+}
+document.getElementById("checkout-managing-dept-filter")?.addEventListener("change", ()=> renderCheckoutTab());
 function renderCheckoutTab(){
   const selCat = categoriesAll.find(c=>c.id===selectedCheckoutCategory);
   const isSteelPlates = selCat && selCat.mode==="inventory";
@@ -2356,7 +2372,11 @@ function renderCheckoutTab(){
   }
   const grid = document.getElementById("checkout-eq-grid");
   if(!grid) return;
-  const items = equipmentAll.filter(e=>e.category===selectedCheckoutCategory);
+  const deptFilter = document.getElementById("checkout-managing-dept-filter")?.value || "";
+  let items = equipmentAll.filter(e=>e.category===selectedCheckoutCategory);
+  if(deptFilter){
+    items = items.filter(e=> e.managingDepartment===deptFilter);
+  }
   renderCheckoutGrid(grid, items);
 }
 
@@ -3939,6 +3959,7 @@ function initDepartmentsListener(){
     departmentsAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
     departmentsAll.sort((a,b)=> (a.order??0)-(b.order??0));
     renderWhereabouts();
+    populateCheckoutManagingDeptFilter();
   }, (err)=>{ console.error("[所属マスタ取得エラー]", err); });
 }
 function initWbStatusesListener(){
