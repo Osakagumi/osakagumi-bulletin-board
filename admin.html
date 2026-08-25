@@ -178,6 +178,10 @@
             <label>カテゴリ</label>
             <select id="eq-category"></select>
           </div>
+          <div class="field">
+            <label>管理部門</label>
+            <select id="eq-managing-dept"></select>
+          </div>
           <div class="field full">
             <label>備考（保管場所・注意事項など）</label>
             <textarea id="eq-note" placeholder="例）本社倉庫棚A／使用後は電源off"></textarea>
@@ -214,7 +218,7 @@
       <div class="panel">
         <h2>登録済み設備一覧</h2>
         <table>
-          <thead><tr><th>設備名</th><th>管理番号</th><th>カテゴリ</th><th>備考</th><th>表示順</th><th>表示設定</th><th>貸出状況</th><th>サイネージ</th><th>操作</th></tr></thead>
+          <thead><tr><th>設備名</th><th>管理番号</th><th>カテゴリ</th><th>管理部門</th><th>備考</th><th>表示順</th><th>表示設定</th><th>貸出状況</th><th>サイネージ</th><th>操作</th></tr></thead>
           <tbody id="eq-table-body"></tbody>
         </table>
       </div>
@@ -1040,6 +1044,17 @@ function populateCategorySelects(){
   if(categoriesAll.some(c=>c.id===prevSel)) sel.value = prevSel;
   if(filterSel && prevFilter !== null) filterSel.value = prevFilter;
 }
+function populateEqManagingDeptSelect(){
+  const sel = document.getElementById("eq-managing-dept");
+  if(!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">未設定</option>';
+  departmentsAll.forEach(d=>{
+    const opt = document.createElement("option");
+    opt.value = d.id; opt.textContent = d.name;
+    sel.appendChild(opt);
+  });
+  if(departmentsAll.some(d=>d.id===prev)) sel.value = prev;
 
 /* ============ 設備管理 ============ */
 function initEquipmentListener(){
@@ -1057,7 +1072,7 @@ function renderEquipmentTable(){
   const body = document.getElementById("eq-table-body");
   body.innerHTML = "";
   if(equipmentAll.length===0){
-    body.innerHTML = `<tr><td colspan="9" class="empty">まだ設備が登録されていません。</td></tr>`;
+    body.innerHTML = `<tr><td colspan="10" class="empty">まだ設備が登録されていません。</td></tr>`;
     return;
   }
   equipmentAll.forEach(eq=>{
@@ -1076,6 +1091,7 @@ function renderEquipmentTable(){
       <td>${escapeHtml(eq.name)}</td>
       <td style="color:var(--muted);">${escapeHtml(eq.assetNo||"")}</td>
       <td><span class="tag" style="background:${cat.color}">${cat.label}</span></td>
+      <td style="color:var(--muted);">${escapeHtml(departmentNameById(eq.managingDepartment) === "未所属" ? "未設定" : departmentNameById(eq.managingDepartment))}</td>
       <td style="color:var(--muted);max-width:220px;">${escapeHtml(eq.note||"")}</td>
       <td></td>
       <td>${eq.active===false ? "非表示" : "表示中"}</td>
@@ -1083,7 +1099,7 @@ function renderEquipmentTable(){
       <td>${eq.signageEnabled ? `<a href="${indexPageUrl()}?reserveSignage=${encodeURIComponent(eq.id)}" target="_blank" rel="noopener noreferrer">画面を開く</a>` : "-"}</td>
       <td class="actions"></td>
     `;
-    const orderTd = tr.children[4];
+    const orderTd = tr.children[5];
     const orderInput = document.createElement("input");
     orderInput.type = "number";
     orderInput.value = eq.order ?? 0;
@@ -1138,6 +1154,7 @@ function startEditEquipment(eq){
   document.getElementById("eq-name").value = eq.name || "";
   document.getElementById("eq-asset-no").value = eq.assetNo || "";
   document.getElementById("eq-category").value = eq.category || (categoriesAll[0]?.id || "");
+  document.getElementById("eq-managing-dept").value = eq.managingDepartment || "";
   document.getElementById("eq-note").value = eq.note || "";
   document.getElementById("eq-order").value = eq.order ?? 0;
   document.getElementById("eq-last-inspection").value = eq.lastInspectionDate || "";
@@ -1157,6 +1174,7 @@ function resetEquipmentForm(){
   document.getElementById("eq-form-title").textContent = "設備を追加";
   document.getElementById("eq-name").value = "";
   document.getElementById("eq-asset-no").value = "";
+  document.getElementById("eq-managing-dept").value = "";
   document.getElementById("eq-note").value = "";
   document.getElementById("eq-order").value = maxOrderInCategory(document.getElementById("eq-category").value) + 10;
   document.getElementById("eq-last-inspection").value = "";
@@ -1178,6 +1196,7 @@ document.getElementById("eq-save-btn").addEventListener("click", async ()=>{
     name,
     assetNo: document.getElementById("eq-asset-no").value.trim(),
     category: document.getElementById("eq-category").value,
+    managingDepartment: document.getElementById("eq-managing-dept").value,
     note: document.getElementById("eq-note").value.trim(),
     order: Number(document.getElementById("eq-order").value)||0,
     active: document.getElementById("eq-active").checked
@@ -1652,6 +1671,7 @@ function initDepartmentsListener(){
     renderDepartments();
     renderEmployees();
     renderContractDefaultDeptSelect();
+    populateEqManagingDeptSelect();
   });
 }
 function renderDepartments(){

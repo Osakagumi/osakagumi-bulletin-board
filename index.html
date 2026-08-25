@@ -2461,6 +2461,11 @@ function renderCheckoutGrid(grid, items){
     assetNoRow.innerHTML = `管理番号: <b>${escapeHtml(eq.assetNo || "未設定")}</b>`;
     card.appendChild(assetNoRow);
 
+    const managingDeptRow = document.createElement("div");
+    managingDeptRow.className = "checkout-meta-row";
+    managingDeptRow.innerHTML = `管理部門: <b>${escapeHtml(eq.managingDepartment ? departmentName(eq.managingDepartment) : "未設定")}</b>`;
+    card.appendChild(managingDeptRow);
+
     if(eq.note){
       const noteEl = document.createElement("div");
       noteEl.className = "checkout-note";
