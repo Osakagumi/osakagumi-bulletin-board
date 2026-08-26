@@ -603,40 +603,10 @@
     <!-- ============ 安否確認管理 ============ -->
     <section id="view-safety" style="display:none;">
       <div class="panel">
-        <h2>新しい安否確認を発信</h2>
-        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">発信すると、それまで発信中だった安否確認は自動的に終了扱いになります。</p>
-        <div class="form-grid">
-          <div class="field full">
-            <label>タイトル</label>
-            <input type="text" id="safety-title-input" placeholder="例）〇月〇日 地震に伴う安否確認">
-          </div>
-          <div class="field full">
-            <label>本文</label>
-            <textarea id="safety-message-input" placeholder="例）大きな地震がありました。安全が確認できたら回答をお願いします。"></textarea>
-          </div>
-        </div>
-        <div class="field" style="display:flex;align-items:center;gap:6px;margin-bottom:12px;">
-          <input type="checkbox" id="safety-send-email" checked style="width:auto;">
-          <label style="margin:0;font-size:12.5px;color:var(--text);">社員全員にメールでも通知する（EmailJS未設定の場合は自動的にスキップされます）</label>
-        </div>
-        <button class="btn btn-primary" id="safety-launch-btn">発信する</button>
-        <div id="safety-launch-status" style="font-size:12.5px;color:var(--muted);margin-top:8px;"></div>
-      </div>
-
-      <div class="panel">
-        <div class="filter-row">
-          <div class="field" style="min-width:260px;">
-            <label>表示する安否確認</label>
-            <select id="safety-campaign-select"></select>
-          </div>
-          <button class="btn btn-danger" id="safety-close-btn" style="display:none;">この安否確認を終了する</button>
-          <button class="btn btn-danger" id="safety-delete-btn" style="display:none;">選択中の安否確認を削除</button>
-        </div>
-        <div id="safety-dashboard-summary" style="font-size:13px;color:var(--muted);margin-bottom:10px;"></div>
-        <table>
-          <thead><tr><th>氏名</th><th>所属</th><th>状態</th><th>コメント</th><th>回答時刻</th></tr></thead>
-          <tbody id="safety-table-body"></tbody>
-        </table>
+        <h2>安否確認について</h2>
+        <p style="font-size:12.5px;color:var(--muted);margin:0;">
+          安否確認の発信・回答状況の確認・終了・削除は、すべて一般画面（社内ポータル本体）の「安否確認」タブに統合されました。安否確認発信権限を持つ方は、一般画面からご利用ください。
+        </p>
       </div>
     </section>
 
@@ -1037,7 +1007,6 @@ onAuthStateChanged(auth, async (user)=>{
   initContractSettingsListener();
   initContractCleanupListener();
   initEmployeesListener();
-  initSafetyCampaignsListener();
 });
 
 /* ---------- tabs ---------- */
@@ -2676,7 +2645,7 @@ function renderSafetyCampaignSelect(){
   document.getElementById("safety-delete-btn").style.display = selectedSafetyCampaignId ? "inline-block" : "none";
   watchSelectedCampaignResponses();
 }
-document.getElementById("safety-campaign-select").addEventListener("change", e=>{
+document.getElementById("safety-campaign-select")?.addEventListener("change", e=>{
   selectedSafetyCampaignId = e.target.value || null;
   document.getElementById("safety-delete-btn").style.display = selectedSafetyCampaignId ? "inline-block" : "none";
   watchSelectedCampaignResponses();
@@ -2705,7 +2674,7 @@ async function enforceSafetyCampaignLimit(){
   }
 }
 
-document.getElementById("safety-delete-btn").addEventListener("click", async ()=>{
+document.getElementById("safety-delete-btn")?.addEventListener("click", async ()=>{
   if(!selectedSafetyCampaignId) return;
   const campaign = safetyCampaignsAll.find(c=>c.id===selectedSafetyCampaignId);
   const label = campaign ? campaign.title : "この安否確認";
@@ -2828,7 +2797,7 @@ async function sendSafetyEmails(campaignId, title, message){
   statusEl.textContent = `メール送信完了：${recipients.length}件中 ${ok}件成功${fail>0 ? `（${fail}件失敗）` : ""}`;
 }
 
-document.getElementById("safety-launch-btn").addEventListener("click", async ()=>{
+document.getElementById("safety-launch-btn")?.addEventListener("click", async ()=>{
   const title = document.getElementById("safety-title-input").value.trim();
   const message = document.getElementById("safety-message-input").value.trim();
   const sendEmail = document.getElementById("safety-send-email").checked;
@@ -2875,7 +2844,7 @@ document.getElementById("safety-launch-btn").addEventListener("click", async ()=
   }
 });
 
-document.getElementById("safety-close-btn").addEventListener("click", async ()=>{
+document.getElementById("safety-close-btn")?.addEventListener("click", async ()=>{
   if(!selectedSafetyCampaignId) return;
   if(!confirm("この安否確認を終了しますか？")) return;
   try{
