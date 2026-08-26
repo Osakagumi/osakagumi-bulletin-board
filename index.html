@@ -1,6 +1,21 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+<script>
+  // 一時的な調査用：開発者ツールが使えない端末でも、画面上でエラー内容を確認できるようにする
+  window.addEventListener("error", function(e){
+    try{
+      var box = document.getElementById("__debug_error_box__");
+      if(!box){
+        box = document.createElement("div");
+        box.id = "__debug_error_box__";
+        box.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:999999;background:#c0392b;color:#fff;padding:12px;font-size:13px;white-space:pre-wrap;word-break:break-all;max-height:60vh;overflow-y:auto;";
+        document.documentElement.appendChild(box);
+      }
+      box.textContent += "[エラー] " + e.message + "\n  at " + (e.filename||"?") + ":" + (e.lineno||"?") + ":" + (e.colno||"?") + "\n\n";
+    }catch(err){}
+  });
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <!-- ホーム画面に追加した際、Safariのタブが毎回増えていくのを防ぐための設定。
