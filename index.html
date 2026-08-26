@@ -750,6 +750,7 @@
       <button class="tab-btn" data-view="bizinfo">業務情報</button>
       <button class="tab-btn" data-view="checkout">資機材</button>
       <button class="tab-btn" data-view="safety" style="display:none;">安否確認</button>
+      <button class="tab-btn" data-view="safetyresponse" style="display:none;">安否回答</button>
       <button class="tab-reorder-btn" id="tab-reorder-toggle" title="タブの並び替え">並び替え</button>
     </nav>
 
@@ -1069,9 +1070,15 @@
         </div>
       </section>
 
-      <!-- ---- 安否確認 ---- -->
+      <!-- ---- 安否確認（発信・回答状況の管理） ---- -->
       <section id="view-safety" style="display:none;">
-        <div id="safety-content"></div>
+        <div id="safety-send-form-wrap"></div>
+        <div id="safety-dashboard-wrap"></div>
+      </section>
+
+      <!-- ---- 安否回答（自分の回答） ---- -->
+      <section id="view-safetyresponse" style="display:none;">
+        <div id="safetyresponse-content"></div>
       </section>
 
       <!-- ---- カレンダー ---- -->
@@ -1822,7 +1829,7 @@ onAuthStateChanged(auth, async (user)=>{
 });
 
 /* ---------- tabs ---------- */
-const ALL_VIEWS = ["dashboard","notices","whereabouts","reserve","checkout","safety","calendar","contracts","chat","bizinfo"];
+const ALL_VIEWS = ["dashboard","notices","whereabouts","reserve","checkout","safety","safetyresponse","calendar","contracts","chat","bizinfo"];
 // タブ名 → 対応するダッシュボードのカードID（ダッシュボード自体と安否確認は常時表示なので対象外）
 const DASH_CARD_BY_VIEW = {
   notices: "dash-card-notices",
@@ -1838,7 +1845,7 @@ function applyMyHiddenTabs(){
   const hidden = (me && Array.isArray(me.hiddenTabs)) ? me.hiddenTabs : [];
   document.querySelectorAll("#main-tabs .tab-btn[data-view]").forEach(btn=>{
     const view = btn.dataset.view;
-    if(view==="dashboard" || view==="safety") return; // 常時表示
+    if(view==="dashboard" || view==="safety" || view==="safetyresponse") return; // 常時表示
     if(hidden.includes(view)) btn.style.display = "none";
     else if(btn.style.display==="none") btn.style.display = "";
   });
@@ -5265,6 +5272,7 @@ function initSafetyCampaignListener(){
       mySafetyResponse = null;
       updateSafetyTabVisibility();
       renderSafety();
+      renderSafetyResponse();
       refreshDashboardIfActive();
       return;
     }
@@ -5276,19 +5284,25 @@ function initSafetyCampaignListener(){
     }catch(e){ mySafetyResponse = null; }
     updateSafetyTabVisibility();
     renderSafety();
+    renderSafetyResponse();
     refreshDashboardIfActive();
   }, (err)=>{ console.error("[安否確認取得エラー]", err); });
 }
 
 function updateSafetyTabVisibility(){
-  const btn = document.querySelector('.tab-btn[data-view="safety"]');
-  if(!btn) return;
+  const manageBtn = document.querySelector('.tab-btn[data-view="safety"]');
+  const responseBtn = document.querySelector('.tab-btn[data-view="safetyresponse"]');
   const hasActive = !!activeSafetyCampaign;
-  // 管理者・安否確認発信権限者は、発信フォームを使うためいつでもタブを表示する
-  btn.style.display = (hasActive || isSafetySender) ? "inline-block" : "none";
-  // 表示中に安否確認タブを見ていた場合、発信が終了したら他のタブへ切り替える（発信権限者は除く）
-  if(!hasActive && !isSafetySender && btn.classList.contains("active")){
-    switchToTab("notices");
+  if(manageBtn){
+    // 「安否確認」タブ（発信・回答状況管理）は、発信権限者・管理者にのみ常時表示する
+    manageBtn.style.display = isSafetySender ? "inline-block" : "none";
+  }
+  if(responseBtn){
+    // 「安否回答」タブ（自分の回答）は、発信中のみ全員に表示する
+    responseBtn.style.display = hasActive ? "inline-block" : "none";
+    if(!hasActive && responseBtn.classList.contains("active")){
+      switchToTab(isSafetySender ? "safety" : "notices");
+    }
   }
 }
 
@@ -5313,10 +5327,11 @@ async function deleteSafetyCampaignWithResponsesGeneral(campaignId){
   }
   await deleteDoc(doc(db,"safety_campaigns", campaignId));
 }
-function buildSafetyDashboard(){
-  const wrap = document.createElement("div");
-  wrap.style.cssText = "background:var(--surface);border:1.5px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px;";
-  wrap.innerHTML = `
+function initSafetyDashboardStaticUI(){
+  const el = document.getElementById("safety-dashboard-wrap");
+  if(!el || el.dataset.built) return;
+  el.dataset.built = "1";
+  el.innerHTML = `
     <div style="font-weight:700;font-size:14px;margin-bottom:10px;">回答状況</div>
     <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:10px;">
       <select id="safety-campaign-select-general" style="min-width:260px;"></select>
@@ -5337,38 +5352,35 @@ function buildSafetyDashboard(){
       </table>
     </div>
   `;
-  setTimeout(()=>{
-    document.getElementById("safety-campaign-select-general")?.addEventListener("change", e=>{
-      selectedSafetyCampaignIdGeneral = e.target.value || null;
-      document.getElementById("safety-delete-btn-general").style.display = selectedSafetyCampaignIdGeneral ? "inline-block" : "none";
-      watchSelectedCampaignResponsesGeneral();
-    });
-    document.getElementById("safety-close-btn-general")?.addEventListener("click", async ()=>{
-      if(!selectedSafetyCampaignIdGeneral) return;
-      if(!confirm("この安否確認を終了しますか？")) return;
-      try{
-        await updateDoc(doc(db,"safety_campaigns", selectedSafetyCampaignIdGeneral), { active:false });
-        toast("安否確認を終了しました。");
-      }catch(e){
-        toast("操作に失敗しました。");
-      }
-    });
-    document.getElementById("safety-delete-btn-general")?.addEventListener("click", async ()=>{
-      if(!selectedSafetyCampaignIdGeneral) return;
-      const campaign = safetyCampaignsAllGeneral.find(c=>c.id===selectedSafetyCampaignIdGeneral);
-      const label = campaign ? campaign.title : "この安否確認";
-      if(!confirm(`「${label}」を削除しますか？\n回答データも含めて完全に削除され、元に戻せません。`)) return;
-      try{
-        await deleteSafetyCampaignWithResponsesGeneral(selectedSafetyCampaignIdGeneral);
-        selectedSafetyCampaignIdGeneral = null;
-        toast("削除しました。");
-      }catch(e){
-        toast("削除に失敗しました。権限をご確認ください。");
-      }
-    });
-    renderSafetyCampaignSelectGeneral();
-  }, 0);
-  return wrap;
+  document.getElementById("safety-campaign-select-general").addEventListener("change", e=>{
+    selectedSafetyCampaignIdGeneral = e.target.value || null;
+    document.getElementById("safety-delete-btn-general").style.display = selectedSafetyCampaignIdGeneral ? "inline-block" : "none";
+    watchSelectedCampaignResponsesGeneral();
+  });
+  document.getElementById("safety-close-btn-general").addEventListener("click", async ()=>{
+    if(!selectedSafetyCampaignIdGeneral) return;
+    if(!confirm("この安否確認を終了しますか？")) return;
+    try{
+      await updateDoc(doc(db,"safety_campaigns", selectedSafetyCampaignIdGeneral), { active:false });
+      toast("安否確認を終了しました。");
+    }catch(e){
+      toast("操作に失敗しました。");
+    }
+  });
+  document.getElementById("safety-delete-btn-general").addEventListener("click", async ()=>{
+    if(!selectedSafetyCampaignIdGeneral) return;
+    const campaign = safetyCampaignsAllGeneral.find(c=>c.id===selectedSafetyCampaignIdGeneral);
+    const label = campaign ? campaign.title : "この安否確認";
+    if(!confirm(`「${label}」を削除しますか？\n回答データも含めて完全に削除され、元に戻せません。`)) return;
+    try{
+      await deleteSafetyCampaignWithResponsesGeneral(selectedSafetyCampaignIdGeneral);
+      selectedSafetyCampaignIdGeneral = null;
+      toast("削除しました。");
+    }catch(e){
+      toast("削除に失敗しました。権限をご確認ください。");
+    }
+  });
+  renderSafetyCampaignSelectGeneral();
 }
 function renderSafetyCampaignSelectGeneral(){
   const sel = document.getElementById("safety-campaign-select-general");
@@ -5575,21 +5587,26 @@ async function sendSafetyEmailsFromGeneralScreen(campaignId, title, message, rec
   statusEl.textContent = `メール送信完了：${recipients.length}件中 ${ok}件成功${fail>0 ? `（${fail}件失敗）` : ""}`;
 }
 function renderSafety(){
-  const el = document.getElementById("safety-content");
-  el.innerHTML = "";
-  if(isSafetySender){
-    el.appendChild(buildSafetySendForm());
-    el.appendChild(buildSafetyDashboard());
+  const sendWrap = document.getElementById("safety-send-form-wrap");
+  const dashWrap = document.getElementById("safety-dashboard-wrap");
+  if(!sendWrap || !dashWrap) return;
+  if(!isSafetySender){
+    sendWrap.innerHTML = "";
+    dashWrap.innerHTML = "";
+    return;
   }
+  if(!sendWrap.dataset.built){
+    sendWrap.dataset.built = "1";
+    sendWrap.appendChild(buildSafetySendForm());
+  }
+  initSafetyDashboardStaticUI();
+}
+function renderSafetyResponse(){
+  const el = document.getElementById("safetyresponse-content");
+  if(!el) return;
+  el.innerHTML = "";
   if(!activeSafetyCampaign){
-    if(!isSafetySender){
-      el.innerHTML = `<div class="safety-none">現在発信中の安否確認はありません。</div>`;
-    } else {
-      const hint = document.createElement("div");
-      hint.className = "safety-none";
-      hint.textContent = "現在発信中の安否確認はありません。（自分自身の回答フォームは、発信中の場合にここに表示されます）";
-      el.appendChild(hint);
-    }
+    el.innerHTML = `<div class="safety-none">現在発信中の安否確認はありません。</div>`;
     return;
   }
   const banner = document.createElement("div");
@@ -5657,7 +5674,7 @@ function renderSafety(){
       await setDoc(doc(db,"safety_responses", `${activeSafetyCampaign.id}_${currentUser.uid}`), payload);
       mySafetyResponse = payload;
       toast("回答を送信しました。");
-      renderSafety();
+      renderSafetyResponse();
     }catch(e){
       errDiv.textContent = "送信に失敗しました。時間をおいて再度お試しください。";
     }
