@@ -50,6 +50,12 @@ service cloud.firestore {
           exists(/databases/$(database)/documents/calendar_editors/$(request.auth.token.email)));
     }
 
+    function isSafetySender() {
+      return isAdmin() ||
+        (isSignedIn() &&
+          exists(/databases/$(database)/documents/safety_senders/$(request.auth.token.email)));
+    }
+
     // 管理者一覧: ログインしていれば読めるが、書き込みは管理者のみ
     match /admins/{email} {
       allow read: if isSignedIn();
@@ -221,8 +227,14 @@ service cloud.firestore {
         (resource.data.authorEmail == request.auth.token.email || isAdmin());
     }
 
-    // 安否確認キャンペーン: 全員が読める。作成・編集・終了は管理者のみ。
+    // 安否確認キャンペーン: 全員が読める。作成・編集・終了は管理者、または安否確認発信権限者のみ。
     match /safety_campaigns/{campaignId} {
+      allow read: if isSignedIn();
+      allow write: if isSafetySender();
+    }
+
+    // 安否確認発信権限一覧: ログインしていれば読めるが、書き込みは管理者のみ
+    match /safety_senders/{email} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }

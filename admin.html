@@ -240,21 +240,10 @@
       </div>
 
       <div class="panel">
-        <h2>測量機器管理者（点検日の編集・貸出状態の管理ができる人）</h2>
-        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-          測量機器・ドローンの「前回点検日」の編集や、貸出中・点検中の設備の状態変更（管理者権限が必要な操作）ができる人を登録します。管理者は常にこれらの操作が可能です。
+        <h2>測量機器管理者について</h2>
+        <p style="font-size:12.5px;color:var(--muted);margin:0;">
+          この権限を含む、すべての権限の付与・取り消しは「ユーザー管理」タブの各社員の編集画面に統合されました。そちらから設定してください。
         </p>
-        <div class="form-grid">
-          <div class="field full">
-            <label>メールアドレス</label>
-            <input type="email" id="eqmanager-email-input" placeholder="you@osakagumi.co.jp">
-          </div>
-        </div>
-        <button class="btn btn-primary" id="eqmanager-add-btn">権限を追加</button>
-        <table style="margin-top:14px;">
-          <thead><tr><th>メールアドレス</th><th>操作</th></tr></thead>
-          <tbody id="eqmanager-table-body"></tbody>
-        </table>
       </div>
     </section>
 
@@ -283,21 +272,10 @@
     <!-- ============ 管理者管理 ============ -->
     <section id="view-admins" style="display:none;">
       <div class="panel">
-        <h2>管理者を追加</h2>
-        <div class="form-grid">
-          <div class="field full">
-            <label>メールアドレス（Firebase Authに登録済みのもの）</label>
-            <input type="email" id="admin-email-input" placeholder="you@osakagumi.co.jp">
-          </div>
-        </div>
-        <button class="btn btn-primary" id="admin-add-btn">管理者に追加</button>
-      </div>
-      <div class="panel">
-        <h2>現在の管理者一覧</h2>
-        <table>
-          <thead><tr><th>メールアドレス</th><th>氏名</th><th>操作</th></tr></thead>
-          <tbody id="admin-table-body"></tbody>
-        </table>
+        <h2>権限管理について</h2>
+        <p style="font-size:12.5px;color:var(--muted);margin:0;">
+          管理者権限を含む、すべての権限の付与・取り消しは「ユーザー管理」タブの各社員の編集画面に統合されました。そちらから設定してください。
+        </p>
       </div>
     </section>
 
@@ -435,6 +413,10 @@
           <div id="emp-edit-hiddentabs-checks" style="display:flex;flex-wrap:wrap;gap:10px;border:1px solid var(--line);border-radius:8px;padding:10px;"></div>
         </div>
         <div class="field">
+          <label>権限</label>
+          <div id="emp-edit-permissions-checks" style="display:flex;flex-direction:column;gap:8px;border:1px solid var(--line);border-radius:8px;padding:10px;"></div>
+        </div>
+        <div class="field">
           <label>並び順</label>
           <input type="number" id="emp-edit-order-input">
         </div>
@@ -487,22 +469,10 @@
     <!-- ============ お知らせ管理 ============ -->
     <section id="view-notices" style="display:none;">
       <div class="panel">
-        <h2>投稿権限を追加</h2>
-        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">管理者は常に投稿できます。それ以外の人に投稿を許可したい場合はここに追加してください。</p>
-        <div class="form-grid">
-          <div class="field full">
-            <label>メールアドレス（Firebase Authに登録済みのもの）</label>
-            <input type="email" id="poster-email-input" placeholder="you@osakagumi.co.jp">
-          </div>
-        </div>
-        <button class="btn btn-primary" id="poster-add-btn">投稿権限を追加</button>
-      </div>
-      <div class="panel">
-        <h2>投稿権限を持つ人一覧（管理者以外）</h2>
-        <table>
-          <thead><tr><th>メールアドレス</th><th>氏名</th><th>操作</th></tr></thead>
-          <tbody id="poster-table-body"></tbody>
-        </table>
+        <h2>投稿権限について</h2>
+        <p style="font-size:12.5px;color:var(--muted);margin:0;">
+          投稿権限を含む、すべての権限の付与・取り消しは「ユーザー管理」タブの各社員の編集画面に統合されました。そちらから設定してください。
+        </p>
       </div>
       <div class="panel">
         <h2>掲示中のお知らせ一覧</h2>
@@ -623,18 +593,10 @@
       </div>
 
       <div class="panel">
-        <h2>他者の行き先を設定できる人（管理者以外）</h2>
-        <div class="form-grid">
-          <div class="field full">
-            <label>メールアドレス</label>
-            <input type="email" id="wbeditor-email-input" placeholder="you@osakagumi.co.jp">
-          </div>
-        </div>
-        <button class="btn btn-primary" id="wbeditor-add-btn">権限を追加</button>
-        <table style="margin-top:14px;">
-          <thead><tr><th>メールアドレス</th><th>氏名</th><th>操作</th></tr></thead>
-          <tbody id="wbeditor-table-body"></tbody>
-        </table>
+        <h2>行き先の設定権限について</h2>
+        <p style="font-size:12.5px;color:var(--muted);margin:0;">
+          他者の行き先を設定できる権限を含む、すべての権限の付与・取り消しは「ユーザー管理」タブの各社員の編集画面に統合されました。そちらから設定してください。
+        </p>
       </div>
     </section>
 
@@ -718,21 +680,10 @@
         <button class="btn btn-primary" id="contract-cleanup-save-btn">保存</button>
       </div>
       <div class="panel">
-        <h2>入札編集権限者（入札関係情報の追加・編集・削除ができる人）</h2>
-        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-          「入札」タブで入札関係情報を追加・編集・削除できる人を登録します（主に営業部を想定）。管理者は常にこれらの操作が可能です。閲覧自体は社員全員ができます。
+        <h2>入札編集権限について</h2>
+        <p style="font-size:12.5px;color:var(--muted);margin:0;">
+          入札関係情報を追加・編集・削除できる権限を含む、すべての権限の付与・取り消しは「ユーザー管理」タブの各社員の編集画面に統合されました。そちらから設定してください。
         </p>
-        <div class="form-grid">
-          <div class="field full">
-            <label>メールアドレス</label>
-            <input type="email" id="contracteditor-email-input" placeholder="you@osakagumi.co.jp">
-          </div>
-        </div>
-        <button class="btn btn-primary" id="contracteditor-add-btn">権限を追加</button>
-        <table style="margin-top:14px;">
-          <thead><tr><th>メールアドレス</th><th>操作</th></tr></thead>
-          <tbody id="contracteditor-table-body"></tbody>
-        </table>
       </div>
     </section>
 
@@ -778,19 +729,10 @@
     <!-- ============ カレンダー管理 ============ -->
     <section id="view-calendar" style="display:none;">
       <div class="panel">
-        <h2>カレンダー編集権限</h2>
-        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">「カレンダー」タブで休日のON/OFF・名称を編集できる人を登録します。管理者は常に編集できます。</p>
-        <div class="form-grid">
-          <div class="field full">
-            <label>メールアドレス</label>
-            <input type="email" id="cal-editor-email-input" placeholder="you@osakagumi.co.jp">
-          </div>
-        </div>
-        <button class="btn btn-primary" id="cal-editor-add-btn">権限を追加</button>
-        <table style="margin-top:14px;">
-          <thead><tr><th>メールアドレス</th><th>氏名</th><th>操作</th></tr></thead>
-          <tbody id="cal-editor-table-body"></tbody>
-        </table>
+        <h2>カレンダー編集権限について</h2>
+        <p style="font-size:12.5px;color:var(--muted);margin:0;">
+          「カレンダー」タブで休日を編集できる権限を含む、すべての権限の付与・取り消しは「ユーザー管理」タブの各社員の編集画面に統合されました。そちらから設定してください。
+        </p>
       </div>
 
       <div class="panel">
@@ -1090,6 +1032,7 @@ onAuthStateChanged(auth, async (user)=>{
   initCalendarEditorsListener();
   initCalendarYearsListener();
   initContractEditorsListener();
+  initSafetySendersListener();
   initBizInfoListener();
   initContractSettingsListener();
   initContractCleanupListener();
@@ -1452,6 +1395,7 @@ function initAdminsListener(){
 }
 function renderAdminsTable(list){
   const body = document.getElementById("admin-table-body");
+  if(!body) return;
   body.innerHTML = "";
   if(list.length===0){
     body.innerHTML = `<tr><td colspan="3" class="empty">管理者が登録されていません。</td></tr>`;
@@ -1475,17 +1419,6 @@ function renderAdminsTable(list){
     body.appendChild(tr);
   });
 }
-document.getElementById("admin-add-btn").addEventListener("click", async ()=>{
-  const email = document.getElementById("admin-email-input").value.trim();
-  if(!email){ toast("メールアドレスを入力してください。"); return; }
-  try{
-    await setDoc(doc(db,"admins", email), { addedBy: currentUser.email, addedAt: new Date().toISOString() });
-    document.getElementById("admin-email-input").value = "";
-    toast("管理者に追加しました。");
-  }catch(e){
-    toast("追加に失敗しました。");
-  }
-});
 
 /* ============================================================
    お知らせ管理（投稿権限）
@@ -1667,6 +1600,7 @@ document.getElementById("notice-detail-close").addEventListener("click", ()=>{
 
 function renderPosters(list){
   const body = document.getElementById("poster-table-body");
+  if(!body) return;
   body.innerHTML = "";
   if(list.length===0){
     body.innerHTML = `<tr><td colspan="3" class="empty">管理者以外の投稿権限者はいません。</td></tr>`;
@@ -1686,17 +1620,6 @@ function renderPosters(list){
     body.appendChild(tr);
   });
 }
-document.getElementById("poster-add-btn").addEventListener("click", async ()=>{
-  const email = document.getElementById("poster-email-input").value.trim();
-  if(!email){ toast("メールアドレスを入力してください。"); return; }
-  try{
-    await setDoc(doc(db,"announcement_posters", email), { addedBy: currentUser.email, addedAt: new Date().toISOString() });
-    document.getElementById("poster-email-input").value = "";
-    toast("投稿権限を追加しました。");
-  }catch(e){
-    toast("追加に失敗しました。");
-  }
-});
 
 /* ============================================================
    行き先管理：ビューの表示列数
@@ -1810,6 +1733,15 @@ document.getElementById("wb-kiosk-save-btn").addEventListener("click", async ()=
 ============================================================ */
 let departmentsAll = [];
 let editingDeptId = null;
+/* ============================================================
+   安否確認発信権限
+============================================================ */
+let lastSafetySenderEmails = [];
+function initSafetySendersListener(){
+  onSnapshot(collection(db,"safety_senders"), snap=>{
+    lastSafetySenderEmails = snap.docs.map(d=>d.id);
+  });
+}
 function initDepartmentsListener(){
   onSnapshot(collection(db,"departments"), snap=>{
     departmentsAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
@@ -1982,6 +1914,7 @@ function initWbEditorsListener(){
 }
 function renderWbEditors(list){
   const body = document.getElementById("wbeditor-table-body");
+  if(!body) return;
   body.innerHTML = "";
   if(list.length===0){
     body.innerHTML = `<tr><td colspan="3" class="empty">管理者以外の権限者はいません。</td></tr>`;
@@ -2001,28 +1934,20 @@ function renderWbEditors(list){
     body.appendChild(tr);
   });
 }
-document.getElementById("wbeditor-add-btn").addEventListener("click", async ()=>{
-  const email = document.getElementById("wbeditor-email-input").value.trim();
-  if(!email){ toast("メールアドレスを入力してください。"); return; }
-  try{
-    await setDoc(doc(db,"whereabouts_editors", email), { addedBy: currentUser.email, addedAt: new Date().toISOString() });
-    document.getElementById("wbeditor-email-input").value = "";
-    toast("権限を追加しました。");
-  }catch(e){
-    toast("追加に失敗しました。");
-  }
-});
 
 /* ============================================================
    測量機器管理者
 ============================================================ */
+let lastEqManagerEmails = [];
 function initEquipmentManagersListener(){
   onSnapshot(collection(db,"equipment_managers"), snap=>{
-    renderEquipmentManagers(snap.docs.map(d=>d.id));
+    lastEqManagerEmails = snap.docs.map(d=>d.id);
+    renderEquipmentManagers(lastEqManagerEmails);
   });
 }
 function renderEquipmentManagers(list){
   const body = document.getElementById("eqmanager-table-body");
+  if(!body) return;
   body.innerHTML = "";
   if(list.length===0){
     body.innerHTML = `<tr><td colspan="2" class="empty">管理者以外の権限者はいません。</td></tr>`;
@@ -2042,17 +1967,6 @@ function renderEquipmentManagers(list){
     body.appendChild(tr);
   });
 }
-document.getElementById("eqmanager-add-btn").addEventListener("click", async ()=>{
-  const email = document.getElementById("eqmanager-email-input").value.trim();
-  if(!email){ toast("メールアドレスを入力してください。"); return; }
-  try{
-    await setDoc(doc(db,"equipment_managers", email), { addedBy: currentUser.email, addedAt: new Date().toISOString() });
-    document.getElementById("eqmanager-email-input").value = "";
-    toast("権限を追加しました。");
-  }catch(e){
-    toast("追加に失敗しました。");
-  }
-});
 
 /* ============================================================
    契約編集権限者
@@ -2173,9 +2087,11 @@ document.getElementById("bizinfo-edit-save-btn")?.addEventListener("click", asyn
   }
 });
 
+let lastContractEditorEmails = [];
 function initContractEditorsListener(){
   onSnapshot(collection(db,"contract_editors"), snap=>{
-    renderContractEditors(snap.docs.map(d=>d.id));
+    lastContractEditorEmails = snap.docs.map(d=>d.id);
+    renderContractEditors(lastContractEditorEmails);
   });
 }
 let contractDefaultDepartmentIdAdmin = null;
@@ -2238,6 +2154,7 @@ document.getElementById("contract-cleanup-save-btn")?.addEventListener("click", 
 
 function renderContractEditors(list){
   const body = document.getElementById("contracteditor-table-body");
+  if(!body) return;
   body.innerHTML = "";
   if(list.length===0){
     body.innerHTML = `<tr><td colspan="2" class="empty">管理者以外の権限者はいません。</td></tr>`;
@@ -2257,17 +2174,6 @@ function renderContractEditors(list){
     body.appendChild(tr);
   });
 }
-document.getElementById("contracteditor-add-btn").addEventListener("click", async ()=>{
-  const email = document.getElementById("contracteditor-email-input").value.trim();
-  if(!email){ toast("メールアドレスを入力してください。"); return; }
-  try{
-    await setDoc(doc(db,"contract_editors", email), { addedBy: currentUser.email, addedAt: new Date().toISOString() });
-    document.getElementById("contracteditor-email-input").value = "";
-    toast("権限を追加しました。");
-  }catch(e){
-    toast("追加に失敗しました。");
-  }
-});
 
 /* ============================================================
    カレンダー編集権限
@@ -2281,6 +2187,7 @@ function initCalendarEditorsListener(){
 }
 function renderCalendarEditors(list){
   const body = document.getElementById("cal-editor-table-body");
+  if(!body) return;
   if(!body) return;
   body.innerHTML = "";
   if(list.length===0){
@@ -2301,17 +2208,6 @@ function renderCalendarEditors(list){
     body.appendChild(tr);
   });
 }
-document.getElementById("cal-editor-add-btn").addEventListener("click", async ()=>{
-  const email = document.getElementById("cal-editor-email-input").value.trim();
-  if(!email){ toast("メールアドレスを入力してください。"); return; }
-  try{
-    await setDoc(doc(db,"calendar_editors", email), { addedBy: currentUser.email, addedAt: new Date().toISOString() });
-    document.getElementById("cal-editor-email-input").value = "";
-    toast("権限を追加しました。");
-  }catch(e){
-    toast("追加に失敗しました。");
-  }
-});
 
 /* ============================================================
    カレンダー：初期データ作成
@@ -2502,6 +2398,16 @@ function sortByDeptAndEmployeeNo(list){
     return (a.name||"").localeCompare(b.name||"","ja");
   });
 }
+// 各種権限の一覧（コレクション名・チェックボックスのラベル・現在の付与者一覧を取得する関数）
+const PERMISSION_DEFS = [
+  { collection: "admins", label: "管理者", getList: ()=> lastAdminEmails },
+  { collection: "announcement_posters", label: "お知らせ投稿権限", getList: ()=> lastPosterEmails },
+  { collection: "whereabouts_editors", label: "行き先の他者設定権限", getList: ()=> lastWbEditorEmails },
+  { collection: "equipment_managers", label: "測量機器管理者", getList: ()=> lastEqManagerEmails },
+  { collection: "contract_editors", label: "入札編集権限", getList: ()=> lastContractEditorEmails },
+  { collection: "calendar_editors", label: "カレンダー編集権限", getList: ()=> lastCalEditorEmails },
+  { collection: "safety_senders", label: "安否確認発信権限", getList: ()=> lastSafetySenderEmails }
+];
 // ユーザー毎に非表示にできるタブ一覧（ダッシュボードは常時表示、安否確認は緊急時に見落とすと困るため対象外）
 const HIDEABLE_TABS = [
   { id:"notices", label:"お知らせ" },
@@ -2614,6 +2520,21 @@ function openEmpEditModal(emp){
     hiddenTabsChecksEl.appendChild(label);
   });
 
+  const permsChecksEl = document.getElementById("emp-edit-permissions-checks");
+  permsChecksEl.innerHTML = "";
+  PERMISSION_DEFS.forEach(perm=>{
+    const label = document.createElement("label");
+    label.style.cssText = "display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;";
+    const cb = document.createElement("input");
+    cb.type = "checkbox"; cb.style.width = "auto";
+    cb.checked = perm.getList().includes(emp.email);
+    cb.className = "emp-edit-permission-check";
+    cb.dataset.collection = perm.collection;
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(perm.label));
+    permsChecksEl.appendChild(label);
+  });
+
   const hideBtn = document.getElementById("emp-edit-hide-btn");
   hideBtn.textContent = emp.hidden ? "表示に戻す" : "非表示にする";
   hideBtn.onclick = async ()=>{
@@ -2671,6 +2592,13 @@ document.getElementById("emp-edit-save-btn")?.addEventListener("click", async ()
     return cb && !cb.checked;
   });
   const name = document.getElementById("emp-edit-name-input").value.trim();
+
+  // 自分自身の管理者権限を外そうとしている場合は確認する
+  const adminCb = document.querySelector('.emp-edit-permission-check[data-collection="admins"]');
+  if(adminCb && !adminCb.checked && editingEmpEmail === currentUser.email){
+    if(!confirm("自分自身を管理者から外します。よろしいですか？")) return;
+  }
+
   try{
     await updateDoc(doc(db,"employees", editingEmpEmail), {
       employeeNo: document.getElementById("emp-edit-no-input").value.trim(),
@@ -2682,6 +2610,16 @@ document.getElementById("emp-edit-save-btn")?.addEventListener("click", async ()
       phone: document.getElementById("emp-edit-phone-input").value.trim(),
       memo: document.getElementById("emp-edit-memo-input").value.trim()
     });
+    // 各種権限の付与・取り消しを反映する
+    const permChecks = [...document.querySelectorAll(".emp-edit-permission-check")];
+    for(const cb of permChecks){
+      const col = cb.dataset.collection;
+      if(cb.checked){
+        await setDoc(doc(db, col, editingEmpEmail), { addedBy: currentUser.email, addedAt: new Date().toISOString() }, { merge: true });
+      } else {
+        try{ await deleteDoc(doc(db, col, editingEmpEmail)); }catch(e){ /* 元々権限が無い場合は何もしない */ }
+      }
+    }
     toast("社員情報を更新しました。");
     document.getElementById("emp-edit-modal").classList.remove("show");
   }catch(e){
