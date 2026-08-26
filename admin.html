@@ -139,6 +139,7 @@
     <button class="tab-btn" data-view="whereabouts">行き先管理</button>
     <button class="tab-btn" data-view="safety">安否確認管理</button>
     <button class="tab-btn" data-view="contracts">入札管理</button>
+    <button class="tab-btn" data-view="bizinfo">業務情報管理</button>
     <button class="tab-btn" data-view="calendar">カレンダー管理</button>
     <button class="tab-reorder-btn" id="tab-reorder-toggle" title="タブの並び替え">並び替え</button>
   </nav>
@@ -659,6 +660,45 @@
       </div>
     </section>
 
+    <!-- ============ 業務情報管理 ============ -->
+    <section id="view-bizinfo" style="display:none;">
+      <div class="panel">
+        <h2>業務情報一覧</h2>
+        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
+          Googleドライブ上にアップロード済みのExcelファイル（共有設定済みのもの）を登録すると、一般画面の「業務情報」タブにピルとして追加され、内容が閲覧できるようになります（編集は不可）。
+        </p>
+        <button class="btn btn-primary" id="bizinfo-add-btn">＋ 追加</button>
+        <table style="margin-top:14px;">
+          <thead><tr><th>業務情報名</th><th>Googleドライブリンク</th><th>有効</th><th>操作</th></tr></thead>
+          <tbody id="bizinfo-table-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============ 業務情報 追加・編集モーダル ============ -->
+    <div class="modal-overlay" id="bizinfo-edit-modal">
+      <div class="modal" style="max-width:460px;">
+        <h3 id="bizinfo-edit-modal-title">業務情報を追加</h3>
+        <div class="field">
+          <label>業務情報名</label>
+          <input type="text" id="bizinfo-name-input" placeholder="例）工事一覧">
+        </div>
+        <div class="field">
+          <label>Googleドライブの共有リンク</label>
+          <input type="text" id="bizinfo-url-input" placeholder="https://drive.google.com/...">
+        </div>
+        <div class="field" style="display:flex;align-items:center;gap:6px;">
+          <input type="checkbox" id="bizinfo-enabled-input" checked style="width:auto;">
+          <label style="margin:0;font-size:12.5px;">有効にする（一般画面に表示する）</label>
+        </div>
+        <div id="bizinfo-edit-error" style="color:var(--danger);font-size:12.5px;margin-top:4px;"></div>
+        <div class="row-btns">
+          <button class="btn btn-ghost" id="bizinfo-edit-cancel-btn" style="border:1px solid var(--line);">キャンセル</button>
+          <button class="btn btn-primary" id="bizinfo-edit-save-btn">保存</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ============ カレンダー管理 ============ -->
     <section id="view-calendar" style="display:none;">
       <div class="panel">
@@ -742,7 +782,7 @@
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js" async></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -759,9 +799,22 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 initStorageHelper(app);
 
-const emailjsReady = !!(window.emailjs && EMAILJS_CONFIG.publicKey && !EMAILJS_CONFIG.publicKey.startsWith("YOUR_"));
-if(emailjsReady){
-  window.emailjs.init(EMAILJS_CONFIG.publicKey);
+let emailjsReady = false;
+function initEmailJsIfAvailable(){
+  if(window.emailjs && EMAILJS_CONFIG.publicKey && !EMAILJS_CONFIG.publicKey.startsWith("YOUR_")){
+    window.emailjs.init(EMAILJS_CONFIG.publicKey);
+    emailjsReady = true;
+    return true;
+  }
+  return false;
+}
+if(!initEmailJsIfAvailable()){
+  // CDNの読み込みが非同期（async）になったため、まだ間に合っていない場合は少し待って再確認する
+  let emailjsRetries = 0;
+  const emailjsRetryTimer = setInterval(()=>{
+    emailjsRetries++;
+    if(initEmailJsIfAvailable() || emailjsRetries > 25){ clearInterval(emailjsRetryTimer); }
+  }, 200);
 }
 
 function toast(msg){
@@ -961,6 +1014,7 @@ onAuthStateChanged(auth, async (user)=>{
   initCalendarEditorsListener();
   initCalendarYearsListener();
   initContractEditorsListener();
+  initBizInfoListener();
   initContractSettingsListener();
   initContractCleanupListener();
   initEmployeesListener();
@@ -968,7 +1022,7 @@ onAuthStateChanged(auth, async (user)=>{
 });
 
 /* ---------- tabs ---------- */
-const ADMIN_VIEWS = ["equipment","reservations","admins","userimport","notices","whereabouts","safety","calendar","contracts"];
+const ADMIN_VIEWS = ["equipment","reservations","admins","userimport","notices","whereabouts","safety","calendar","contracts","bizinfo"];
 function switchToAdminTab(viewName){
   document.querySelectorAll(".tab-btn").forEach(b=>{
     b.classList.toggle("active", b.dataset.view===viewName);
@@ -1926,6 +1980,122 @@ document.getElementById("eqmanager-add-btn").addEventListener("click", async ()=
 /* ============================================================
    契約編集権限者
 ============================================================ */
+/* ============================================================
+   業務情報管理
+============================================================ */
+// GoogleドライブのURL（/file/d/xxx や /spreadsheets/d/xxx など）からファイルIDを取り出す
+function extractDriveFileId(url){
+  if(!url) return "";
+  const m = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  return m ? m[1] : "";
+}
+let bizInfoItemsAll = [];
+function initBizInfoListener(){
+  onSnapshot(collection(db,"business_info_items"), snap=>{
+    bizInfoItemsAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    bizInfoItemsAll.sort((a,b)=> (a.order??0)-(b.order??0) || (a.name||"").localeCompare(b.name||"","ja"));
+    renderBizInfoTable();
+  }, (err)=>{ console.error("[業務情報取得エラー]", err); });
+}
+function renderBizInfoTable(){
+  const body = document.getElementById("bizinfo-table-body");
+  if(!body) return;
+  body.innerHTML = "";
+  if(bizInfoItemsAll.length===0){
+    body.innerHTML = `<tr><td colspan="4" class="empty">まだ登録されていません。</td></tr>`;
+    return;
+  }
+  bizInfoItemsAll.forEach(item=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHtml(item.name||"")}</td>
+      <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-size:12px;">${escapeHtml(item.driveUrl||"")}</td>
+      <td>${item.enabled!==false ? "有効" : "無効"}</td>
+      <td class="actions"></td>
+    `;
+    const actionsTd = tr.querySelector(".actions");
+    const shortcutBtn = document.createElement("button");
+    shortcutBtn.className = "btn btn-ghost"; shortcutBtn.textContent = "ショートカット作成";
+    shortcutBtn.style.border = "1px solid var(--line)";
+    shortcutBtn.addEventListener("click", ()=> downloadBizInfoShortcut(item));
+    actionsTd.appendChild(shortcutBtn);
+    const editBtn = document.createElement("button");
+    editBtn.className = "btn btn-ghost"; editBtn.textContent = "編集";
+    editBtn.style.border = "1px solid var(--line)";
+    editBtn.addEventListener("click", ()=> openBizInfoEditModal(item));
+    actionsTd.appendChild(editBtn);
+    const deleteBtn = document.createElement("button");
+    deleteBtn.className = "btn btn-danger"; deleteBtn.textContent = "削除";
+    deleteBtn.addEventListener("click", async ()=>{
+      if(!confirm(`「${item.name||""}」を削除しますか？\n一般画面のピルも消えます。`)) return;
+      try{
+        await deleteDoc(doc(db,"business_info_items", item.id));
+        toast("削除しました。");
+      }catch(e){
+        toast("削除に失敗しました。");
+      }
+    });
+    actionsTd.appendChild(deleteBtn);
+    body.appendChild(tr);
+  });
+}
+// 編集用リンク（Googleドライブでそのファイルを開くページ）のショートカット（.url）ファイルを、
+// ブラウザのダウンロード機能を使ってダウンロードする（そのままデスクトップ等に保存できる）
+function downloadBizInfoShortcut(item){
+  const fileId = extractDriveFileId(item.driveUrl);
+  if(!fileId){
+    toast("Googleドライブのリンクからファイルを特定できませんでした。");
+    return;
+  }
+  const editUrl = `https://drive.google.com/file/d/${fileId}/view`;
+  const content = `[InternetShortcut]\r\nURL=${editUrl}\r\n`;
+  const blob = new Blob([content], { type: "application/internet-shortcut" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `${(item.name||"業務情報").replace(/[\\/:*?"<>|]/g,"")}（編集用）.url`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=> URL.revokeObjectURL(a.href), 3000);
+}
+let editingBizInfoId = null;
+function openBizInfoEditModal(item){
+  editingBizInfoId = item ? item.id : null;
+  document.getElementById("bizinfo-edit-modal-title").textContent = item ? "業務情報を編集" : "業務情報を追加";
+  document.getElementById("bizinfo-name-input").value = item ? (item.name||"") : "";
+  document.getElementById("bizinfo-url-input").value = item ? (item.driveUrl||"") : "";
+  document.getElementById("bizinfo-enabled-input").checked = item ? (item.enabled!==false) : true;
+  document.getElementById("bizinfo-edit-error").textContent = "";
+  document.getElementById("bizinfo-edit-modal").classList.add("show");
+}
+document.getElementById("bizinfo-add-btn")?.addEventListener("click", ()=> openBizInfoEditModal(null));
+document.getElementById("bizinfo-edit-cancel-btn")?.addEventListener("click", ()=>{
+  document.getElementById("bizinfo-edit-modal").classList.remove("show");
+});
+document.getElementById("bizinfo-edit-save-btn")?.addEventListener("click", async ()=>{
+  const errEl = document.getElementById("bizinfo-edit-error");
+  const name = document.getElementById("bizinfo-name-input").value.trim();
+  const driveUrl = document.getElementById("bizinfo-url-input").value.trim();
+  const enabled = document.getElementById("bizinfo-enabled-input").checked;
+  if(!name){ errEl.textContent = "業務情報名を入力してください。"; return; }
+  if(!driveUrl){ errEl.textContent = "Googleドライブのリンクを入力してください。"; return; }
+  const fileId = extractDriveFileId(driveUrl);
+  if(!fileId){ errEl.textContent = "リンクからファイルを特定できませんでした。URLをご確認ください。"; return; }
+  try{
+    if(editingBizInfoId){
+      await updateDoc(doc(db,"business_info_items", editingBizInfoId), { name, driveUrl, fileId, enabled });
+      toast("更新しました。");
+    } else {
+      const maxOrder = bizInfoItemsAll.reduce((m,i)=>Math.max(m,i.order??0),0);
+      await addDoc(collection(db,"business_info_items"), { name, driveUrl, fileId, enabled, order: maxOrder+10 });
+      toast("追加しました。");
+    }
+    document.getElementById("bizinfo-edit-modal").classList.remove("show");
+  }catch(e){
+    errEl.textContent = "保存に失敗しました。権限をご確認ください。";
+  }
+});
+
 function initContractEditorsListener(){
   onSnapshot(collection(db,"contract_editors"), snap=>{
     renderContractEditors(snap.docs.map(d=>d.id));
@@ -2262,8 +2432,17 @@ const HIDEABLE_TABS = [
   { id:"whereabouts", label:"行き先" },
   { id:"reserve", label:"予約" },
   { id:"checkout", label:"資機材" },
-  { id:"contracts", label:"入札" }
+  { id:"contracts", label:"入札" },
+  { id:"bizinfo", label:"業務情報" }
 ];
+// タブ本体に加えて、「業務情報」の中の各ピル（登録済みの各業務情報）も個別にON/OFFできるようにする
+function getFullHideableList(){
+  const bizInfoSubItems = bizInfoItemsAll.map(item=>({
+    id: "bizinfo:" + item.id,
+    label: "業務情報 - " + (item.name || "")
+  }));
+  return [...HIDEABLE_TABS, ...bizInfoSubItems];
+}
 function renderEmployees(){
   const body = document.getElementById("emp-card-list");
   if(!body) return;
@@ -2301,7 +2480,7 @@ function renderEmployees(){
 
     const deptNames = empDepartmentsAdmin(emp).map(id=>departmentNameById(id));
     const hiddenTabNames = (Array.isArray(emp.hiddenTabs) ? emp.hiddenTabs : [])
-      .map(id=> HIDEABLE_TABS.find(t=>t.id===id)?.label).filter(Boolean);
+      .map(id=> getFullHideableList().find(t=>t.id===id)?.label).filter(Boolean);
     const summaryLine = document.createElement("div");
     summaryLine.className = "emp-card-summary";
     summaryLine.textContent =
@@ -2346,7 +2525,7 @@ function openEmpEditModal(emp){
   const empHiddenTabs = Array.isArray(emp.hiddenTabs) ? emp.hiddenTabs : [];
   const hiddenTabsChecksEl = document.getElementById("emp-edit-hiddentabs-checks");
   hiddenTabsChecksEl.innerHTML = "";
-  HIDEABLE_TABS.forEach(t=>{
+  getFullHideableList().forEach(t=>{
     const label = document.createElement("label");
     label.style.cssText = "display:flex;align-items:center;gap:5px;font-size:12.5px;cursor:pointer;";
     const cb = document.createElement("input");
@@ -2383,7 +2562,7 @@ document.getElementById("emp-edit-cancel-btn")?.addEventListener("click", ()=>{
 document.getElementById("emp-edit-save-btn")?.addEventListener("click", async ()=>{
   if(!editingEmpEmail) return;
   const selectedDepts = [...document.querySelectorAll(".emp-edit-dept-check:checked")].map(cb=>cb.value);
-  const selectedHiddenTabs = HIDEABLE_TABS.map(t=>t.id).filter(id=>{
+  const selectedHiddenTabs = getFullHideableList().map(t=>t.id).filter(id=>{
     const cb = document.querySelector(`.emp-edit-visibletab-check[value="${id}"]`);
     return cb && !cb.checked;
   });

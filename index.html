@@ -747,7 +747,7 @@
       <button class="tab-btn" data-view="chat">チャット<span id="chat-tab-badge" class="chat-conv-dot" style="display:none;margin-left:5px;vertical-align:middle;"></span></button>
       <button class="tab-btn" data-view="reserve">予約</button>
       <button class="tab-btn" data-view="contracts">入札</button>
-      <button class="tab-btn" data-view="bidinfo">入札情報</button>
+      <button class="tab-btn" data-view="bizinfo">業務情報</button>
       <button class="tab-btn" data-view="checkout">資機材</button>
       <button class="tab-btn" data-view="safety" style="display:none;">安否確認</button>
       <button class="tab-reorder-btn" id="tab-reorder-toggle" title="タブの並び替え">並び替え</button>
@@ -1102,9 +1102,11 @@
       </section>
 
       <!-- ---- 入札情報（Googleドライブ上のExcelファイルを埋め込み表示） ---- -->
-      <section id="view-bidinfo" style="display:none;">
-        <p style="font-size:12px;color:var(--muted);margin:0 0 12px;">このファイルはGoogleドライブ上のExcelファイルをそのまま表示しています（閲覧専用）。内容の編集は、パソコンの同期フォルダ内のファイルから直接行ってください。このタブを開くたびに最新の内容を読み込みます。</p>
-        <iframe id="bidinfo-iframe" src="https://drive.google.com/file/d/11a9wrLnbDFxI0VLtf6tuD8hO5V19jve6/preview" style="width:100%;height:75vh;border:1px solid var(--line);border-radius:10px;background:#fff;" allow="autoplay"></iframe>
+      <section id="view-bizinfo" style="display:none;">
+        <div class="cat-row" id="bizinfo-pill-row"></div>
+        <div id="bizinfo-empty" style="color:var(--muted);text-align:center;padding:24px;display:none;">表示できる業務情報がありません。</div>
+        <p id="bizinfo-note" style="font-size:12px;color:var(--muted);margin:0 0 12px;display:none;">このファイルはGoogleドライブ上のExcelファイルをそのまま表示しています（閲覧専用）。内容の編集は、パソコンの同期フォルダ内のファイルから直接行ってください。タブ・ピルを切り替えるたびに最新の内容を読み込みます。</p>
+        <iframe id="bizinfo-iframe" style="width:100%;height:75vh;border:1px solid var(--line);border-radius:10px;background:#fff;display:none;" allow="autoplay"></iframe>
       </section>
 
       <!-- ---- チャット（1対1・当日分のみ保持） ---- -->
@@ -1645,6 +1647,8 @@ let chatLastConvName = null;
 let chatThreadUnsub = null;
 let contractDefaultDepartmentId = null;
 let contractsAll = [];
+let bizInfoItemsAll = [];
+let selectedBizInfoId = null;
 let editingContractId = null;
 let equipmentAll = [];
 let selectedCategory = null;
@@ -1776,6 +1780,7 @@ onAuthStateChanged(auth, async (user)=>{
     initWbPresetsListener();
     initSteelPlateTxListener();
     initContractsListener();
+    initBizInfoListener();
     initChatListeners();
     initContractSettingsListener();
     initUserPrefsListener();
@@ -1801,7 +1806,7 @@ onAuthStateChanged(auth, async (user)=>{
 });
 
 /* ---------- tabs ---------- */
-const ALL_VIEWS = ["dashboard","notices","whereabouts","reserve","checkout","safety","calendar","contracts","chat","bidinfo"];
+const ALL_VIEWS = ["dashboard","notices","whereabouts","reserve","checkout","safety","calendar","contracts","chat","bizinfo"];
 // タブ名 → 対応するダッシュボードのカードID（ダッシュボード自体と安否確認は常時表示なので対象外）
 const DASH_CARD_BY_VIEW = {
   notices: "dash-card-notices",
@@ -1830,6 +1835,8 @@ function applyMyHiddenTabs(){
   if(activeBtn && activeBtn.style.display==="none"){
     const firstVisible = Array.from(document.querySelectorAll("#main-tabs .tab-btn")).find(b=> b.style.display !== "none");
     if(firstVisible) switchToTab(firstVisible.dataset.view);
+  } else if(document.getElementById("view-bizinfo").style.display !== "none"){
+    try{ renderBizInfoTab(); }catch(e){ /* ignore */ }
   }
 }
 /* ---------- ダッシュボードのカードをドラッグ＆ドロップで並び替え ---------- */
@@ -2142,8 +2149,8 @@ function switchToTab(viewName){
     }
     cleanupOldChatMessages();
   }
-  if(viewName==="bidinfo"){
-    try{ reloadBidinfoIframe(); }catch(e){ console.error("[入札情報タブの表示エラー]", e); }
+  if(viewName==="bizinfo"){
+    try{ renderBizInfoTab(); }catch(e){ console.error("[業務情報タブの表示エラー]", e); }
   }
 }
 document.querySelectorAll(".tab-btn").forEach(btn=>{
@@ -7282,11 +7289,61 @@ async function cleanupOldChatMessages(){
   }catch(e){ console.error("[チャット自動削除エラー]", e); }
 }
 
-function reloadBidinfoIframe(){
-  const iframe = document.getElementById("bidinfo-iframe");
-  if(iframe){
-    iframe.src = "https://drive.google.com/file/d/11a9wrLnbDFxI0VLtf6tuD8hO5V19jve6/preview?t=" + Date.now();
+/* =========================================================
+   業務情報（Googleドライブ上のファイルをピル切り替えで表示）
+========================================================= */
+function initBizInfoListener(){
+  onSnapshot(collection(db,"business_info_items"), snap=>{
+    bizInfoItemsAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    bizInfoItemsAll.sort((a,b)=> (a.order??0)-(b.order??0) || (a.name||"").localeCompare(b.name||"","ja"));
+    if(document.getElementById("view-bizinfo").style.display !== "none"){
+      renderBizInfoTab();
+    }
+  }, (err)=>{ console.error("[業務情報取得エラー]", err); });
+}
+// 自分に対して非表示に設定されていない、かつ有効な業務情報だけを対象にする
+function visibleBizInfoItems(){
+  const me = employeesAll.find(e=>(e.email||"").toLowerCase()===(currentUser?.email||"").toLowerCase());
+  const hidden = (me && Array.isArray(me.hiddenTabs)) ? me.hiddenTabs : [];
+  return bizInfoItemsAll.filter(item=> item.enabled!==false && !hidden.includes("bizinfo:"+item.id));
+}
+function renderBizInfoTab(){
+  const row = document.getElementById("bizinfo-pill-row");
+  const emptyEl = document.getElementById("bizinfo-empty");
+  const noteEl = document.getElementById("bizinfo-note");
+  const iframe = document.getElementById("bizinfo-iframe");
+  const items = visibleBizInfoItems();
+  row.innerHTML = "";
+  if(items.length===0){
+    emptyEl.style.display = "block";
+    noteEl.style.display = "none";
+    iframe.style.display = "none";
+    selectedBizInfoId = null;
+    return;
   }
+  emptyEl.style.display = "none";
+  noteEl.style.display = "block";
+  iframe.style.display = "block";
+  if(!items.some(i=>i.id===selectedBizInfoId)){
+    selectedBizInfoId = items[0].id;
+  }
+  items.forEach(item=>{
+    const pill = document.createElement("button");
+    pill.className = "cat-pill" + (item.id===selectedBizInfoId ? " active" : "");
+    pill.textContent = item.name || "";
+    pill.addEventListener("click", ()=>{
+      selectedBizInfoId = item.id;
+      renderBizInfoTab();
+    });
+    row.appendChild(pill);
+  });
+  loadBizInfoIframe();
+}
+function loadBizInfoIframe(){
+  const iframe = document.getElementById("bizinfo-iframe");
+  const item = bizInfoItemsAll.find(i=>i.id===selectedBizInfoId);
+  if(!iframe || !item || !item.fileId) return;
+  iframe.src = `https://drive.google.com/file/d/${item.fileId}/preview?t=${Date.now()}`;
 }
 
 </script>
