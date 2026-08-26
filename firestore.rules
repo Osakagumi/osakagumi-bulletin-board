@@ -56,6 +56,12 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // 利用停止（実質的な「削除」）対象ユーザーの一覧: 本人が自分の状態を確認するために読める必要がある。書き込みは管理者のみ。
+    match /blocked_users/{email} {
+      allow read: if isSignedIn() && (request.auth.token.email == email || isAdmin());
+      allow write: if isAdmin();
+    }
+
     // お知らせ投稿権限一覧: ログインしていれば読めるが、書き込みは管理者のみ
     match /announcement_posters/{email} {
       allow read: if isSignedIn();

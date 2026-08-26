@@ -358,6 +358,7 @@
       <div class="panel">
         <h2>社員一覧（氏名・所属・タブ表示・並び順・電話番号・備考の編集）</h2>
         <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">ログインすると自動的にここへ追加されます。CSV一括登録した場合は社員番号・電話番号・備考も反映されています。「編集」から詳細を変更できます。</p>
+        <button class="btn btn-ghost" id="user-delete-guide-btn" style="border:1px solid var(--line);margin-bottom:14px;">ユーザー削除手順</button>
         <div id="emp-card-list"></div>
       </div>
     </section>
@@ -398,12 +399,40 @@
           <label>備考</label>
           <input type="text" id="emp-edit-memo-input">
         </div>
-        <div class="row-btns" style="justify-content:space-between;">
-          <button class="btn btn-ghost" id="emp-edit-hide-btn" style="border:1px solid var(--danger);color:var(--danger);"></button>
+        <div class="row-btns" style="justify-content:space-between;flex-wrap:wrap;gap:8px;">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn btn-ghost" id="emp-edit-hide-btn" style="border:1px solid var(--danger);color:var(--danger);"></button>
+            <button class="btn btn-danger" id="emp-edit-purge-btn">完全に削除する</button>
+          </div>
           <div style="display:flex;gap:8px;">
             <button class="btn btn-ghost" id="emp-edit-cancel-btn" style="border:1px solid var(--line);">キャンセル</button>
             <button class="btn btn-primary" id="emp-edit-save-btn">保存</button>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ ユーザー削除手順モーダル ============ -->
+    <div class="modal-overlay" id="user-delete-guide-modal">
+      <div class="modal" style="max-width:560px;">
+        <h3>ユーザーを完全に削除する手順</h3>
+        <div style="font-size:12.5px;color:var(--text);line-height:1.8;">
+          <p style="margin:0 0 14px;">
+            「完全に削除する」ボタンでは、社員データの消去と、そのアカウントでの<b>ログインをブロック</b>することができます。ただし、Firebaseの仕組み上、<b>ログイン用アカウント自体（メールアドレス・パスワード）の削除</b>は、管理画面から自動では行えません。本当にアカウントごと消したい場合は、以下の手順でFirebaseコンソールから手動で削除してください。
+          </p>
+          <ol style="margin:0 0 14px;padding-left:20px;">
+            <li style="margin-bottom:10px;">下のリンクから、Firebaseコンソールの「Authentication（ユーザー）」画面を開く</li>
+            <li style="margin-bottom:10px;">削除したい人の<b>メールアドレスを検索</b>して該当行を見つける</li>
+            <li style="margin-bottom:10px;">行の右端にある「⋮」（縦の3点メニュー）をクリックし、「ユーザーを削除」を選択</li>
+            <li style="margin-bottom:10px;">確認ダイアログが出るので「削除」を押して完了</li>
+          </ol>
+          <p style="margin:0 0 14px;color:var(--muted);">
+            ※ 先に「完全に削除する」ボタンで社員データを消去・ログインブロックしておけば、この手順を行うまでの間もそのユーザーはアプリを利用できません。手順④の作業は、都合の良いタイミングでまとめて行っていただいて構いません。
+          </p>
+          <a href="https://console.firebase.google.com/project/osakagumi-bulletin-board/authentication/users" target="_blank" rel="noopener noreferrer" class="btn btn-primary" style="display:inline-block;text-decoration:none;">Firebaseコンソール（Authentication）を開く ↗</a>
+        </div>
+        <div class="row-btns">
+          <button class="btn btn-ghost" id="user-delete-guide-close-btn" style="border:1px solid var(--line);">閉じる</button>
         </div>
       </div>
     </div>
@@ -2554,8 +2583,35 @@ function openEmpEditModal(emp){
     }
   };
 
+  const purgeBtn = document.getElementById("emp-edit-purge-btn");
+  purgeBtn.onclick = async ()=>{
+    const msg = `${emp.name || emp.email}（${emp.email}）を完全に削除しますか？\n\n` +
+      `・社員データが完全に消去されます（元に戻せません）\n` +
+      `・このメールアドレスでは今後ログインできなくなります\n\n` +
+      `※ログイン用アカウント自体（Firebase Authentication）は別途手動での削除が必要です。「ユーザー削除手順」ボタンから手順をご確認ください。`;
+    if(!confirm(msg)) return;
+    try{
+      await setDoc(doc(db,"blocked_users", emp.email), {
+        blockedAt: new Date().toISOString(),
+        blockedBy: currentUser.email,
+        name: emp.name || ""
+      });
+      await deleteDoc(doc(db,"employees", emp.email));
+      toast("削除し、ログインをブロックしました。");
+      document.getElementById("emp-edit-modal").classList.remove("show");
+    }catch(e){
+      toast("削除に失敗しました。権限をご確認ください。");
+    }
+  };
+
   document.getElementById("emp-edit-modal").classList.add("show");
 }
+document.getElementById("user-delete-guide-btn")?.addEventListener("click", ()=>{
+  document.getElementById("user-delete-guide-modal").classList.add("show");
+});
+document.getElementById("user-delete-guide-close-btn")?.addEventListener("click", ()=>{
+  document.getElementById("user-delete-guide-modal").classList.remove("show");
+});
 document.getElementById("emp-edit-cancel-btn")?.addEventListener("click", ()=>{
   document.getElementById("emp-edit-modal").classList.remove("show");
 });

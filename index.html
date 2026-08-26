@@ -1735,6 +1735,18 @@ document.getElementById("logout-btn").addEventListener("click", ()=> signOut(aut
 
 onAuthStateChanged(auth, async (user)=>{
   if(user){
+    // 利用停止（実質的な「削除」）対象かどうかを最初に確認する。対象であれば即座にログアウトさせる。
+    try{
+      const blockedDoc = await getDoc(doc(db, "blocked_users", user.email));
+      if(blockedDoc.exists()){
+        await signOut(auth);
+        document.getElementById("login-error").textContent = "このアカウントはご利用いただけません。管理者にお問い合わせください。";
+        return;
+      }
+    }catch(e){
+      // ブロック確認自体が失敗した場合は、念のため通常通りログインは継続する
+      console.error("[利用停止確認エラー]", e);
+    }
     currentUser = user;
     document.getElementById("login-screen").style.display = "none";
     document.getElementById("app").style.display = "flex";
