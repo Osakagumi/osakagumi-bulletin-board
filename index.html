@@ -5315,6 +5315,28 @@ function buildSafetySendForm(){
   wrap.querySelector("#safety-send-launch-btn").addEventListener("click", ()=> launchSafetyCampaignFromGeneralScreen());
   return wrap;
 }
+const MAX_SAFETY_CAMPAIGNS = 5;
+async function deleteSafetyCampaignWithResponses(campaignId){
+  const respSnap = await getDocs(query(collection(db,"safety_responses"), where("campaignId","==", campaignId)));
+  for(const d of respSnap.docs){
+    await deleteDoc(doc(db,"safety_responses", d.id));
+  }
+  await deleteDoc(doc(db,"safety_campaigns", campaignId));
+}
+// 発信のたびに呼び出し、最大保存件数(MAX_SAFETY_CAMPAIGNS)を超えた分を古い順に削除する
+async function enforceSafetyCampaignLimit(){
+  try{
+    const snap = await getDocs(query(collection(db,"safety_campaigns"), orderBy("createdAt","desc")));
+    const all = snap.docs.map(d=>({id:d.id}));
+    if(all.length <= MAX_SAFETY_CAMPAIGNS) return;
+    const toDelete = all.slice(MAX_SAFETY_CAMPAIGNS); // 新しい順に並んでいるので、はみ出した古い分
+    for(const c of toDelete){
+      await deleteSafetyCampaignWithResponses(c.id);
+    }
+  }catch(e){
+    console.error("[安否確認 上限超過分の自動削除エラー]", e);
+  }
+}
 async function launchSafetyCampaignFromGeneralScreen(){
   const title = document.getElementById("safety-send-title-input").value.trim();
   const message = document.getElementById("safety-send-message-input").value.trim();
@@ -5352,6 +5374,7 @@ async function launchSafetyCampaignFromGeneralScreen(){
     document.getElementById("safety-send-title-input").value = "";
     document.getElementById("safety-send-message-input").value = "";
     toast("安否確認を発信しました。");
+    await enforceSafetyCampaignLimit();
     if(sendEmail){
       await sendSafetyEmailsFromGeneralScreen(newCampaignRef.id, title, message, recipients, statusEl);
     }

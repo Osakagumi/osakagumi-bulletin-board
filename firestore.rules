@@ -245,7 +245,7 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create, update: if isSignedIn() &&
         request.resource.data.userId == request.auth.uid;
-      allow delete: if isAdmin();
+      allow delete: if isSafetySender();
     }
 
     // 敷鉄板の種類マスタ（6m・3mなど、総数・単価）: 全員が読める。
