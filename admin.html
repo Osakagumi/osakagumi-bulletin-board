@@ -324,6 +324,53 @@
       </div>
 
       <div class="panel">
+        <h2>社員を1件登録</h2>
+        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
+          この画面から1人ずつログインアカウントを作成できます。メールアドレス・パスワードは必須、他は省略可です。所属はCtrl（Macは⌘）+クリックで複数選択できます。
+        </p>
+        <div class="form-grid">
+          <div class="field">
+            <label>社員番号</label>
+            <input type="text" id="single-emp-no">
+          </div>
+          <div class="field">
+            <label>氏名</label>
+            <input type="text" id="single-emp-name">
+          </div>
+          <div class="field">
+            <label>所属</label>
+            <select id="single-emp-dept" multiple size="4"></select>
+          </div>
+          <div class="field">
+            <label>メールアドレス <span style="color:var(--danger);">*</span></label>
+            <input type="email" id="single-emp-email" placeholder="you@osakagumi.co.jp">
+          </div>
+          <div class="field">
+            <label>パスワード <span style="color:var(--danger);">*</span></label>
+            <input type="text" id="single-emp-password" placeholder="6文字以上">
+          </div>
+          <div class="field">
+            <label>電話番号</label>
+            <input type="text" id="single-emp-phone">
+          </div>
+          <div class="field full">
+            <label>備考</label>
+            <input type="text" id="single-emp-memo">
+          </div>
+          <div class="field" style="display:flex;align-items:center;gap:6px;">
+            <input type="checkbox" id="single-emp-admin" style="width:auto;">
+            <label style="margin:0;">管理者にする</label>
+          </div>
+          <div class="field" style="display:flex;align-items:center;gap:6px;">
+            <input type="checkbox" id="single-emp-poster" style="width:auto;">
+            <label style="margin:0;">お知らせ投稿を許可する</label>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="single-emp-register-btn">登録する</button>
+        <div id="single-emp-status" style="font-size:12.5px;color:var(--muted);margin-top:10px;white-space:pre-line;"></div>
+      </div>
+
+      <div class="panel">
         <h2>CSVで一括登録</h2>
         <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
           1行目はヘッダー行として無視されます。2行目以降を1人ずつ登録します。<br>
@@ -1771,6 +1818,7 @@ function initDepartmentsListener(){
     renderEmployees();
     renderContractDefaultDeptSelect();
     populateEqManagingDeptSelect();
+    populateSingleEmpDeptSelect();
   });
 }
 function renderDepartments(){
@@ -3008,6 +3056,86 @@ function renderUserImportPreview(){
   panel.style.display = "block";
   document.getElementById("userimport-status").textContent = "";
 }
+
+function populateSingleEmpDeptSelect(){
+  const sel = document.getElementById("single-emp-dept");
+  if(!sel) return;
+  sel.innerHTML = "";
+  departmentsAll.forEach(d=>{
+    const opt = document.createElement("option");
+    opt.value = d.id; opt.textContent = d.name;
+    sel.appendChild(opt);
+  });
+}
+document.getElementById("single-emp-register-btn")?.addEventListener("click", async ()=>{
+  const statusEl = document.getElementById("single-emp-status");
+  const email = document.getElementById("single-emp-email").value.trim();
+  const password = document.getElementById("single-emp-password").value;
+  const name = document.getElementById("single-emp-name").value.trim();
+  const employeeNo = document.getElementById("single-emp-no").value.trim();
+  const phone = document.getElementById("single-emp-phone").value.trim();
+  const memo = document.getElementById("single-emp-memo").value.trim();
+  const isAdminFlag = document.getElementById("single-emp-admin").checked;
+  const isPosterFlag = document.getElementById("single-emp-poster").checked;
+  const selectedDepts = [...document.getElementById("single-emp-dept").selectedOptions].map(o=>o.value);
+
+  if(!email || !password){
+    statusEl.textContent = "メールアドレスとパスワードは必須です。";
+    statusEl.style.color = "var(--danger)";
+    return;
+  }
+  statusEl.style.color = "var(--muted)";
+  statusEl.textContent = "登録中…";
+
+  // 管理者自身のログイン状態を保ったまま作成するため、CSV一括登録と同じくセカンダリのFirebaseアプリを使う
+  const secondaryApp = initializeApp(firebaseConfig, "singleUserCreate_" + Date.now());
+  const secondaryAuth = getAuth(secondaryApp);
+  try{ await setPersistence(secondaryAuth, inMemoryPersistence); }catch(e){}
+
+  let accountResult = "";
+  try{
+    await createUserWithEmailAndPassword(secondaryAuth, email, password);
+    await signOut(secondaryAuth);
+    accountResult = "アカウントを作成しました。";
+  }catch(e){
+    if(e.code === "auth/email-already-in-use"){
+      accountResult = "（このメールアドレスは既にアカウントが存在します。社員情報のみ登録・更新します）";
+    } else {
+      statusEl.textContent = "アカウント作成に失敗しました：" + (e.code || e.message);
+      statusEl.style.color = "var(--danger)";
+      return;
+    }
+  }
+
+  try{
+    await setDoc(doc(db,"employees", email), {
+      employeeNo, name: name || email.split("@")[0], email,
+      departments: selectedDepts,
+      department: selectedDepts[0] || "", // 旧バージョン互換用
+      phone, memo, order: 0,
+      createdBy: currentUser.email,
+      importedAt: new Date().toISOString()
+    }, { merge: true });
+    if(isAdminFlag){
+      await setDoc(doc(db,"admins", email), { addedBy: currentUser.email, addedAt: new Date().toISOString() });
+    }
+    if(isPosterFlag){
+      await setDoc(doc(db,"announcement_posters", email), { addedBy: currentUser.email, addedAt: new Date().toISOString() });
+    }
+    statusEl.textContent = accountResult + " 社員情報を登録しました。";
+    statusEl.style.color = "var(--muted)";
+    toast("登録しました。");
+    // フォームをクリア
+    ["single-emp-no","single-emp-name","single-emp-email","single-emp-password","single-emp-phone","single-emp-memo"]
+      .forEach(id=> document.getElementById(id).value = "");
+    document.getElementById("single-emp-admin").checked = false;
+    document.getElementById("single-emp-poster").checked = false;
+    document.getElementById("single-emp-dept").selectedIndex = -1;
+  }catch(e){
+    statusEl.textContent = accountResult + " ただし社員情報の登録に失敗しました：" + (e.code || e.message);
+    statusEl.style.color = "var(--danger)";
+  }
+});
 
 document.getElementById("userimport-execute-btn").addEventListener("click", async ()=>{
   if(userImportRows.length===0) return;
