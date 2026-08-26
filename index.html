@@ -1812,7 +1812,6 @@ onAuthStateChanged(auth, async (user)=>{
     ensureSteelPlateCategoryAndMigrate();
 
     if(urlPreselect.campaign){
-      switchToTab("safetyresponse");
       history.replaceState(null, "", location.pathname);
     }
     if(isDisplayMode){
@@ -5282,10 +5281,16 @@ function initSafetyCampaignListener(){
       const respSnap = await getDoc(doc(db,"safety_responses", `${activeSafetyCampaign.id}_${currentUser.uid}`));
       mySafetyResponse = respSnap.exists() ? respSnap.data() : null;
     }catch(e){ mySafetyResponse = null; }
+    const shouldRedirectToResponse = urlPreselect.campaign && urlPreselect.campaign===activeSafetyCampaign.id;
     updateSafetyTabVisibility();
     renderSafety();
     renderSafetyResponse();
     refreshDashboardIfActive();
+    // メールのリンクから開いた場合、安否回答タブがちゃんと見えるようになったこのタイミングで切り替える
+    // （データ読み込み前に切り替えると、他の初期化処理に「非表示タブ」と誤認されて戻されてしまうため）
+    if(shouldRedirectToResponse){
+      switchToTab("safetyresponse");
+    }
   }, (err)=>{ console.error("[安否確認取得エラー]", err); });
 }
 
