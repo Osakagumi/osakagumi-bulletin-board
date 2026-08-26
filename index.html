@@ -747,6 +747,7 @@
       <button class="tab-btn" data-view="chat">チャット<span id="chat-tab-badge" class="chat-conv-dot" style="display:none;margin-left:5px;vertical-align:middle;"></span></button>
       <button class="tab-btn" data-view="reserve">予約</button>
       <button class="tab-btn" data-view="contracts">入札</button>
+      <button class="tab-btn" data-view="bidinfo">入札情報</button>
       <button class="tab-btn" data-view="checkout">資機材</button>
       <button class="tab-btn" data-view="safety" style="display:none;">安否確認</button>
       <button class="tab-reorder-btn" id="tab-reorder-toggle" title="タブの並び替え">並び替え</button>
@@ -1098,6 +1099,15 @@
           </label>
         </div>
         <div id="contract-list"></div>
+      </section>
+
+      <!-- ---- 入札情報（Googleドライブ上のExcelファイルを埋め込み表示） ---- -->
+      <section id="view-bidinfo" style="display:none;">
+        <div class="section-toolbar">
+          <a href="https://drive.google.com/file/d/1TJooT6NgaTCyzSv_hP4Kd7m3Q1hjBAz1/view" target="_blank" rel="noopener noreferrer" class="btn-ghost" style="border:1px solid var(--line);text-decoration:none;display:inline-block;">Googleドライブで開く ↗</a>
+        </div>
+        <p style="font-size:12px;color:var(--muted);margin:-6px 0 12px;">このファイルはGoogleドライブ上のExcelファイルをそのまま表示しています（閲覧専用）。内容の編集は、パソコンの同期フォルダ内のファイルから直接行ってください。</p>
+        <iframe src="https://drive.google.com/file/d/1TJooT6NgaTCyzSv_hP4Kd7m3Q1hjBAz1/preview" style="width:100%;height:75vh;border:1px solid var(--line);border-radius:10px;background:#fff;" allow="autoplay"></iframe>
       </section>
 
       <!-- ---- チャット（1対1・当日分のみ保持） ---- -->
@@ -1469,9 +1479,9 @@
 
   <div class="toast" id="toast"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js" async></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js" async></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
@@ -1489,9 +1499,22 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 initStorageHelper(app);
 
-const emailjsReady = !!(window.emailjs && EMAILJS_CONFIG.publicKey && !EMAILJS_CONFIG.publicKey.startsWith("YOUR_"));
-if(emailjsReady){
-  window.emailjs.init(EMAILJS_CONFIG.publicKey);
+let emailjsReady = false;
+function initEmailJsIfAvailable(){
+  if(window.emailjs && EMAILJS_CONFIG.publicKey && !EMAILJS_CONFIG.publicKey.startsWith("YOUR_")){
+    window.emailjs.init(EMAILJS_CONFIG.publicKey);
+    emailjsReady = true;
+    return true;
+  }
+  return false;
+}
+if(!initEmailJsIfAvailable()){
+  // CDNの読み込みが非同期（async）になったため、まだ間に合っていない場合は少し待って再確認する
+  let emailjsRetries = 0;
+  const emailjsRetryTimer = setInterval(()=>{
+    emailjsRetries++;
+    if(initEmailJsIfAvailable() || emailjsRetries > 25){ clearInterval(emailjsRetryTimer); }
+  }, 200);
 }
 function indexPageUrl(){
   return location.href.split(/[?#]/)[0];
@@ -1781,7 +1804,7 @@ onAuthStateChanged(auth, async (user)=>{
 });
 
 /* ---------- tabs ---------- */
-const ALL_VIEWS = ["dashboard","notices","whereabouts","reserve","checkout","safety","calendar","contracts","chat"];
+const ALL_VIEWS = ["dashboard","notices","whereabouts","reserve","checkout","safety","calendar","contracts","chat","bidinfo"];
 // タブ名 → 対応するダッシュボードのカードID（ダッシュボード自体と安否確認は常時表示なので対象外）
 const DASH_CARD_BY_VIEW = {
   notices: "dash-card-notices",
