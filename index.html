@@ -942,6 +942,9 @@
 
       <!-- ---- ダッシュボード ---- -->
       <section id="view-dashboard">
+        <div id="dash-startup-btn-wrap" style="display:none;text-align:right;margin-bottom:10px;">
+          <button type="button" class="btn-ghost" id="dash-startup-btn" style="border:1px solid var(--line);">スタートアップに登録する</button>
+        </div>
         <div class="dash-grid">
           <div class="dash-card" id="dash-card-safety" style="display:none;">
             <h3>⚠ 安否確認</h3>
@@ -1349,6 +1352,41 @@
       <p style="font-size:12px;color:var(--muted);word-break:break-all;" id="qr-modal-url"></p>
       <div class="row-btns" style="justify-content:center;">
         <button class="btn-ghost" id="qr-modal-close" style="border:1px solid var(--line);">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ スタートアップ登録 案内モーダル ============ -->
+  <div class="modal-overlay" id="startup-guide-modal">
+    <div class="modal" style="max-width:520px;">
+      <h3>スタートアップに登録する</h3>
+      <div style="font-size:12.5px;color:var(--text);line-height:1.8;">
+        <p style="margin:0 0 14px;">
+          ブラウザの仕組み上、ボタン一つでパソコンの起動設定を自動的に変更することはできません。代わりに、このポータルを開くための<b>ショートカットファイル</b>をダウンロードできますので、それを「スタートアップ」フォルダに置くことで、パソコン起動時に自動的にこのページが開くようになります。
+        </p>
+        <div id="startup-guide-windows" style="display:none;">
+          <ol style="margin:0 0 14px;padding-left:20px;">
+            <li style="margin-bottom:10px;">下の「ショートカットをダウンロード」を押す</li>
+            <li style="margin-bottom:10px;">キーボードで<b>Windowsキー＋R</b>を押し、「ファイル名を指定して実行」に<b>shell:startup</b>と入力してEnter</li>
+            <li style="margin-bottom:10px;">開いたフォルダに、ダウンロードしたショートカットファイルを移動（またはコピー）する</li>
+            <li style="margin-bottom:10px;">次回パソコン起動時から、自動的にこのページが開きます</li>
+          </ol>
+        </div>
+        <div id="startup-guide-mac" style="display:none;">
+          <ol style="margin:0 0 14px;padding-left:20px;">
+            <li style="margin-bottom:10px;">下の「ショートカットをダウンロード」を押す</li>
+            <li style="margin-bottom:10px;">「システム設定」→「一般」→「ログイン項目」を開く</li>
+            <li style="margin-bottom:10px;">「＋」ボタンから、ダウンロードしたショートカットファイルを追加する</li>
+            <li style="margin-bottom:10px;">次回ログイン時から、自動的にこのページが開きます</li>
+          </ol>
+        </div>
+        <p style="margin:0 0 14px;color:var(--muted);">
+          ※ お使いのブラウザの設定によっては、パソコン起動後に手動でブラウザを開く必要がある場合があります。
+        </p>
+      </div>
+      <div class="row-btns">
+        <button class="btn-ghost" id="startup-guide-close-btn" style="border:1px solid var(--line);">閉じる</button>
+        <button class="btn-primary" id="startup-guide-download-btn">ショートカットをダウンロード</button>
       </div>
     </div>
   </div>
@@ -7720,6 +7758,41 @@ function loadBizInfoIframe(){
   if(!iframe || !item || !item.fileId) return;
   iframe.src = `https://drive.google.com/file/d/${item.fileId}/preview?t=${Date.now()}`;
 }
+
+/* ---------- スタートアップ登録（PCのみ） ---------- */
+const isMobileDevice = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+const isMacDevice = /Mac/i.test(navigator.userAgent) && !isMobileDevice;
+if(!isMobileDevice){
+  const wrap = document.getElementById("dash-startup-btn-wrap");
+  if(wrap) wrap.style.display = "block";
+}
+document.getElementById("dash-startup-btn")?.addEventListener("click", ()=>{
+  document.getElementById("startup-guide-windows").style.display = isMacDevice ? "none" : "block";
+  document.getElementById("startup-guide-mac").style.display = isMacDevice ? "block" : "none";
+  document.getElementById("startup-guide-modal").classList.add("show");
+});
+document.getElementById("startup-guide-close-btn")?.addEventListener("click", ()=>{
+  document.getElementById("startup-guide-modal").classList.remove("show");
+});
+document.getElementById("startup-guide-download-btn")?.addEventListener("click", ()=>{
+  const url = location.origin + location.pathname;
+  const a = document.createElement("a");
+  if(isMacDevice){
+    const content = `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n\t<key>URL</key>\n\t<string>${url}</string>\n</dict>\n</plist>\n`;
+    const blob = new Blob([content], { type: "application/octet-stream" });
+    a.href = URL.createObjectURL(blob);
+    a.download = "社内ポータル.webloc";
+  } else {
+    const content = `[InternetShortcut]\r\nURL=${url}\r\n`;
+    const blob = new Blob([content], { type: "application/internet-shortcut" });
+    a.href = URL.createObjectURL(blob);
+    a.download = "社内ポータル.url";
+  }
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=> URL.revokeObjectURL(a.href), 3000);
+});
 
 </script>
 </body>
