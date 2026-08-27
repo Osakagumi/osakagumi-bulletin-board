@@ -2304,7 +2304,7 @@ function renderCheckoutCategoryRow(){
   const row = document.getElementById("checkout-cat-row");
   if(!row) return;
   row.innerHTML = "";
-  const cats = categoriesAll.filter(cat=>cat.mode==="checkout" || cat.mode==="inventory");
+  const cats = categoriesAll.filter(cat=> (cat.mode==="checkout" || cat.mode==="inventory") && equipmentAll.some(e=>e.category===cat.id));
   if(selectedCheckoutCategory===null || !cats.some(c=>c.id===selectedCheckoutCategory)){
     selectedCheckoutCategory = cats[0]?.id || null;
   }

@@ -232,7 +232,6 @@
       <div class="panel">
         <h2>登録済み設備一覧</h2>
         <button class="btn btn-ghost" id="eq-export-btn" style="border:1px solid var(--line);margin-bottom:10px;">CSVでエクスポート</button>
-        <button class="btn btn-ghost" id="eq-dedupe-btn" style="border:1px solid var(--danger);color:var(--danger);margin-bottom:10px;">重複データを整理</button>
         <table>
           <thead><tr><th>設備名</th><th>管理番号</th><th>カテゴリ</th><th>管理部門</th><th>備考</th><th>表示順</th><th>表示設定</th><th>貸出状況</th><th>サイネージ</th><th>操作</th></tr></thead>
           <tbody id="eq-table-body"></tbody>
@@ -1236,6 +1235,7 @@ document.getElementById("eq-category").addEventListener("change", ()=>{
 function startEditEquipment(eq){
   editingEquipmentId = eq.id;
   document.getElementById("eq-form-title").textContent = "設備を編集：" + eq.name;
+  document.getElementById("eq-form-title").scrollIntoView({ behavior: "smooth", block: "start" });
   document.getElementById("eq-name").value = eq.name || "";
   document.getElementById("eq-asset-no").value = eq.assetNo || "";
   document.getElementById("eq-category").value = eq.category || (categoriesAll[0]?.id || "");
@@ -1501,41 +1501,6 @@ document.getElementById("eq-export-btn")?.addEventListener("click", ()=>{
   a.click();
   a.remove();
   setTimeout(()=> URL.revokeObjectURL(a.href), 3000);
-});
-
-document.getElementById("eq-dedupe-btn")?.addEventListener("click", async ()=>{
-  // 名前・管理番号が同じものを「同じ設備」とみなしてグループ化する
-  const groups = new Map();
-  equipmentAll.forEach(eq=>{
-    const key = `${eq.name}|||${eq.assetNo||""}`;
-    if(!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(eq);
-  });
-  const dupGroups = [...groups.values()].filter(g=>g.length>1);
-  if(dupGroups.length===0){
-    toast("重複しているデータは見つかりませんでした。");
-    return;
-  }
-  const totalDeleteCount = dupGroups.reduce((sum,g)=>sum+g.length-1, 0);
-  const listPreview = dupGroups.map(g=>`・${g[0].name}${g[0].assetNo?`（${g[0].assetNo}）`:""} … ${g.length}件`).join("\n");
-  const msg = `名前・管理番号が同じ設備が ${dupGroups.length} 種類見つかりました（合計 ${totalDeleteCount} 件を削除して1件ずつにまとめます）。\n\n${listPreview}\n\n` +
-    `各グループは表示順が一番小さいものを残し、それ以外を削除します。過去の貸出履歴・予約履歴が削除される設備に紐づいている場合、その履歴との対応関係が失われる可能性があります。\n\nよろしいですか？`;
-  if(!confirm(msg)) return;
-
-  let deleted = 0, fail = 0;
-  for(const group of dupGroups){
-    const sorted = [...group].sort((a,b)=> (a.order??0)-(b.order??0));
-    const remove = sorted.slice(1); // 先頭（表示順が一番小さいもの）を残す
-    for(const eq of remove){
-      try{
-        await deleteDoc(doc(db,"equipment", eq.id));
-        deleted++;
-      }catch(e){
-        fail++;
-      }
-    }
-  }
-  toast(`整理が完了しました（${deleted}件削除${fail>0 ? `・${fail}件失敗` : ""}）。`);
 });
 
 /* ============ 予約状況（全体） ============ */
