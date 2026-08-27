@@ -1835,7 +1835,9 @@ onAuthStateChanged(auth, async (user)=>{
     isCalendarEditor = isAdmin || !!(calEditorDoc && calEditorDoc.exists());
     isContractEditor = isAdmin || !!(contractEditorDoc && contractEditorDoc.exists());
     isSafetySender = isAdmin || !!(safetySenderDoc && safetySenderDoc.exists());
-    document.getElementById("admin-link").style.display = isAdmin ? "inline-block" : "none";
+    document.getElementById("admin-link").style.display =
+      (isAdmin || isPoster || isWhereaboutsEditor || isEquipmentManager || isCalendarEditor || isContractEditor)
+        ? "inline-block" : "none";
     document.getElementById("notice-new-btn").style.display = isPoster ? "inline-block" : "none";
     document.getElementById("contract-new-btn").style.display = isContractEditor ? "inline-block" : "none";
     document.getElementById("wb-preset-tab-btn").style.display = (!isDisplayMode && (isAdmin || isWhereaboutsEditor)) ? "inline-block" : "none";
