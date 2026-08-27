@@ -1232,6 +1232,15 @@ document.getElementById("eq-category").addEventListener("change", ()=>{
   applyEquipmentFormModeUI();
 });
 
+// 固定表示（スティッキー）のヘッダー・タブバーに見出しが隠れないよう、その高さ分だけ余分にスクロールする
+function scrollToEquipmentFormTop(){
+  const target = document.getElementById("eq-form-title");
+  const header = document.querySelector("header");
+  const nav = document.getElementById("main-tabs");
+  const stickyOffset = (header?.offsetHeight || 0) + (nav?.offsetHeight || 0) + 16;
+  const top = target.getBoundingClientRect().top + window.pageYOffset - stickyOffset;
+  window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+}
 function startEditEquipment(eq){
   editingEquipmentId = eq.id;
   document.getElementById("eq-form-title").textContent = "設備を編集：" + eq.name;
@@ -1250,7 +1259,7 @@ function startEditEquipment(eq){
   document.getElementById("eq-save-btn").textContent = "変更を保存";
   document.getElementById("eq-cancel-edit").style.display = "inline-block";
   // フォームの表示項目が全部切り替わり終わってから（レイアウトが確定してから）スクロールする
-  document.getElementById("eq-form-title").scrollIntoView({ behavior: "smooth", block: "start" });
+  scrollToEquipmentFormTop();
 }
 
 document.getElementById("eq-cancel-edit").addEventListener("click", resetEquipmentForm);
