@@ -231,10 +231,42 @@
 
       <div class="panel">
         <h2>登録済み設備一覧</h2>
+        <button class="btn btn-ghost" id="eq-export-btn" style="border:1px solid var(--line);margin-bottom:10px;">CSVでエクスポート</button>
         <table>
           <thead><tr><th>設備名</th><th>管理番号</th><th>カテゴリ</th><th>管理部門</th><th>備考</th><th>表示順</th><th>表示設定</th><th>貸出状況</th><th>サイネージ</th><th>操作</th></tr></thead>
           <tbody id="eq-table-body"></tbody>
         </table>
+      </div>
+
+      <div class="panel">
+        <h2>設備をCSVで一括登録</h2>
+        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
+          1行目はヘッダー行として無視されます。2行目以降を1件ずつ登録します。<br>
+          列の順番：<b>設備名, 管理番号, カテゴリ名, 管理部門名, 備考, 表示順, 総数, 単価</b><br>
+          必須は「設備名」「カテゴリ名」のみで、他は省略可です。<br>
+          カテゴリ名・管理部門名は、それぞれ既に登録済みの名称をそのまま入力してください（一致しない場合、カテゴリ未指定の行は登録されず、管理部門は未設定として登録されます）。<br>
+          「総数」「単価」は、カテゴリの方式が「在庫数管理」の場合のみ使われます（それ以外のカテゴリでは無視されます）。
+        </p>
+        <div class="field full" style="margin-bottom:12px;">
+          <label>サンプル</label>
+          <pre style="background:#F7F8FA;border:1px solid var(--line);border-radius:7px;padding:10px 12px;font-size:12px;overflow-x:auto;">設備名,管理番号,カテゴリ名,管理部門名,備考,表示順,総数,単価
+トータルステーション,ST-001,測量機器,工務部,,10,,
+敷鉄板6m,,敷鉄板,工務部,,20,50,3000</pre>
+        </div>
+        <div class="field full">
+          <label>CSVファイルを選択</label>
+          <input type="file" id="eqimport-file" accept=".csv,text/csv">
+        </div>
+        <button class="btn btn-ghost" id="eqimport-preview-btn" style="border:1px solid var(--line);margin-top:10px;">内容を確認</button>
+        <div class="panel" id="eqimport-preview-panel" style="display:none;">
+          <h2>登録内容の確認（<span id="eqimport-count">0</span>件）</h2>
+          <table>
+            <thead><tr><th>設備名</th><th>管理番号</th><th>カテゴリ</th><th>管理部門</th><th>備考</th><th>表示順</th><th>総数</th><th>単価</th></tr></thead>
+            <tbody id="eqimport-preview-body"></tbody>
+          </table>
+          <button class="btn btn-primary" id="eqimport-execute-btn" style="margin-top:12px;">登録を実行</button>
+          <div id="eqimport-status" style="font-size:12.5px;color:var(--muted);margin-top:10px;white-space:pre-line;"></div>
+        </div>
       </div>
     </section>
 
@@ -1292,6 +1324,162 @@ async function deleteEquipment(eq){
     toast("削除に失敗しました。");
   }
 }
+
+/* ============================================================
+   設備のCSV一括登録
+============================================================ */
+let eqImportRows = [];
+function categoryIdByName(name){
+  if(!name) return "";
+  const cat = categoriesAll.find(c=>c.label===name);
+  return cat ? cat.id : "";
+}
+function parseEquipmentCsv(text){
+  text = text.replace(/^\uFEFF/, "");
+  const lines = text.split(/\r\n|\n|\r/).filter(l=>l.trim().length>0);
+  const rows = [];
+  for(let i=1;i<lines.length;i++){ // 1行目はヘッダーとして無視
+    const cols = parseCsvLine(lines[i]);
+    if(cols.length===0) continue;
+    const [name, assetNo, categoryName, deptName, note, order, totalCount, unitPrice] = cols;
+    if(!name || !name.trim()) continue;
+    rows.push({
+      name: name.trim(),
+      assetNo: (assetNo||"").trim(),
+      categoryName: (categoryName||"").trim(),
+      deptName: (deptName||"").trim(),
+      note: (note||"").trim(),
+      order: Number(order)||0,
+      totalCount: Number(totalCount)||0,
+      unitPrice: Number(unitPrice)||0
+    });
+  }
+  return rows;
+}
+document.getElementById("eqimport-preview-btn")?.addEventListener("click", async ()=>{
+  const fileInput = document.getElementById("eqimport-file");
+  const file = fileInput.files[0];
+  if(!file){ toast("CSVファイルを選択してください。"); return; }
+  const text = await file.text();
+  eqImportRows = parseEquipmentCsv(text);
+  const panel = document.getElementById("eqimport-preview-panel");
+  const body = document.getElementById("eqimport-preview-body");
+  document.getElementById("eqimport-count").textContent = eqImportRows.length;
+  body.innerHTML = "";
+  if(eqImportRows.length===0){
+    body.innerHTML = `<tr><td colspan="8" class="empty">読み取れる行がありませんでした。CSVの形式をご確認ください。</td></tr>`;
+    panel.style.display = "block";
+    return;
+  }
+  eqImportRows.forEach(row=>{
+    const cat = categoriesAll.find(c=>c.label===row.categoryName);
+    const catCellHtml = row.categoryName
+      ? escapeHtml(row.categoryName) + (cat ? "" : "（未登録・この行は登録されません）")
+      : "（未入力・この行は登録されません）";
+    const isInventory = cat && cat.mode==="inventory";
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHtml(row.name)}</td>
+      <td>${escapeHtml(row.assetNo)}</td>
+      <td>${catCellHtml}</td>
+      <td>${row.deptName ? escapeHtml(row.deptName) + (departmentIdByName(row.deptName) ? "" : "（未登録・未設定になります）") : "未設定"}</td>
+      <td style="max-width:160px;color:var(--muted);">${escapeHtml(row.note)}</td>
+      <td>${row.order}</td>
+      <td>${isInventory ? row.totalCount : "-"}</td>
+      <td>${isInventory ? row.unitPrice : "-"}</td>
+    `;
+    body.appendChild(tr);
+  });
+  panel.style.display = "block";
+});
+document.getElementById("eqimport-execute-btn")?.addEventListener("click", async ()=>{
+  const statusEl = document.getElementById("eqimport-status");
+  let ok = 0, skip = 0, fail = 0;
+  const failDetails = [];
+  for(const row of eqImportRows){
+    const categoryId = categoryIdByName(row.categoryName);
+    if(!categoryId){
+      skip++;
+      statusEl.textContent = `処理中… ${ok+skip+fail}/${eqImportRows.length}（成功${ok}・スキップ${skip}・失敗${fail}）`;
+      continue;
+    }
+    const cat = categoriesAll.find(c=>c.id===categoryId);
+    const isInventory = cat && cat.mode==="inventory";
+    const payload = {
+      name: row.name,
+      assetNo: row.assetNo,
+      category: categoryId,
+      managingDepartment: departmentIdByName(row.deptName),
+      note: row.note,
+      order: row.order,
+      active: true
+    };
+    if(isInventory){
+      payload.totalCount = row.totalCount;
+      payload.unitPricePerDay = row.unitPrice;
+    } else {
+      payload.lastInspectionDate = "";
+      payload.signageEnabled = false;
+      payload.status = "in_stock";
+      payload.holderEmail = "";
+      payload.holderName = "";
+      payload.holderSince = null;
+      payload.returnDueDate = "";
+    }
+    try{
+      await addDoc(collection(db,"equipment"), payload);
+      ok++;
+    }catch(e){
+      fail++;
+      failDetails.push(`${row.name}: ${e.code || e.message}`);
+    }
+    statusEl.textContent = `処理中… ${ok+skip+fail}/${eqImportRows.length}（成功${ok}・スキップ${skip}・失敗${fail}）`;
+    await new Promise(r=>setTimeout(r, 200));
+  }
+  let summary = `完了：登録${ok}件・カテゴリ未一致でスキップ${skip}件・失敗${fail}件`;
+  if(failDetails.length>0){
+    summary += "\n\n【失敗の詳細】\n" + failDetails.join("\n");
+  }
+  statusEl.textContent = summary;
+  toast("設備のCSV一括登録が完了しました。");
+});
+
+// CSVの1セル分をエスケープする（カンマ・改行・ダブルクォートを含む場合のみ " " で囲む）
+function csvEscapeCell(value){
+  const s = String(value ?? "");
+  if(/[",\n\r]/.test(s)){
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
+}
+document.getElementById("eq-export-btn")?.addEventListener("click", ()=>{
+  const header = ["設備名","管理番号","カテゴリ名","管理部門名","備考","表示順","総数","単価"];
+  const rows = [header];
+  equipmentAll.forEach(eq=>{
+    const cat = catInfo(eq.category);
+    const isInventory = cat && cat.mode==="inventory";
+    rows.push([
+      eq.name || "",
+      eq.assetNo || "",
+      cat ? cat.label : "",
+      eq.managingDepartment ? departmentNameById(eq.managingDepartment) : "",
+      eq.note || "",
+      eq.order ?? 0,
+      isInventory ? (eq.totalCount ?? 0) : "",
+      isInventory ? (eq.unitPricePerDay ?? 0) : ""
+    ]);
+  });
+  const csvText = rows.map(r=> r.map(csvEscapeCell).join(",")).join("\r\n");
+  const blob = new Blob(["\uFEFF" + csvText], { type: "text/csv;charset=utf-8;" }); // BOM付きでExcelでも文字化けしないようにする
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  const today = new Date().toISOString().slice(0,10);
+  a.download = `設備一覧_${today}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=> URL.revokeObjectURL(a.href), 3000);
+});
 
 /* ============ 予約状況（全体） ============ */
 let allReservations = [];
