@@ -150,7 +150,7 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // 測量機器管理者一覧（点検日の編集・貸出状態の管理ができる人）: 全員が読める。書き込みはシステム管理者のみ。
+    // 設備管理者一覧（点検日の編集・貸出状態の管理ができる人）: 全員が読める。書き込みはシステム管理者のみ。
     match /equipment_managers/{email} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
@@ -194,7 +194,7 @@ service cloud.firestore {
     // 設備マスタ: ログインしていれば読める。
     // 追加・削除・基本情報の編集はシステム管理者のみ。
     // 状態変更（在庫中・貸出中・点検中・故障中）は、在庫中からの操作は誰でも、
-    // それ以外は測量機器管理者、または現在の借用者本人が可能。
+    // それ以外は設備管理者、または現在の借用者本人が可能。
     match /equipment/{equipmentId} {
       allow read: if isSignedIn();
       allow create, delete: if isAdmin() || isEquipmentManager();
@@ -249,14 +249,14 @@ service cloud.firestore {
     }
 
     // 敷鉄板の種類マスタ（6m・3mなど、総数・単価）: 全員が読める。
-    // 追加・編集・削除はシステム管理者、または測量機器管理者のみ。
+    // 追加・編集・削除はシステム管理者、または設備管理者のみ。
     match /steel_plate_types/{typeId} {
       allow read: if isSignedIn();
       allow write: if isAdmin() || isEquipmentManager();
     }
 
     // 敷鉄板の貸出・返却の記録: 全員が読める。
-    // 作成は本人のメールアドレスでのみ可能。更新・削除は本人 / システム管理者 / 測量機器管理者のみ。
+    // 作成は本人のメールアドレスでのみ可能。更新・削除は本人 / システム管理者 / 設備管理者のみ。
     match /steel_plate_transactions/{txId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() &&

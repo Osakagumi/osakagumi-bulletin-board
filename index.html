@@ -914,7 +914,7 @@
         </div>
       </div>
 
-      <!-- 敷鉄板 種類の設定モーダル（システム管理者・測量機器管理者のみ） -->
+      <!-- 敷鉄板 種類の設定モーダル（システム管理者・設備管理者のみ） -->
       <div class="modal-overlay" id="sp-type-modal">
         <div class="modal">
           <h3 id="sp-type-modal-title">鉄板の設定</h3>
@@ -2608,7 +2608,7 @@ function renderCheckoutGrid(grid, items){
     function addCheckoutButtons(targetStatus){
       // 借りる：誰でも可能（自分が借用者になる）
       addBtn("借りる", targetStatus, true, false);
-      // 貸出する：測量機器管理者のみ（貸出先を選択できる）
+      // 貸出する：設備管理者のみ（貸出先を選択できる）
       if(isEquipmentManager) addBtn("貸出する", targetStatus, true, true);
     }
 
@@ -2632,7 +2632,7 @@ function renderCheckoutGrid(grid, items){
     } else {
       const note = document.createElement("div");
       note.className = "checkout-locked-note";
-      note.textContent = "借用者または測量機器管理者のみ操作できます。";
+      note.textContent = "借用者または設備管理者のみ操作できます。";
       actions.appendChild(note);
     }
     card.appendChild(actions);

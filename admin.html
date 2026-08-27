@@ -329,14 +329,14 @@
         <h2>CSVで一括登録</h2>
         <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
           1行目はヘッダー行として無視されます。2行目以降を1人ずつ登録します。<br>
-          列の順番：<b>社員番号, 氏名, 所属, システム管理者フラグ, お知らせ投稿フラグ, 行き先編集権限フラグ, 測量機器管理者フラグ, 入札編集権限フラグ, カレンダー編集権限フラグ, 安否確認発信権限フラグ, メールアドレス, パスワード, 電話番号, 備考</b><br>
+          列の順番：<b>社員番号, 氏名, 所属, システム管理者フラグ, お知らせ投稿フラグ, 行き先編集権限フラグ, 設備管理者フラグ, 入札編集権限フラグ, カレンダー編集権限フラグ, 安否確認発信権限フラグ, メールアドレス, パスワード, 電話番号, 備考</b><br>
           必須は「メールアドレス」「パスワード」のみで、他は省略可です。<br>
           各権限フラグは <code>1</code> / <code>TRUE</code> / <code>○</code> / <code>はい</code> のいずれかを入れると有効になります（空欄は無効）。<br>
           所属欄には「ユーザー管理」タブで登録済みの部署名をそのまま入力してください（一致しない場合は未所属として登録されます）。複数の部署に所属させたい場合は「、」または「/」区切りで入力してください（例：役員、営業部）。
         </p>
         <div class="field full" style="margin-bottom:12px;">
           <label>サンプル</label>
-          <pre style="background:#F7F8FA;border:1px solid var(--line);border-radius:7px;padding:10px 12px;font-size:12px;overflow-x:auto;">社員番号,氏名,所属,システム管理者フラグ,お知らせ投稿フラグ,行き先編集権限フラグ,測量機器管理者フラグ,入札編集権限フラグ,カレンダー編集権限フラグ,安否確認発信権限フラグ,メールアドレス,パスワード,電話番号,備考
+          <pre style="background:#F7F8FA;border:1px solid var(--line);border-radius:7px;padding:10px 12px;font-size:12px;overflow-x:auto;">社員番号,氏名,所属,システム管理者フラグ,お知らせ投稿フラグ,行き先編集権限フラグ,設備管理者フラグ,入札編集権限フラグ,カレンダー編集権限フラグ,安否確認発信権限フラグ,メールアドレス,パスワード,電話番号,備考
 1001,山田太郎,工務部,,1,,,,,,yamada@osakagumi.co.jp,Osaka2026!,090-1234-5678,現場責任者
 1002,佐藤花子,総務経理部,1,1,1,,,,1,sato@osakagumi.co.jp,Osaka2026!,090-2345-6789,</pre>
         </div>
@@ -908,6 +908,38 @@ let currentUser = null;
 let editingEquipmentId = null;
 let equipmentAll = [];
 
+// 管理画面の各セクションと、それに対応する権限・一般画面側のタブの対応表。
+// permission が null のセクションはシステム管理者のみが操作できる（対応する個別権限が存在しないため）。
+const ADMIN_SECTION_PERMISSIONS = {
+  equipment:     { permission: "isEquipmentManager", generalTab: "checkout" },
+  reservations:  { permission: null, generalTab: null },
+  userimport:    { permission: null, generalTab: null },
+  notices:       { permission: "isPoster", generalTab: "notices" },
+  whereabouts:   { permission: "isWhereaboutsEditor", generalTab: "whereabouts" },
+  calendar:      { permission: "isCalendarEditor", generalTab: "calendar" },
+  contracts:     { permission: "isContractEditor", generalTab: "contracts" },
+  bizinfo:       { permission: null, generalTab: null }
+};
+let myAdminPermissions = {};
+let mySectionAccess = {};
+function computeSectionAccess(){
+  mySectionAccess = {};
+  Object.entries(ADMIN_SECTION_PERMISSIONS).forEach(([section, def])=>{
+    if(myAdminPermissions.isAdmin){ mySectionAccess[section] = true; return; }
+    if(!def.permission){ mySectionAccess[section] = false; return; } // システム管理者専用セクション
+    const hasPermission = !!myAdminPermissions[def.permission];
+    const tabVisibleOnGeneralScreen = !myHiddenTabsForAdmin.includes(def.generalTab);
+    mySectionAccess[section] = hasPermission && tabVisibleOnGeneralScreen;
+  });
+}
+function applySectionAccessToNav(){
+  document.querySelectorAll(".tab-btn[data-view]").forEach(btn=>{
+    const view = btn.dataset.view;
+    if(!(view in ADMIN_SECTION_PERMISSIONS)) return; // 対象外のボタン（並び替えボタン等）はそのまま
+    btn.style.display = mySectionAccess[view] ? "" : "none";
+  });
+}
+let myHiddenTabsForAdmin = [];
 onAuthStateChanged(auth, async (user)=>{
   if(!user){
     document.getElementById("gate").style.display = "flex";
@@ -915,19 +947,39 @@ onAuthStateChanged(auth, async (user)=>{
     return;
   }
   currentUser = user;
-  let isAdmin = false;
-  try{
-    const d = await getDoc(doc(db,"admins", user.email));
-    isAdmin = d.exists();
-  }catch(e){ isAdmin = false; }
 
-  if(!isAdmin){
+  const [adminDoc, posterDoc, wbEditorDoc, eqManagerDoc, calEditorDoc, contractEditorDoc, myEmpDoc] = await Promise.all([
+    getDoc(doc(db, "admins", user.email)).catch(()=>null),
+    getDoc(doc(db, "announcement_posters", user.email)).catch(()=>null),
+    getDoc(doc(db, "whereabouts_editors", user.email)).catch(()=>null),
+    getDoc(doc(db, "equipment_managers", user.email)).catch(()=>null),
+    getDoc(doc(db, "calendar_editors", user.email)).catch(()=>null),
+    getDoc(doc(db, "contract_editors", user.email)).catch(()=>null),
+    getDoc(doc(db, "employees", user.email)).catch(()=>null)
+  ]);
+  myAdminPermissions = {
+    isAdmin: !!(adminDoc && adminDoc.exists()),
+    isPoster: !!(posterDoc && posterDoc.exists()),
+    isWhereaboutsEditor: !!(wbEditorDoc && wbEditorDoc.exists()),
+    isEquipmentManager: !!(eqManagerDoc && eqManagerDoc.exists()),
+    isCalendarEditor: !!(calEditorDoc && calEditorDoc.exists()),
+    isContractEditor: !!(contractEditorDoc && contractEditorDoc.exists())
+  };
+  myHiddenTabsForAdmin = (myEmpDoc && myEmpDoc.exists() && Array.isArray(myEmpDoc.data().hiddenTabs)) ? myEmpDoc.data().hiddenTabs : [];
+  computeSectionAccess();
+  const isAdmin = myAdminPermissions.isAdmin; // 以降の既存コードとの互換用
+  const hasAnyAccess = Object.values(mySectionAccess).some(v=>v);
+
+  if(!hasAnyAccess){
     document.getElementById("gate").style.display = "flex";
-    document.getElementById("gate-msg").textContent = "この画面はシステム管理者のみ利用できます。システム管理者権限が必要な場合は既存のシステム管理者にご相談ください。";
+    document.getElementById("gate-msg").textContent = "この画面を利用できる権限がありません。権限が必要な場合はシステム管理者にご相談ください。";
     return;
   }
 
   document.getElementById("admin-app").style.display = "block";
+  applySectionAccessToNav();
+  const firstAccessibleSection = Object.keys(ADMIN_SECTION_PERMISSIONS).find(s=>mySectionAccess[s]);
+  if(firstAccessibleSection) switchToAdminTab(firstAccessibleSection);
   updateStickyNavOffset();
   seedCategoriesIfEmpty().then(initCategoriesListener);
   initEquipmentListener();
@@ -1847,7 +1899,7 @@ function renderWbEditors(list){
 }
 
 /* ============================================================
-   測量機器管理者
+   設備管理者
 ============================================================ */
 let lastEqManagerEmails = [];
 function initEquipmentManagersListener(){
@@ -2314,7 +2366,7 @@ const PERMISSION_DEFS = [
   { collection: "admins", label: "システム管理者", getList: ()=> lastAdminEmails },
   { collection: "announcement_posters", label: "お知らせ投稿権限", getList: ()=> lastPosterEmails },
   { collection: "whereabouts_editors", label: "行き先の他者設定権限", getList: ()=> lastWbEditorEmails },
-  { collection: "equipment_managers", label: "測量機器管理者", getList: ()=> lastEqManagerEmails },
+  { collection: "equipment_managers", label: "設備管理者", getList: ()=> lastEqManagerEmails },
   { collection: "contract_editors", label: "入札編集権限", getList: ()=> lastContractEditorEmails },
   { collection: "calendar_editors", label: "カレンダー編集権限", getList: ()=> lastCalEditorEmails },
   { collection: "safety_senders", label: "安否確認発信権限", getList: ()=> lastSafetySenderEmails }
