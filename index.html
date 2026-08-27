@@ -1863,6 +1863,7 @@ onAuthStateChanged(auth, async (user)=>{
     initChatListeners();
     initContractSettingsListener();
     initUserPrefsListener();
+    initSystemTabDefaultsListener();
     initDashCardDragDrop();
     cleanupResolvedContracts();
     ensureSteelPlateCategoryAndMigrate();
@@ -1895,9 +1896,38 @@ const DASH_CARD_BY_VIEW = {
   contracts: "dash-card-contracts"
 };
 // システム管理者がユーザー毎に設定した「非表示にするタブ」を、自分のタブ・ダッシュボードのカードに反映する
+let systemTabDefaults = null;
+let hasPersonalTabOrderFlag = null; // null=未判定、true=個人設定あり、false=個人設定なし
+const GENERAL_HIDEABLE_TAB_IDS = ["notices","calendar","whereabouts","chat","reserve","checkout","contracts","bizinfo"];
+function tryApplyOrgTabDefaults(){
+  if(hasPersonalTabOrderFlag !== false) return; // 個人設定がある、またはまだ判定できていない場合は何もしない
+  if(!systemTabDefaults) return;
+  if(Array.isArray(systemTabDefaults.tabOrder) && systemTabDefaults.tabOrder.length){
+    applyTabOrderArray(systemTabDefaults.tabOrder);
+    localStorage.setItem(TAB_ORDER_KEY, JSON.stringify(systemTabDefaults.tabOrder));
+  }
+  if(systemTabDefaults.initialTab){
+    const btn = document.querySelector(`#main-tabs .tab-btn[data-view="${systemTabDefaults.initialTab}"]`);
+    if(btn && btn.style.display !== "none"){
+      switchToTab(systemTabDefaults.initialTab);
+    }
+  }
+}
+function initSystemTabDefaultsListener(){
+  onSnapshot(doc(db,"system_tab_defaults","general"), snap=>{
+    systemTabDefaults = snap.exists() ? snap.data() : {};
+    tryApplyOrgTabDefaults();
+    applyMyHiddenTabs(); // 既定の有効タブが変わった可能性があるので再適用
+  }, (err)=>{ console.error("[一般画面タブ既定値取得エラー]", err); });
+}
 function applyMyHiddenTabs(){
   const me = employeesAll.find(e=>(e.email||"").toLowerCase()===(currentUser?.email||"").toLowerCase());
-  const hidden = (me && Array.isArray(me.hiddenTabs)) ? me.hiddenTabs : [];
+  const hasPersonalHiddenTabs = me && Array.isArray(me.hiddenTabs);
+  const hidden = hasPersonalHiddenTabs
+    ? me.hiddenTabs
+    : (systemTabDefaults && Array.isArray(systemTabDefaults.enabledTabs)
+        ? GENERAL_HIDEABLE_TAB_IDS.filter(id => !systemTabDefaults.enabledTabs.includes(id))
+        : []);
   document.querySelectorAll("#main-tabs .tab-btn[data-view]").forEach(btn=>{
     const view = btn.dataset.view;
     if(view==="dashboard" || view==="safety" || view==="safetyresponse") return; // 常時表示
@@ -6924,9 +6954,13 @@ function initUserPrefsListener(){
       renderContractsTab();
     }
     if(Array.isArray(prefs.tabOrder) && !document.getElementById("main-tabs").classList.contains("reordering")){
+      hasPersonalTabOrderFlag = true;
       applyTabOrderArray(prefs.tabOrder);
       localStorage.setItem(TAB_ORDER_KEY, JSON.stringify(prefs.tabOrder));
       // 現在表示中のタブが並び替えでも変わらず見えるよう、選択状態だけ保つ（初期表示のやり直しはしない）
+    } else if(hasPersonalTabOrderFlag === null){
+      hasPersonalTabOrderFlag = false;
+      tryApplyOrgTabDefaults();
     }
     if(prefs.dashboardCardOrder){
       applyDashCardOrder(prefs.dashboardCardOrder);

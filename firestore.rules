@@ -92,6 +92,13 @@ service cloud.firestore {
       allow write: if isSignedIn() && (isAdmin() || isContractEditor() || isPoster() || isSafetySender());
     }
 
+    // タブの並び順・初期表示タブ・一般画面での既定の表示タブなど、システム全体の既定値。
+    // 全員が読めるが、書き込みはシステム管理者のみ。
+    match /system_tab_defaults/{screenId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
     // 行き先の事前設定（次の営業日用の下書き・初期状態テンプレート・自動反映済み日付の記録）
     // 全員が読める。書き込みは行き先の他者設定権限者・システム管理者のみ。
     match /wb_presets/{docId} {

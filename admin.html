@@ -93,6 +93,12 @@
   td.actions{white-space:nowrap;}
   td.actions button{margin-right:6px;}
   .tag{font-size:10.5px;font-weight:700;color:#fff;padding:2px 7px;border-radius:4px;font-family:var(--mono);white-space:nowrap;display:inline-block;}
+  .settings-draglist{border:1px solid var(--line);border-radius:8px;padding:6px;max-width:360px;}
+  .settings-drag-row{display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:6px;font-size:13px;background:var(--surface,#fff);margin-bottom:4px;cursor:grab;}
+  .settings-drag-row:last-child{margin-bottom:0;}
+  .settings-drag-row:active{cursor:grabbing;}
+  .settings-drag-row.dragging{opacity:0.4;}
+  .settings-drag-handle{color:var(--muted);font-size:15px;}
   .emp-card{background:var(--surface,#fff);border:1.5px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:8px;}
   .emp-card.emp-card-hidden{opacity:0.45;}
   .emp-card-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
@@ -138,6 +144,7 @@
     <button class="tab-btn" data-view="whereabouts">行き先管理</button>
     <button class="tab-btn" data-view="contracts">入札管理</button>
     <button class="tab-btn" data-view="bizinfo">業務情報管理</button>
+    <button class="tab-btn" data-view="systemsettings">システム管理</button>
     <button class="tab-btn" data-view="calendar">カレンダー管理</button>
     <button class="tab-reorder-btn" id="tab-reorder-toggle" title="タブの並び替え">並び替え</button>
   </nav>
@@ -679,6 +686,45 @@
       </div>
     </section>
 
+    <!-- ============ システム管理 ============ -->
+    <section id="view-systemsettings" style="display:none;">
+      <div class="panel">
+        <h2>一般画面のタブ設定（既定値）</h2>
+        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
+          ここで設定した内容は、社員が自分で並び替え・表示設定をまだ行っていない場合の初期値として使われます。社員本人が設定を変更した場合は、そちらが優先されます。
+        </p>
+        <div class="field">
+          <label>タブの並び順（ドラッグで並び替え）</label>
+          <div id="general-tab-order-list" class="settings-draglist"></div>
+        </div>
+        <div class="field">
+          <label>最初に表示するタブ</label>
+          <select id="general-initial-tab-select"></select>
+        </div>
+        <div class="field">
+          <label>既定で有効にするタブ</label>
+          <div id="general-enabled-tabs-checks" style="display:flex;flex-wrap:wrap;gap:10px;border:1px solid var(--line);border-radius:8px;padding:10px;"></div>
+        </div>
+        <button class="btn btn-primary" id="general-tab-defaults-save-btn">保存</button>
+      </div>
+
+      <div class="panel">
+        <h2>管理画面のタブ設定（既定値）</h2>
+        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
+          管理画面で表示されるタブは、社員それぞれの権限によって決まりますが、その中での並び順・最初に表示するタブをここで設定できます。
+        </p>
+        <div class="field">
+          <label>タブの並び順（ドラッグで並び替え）</label>
+          <div id="admin-tab-order-list" class="settings-draglist"></div>
+        </div>
+        <div class="field">
+          <label>最初に表示するタブ</label>
+          <select id="admin-initial-tab-select"></select>
+        </div>
+        <button class="btn btn-primary" id="admin-tab-defaults-save-btn">保存</button>
+      </div>
+    </section>
+
     <!-- ============ 業務情報 ファイル登録手順モーダル ============ -->
     <div class="modal-overlay" id="bizinfo-guide-modal">
       <div class="modal" style="max-width:560px;">
@@ -1002,7 +1048,8 @@ const ADMIN_SECTION_PERMISSIONS = {
   whereabouts:   { permission: "isWhereaboutsEditor", generalTab: "whereabouts" },
   calendar:      { permission: "isCalendarEditor", generalTab: "calendar" },
   contracts:     { permission: "isContractEditor", generalTab: "contracts" },
-  bizinfo:       { permission: null, generalTab: null }
+  bizinfo:       { permission: null, generalTab: null },
+  systemsettings:{ permission: null, generalTab: null }
 };
 let myAdminPermissions = {};
 let mySectionAccess = {};
@@ -1083,6 +1130,8 @@ onAuthStateChanged(auth, async (user)=>{
   initSafetySendersListener();
   populateSingleEmpPermissionsChecks();
   initBizInfoListener();
+  initGeneralTabDefaultsListener();
+  initAdminTabDefaultsListener();
   initContractSettingsListener();
   initContractHighlightSettingsListener();
   initContractCleanupListener();
@@ -1090,7 +1139,7 @@ onAuthStateChanged(auth, async (user)=>{
 });
 
 /* ---------- tabs ---------- */
-const ADMIN_VIEWS = ["equipment","reservations","userimport","notices","whereabouts","calendar","contracts","bizinfo"];
+const ADMIN_VIEWS = ["equipment","reservations","userimport","notices","whereabouts","calendar","contracts","bizinfo","systemsettings"];
 function switchToAdminTab(viewName){
   document.querySelectorAll(".tab-btn").forEach(b=>{
     b.classList.toggle("active", b.dataset.view===viewName);
@@ -2233,6 +2282,162 @@ function extractDriveFileId(url){
   return m ? m[1] : "";
 }
 let bizInfoItemsAll = [];
+/* ============================================================
+   システム管理（一般画面・管理画面のタブ既定値）
+============================================================ */
+// 一般画面の全タブ（並び順設定の対象）。dashboard・safety・safetyresponseは常時表示のため「有効タブ」選択には出さない。
+const GENERAL_TAB_ORDER_DEFS = [
+  { id:"dashboard", label:"ダッシュボード" },
+  { id:"notices", label:"お知らせ" },
+  { id:"calendar", label:"カレンダー" },
+  { id:"whereabouts", label:"行き先" },
+  { id:"chat", label:"チャット" },
+  { id:"reserve", label:"予約" },
+  { id:"contracts", label:"入札" },
+  { id:"bizinfo", label:"業務情報" },
+  { id:"checkout", label:"資機材" },
+  { id:"safety", label:"安否確認" },
+  { id:"safetyresponse", label:"安否回答" }
+];
+// 管理画面の全タブ（並び順設定の対象）
+const ADMIN_TAB_ORDER_DEFS = [
+  { id:"equipment", label:"設備管理" },
+  { id:"reservations", label:"予約状況（全体）" },
+  { id:"userimport", label:"ユーザー管理" },
+  { id:"notices", label:"お知らせ管理" },
+  { id:"whereabouts", label:"行き先管理" },
+  { id:"calendar", label:"カレンダー管理" },
+  { id:"contracts", label:"入札管理" },
+  { id:"bizinfo", label:"業務情報管理" },
+  { id:"systemsettings", label:"システム管理" }
+];
+
+// 汎用のドラッグ並び替えリストを構築する（並び順の配列を渡すと、その順で描画し直す）
+function buildDragOrderList(containerId, defs, order){
+  const container = document.getElementById(containerId);
+  if(!container) return;
+  const defMap = new Map(defs.map(d=>[d.id, d.label]));
+  const ids = (order && order.length ? order.filter(id=>defMap.has(id)) : defs.map(d=>d.id));
+  defs.forEach(d=>{ if(!ids.includes(d.id)) ids.push(d.id); }); // 未指定の新しいタブは末尾に追加
+  container.innerHTML = "";
+  ids.forEach(id=>{
+    const row = document.createElement("div");
+    row.className = "settings-drag-row";
+    row.draggable = true;
+    row.dataset.id = id;
+    row.innerHTML = `<span class="settings-drag-handle">⠿</span><span>${escapeHtml(defMap.get(id) || id)}</span>`;
+    row.addEventListener("dragstart", ()=> row.classList.add("dragging"));
+    row.addEventListener("dragend", ()=> row.classList.remove("dragging"));
+    container.appendChild(row);
+  });
+  if(!container.dataset.dndBound){
+    container.dataset.dndBound = "1";
+    container.addEventListener("dragover", (e)=>{
+      e.preventDefault();
+      const dragging = container.querySelector(".dragging");
+      if(!dragging) return;
+      const after = [...container.querySelectorAll(".settings-drag-row:not(.dragging)")].reduce((closest, child)=>{
+        const box = child.getBoundingClientRect();
+        const offset = e.clientY - box.top - box.height/2;
+        if(offset < 0 && offset > closest.offset) return { offset, element: child };
+        return closest;
+      }, { offset:-Infinity, element:null }).element;
+      if(after==null) container.appendChild(dragging);
+      else container.insertBefore(dragging, after);
+    });
+  }
+}
+function readDragOrderList(containerId){
+  const container = document.getElementById(containerId);
+  if(!container) return [];
+  return [...container.querySelectorAll(".settings-drag-row")].map(r=>r.dataset.id);
+}
+function populateInitialTabSelect(selectId, defs, currentValue){
+  const sel = document.getElementById(selectId);
+  if(!sel) return;
+  sel.innerHTML = "";
+  defs.forEach(d=>{
+    const opt = document.createElement("option");
+    opt.value = d.id; opt.textContent = d.label;
+    sel.appendChild(opt);
+  });
+  if(defs.some(d=>d.id===currentValue)) sel.value = currentValue;
+}
+
+function initGeneralTabDefaultsListener(){
+  onSnapshot(doc(db,"system_tab_defaults","general"), snap=>{
+    const data = snap.exists() ? snap.data() : {};
+    buildDragOrderList("general-tab-order-list", GENERAL_TAB_ORDER_DEFS, data.tabOrder);
+    populateInitialTabSelect("general-initial-tab-select", GENERAL_TAB_ORDER_DEFS, data.initialTab || "dashboard");
+    const enabledTabs = Array.isArray(data.enabledTabs) ? data.enabledTabs : HIDEABLE_TABS.map(t=>t.id);
+    const checksEl = document.getElementById("general-enabled-tabs-checks");
+    if(checksEl){
+      checksEl.innerHTML = "";
+      HIDEABLE_TABS.forEach(t=>{
+        const label = document.createElement("label");
+        label.style.cssText = "display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;";
+        const cb = document.createElement("input");
+        cb.type = "checkbox"; cb.style.width = "auto";
+        cb.checked = enabledTabs.includes(t.id);
+        cb.className = "general-enabled-tab-check";
+        cb.value = t.id;
+        label.appendChild(cb);
+        label.appendChild(document.createTextNode(t.label));
+        checksEl.appendChild(label);
+      });
+    }
+  }, (err)=>{ console.error("[一般画面タブ既定値取得エラー]", err); });
+}
+document.getElementById("general-tab-defaults-save-btn")?.addEventListener("click", async ()=>{
+  const tabOrder = readDragOrderList("general-tab-order-list");
+  const initialTab = document.getElementById("general-initial-tab-select").value;
+  const enabledTabs = [...document.querySelectorAll(".general-enabled-tab-check:checked")].map(cb=>cb.value);
+  try{
+    await setDoc(doc(db,"system_tab_defaults","general"), { tabOrder, initialTab, enabledTabs }, { merge:true });
+    toast("保存しました。");
+  }catch(e){
+    toast("保存に失敗しました。権限をご確認ください。");
+  }
+});
+
+let adminScreenDefaultsApplied = false;
+function initAdminTabDefaultsListener(){
+  onSnapshot(doc(db,"system_tab_defaults","admin"), snap=>{
+    const data = snap.exists() ? snap.data() : {};
+    buildDragOrderList("admin-tab-order-list", ADMIN_TAB_ORDER_DEFS, data.tabOrder);
+    populateInitialTabSelect("admin-initial-tab-select", ADMIN_TAB_ORDER_DEFS, data.initialTab || "equipment");
+    // 本人がまだ並び替え・初期表示タブを設定していない場合のみ、システム既定値を適用する（セッション中1回だけ）
+    if(adminScreenDefaultsApplied) return;
+    adminScreenDefaultsApplied = true;
+    let personalOrder = null;
+    try{ personalOrder = JSON.parse(localStorage.getItem(ADMIN_TAB_ORDER_KEY) || "null"); }catch(e){ personalOrder = null; }
+    if(!personalOrder && Array.isArray(data.tabOrder) && data.tabOrder.length){
+      const nav = document.getElementById("main-tabs");
+      const reorderBtn = document.getElementById("tab-reorder-toggle");
+      if(nav && reorderBtn){
+        data.tabOrder.forEach(viewName=>{
+          const btn = nav.querySelector(`.tab-btn[data-view="${viewName}"]`);
+          if(btn) nav.insertBefore(btn, reorderBtn);
+        });
+        const targetView = data.initialTab && mySectionAccess[data.initialTab] && nav.querySelector(`.tab-btn[data-view="${data.initialTab}"]`) ? data.initialTab : null;
+        if(targetView){
+          switchToAdminTab(targetView);
+        }
+      }
+    }
+  }, (err)=>{ console.error("[管理画面タブ既定値取得エラー]", err); });
+}
+document.getElementById("admin-tab-defaults-save-btn")?.addEventListener("click", async ()=>{
+  const tabOrder = readDragOrderList("admin-tab-order-list");
+  const initialTab = document.getElementById("admin-initial-tab-select").value;
+  try{
+    await setDoc(doc(db,"system_tab_defaults","admin"), { tabOrder, initialTab }, { merge:true });
+    toast("保存しました。");
+  }catch(e){
+    toast("保存に失敗しました。権限をご確認ください。");
+  }
+});
+
 function initBizInfoListener(){
   onSnapshot(collection(db,"business_info_items"), snap=>{
     bizInfoItemsAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
@@ -2688,6 +2893,7 @@ const HIDEABLE_TABS = [
   { id:"notices", label:"お知らせ" },
   { id:"calendar", label:"カレンダー" },
   { id:"whereabouts", label:"行き先" },
+  { id:"chat", label:"チャット" },
   { id:"reserve", label:"予約" },
   { id:"checkout", label:"資機材" },
   { id:"contracts", label:"入札" },
