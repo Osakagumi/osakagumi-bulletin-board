@@ -1542,6 +1542,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js" async></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js" async></script>
+<script src="https://cdn.jsdelivr.net/npm/encoding-japanese@2.2.0/encoding.min.js" async></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
@@ -7811,7 +7812,15 @@ document.getElementById("startup-guide-download-btn")?.addEventListener("click",
     `objShortcut.Description = "大坂組社内ポータル"\r\n` +
     `objShortcut.Save\r\n` +
     `MsgBox "スタートアップへの登録が完了しました。" & vbCrLf & "次回パソコン起動時から、自動的にこのページが開きます。", vbInformation, "登録完了"\r\n`;
-  const blob = new Blob([content], { type: "application/octet-stream" });
+  // VBScriptはShift-JISで保存するのが最も確実に認識される。ライブラリが読み込めていない場合はUTF-8(BOM付き)にフォールバックする。
+  let blob;
+  if(window.Encoding){
+    const unicodeArray = window.Encoding.stringToCode(content);
+    const sjisArray = window.Encoding.convert(unicodeArray, { to: "SJIS", from: "UNICODE" });
+    blob = new Blob([new Uint8Array(sjisArray)], { type: "application/octet-stream" });
+  } else {
+    blob = new Blob(["\uFEFF" + content], { type: "application/octet-stream" });
+  }
   a.href = URL.createObjectURL(blob);
   a.download = "社内ポータル登録.vbs";
   document.body.appendChild(a);
