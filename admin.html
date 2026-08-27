@@ -2825,8 +2825,9 @@ document.getElementById("cal-seed-btn").addEventListener("click", async ()=>{
   try{
     await setDoc(doc(db,"calendar_years", yearStr), {
       createdAt: new Date().toISOString(),
-      createdBy: currentUser.email
-    });
+      createdBy: currentUser.email,
+      status: "draft"
+    }, { merge:true });
   }catch(e){ /* 年度一覧への登録に失敗しても日付データ自体は作成済み */ }
   const holidayCount = Object.keys(holidaysMap).length;
   const holidayNote = holidaysOk

@@ -1003,12 +1003,6 @@
               </div>
               <div id="dash-checkout-body"></div>
             </div>
-            <div id="dash-startup-btn-wrap" style="display:none;text-align:right;">
-              <button type="button" class="btn-ghost" id="dash-startup-btn" style="border:1px solid var(--line);">スタートアップ登録手順</button>
-            </div>
-            <div id="dash-homescreen-btn-wrap" style="display:none;text-align:right;">
-              <button type="button" class="btn-ghost" id="dash-homescreen-btn" style="border:1px solid var(--line);">ホーム画面追加手順</button>
-            </div>
           </div>
         </div>
       </section>
@@ -1098,6 +1092,8 @@
             <button id="cal-today-btn" class="btn-primary">今日</button>
           </div>
           <div id="cal-edit-hint" style="font-size:11.5px;color:var(--muted);"></div>
+          <span id="cal-status-badge" style="display:none;font-size:11.5px;font-weight:700;padding:3px 10px;border-radius:12px;margin-right:8px;"></span>
+          <button id="cal-publish-btn" class="btn-primary" style="display:none;background:var(--danger);">公開する</button>
           <button id="cal-export-btn" class="btn-primary">Excel出力</button>
         </div>
         <div class="cal-grid-wrap" id="cal-grid-wrap"></div>
@@ -1359,53 +1355,6 @@
     </div>
   </div>
 
-  <!-- ============ スタートアップ登録 案内モーダル ============ -->
-  <div class="modal-overlay" id="startup-guide-modal">
-    <div class="modal" style="max-width:520px;">
-      <h3>スタートアップ登録手順</h3>
-      <div style="font-size:12.5px;color:var(--text);line-height:1.8;">
-        <ol style="margin:0 0 14px;padding-left:20px;">
-          <li style="margin-bottom:10px;">下の「登録用ファイルをダウンロード」を押す</li>
-          <li style="margin-bottom:10px;">ダウンロードしたファイルを<b>ダブルクリックして実行</b>する</li>
-          <li style="margin-bottom:10px;">「登録が完了しました」というメッセージが出れば完了。次回パソコン起動時から、自動的にこのページが開きます</li>
-        </ol>
-        <p style="margin:0;color:var(--muted);">
-          ※ ダウンロード時や実行時に、Windowsやセキュリティソフトから警告が表示される場合があります。その場合は「詳細情報」→「実行」（または「保持する」）と進んで実行してください。心当たりのある社内システムのファイルであれば問題ありません。
-        </p>
-      </div>
-      <div class="row-btns">
-        <button class="btn-ghost" id="startup-guide-close-btn" style="border:1px solid var(--line);">閉じる</button>
-        <button class="btn-primary" id="startup-guide-download-btn">登録用ファイルをダウンロード</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ============ ホーム画面追加 案内モーダル（iPhone/Safari用） ============ -->
-  <div class="modal-overlay" id="homescreen-guide-modal">
-    <div class="modal" style="max-width:480px;">
-      <h3>ホーム画面追加手順</h3>
-      <div style="font-size:12.5px;color:var(--text);line-height:1.8;">
-        <div id="homescreen-guide-ios">
-          <ol style="margin:0;padding-left:20px;">
-            <li style="margin-bottom:10px;">画面下部（または上部）の<b>共有ボタン</b>（四角から矢印が上に伸びたアイコン）をタップ</li>
-            <li style="margin-bottom:10px;">メニューを下にスクロールし、「<b>ホーム画面に追加</b>」をタップ</li>
-            <li style="margin-bottom:10px;">名前を確認して「追加」をタップ</li>
-          </ol>
-        </div>
-        <div id="homescreen-guide-android" style="display:none;">
-          <ol style="margin:0;padding-left:20px;">
-            <li style="margin-bottom:10px;">画面右上の<b>「⋮」（縦の3点メニュー）</b>をタップ</li>
-            <li style="margin-bottom:10px;">「<b>ホーム画面に追加</b>」または「<b>アプリをインストール</b>」をタップ</li>
-            <li style="margin-bottom:10px;">確認画面で「追加」または「インストール」をタップ</li>
-          </ol>
-        </div>
-      </div>
-      <div class="row-btns">
-        <button class="btn-ghost" id="homescreen-guide-close-btn" style="border:1px solid var(--line);">閉じる</button>
-      </div>
-    </div>
-  </div>
-
   <!-- ============ WHEREABOUTS EDIT MODAL ============ -->
   <div class="modal-overlay" id="wb-modal">
     <div class="modal">
@@ -1542,7 +1491,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js" async></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js" async></script>
-<script src="https://cdn.jsdelivr.net/npm/encoding-japanese@2.2.0/encoding.min.js" async></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
@@ -1845,6 +1793,7 @@ onAuthStateChanged(auth, async (user)=>{
     // 表示に必須ではない社員レコード作成はawaitせずバックグラウンドで行う
     ensureEmployeeRecord();
     initSafetyCampaignListener();
+    initCalendarYearsListenerGeneral();
     if(isSafetySender){ initSafetyCampaignsAdminListener(); }
     initCategoriesListener();
     initEquipmentListener();
@@ -5830,6 +5779,8 @@ function renderSafetyResponse(){
 ========================================================= */
 let calFiscalYearStart = null; // 例: 2026 → 2026/4〜2027/3
 let calDaysUnsub = null;
+let calYearsAll = [];
+let calYearsUnsub = null;
 
 function defaultFiscalYearStart(){
   const now = new Date();
@@ -6102,9 +6053,76 @@ document.getElementById("cal-today-btn").addEventListener("click", ()=>{
   scrollToCalMonth(todayYm);
 });
 
+function fiscalYearOfDateStr(dateStr){
+  const [y, m] = dateStr.split("-").map(Number);
+  return m >= 4 ? y : y - 1;
+}
+function initCalendarYearsListenerGeneral(){
+  if(calYearsUnsub){ calYearsUnsub(); calYearsUnsub = null; }
+  calYearsUnsub = onSnapshot(collection(db,"calendar_years"), snap=>{
+    calYearsAll = snap.docs.map(d=>({ year:d.id, ...d.data() }));
+    updateCalStatusUI();
+    if(calFiscalYearStart !== null && document.getElementById("view-calendar").style.display !== "none"){
+      loadCalendarYear(calFiscalYearStart);
+    }
+  }, (err)=>{ console.error("[年度一覧取得エラー]", err); });
+}
+// 年度のデータが存在しない、またはstatusフィールドが無い（この機能追加より前に作られた年度）場合は、
+// 後方互換のため「公開中」として扱う。
+function calYearStatus(year){
+  const rec = calYearsAll.find(y=>y.year===String(year));
+  if(!rec) return "published";
+  return rec.status || "published";
+}
+function updateCalStatusUI(){
+  const badge = document.getElementById("cal-status-badge");
+  const publishBtn = document.getElementById("cal-publish-btn");
+  if(!badge || !publishBtn) return;
+  const status = calYearStatus(calFiscalYearStart);
+  if(isCalendarEditor){
+    badge.style.display = "inline-block";
+    if(status==="draft"){
+      badge.textContent = "編集中（未公開）";
+      badge.style.background = "#FDECEA"; badge.style.color = "var(--danger)";
+      publishBtn.style.display = "inline-block";
+    } else {
+      badge.textContent = "公開中";
+      badge.style.background = "#E8F5EE"; badge.style.color = "#1E8E4F";
+      publishBtn.style.display = "none";
+    }
+  } else {
+    badge.style.display = "none";
+    publishBtn.style.display = "none";
+  }
+}
+document.getElementById("cal-publish-btn")?.addEventListener("click", async ()=>{
+  if(!isCalendarEditor) return;
+  if(!confirm(`${calFiscalYearStart}年度のカレンダーを公開しますか？\n公開すると、全社員が閲覧できるようになります。`)) return;
+  try{
+    await setDoc(doc(db,"calendar_years", String(calFiscalYearStart)), { status: "published" }, { merge:true });
+    toast("公開しました。");
+  }catch(e){
+    toast("公開に失敗しました。権限をご確認ください。");
+  }
+});
+// 編集操作のたびに呼び出す。対象の日付が属する年度を「編集中」に戻す（未公開の状態にする）。
+async function markCalYearAsDraft(dateStr){
+  const year = fiscalYearOfDateStr(dateStr);
+  try{
+    await setDoc(doc(db,"calendar_years", String(year)), { status: "draft" }, { merge:true });
+  }catch(e){ /* 失敗しても日付データ自体の更新は別途行われているので致命的ではない */ }
+}
 function loadCalendarYear(year){
   if(calDaysUnsub){ calDaysUnsub(); calDaysUnsub = null; }
   document.getElementById("cal-year-label").textContent = `${year}年度（${year}/4〜${year+1}/3）`;
+  updateCalStatusUI();
+  const wrap = document.getElementById("cal-grid-wrap");
+  const status = calYearStatus(year);
+  if(!isCalendarEditor && status==="draft"){
+    wrap.innerHTML = `<div style="grid-column:1/-1;color:var(--muted);text-align:center;padding:40px;">この年度のカレンダーはまだ公開されていません。</div>`;
+    calDaysData = {};
+    return;
+  }
   const startId = `${year}-04-01`;
   const endId = `${year+1}-03-31`;
   const q = query(collection(db,"calendar_days"), where(documentId(), ">=", startId), where(documentId(), "<=", endId));
@@ -6236,6 +6254,7 @@ async function toggleCalHoliday(dateStr){
       isHoliday: !current.isHoliday,
       label: current.label || ""
     });
+    await markCalYearAsDraft(dateStr);
   }catch(e){
     toast("更新に失敗しました。権限をご確認ください。");
   }
@@ -6251,6 +6270,7 @@ async function editCalLabel(dateStr){
       isHoliday: !!current.isHoliday,
       label: input.trim()
     });
+    await markCalYearAsDraft(dateStr);
   }catch(e){
     toast("更新に失敗しました。権限をご確認ください。");
   }
@@ -7816,79 +7836,6 @@ function loadBizInfoIframe(){
   iframe.src = `https://drive.google.com/file/d/${item.fileId}/preview?t=${Date.now()}`;
 }
 
-/* ---------- スタートアップ登録（Windows PCのみ） ---------- */
-const isMobileDevice = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-const isWindowsDevice = /Windows/i.test(navigator.userAgent) && !isMobileDevice;
-if(isWindowsDevice){
-  const wrap = document.getElementById("dash-startup-btn-wrap");
-  if(wrap) wrap.style.display = "block";
-}
-document.getElementById("dash-startup-btn")?.addEventListener("click", ()=>{
-  document.getElementById("startup-guide-modal").classList.add("show");
-});
-document.getElementById("startup-guide-close-btn")?.addEventListener("click", ()=>{
-  document.getElementById("startup-guide-modal").classList.remove("show");
-});
-document.getElementById("startup-guide-download-btn")?.addEventListener("click", ()=>{
-  const url = location.origin + location.pathname;
-  const a = document.createElement("a");
-  // WScript.Shell の CreateShortcut を使い、実行するだけでスタートアップフォルダに
-  // ショートカット（.lnk）を自動作成するVBScript。手動でフォルダを開いて移動する手間が無くなる。
-  const escapedUrl = url.replace(/"/g, '""');
-  const content =
-    `Set objShell = CreateObject("WScript.Shell")\r\n` +
-    `strStartupFolder = objShell.SpecialFolders("Startup")\r\n` +
-    `Set objShortcut = objShell.CreateShortcut(strStartupFolder & "\\社内ポータル.lnk")\r\n` +
-    `objShortcut.TargetPath = "${escapedUrl}"\r\n` +
-    `objShortcut.Description = "大坂組社内ポータル"\r\n` +
-    `objShortcut.Save\r\n` +
-    `MsgBox "スタートアップへの登録が完了しました。" & vbCrLf & "次回パソコン起動時から、自動的にこのページが開きます。", vbInformation, "登録完了"\r\n`;
-  // VBScriptはShift-JISで保存するのが最も確実に認識される。ライブラリが読み込めていない場合はUTF-8(BOM付き)にフォールバックする。
-  let blob;
-  if(window.Encoding){
-    const unicodeArray = window.Encoding.stringToCode(content);
-    const sjisArray = window.Encoding.convert(unicodeArray, { to: "SJIS", from: "UNICODE" });
-    blob = new Blob([new Uint8Array(sjisArray)], { type: "application/octet-stream" });
-  } else {
-    blob = new Blob(["\uFEFF" + content], { type: "application/octet-stream" });
-  }
-  a.href = URL.createObjectURL(blob);
-  a.download = "社内ポータル登録.vbs";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(()=> URL.revokeObjectURL(a.href), 3000);
-});
-
-/* ---------- ホーム画面に追加（スマホのみ） ---------- */
-const isIosDevice = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-const isAndroidDevice = /Android/i.test(navigator.userAgent);
-let deferredInstallPrompt = null;
-// Android Chrome: ブラウザが「インストール可能」と判断すると発火する。ここでイベントを保持しておき、
-// ボタンが押された時にプロンプトを呼び出す（発火しない場合は手順案内にフォールバックする）。
-window.addEventListener("beforeinstallprompt", (e)=>{
-  e.preventDefault();
-  deferredInstallPrompt = e;
-});
-if(isMobileDevice){
-  const wrap = document.getElementById("dash-homescreen-btn-wrap");
-  if(wrap) wrap.style.display = "block";
-}
-document.getElementById("dash-homescreen-btn")?.addEventListener("click", async ()=>{
-  if(deferredInstallPrompt){
-    deferredInstallPrompt.prompt();
-    await deferredInstallPrompt.userChoice;
-    deferredInstallPrompt = null;
-    return;
-  }
-  // インストールプロンプトが使えない場合（iOS、または発火タイミングを逃した場合など）は手順を案内する
-  document.getElementById("homescreen-guide-ios").style.display = isAndroidDevice ? "none" : "block";
-  document.getElementById("homescreen-guide-android").style.display = isAndroidDevice ? "block" : "none";
-  document.getElementById("homescreen-guide-modal").classList.add("show");
-});
-document.getElementById("homescreen-guide-close-btn")?.addEventListener("click", ()=>{
-  document.getElementById("homescreen-guide-modal").classList.remove("show");
-});
 
 </script>
 </body>
