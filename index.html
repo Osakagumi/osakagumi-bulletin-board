@@ -1655,6 +1655,7 @@ let chatLastConvEmail = null;
 let chatLastConvName = null;
 let chatThreadUnsub = null;
 let contractDefaultDepartmentId = null;
+let contractHighlightDays = 7;
 let contractsAll = [];
 let bizInfoItemsAll = [];
 let selectedBizInfoId = null;
@@ -2034,7 +2035,7 @@ function renderDashboard(){
   // ---- 入札（直近1週間以内に開始するもの） ----
   const contractsBody = document.getElementById("dash-contracts-body");
   contractsBody.innerHTML = "";
-  const weekLaterForDash = new Date(Date.now() + 7*24*60*60*1000);
+  const weekLaterForDash = new Date(Date.now() + contractHighlightDays*24*60*60*1000);
   const upcomingContracts = contractsAll
     .filter(c=>{
       const d = new Date(c.startAt);
@@ -3491,9 +3492,14 @@ async function cleanupOldNotices(){
   if(noticeCleanupRunning) return;
   noticeCleanupRunning = true;
   try{
-    const oneMonthAgo = Timestamp.fromMillis(Date.now() - 30*24*60*60*1000);
+    let cleanupDays = 30;
+    try{
+      const settingsDoc = await getDoc(doc(db,"app_settings","notice_cleanup"));
+      if(settingsDoc.exists() && settingsDoc.data().days){ cleanupDays = settingsDoc.data().days; }
+    }catch(e){ /* 設定取得に失敗した場合は既定値(30日)のまま続行 */ }
+    const cutoff = Timestamp.fromMillis(Date.now() - cleanupDays*24*60*60*1000);
     // 複合インデックスを避けるため、日付だけで取得してから権限に応じてJS側で絞り込む
-    const snap = await getDocs(query(collection(db,"announcements"), where("createdAt","<", oneMonthAgo)));
+    const snap = await getDocs(query(collection(db,"announcements"), where("createdAt","<", cutoff)));
     if(snap.empty) return;
     const targets = isAdmin
       ? snap.docs
@@ -3511,7 +3517,7 @@ async function cleanupOldNotices(){
       }catch(e){ /* 1件失敗しても他の削除は続行 */ }
     }
     if(count>0){
-      toast(`1ヶ月以上前のお知らせを${count}件、自動的に削除しました。`);
+      toast(`${cleanupDays}日以上前のお知らせを${count}件、自動的に削除しました。`);
     }
   }catch(e){
     console.error("[お知らせ自動削除エラー]", e);
@@ -5343,6 +5349,14 @@ function initSafetyDashboardStaticUI(){
   if(!el || el.dataset.built) return;
   el.dataset.built = "1";
   el.innerHTML = `
+    <div style="background:var(--surface);border:1.5px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px;">
+      <div style="font-weight:700;font-size:14px;margin-bottom:10px;">保存件数の設定</div>
+      <p style="font-size:12px;color:var(--muted);margin:0 0 10px;">発信した安否確認は、この件数を超えると古いものから自動的に削除されます（回答データも一緒に削除されます）。</p>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <input type="number" id="safety-maxcount-input" min="1" style="width:100px;" value="5">
+        <button type="button" class="btn-primary" id="safety-maxcount-save-btn">保存</button>
+      </div>
+    </div>
     <div style="font-weight:700;font-size:14px;margin-bottom:10px;">回答状況</div>
     <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:10px;">
       <select id="safety-campaign-select-general" style="min-width:260px;"></select>
@@ -5363,6 +5377,20 @@ function initSafetyDashboardStaticUI(){
       </table>
     </div>
   `;
+  document.getElementById("safety-maxcount-save-btn").addEventListener("click", async ()=>{
+    const maxCampaigns = Math.max(1, Number(document.getElementById("safety-maxcount-input").value) || 5);
+    try{
+      await setDoc(doc(db,"app_settings","safety_cleanup"), { maxCampaigns }, { merge:true });
+      toast("保存しました。");
+    }catch(e){
+      toast("保存に失敗しました。権限をご確認ください。");
+    }
+  });
+  getDoc(doc(db,"app_settings","safety_cleanup")).then(settingsDoc=>{
+    const maxCampaigns = (settingsDoc.exists() && settingsDoc.data().maxCampaigns) || 5;
+    const input = document.getElementById("safety-maxcount-input");
+    if(input) input.value = maxCampaigns;
+  }).catch(()=>{});
   document.getElementById("safety-campaign-select-general").addEventListener("change", e=>{
     selectedSafetyCampaignIdGeneral = e.target.value || null;
     document.getElementById("safety-delete-btn-general").style.display = selectedSafetyCampaignIdGeneral ? "inline-block" : "none";
@@ -5488,7 +5516,7 @@ function buildSafetySendForm(){
     </div>
     <div style="display:flex;align-items:center;gap:6px;margin:10px 0 12px;">
       <input type="checkbox" id="safety-send-email-check" checked style="width:auto;">
-      <label style="margin:0;font-size:12.5px;color:var(--text);">社員全員にメールでも通知する（EmailJS未設定の場合は自動的にスキップされます）</label>
+      <label style="margin:0;font-size:12.5px;color:var(--text);">社員全員にメールでも通知する</label>
     </div>
     <button type="button" class="btn-primary" id="safety-send-launch-btn">発信</button>
     <div id="safety-send-status" style="font-size:12.5px;color:var(--muted);margin-top:8px;"></div>
@@ -5496,7 +5524,6 @@ function buildSafetySendForm(){
   wrap.querySelector("#safety-send-launch-btn").addEventListener("click", ()=> launchSafetyCampaignFromGeneralScreen());
   return wrap;
 }
-const MAX_SAFETY_CAMPAIGNS = 5;
 async function deleteSafetyCampaignWithResponses(campaignId){
   const respSnap = await getDocs(query(collection(db,"safety_responses"), where("campaignId","==", campaignId)));
   for(const d of respSnap.docs){
@@ -5504,13 +5531,18 @@ async function deleteSafetyCampaignWithResponses(campaignId){
   }
   await deleteDoc(doc(db,"safety_campaigns", campaignId));
 }
-// 発信のたびに呼び出し、最大保存件数(MAX_SAFETY_CAMPAIGNS)を超えた分を古い順に削除する
+// 発信のたびに呼び出し、最大保存件数を超えた分を古い順に削除する
 async function enforceSafetyCampaignLimit(){
   try{
+    let maxCampaigns = 5;
+    try{
+      const settingsDoc = await getDoc(doc(db,"app_settings","safety_cleanup"));
+      if(settingsDoc.exists() && settingsDoc.data().maxCampaigns){ maxCampaigns = settingsDoc.data().maxCampaigns; }
+    }catch(e){ /* 設定取得に失敗した場合は既定値(5件)のまま続行 */ }
     const snap = await getDocs(query(collection(db,"safety_campaigns"), orderBy("createdAt","desc")));
     const all = snap.docs.map(d=>({id:d.id}));
-    if(all.length <= MAX_SAFETY_CAMPAIGNS) return;
-    const toDelete = all.slice(MAX_SAFETY_CAMPAIGNS); // 新しい順に並んでいるので、はみ出した古い分
+    if(all.length <= maxCampaigns) return;
+    const toDelete = all.slice(maxCampaigns); // 新しい順に並んでいるので、はみ出した古い分
     for(const c of toDelete){
       await deleteSafetyCampaignWithResponses(c.id);
     }
@@ -6810,6 +6842,11 @@ function initContractSettingsListener(){
   onSnapshot(doc(db,"app_settings","contract_defaults"), snap=>{
     contractDefaultDepartmentId = (snap.exists() && snap.data().defaultDepartmentId) || null;
   }, (err)=>{ console.error("[入札設定取得エラー]", err); });
+  onSnapshot(doc(db,"app_settings","contract_highlight"), snap=>{
+    contractHighlightDays = (snap.exists() && snap.data().days) || 7;
+    if(document.getElementById("view-contracts").style.display !== "none"){ renderContractsTab(); }
+    refreshDashboardIfActive();
+  }, (err)=>{ console.error("[入札ハイライト設定取得エラー]", err); });
 }
 // 個人ごとの画面設定（アカウントに紐づけて保存する好み設定）。どの端末からログインしても引き継がれる。
 function initUserPrefsListener(){
@@ -7022,7 +7059,7 @@ function renderContractsTab(){
   visibleContracts.forEach(c=>{
     const card = document.createElement("div");
     const now = new Date();
-    const weekLater = new Date(now.getTime() + 7*24*60*60*1000);
+    const weekLater = new Date(now.getTime() + contractHighlightDays*24*60*60*1000);
     const startDateObj = new Date(c.startAt);
     const isResolved = isContractResolved(c);
     const isUpcomingWithinWeek = !isResolved && !isNaN(startDateObj.getTime()) && startDateObj >= now && startDateObj <= weekLater;

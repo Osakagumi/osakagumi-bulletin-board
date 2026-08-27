@@ -89,7 +89,7 @@ service cloud.firestore {
     // アプリ全体の設定（行き先ビューの列数など）: 全員が読める。書き込みはシステム管理者のみ。
     match /app_settings/{settingId} {
       allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow write: if isSignedIn() && (isAdmin() || isContractEditor() || isPoster() || isSafetySender());
     }
 
     // 行き先の事前設定（次の営業日用の下書き・初期状態テンプレート・自動反映済み日付の記録）
@@ -163,11 +163,6 @@ service cloud.firestore {
     }
 
     // 入札の対応部門などのアプリ全体設定: 全員が読める。書き込みはシステム管理者 or 契約編集権限者のみ。
-    match /app_settings/{settingId} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn() && isContractEditor();
-    }
-
     // 契約（入札関係情報）: 全員が読める（公開）。作成・更新・削除はシステム管理者 or 契約編集権限者のみ。
     match /contracts/{contractId} {
       allow read: if isSignedIn();

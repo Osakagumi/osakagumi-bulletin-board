@@ -478,8 +478,21 @@
     <!-- ============ お知らせ管理 ============ -->
     <section id="view-notices" style="display:none;">
       <div class="panel">
+        <h2>お知らせの自動削除設定</h2>
+        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
+          投稿から指定した日数が経過したお知らせは、いずれかのシステム管理者・お知らせ投稿権限者がログインした際に自動的に削除されます。
+        </p>
+        <div class="form-grid">
+          <div class="field">
+            <label>自動削除までの日数</label>
+            <input type="number" id="notice-cleanup-days-input" min="1" value="30">
+          </div>
+        </div>
+        <button class="btn btn-primary" id="notice-cleanup-save-btn">保存</button>
+      </div>
+      <div class="panel">
         <h2>掲示中のお知らせ一覧</h2>
-        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">個人ごとの「既読」状態に関わらず、現在掲示されている全てのお知らせを確認・削除できます。投稿から1ヶ月経過したお知らせは、いずれかのシステム管理者がログインした際に自動的に削除されます。</p>
+        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">個人ごとの「既読」状態に関わらず、現在掲示されている全てのお知らせを確認・削除できます。</p>
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
           <label style="display:flex;align-items:center;gap:5px;font-size:12.5px;color:var(--text);">
             <input type="checkbox" id="notices-select-all" style="width:auto;">全て選択
@@ -610,6 +623,19 @@
           </div>
         </div>
         <button class="btn btn-primary" id="contract-default-dept-save-btn">保存</button>
+      </div>
+      <div class="panel">
+        <h2>直近ハイライト表示の日数</h2>
+        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
+          入札一覧・ダッシュボードで、開始日時が指定した日数以内に迫っているものを目立たせて表示します。
+        </p>
+        <div class="form-grid">
+          <div class="field">
+            <label>日数</label>
+            <input type="number" id="contract-highlight-days-input" min="1" value="7">
+          </div>
+        </div>
+        <button class="btn btn-primary" id="contract-highlight-save-btn">保存</button>
       </div>
       <div class="panel">
         <h2>開札結果確定後の自動削除タイミング</h2>
@@ -1044,6 +1070,7 @@ onAuthStateChanged(auth, async (user)=>{
   initReservationsListener();
   initAdminsListener();
   initPostersListener();
+  initNoticeCleanupSettingsListener();
   initNoticesAdminListener();
   initDepartmentsListener();
   initWbColumnsListener();
@@ -1057,6 +1084,7 @@ onAuthStateChanged(auth, async (user)=>{
   populateSingleEmpPermissionsChecks();
   initBizInfoListener();
   initContractSettingsListener();
+  initContractHighlightSettingsListener();
   initContractCleanupListener();
   initEmployeesListener();
 });
@@ -1632,6 +1660,22 @@ function renderAdminsTable(list){
    お知らせ管理（投稿権限）
 ============================================================ */
 let lastPosterEmails = [];
+function initNoticeCleanupSettingsListener(){
+  onSnapshot(doc(db,"app_settings","notice_cleanup"), snap=>{
+    const days = (snap.exists() && snap.data().days) || 30;
+    const input = document.getElementById("notice-cleanup-days-input");
+    if(input) input.value = days;
+  }, (err)=>{ console.error("[お知らせ自動削除設定取得エラー]", err); });
+}
+document.getElementById("notice-cleanup-save-btn")?.addEventListener("click", async ()=>{
+  const days = Math.max(1, Number(document.getElementById("notice-cleanup-days-input").value) || 30);
+  try{
+    await setDoc(doc(db,"app_settings","notice_cleanup"), { days }, { merge:true });
+    toast("保存しました。");
+  }catch(e){
+    toast("保存に失敗しました。権限をご確認ください。");
+  }
+});
 function initPostersListener(){
   onSnapshot(collection(db,"announcement_posters"), snap=>{
     lastPosterEmails = snap.docs.map(d=>d.id);
@@ -2333,6 +2377,23 @@ document.getElementById("contract-default-dept-save-btn")?.addEventListener("cli
   const deptId = document.getElementById("contract-default-dept-select").value;
   try{
     await setDoc(doc(db,"app_settings","contract_defaults"), { defaultDepartmentId: deptId }, { merge:true });
+    toast("保存しました。");
+  }catch(e){
+    toast("保存に失敗しました。権限をご確認ください。");
+  }
+});
+
+function initContractHighlightSettingsListener(){
+  onSnapshot(doc(db,"app_settings","contract_highlight"), snap=>{
+    const days = (snap.exists() && snap.data().days) || 7;
+    const input = document.getElementById("contract-highlight-days-input");
+    if(input) input.value = days;
+  }, (err)=>{ console.error("[入札ハイライト設定取得エラー]", err); });
+}
+document.getElementById("contract-highlight-save-btn")?.addEventListener("click", async ()=>{
+  const days = Math.max(1, Number(document.getElementById("contract-highlight-days-input").value) || 7);
+  try{
+    await setDoc(doc(db,"app_settings","contract_highlight"), { days }, { merge:true });
     toast("保存しました。");
   }catch(e){
     toast("保存に失敗しました。権限をご確認ください。");
