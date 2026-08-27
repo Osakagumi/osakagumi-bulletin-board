@@ -4,8 +4,8 @@ rules_version = '2';
 // Firebaseコンソール > Firestore Database > ルール タブに、このファイルの中身を
 // そのまま貼り付けて「公開」してください。
 //
-// 管理者の登録方法:
-// Firestoreの「admins」コレクションに、管理者にしたい人のメールアドレスを
+// システム管理者の登録方法:
+// Firestoreの「admins」コレクションに、システム管理者にしたい人のメールアドレスを
 // ドキュメントIDとしてドキュメントを1つ作成してください（中身は空でOK）。
 // 例: コレクション admins > ドキュメントID: hine@osakagumi.co.jp
 
@@ -56,62 +56,62 @@ service cloud.firestore {
           exists(/databases/$(database)/documents/safety_senders/$(request.auth.token.email)));
     }
 
-    // 管理者一覧: ログインしていれば読めるが、書き込みは管理者のみ
+    // システム管理者一覧: ログインしていれば読めるが、書き込みはシステム管理者のみ
     match /admins/{email} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
 
-    // 利用停止（実質的な「削除」）対象ユーザーの一覧: 本人が自分の状態を確認するために読める必要がある。書き込みは管理者のみ。
+    // 利用停止（実質的な「削除」）対象ユーザーの一覧: 本人が自分の状態を確認するために読める必要がある。書き込みはシステム管理者のみ。
     match /blocked_users/{email} {
       allow read: if isSignedIn() && (request.auth.token.email == email || isAdmin());
       allow write: if isAdmin();
     }
 
-    // お知らせ投稿権限一覧: ログインしていれば読めるが、書き込みは管理者のみ
+    // お知らせ投稿権限一覧: ログインしていれば読めるが、書き込みはシステム管理者のみ
     match /announcement_posters/{email} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
 
-    // 行き先ボード「他者設定権限」一覧: ログインしていれば読めるが、書き込みは管理者のみ
+    // 行き先ボード「他者設定権限」一覧: ログインしていれば読めるが、書き込みはシステム管理者のみ
     match /whereabouts_editors/{email} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
 
-    // 所属（部署）マスタ: 全員が読める。追加・編集・削除は管理者のみ。
+    // 所属（部署）マスタ: 全員が読める。追加・編集・削除はシステム管理者のみ。
     match /departments/{deptId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
 
-    // アプリ全体の設定（行き先ビューの列数など）: 全員が読める。書き込みは管理者のみ。
+    // アプリ全体の設定（行き先ビューの列数など）: 全員が読める。書き込みはシステム管理者のみ。
     match /app_settings/{settingId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
 
     // 行き先の事前設定（次の営業日用の下書き・初期状態テンプレート・自動反映済み日付の記録）
-    // 全員が読める。書き込みは行き先の他者設定権限者・管理者のみ。
+    // 全員が読める。書き込みは行き先の他者設定権限者・システム管理者のみ。
     match /wb_presets/{docId} {
       allow read: if isSignedIn();
       allow write: if isWhereaboutsEditor();
     }
 
-    // カレンダー編集権限一覧: 全員が読める。書き込みは管理者のみ。
+    // カレンダー編集権限一覧: 全員が読める。書き込みはシステム管理者のみ。
     match /calendar_editors/{email} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
 
-    // 年間休日カレンダー（日付ごとの休日ON/OFF・名称）: 全員が読める。編集はカレンダー編集権限者・管理者のみ。
+    // 年間休日カレンダー（日付ごとの休日ON/OFF・名称）: 全員が読める。編集はカレンダー編集権限者・システム管理者のみ。
     match /calendar_days/{dateId} {
       allow read: if isSignedIn();
       allow write: if isCalendarEditor();
     }
 
-    // 年間休日カレンダーの年度一覧（最大3年度分の管理用）: 全員が読める。編集はカレンダー編集権限者・管理者のみ。
+    // 年間休日カレンダーの年度一覧（最大3年度分の管理用）: 全員が読める。編集はカレンダー編集権限者・システム管理者のみ。
     match /calendar_years/{yearId} {
       allow read: if isSignedIn();
       allow write: if isCalendarEditor();
@@ -127,13 +127,13 @@ service cloud.firestore {
       allow read, write: if isSignedIn() && request.auth.token.email == email;
     }
 
-    // 行き先ステータスマスタ（在席・外出・現場・休みなど）: 全員が読める。管理は管理者のみ。
+    // 行き先ステータスマスタ（在席・外出・現場・休みなど）: 全員が読める。管理はシステム管理者のみ。
     match /wb_statuses/{statusId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
 
-    // 設備カテゴリ（会議室・業務共用車輌・測量機器・ドローンなど）: 全員が読める。管理は管理者のみ。
+    // 設備カテゴリ（会議室・業務共用車輌・測量機器・ドローンなど）: 全員が読める。管理はシステム管理者のみ。
     match /equipment_categories/{categoryId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
@@ -141,7 +141,7 @@ service cloud.firestore {
 
     // 社員名簿（行き先ボード兼用）: ログインすると自動で自分の行が作られる。
     // 読み取りは全員。新規作成は本人のみ（なりすまし登録防止）。
-    // 更新（氏名・所属・状態など）は本人 / 管理者 / 行き先の他者設定権限者。削除は管理者のみ。
+    // 更新（氏名・所属・状態など）は本人 / システム管理者 / 行き先の他者設定権限者。削除はシステム管理者のみ。
     match /employees/{email} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && (request.auth.token.email == email || isAdmin());
@@ -150,31 +150,31 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // 測量機器管理者一覧（点検日の編集・貸出状態の管理ができる人）: 全員が読める。書き込みは管理者のみ。
+    // 測量機器管理者一覧（点検日の編集・貸出状態の管理ができる人）: 全員が読める。書き込みはシステム管理者のみ。
     match /equipment_managers/{email} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
 
-    // 契約（入札関係情報）の編集権限者一覧: 全員が読める。書き込みは管理者のみ。
+    // 契約（入札関係情報）の編集権限者一覧: 全員が読める。書き込みはシステム管理者のみ。
     match /contract_editors/{email} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
 
-    // 入札の対応部門などのアプリ全体設定: 全員が読める。書き込みは管理者 or 契約編集権限者のみ。
+    // 入札の対応部門などのアプリ全体設定: 全員が読める。書き込みはシステム管理者 or 契約編集権限者のみ。
     match /app_settings/{settingId} {
       allow read: if isSignedIn();
       allow write: if isSignedIn() && isContractEditor();
     }
 
-    // 契約（入札関係情報）: 全員が読める（公開）。作成・更新・削除は管理者 or 契約編集権限者のみ。
+    // 契約（入札関係情報）: 全員が読める（公開）。作成・更新・削除はシステム管理者 or 契約編集権限者のみ。
     match /contracts/{contractId} {
       allow read: if isSignedIn();
       allow create, update, delete: if isSignedIn() && isContractEditor();
     }
 
-    // 業務情報（Googleドライブ上のファイルを一般画面にピル切り替えで表示する）: 全員が読める。管理は管理者のみ。
+    // 業務情報（Googleドライブ上のファイルを一般画面にピル切り替えで表示する）: 全員が読める。管理はシステム管理者のみ。
     match /business_info_items/{itemId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
@@ -192,7 +192,7 @@ service cloud.firestore {
     }
 
     // 設備マスタ: ログインしていれば読める。
-    // 追加・削除・基本情報の編集は管理者のみ。
+    // 追加・削除・基本情報の編集はシステム管理者のみ。
     // 状態変更（在庫中・貸出中・点検中・故障中）は、在庫中からの操作は誰でも、
     // それ以外は測量機器管理者、または現在の借用者本人が可能。
     match /equipment/{equipmentId} {
@@ -206,7 +206,7 @@ service cloud.firestore {
     }
 
     // 予約: ログインしていれば読める。
-    // 作成は本人のuserIdでのみ可能。更新・削除は本人または管理者のみ可能。
+    // 作成は本人のuserIdでのみ可能。更新・削除は本人またはシステム管理者のみ可能。
     match /reservations/{reservationId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() &&
@@ -215,7 +215,7 @@ service cloud.firestore {
         (resource.data.userId == request.auth.uid || isAdmin());
     }
 
-    // お知らせ: 全員が読める。投稿は投稿権限者のみ。削除・編集は本人 or 管理者。
+    // お知らせ: 全員が読める。投稿は投稿権限者のみ。削除・編集は本人 or システム管理者。
     match /announcements/{postId} {
       allow read: if isSignedIn();
       allow create: if isPoster() &&
@@ -227,19 +227,19 @@ service cloud.firestore {
         (resource.data.authorEmail == request.auth.token.email || isAdmin());
     }
 
-    // 安否確認キャンペーン: 全員が読める。作成・編集・終了は管理者、または安否確認発信権限者のみ。
+    // 安否確認キャンペーン: 全員が読める。作成・編集・終了はシステム管理者、または安否確認発信権限者のみ。
     match /safety_campaigns/{campaignId} {
       allow read: if isSignedIn();
       allow write: if isSafetySender();
     }
 
-    // 安否確認発信権限一覧: ログインしていれば読めるが、書き込みは管理者のみ
+    // 安否確認発信権限一覧: ログインしていれば読めるが、書き込みはシステム管理者のみ
     match /safety_senders/{email} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
 
-    // 安否確認への回答: 全員が読める（誰が回答済みか管理者が把握するため）。
+    // 安否確認への回答: 全員が読める（誰が回答済みかシステム管理者が把握するため）。
     // 書き込みは本人のuserIdでのみ可能。
     match /safety_responses/{responseId} {
       allow read: if isSignedIn();
@@ -249,14 +249,14 @@ service cloud.firestore {
     }
 
     // 敷鉄板の種類マスタ（6m・3mなど、総数・単価）: 全員が読める。
-    // 追加・編集・削除は管理者、または測量機器管理者のみ。
+    // 追加・編集・削除はシステム管理者、または測量機器管理者のみ。
     match /steel_plate_types/{typeId} {
       allow read: if isSignedIn();
       allow write: if isAdmin() || isEquipmentManager();
     }
 
     // 敷鉄板の貸出・返却の記録: 全員が読める。
-    // 作成は本人のメールアドレスでのみ可能。更新・削除は本人 / 管理者 / 測量機器管理者のみ。
+    // 作成は本人のメールアドレスでのみ可能。更新・削除は本人 / システム管理者 / 測量機器管理者のみ。
     match /steel_plate_transactions/{txId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() &&

@@ -329,14 +329,14 @@
         <h2>CSVで一括登録</h2>
         <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
           1行目はヘッダー行として無視されます。2行目以降を1人ずつ登録します。<br>
-          列の順番：<b>社員番号, 氏名, 所属, 管理者フラグ, お知らせ投稿フラグ, 行き先編集権限フラグ, 測量機器管理者フラグ, 入札編集権限フラグ, カレンダー編集権限フラグ, 安否確認発信権限フラグ, メールアドレス, パスワード, 電話番号, 備考</b><br>
+          列の順番：<b>社員番号, 氏名, 所属, システム管理者フラグ, お知らせ投稿フラグ, 行き先編集権限フラグ, 測量機器管理者フラグ, 入札編集権限フラグ, カレンダー編集権限フラグ, 安否確認発信権限フラグ, メールアドレス, パスワード, 電話番号, 備考</b><br>
           必須は「メールアドレス」「パスワード」のみで、他は省略可です。<br>
           各権限フラグは <code>1</code> / <code>TRUE</code> / <code>○</code> / <code>はい</code> のいずれかを入れると有効になります（空欄は無効）。<br>
           所属欄には「ユーザー管理」タブで登録済みの部署名をそのまま入力してください（一致しない場合は未所属として登録されます）。複数の部署に所属させたい場合は「、」または「/」区切りで入力してください（例：役員、営業部）。
         </p>
         <div class="field full" style="margin-bottom:12px;">
           <label>サンプル</label>
-          <pre style="background:#F7F8FA;border:1px solid var(--line);border-radius:7px;padding:10px 12px;font-size:12px;overflow-x:auto;">社員番号,氏名,所属,管理者フラグ,お知らせ投稿フラグ,行き先編集権限フラグ,測量機器管理者フラグ,入札編集権限フラグ,カレンダー編集権限フラグ,安否確認発信権限フラグ,メールアドレス,パスワード,電話番号,備考
+          <pre style="background:#F7F8FA;border:1px solid var(--line);border-radius:7px;padding:10px 12px;font-size:12px;overflow-x:auto;">社員番号,氏名,所属,システム管理者フラグ,お知らせ投稿フラグ,行き先編集権限フラグ,測量機器管理者フラグ,入札編集権限フラグ,カレンダー編集権限フラグ,安否確認発信権限フラグ,メールアドレス,パスワード,電話番号,備考
 1001,山田太郎,工務部,,1,,,,,,yamada@osakagumi.co.jp,Osaka2026!,090-1234-5678,現場責任者
 1002,佐藤花子,総務経理部,1,1,1,,,,1,sato@osakagumi.co.jp,Osaka2026!,090-2345-6789,</pre>
         </div>
@@ -350,7 +350,7 @@
       <div class="panel" id="userimport-preview-panel" style="display:none;">
         <h2>登録内容の確認（<span id="userimport-count">0</span>件）</h2>
         <table>
-          <thead><tr><th>社員番号</th><th>氏名</th><th>所属</th><th>管理者</th><th>お知らせ投稿</th><th>行き先編集</th><th>測量機器管理</th><th>入札編集</th><th>カレンダー編集</th><th>安否確認発信</th><th>メールアドレス</th><th>電話番号</th><th>備考</th></tr></thead>
+          <thead><tr><th>社員番号</th><th>氏名</th><th>所属</th><th>システム管理者</th><th>お知らせ投稿</th><th>行き先編集</th><th>測量機器管理</th><th>入札編集</th><th>カレンダー編集</th><th>安否確認発信</th><th>メールアドレス</th><th>電話番号</th><th>備考</th></tr></thead>
           <tbody id="userimport-preview-body"></tbody>
         </table>
         <button class="btn btn-primary" id="userimport-execute-btn" style="margin-top:12px;">この内容で登録を実行する</button>
@@ -447,7 +447,7 @@
     <section id="view-notices" style="display:none;">
       <div class="panel">
         <h2>掲示中のお知らせ一覧</h2>
-        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">個人ごとの「既読」状態に関わらず、現在掲示されている全てのお知らせを確認・削除できます。投稿から1ヶ月経過したお知らせは、いずれかの管理者がログインした際に自動的に削除されます。</p>
+        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">個人ごとの「既読」状態に関わらず、現在掲示されている全てのお知らせを確認・削除できます。投稿から1ヶ月経過したお知らせは、いずれかのシステム管理者がログインした際に自動的に削除されます。</p>
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
           <label style="display:flex;align-items:center;gap:5px;font-size:12.5px;color:var(--text);">
             <input type="checkbox" id="notices-select-all" style="width:auto;">全て選択
@@ -772,7 +772,7 @@ async function seedCategoriesIfEmpty(){
       await setDoc(doc(db,"equipment_categories", c.id), {
         label: c.label, color: c.color, mode: c.mode, order: SEED_CATEGORIES.indexOf(c)*10
       });
-    }catch(e){ /* 既に他の管理者が作成済みの場合など、失敗しても致命的ではない */ }
+    }catch(e){ /* 既に他のシステム管理者が作成済みの場合など、失敗しても致命的ではない */ }
   }
 }
 function initCategoriesListener(){
@@ -923,7 +923,7 @@ onAuthStateChanged(auth, async (user)=>{
 
   if(!isAdmin){
     document.getElementById("gate").style.display = "flex";
-    document.getElementById("gate-msg").textContent = "この画面は管理者のみ利用できます。管理者権限が必要な場合は既存の管理者にご相談ください。";
+    document.getElementById("gate-msg").textContent = "この画面はシステム管理者のみ利用できます。システム管理者権限が必要な場合は既存のシステム管理者にご相談ください。";
     return;
   }
 
@@ -1296,7 +1296,7 @@ function renderReservationsTable(){
   });
 }
 
-/* ============ 管理者管理 ============ */
+/* ============ システム管理者管理 ============ */
 let lastAdminEmails = [];
 function initAdminsListener(){
   onSnapshot(collection(db,"admins"), snap=>{
@@ -1309,7 +1309,7 @@ function renderAdminsTable(list){
   if(!body) return;
   body.innerHTML = "";
   if(list.length===0){
-    body.innerHTML = `<tr><td colspan="3" class="empty">管理者が登録されていません。</td></tr>`;
+    body.innerHTML = `<tr><td colspan="3" class="empty">システム管理者が登録されていません。</td></tr>`;
     return;
   }
   list.forEach(email=>{
@@ -1319,12 +1319,12 @@ function renderAdminsTable(list){
     btn.className = "btn btn-danger"; btn.textContent = "削除";
     btn.addEventListener("click", async ()=>{
       if(email === currentUser.email){
-        if(!confirm("自分自身を管理者から外します。よろしいですか？")) return;
+        if(!confirm("自分自身をシステム管理者から外します。よろしいですか？")) return;
       } else {
-        if(!confirm(`${email} を管理者から外しますか？`)) return;
+        if(!confirm(`${email} をシステム管理者から外しますか？`)) return;
       }
       await deleteDoc(doc(db,"admins", email));
-      toast("管理者を削除しました。");
+      toast("システム管理者を削除しました。");
     });
     tr.querySelector(".actions").appendChild(btn);
     body.appendChild(tr);
@@ -1514,7 +1514,7 @@ function renderPosters(list){
   if(!body) return;
   body.innerHTML = "";
   if(list.length===0){
-    body.innerHTML = `<tr><td colspan="3" class="empty">管理者以外の投稿権限者はいません。</td></tr>`;
+    body.innerHTML = `<tr><td colspan="3" class="empty">システム管理者以外の投稿権限者はいません。</td></tr>`;
     return;
   }
   list.forEach(email=>{
@@ -1828,7 +1828,7 @@ function renderWbEditors(list){
   if(!body) return;
   body.innerHTML = "";
   if(list.length===0){
-    body.innerHTML = `<tr><td colspan="3" class="empty">管理者以外の権限者はいません。</td></tr>`;
+    body.innerHTML = `<tr><td colspan="3" class="empty">システム管理者以外の権限者はいません。</td></tr>`;
     return;
   }
   list.forEach(email=>{
@@ -1861,7 +1861,7 @@ function renderEquipmentManagers(list){
   if(!body) return;
   body.innerHTML = "";
   if(list.length===0){
-    body.innerHTML = `<tr><td colspan="2" class="empty">管理者以外の権限者はいません。</td></tr>`;
+    body.innerHTML = `<tr><td colspan="2" class="empty">システム管理者以外の権限者はいません。</td></tr>`;
     return;
   }
   list.forEach(email=>{
@@ -2068,7 +2068,7 @@ function renderContractEditors(list){
   if(!body) return;
   body.innerHTML = "";
   if(list.length===0){
-    body.innerHTML = `<tr><td colspan="2" class="empty">管理者以外の権限者はいません。</td></tr>`;
+    body.innerHTML = `<tr><td colspan="2" class="empty">システム管理者以外の権限者はいません。</td></tr>`;
     return;
   }
   list.forEach(email=>{
@@ -2102,7 +2102,7 @@ function renderCalendarEditors(list){
   if(!body) return;
   body.innerHTML = "";
   if(list.length===0){
-    body.innerHTML = `<tr><td colspan="3" class="empty">管理者以外の権限者はいません。</td></tr>`;
+    body.innerHTML = `<tr><td colspan="3" class="empty">システム管理者以外の権限者はいません。</td></tr>`;
     return;
   }
   list.forEach(email=>{
@@ -2311,7 +2311,7 @@ function sortByDeptAndEmployeeNo(list){
 }
 // 各種権限の一覧（コレクション名・チェックボックスのラベル・現在の付与者一覧を取得する関数）
 const PERMISSION_DEFS = [
-  { collection: "admins", label: "管理者", getList: ()=> lastAdminEmails },
+  { collection: "admins", label: "システム管理者", getList: ()=> lastAdminEmails },
   { collection: "announcement_posters", label: "お知らせ投稿権限", getList: ()=> lastPosterEmails },
   { collection: "whereabouts_editors", label: "行き先の他者設定権限", getList: ()=> lastWbEditorEmails },
   { collection: "equipment_managers", label: "測量機器管理者", getList: ()=> lastEqManagerEmails },
@@ -2504,10 +2504,10 @@ document.getElementById("emp-edit-save-btn")?.addEventListener("click", async ()
   });
   const name = document.getElementById("emp-edit-name-input").value.trim();
 
-  // 自分自身の管理者権限を外そうとしている場合は確認する
+  // 自分自身のシステム管理者権限を外そうとしている場合は確認する
   const adminCb = document.querySelector('.emp-edit-permission-check[data-collection="admins"]');
   if(adminCb && !adminCb.checked && editingEmpEmail === currentUser.email){
-    if(!confirm("自分自身を管理者から外します。よろしいですか？")) return;
+    if(!confirm("自分自身をシステム管理者から外します。よろしいですか？")) return;
   }
 
   try{
@@ -2961,7 +2961,7 @@ document.getElementById("single-emp-register-btn")?.addEventListener("click", as
   statusEl.style.color = "var(--muted)";
   statusEl.textContent = "登録中…";
 
-  // 管理者自身のログイン状態を保ったまま作成するため、CSV一括登録と同じくセカンダリのFirebaseアプリを使う
+  // システム管理者自身のログイン状態を保ったまま作成するため、CSV一括登録と同じくセカンダリのFirebaseアプリを使う
   const secondaryApp = initializeApp(firebaseConfig, "singleUserCreate_" + Date.now());
   const secondaryAuth = getAuth(secondaryApp);
   try{ await setPersistence(secondaryAuth, inMemoryPersistence); }catch(e){}
@@ -3014,7 +3014,7 @@ document.getElementById("userimport-execute-btn").addEventListener("click", asyn
   let ok = 0, exists = 0, fail = 0;
   const failDetails = [];
 
-  // 管理者自身のログイン状態を保ったまま作成するため、別名のセカンダリFirebaseアプリを使う
+  // システム管理者自身のログイン状態を保ったまま作成するため、別名のセカンダリFirebaseアプリを使う
   const secondaryApp = initializeApp(firebaseConfig, "userImportApp_" + Date.now());
   const secondaryAuth = getAuth(secondaryApp);
   try{ await setPersistence(secondaryAuth, inMemoryPersistence); }catch(e){}

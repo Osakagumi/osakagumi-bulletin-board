@@ -914,7 +914,7 @@
         </div>
       </div>
 
-      <!-- 敷鉄板 種類の設定モーダル（管理者・測量機器管理者のみ） -->
+      <!-- 敷鉄板 種類の設定モーダル（システム管理者・測量機器管理者のみ） -->
       <div class="modal-overlay" id="sp-type-modal">
         <div class="modal">
           <h3 id="sp-type-modal-title">鉄板の設定</h3>
@@ -1748,7 +1748,7 @@ onAuthStateChanged(auth, async (user)=>{
       const blockedDoc = await getDoc(doc(db, "blocked_users", user.email));
       if(blockedDoc.exists()){
         await signOut(auth);
-        document.getElementById("login-error").textContent = "このアカウントはご利用いただけません。管理者にお問い合わせください。";
+        document.getElementById("login-error").textContent = "このアカウントはご利用いただけません。システム管理者にお問い合わせください。";
         return;
       }
     }catch(e){
@@ -1838,7 +1838,7 @@ const DASH_CARD_BY_VIEW = {
   checkout: "dash-card-checkout",
   contracts: "dash-card-contracts"
 };
-// 管理者がユーザー毎に設定した「非表示にするタブ」を、自分のタブ・ダッシュボードのカードに反映する
+// システム管理者がユーザー毎に設定した「非表示にするタブ」を、自分のタブ・ダッシュボードのカードに反映する
 function applyMyHiddenTabs(){
   const me = employeesAll.find(e=>(e.email||"").toLowerCase()===(currentUser?.email||"").toLowerCase());
   const hidden = (me && Array.isArray(me.hiddenTabs)) ? me.hiddenTabs : [];
@@ -3458,7 +3458,7 @@ function initNoticesListener(){
 }
 
 let noticeCleanupRunning = false;
-// 予約日が過去日になった予約を自動削除する（本人の予約は誰でも、それ以外は管理者のみ削除できる）
+// 予約日が過去日になった予約を自動削除する（本人の予約は誰でも、それ以外はシステム管理者のみ削除できる）
 let reservationCleanupRunning = false;
 async function cleanupPastReservations(){
   if(reservationCleanupRunning) return;
@@ -5299,7 +5299,7 @@ function updateSafetyTabVisibility(){
   const responseBtn = document.querySelector('.tab-btn[data-view="safetyresponse"]');
   const hasActive = !!activeSafetyCampaign;
   if(manageBtn){
-    // 「安否確認」タブ（発信・回答状況管理）は、発信権限者・管理者にのみ常時表示する
+    // 「安否確認」タブ（発信・回答状況管理）は、発信権限者・システム管理者にのみ常時表示する
     manageBtn.style.display = isSafetySender ? "inline-block" : "none";
   }
   if(responseBtn){
@@ -6162,7 +6162,7 @@ function initSteelPlateTxListener(){
     try{ renderMyResourcesSummary(); }catch(e){ /* checkoutタブが未表示なら何もしない */ }
   });
 }
-// 初回アクセス時（管理者のみ、1回だけ）：
+// 初回アクセス時（システム管理者のみ、1回だけ）：
 // ①「敷鉄板」カテゴリ（在庫数管理）が無ければ作成
 // ②旧 steel_plate_types のデータが残っていれば、同じドキュメントID（6m・3m）のまま
 //   equipment コレクションへ移す。IDを引き継ぐことで、既存の steel_plate_transactions
@@ -6619,7 +6619,7 @@ function validateSpForm(excludeTxId){
   const typeId = document.getElementById("sp-plate-select").value;
   const siteName = document.getElementById("sp-site-input").value.trim();
   const orderer = document.getElementById("sp-orderer-input").value.trim();
-  if(!typeId){ errEl.textContent = `${selectedInventoryCategoryLabel()}の種類を登録してください（管理者にご連絡ください）。`; return null; }
+  if(!typeId){ errEl.textContent = `${selectedInventoryCategoryLabel()}の種類を登録してください（システム管理者にご連絡ください）。`; return null; }
   if(!siteName){ errEl.textContent = "現場名を入力してください。"; return null; }
 
   if(spSelectedType==="lend"){
