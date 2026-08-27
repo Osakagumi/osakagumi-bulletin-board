@@ -1071,6 +1071,7 @@ function applySectionAccessToNav(){
   });
 }
 let myHiddenTabsForAdmin = [];
+const GENERAL_HIDEABLE_TAB_IDS_FOR_ADMIN = ["notices","calendar","whereabouts","chat","reserve","checkout","contracts","bizinfo"];
 onAuthStateChanged(auth, async (user)=>{
   if(!user){
     document.getElementById("gate").style.display = "flex";
@@ -1079,14 +1080,15 @@ onAuthStateChanged(auth, async (user)=>{
   }
   currentUser = user;
 
-  const [adminDoc, posterDoc, wbEditorDoc, eqManagerDoc, calEditorDoc, contractEditorDoc, myEmpDoc] = await Promise.all([
+  const [adminDoc, posterDoc, wbEditorDoc, eqManagerDoc, calEditorDoc, contractEditorDoc, myEmpDoc, generalDefaultsDoc] = await Promise.all([
     getDoc(doc(db, "admins", user.email)).catch(()=>null),
     getDoc(doc(db, "announcement_posters", user.email)).catch(()=>null),
     getDoc(doc(db, "whereabouts_editors", user.email)).catch(()=>null),
     getDoc(doc(db, "equipment_managers", user.email)).catch(()=>null),
     getDoc(doc(db, "calendar_editors", user.email)).catch(()=>null),
     getDoc(doc(db, "contract_editors", user.email)).catch(()=>null),
-    getDoc(doc(db, "employees", user.email)).catch(()=>null)
+    getDoc(doc(db, "employees", user.email)).catch(()=>null),
+    getDoc(doc(db, "system_tab_defaults", "general")).catch(()=>null)
   ]);
   myAdminPermissions = {
     isAdmin: !!(adminDoc && adminDoc.exists()),
@@ -1096,7 +1098,17 @@ onAuthStateChanged(auth, async (user)=>{
     isCalendarEditor: !!(calEditorDoc && calEditorDoc.exists()),
     isContractEditor: !!(contractEditorDoc && contractEditorDoc.exists())
   };
-  myHiddenTabsForAdmin = (myEmpDoc && myEmpDoc.exists() && Array.isArray(myEmpDoc.data().hiddenTabs)) ? myEmpDoc.data().hiddenTabs : [];
+  if(myEmpDoc && myEmpDoc.exists() && Array.isArray(myEmpDoc.data().hiddenTabs)){
+    // 本人が個人設定済み：そちらを優先する
+    myHiddenTabsForAdmin = myEmpDoc.data().hiddenTabs;
+  } else {
+    // 個人設定が無い場合は、システム既定の「有効なタブ」から非表示リストを逆算して使う
+    const generalDefaults = (generalDefaultsDoc && generalDefaultsDoc.exists()) ? generalDefaultsDoc.data() : {};
+    const enabledTabs = Array.isArray(generalDefaults.enabledTabs) ? generalDefaults.enabledTabs : null;
+    myHiddenTabsForAdmin = enabledTabs
+      ? GENERAL_HIDEABLE_TAB_IDS_FOR_ADMIN.filter(id => !enabledTabs.includes(id))
+      : [];
+  }
   computeSectionAccess();
   const isAdmin = myAdminPermissions.isAdmin; // 以降の既存コードとの互換用
   const hasAnyAccess = Object.values(mySectionAccess).some(v=>v);
