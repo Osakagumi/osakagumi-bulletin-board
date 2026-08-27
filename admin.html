@@ -698,13 +698,6 @@
             <label>タブの並び順（ドラッグで並び替え）</label>
             <div id="general-tab-order-list" class="settings-draglist"></div>
           </div>
-          <div class="field">
-            <label>既定で有効にするタブ</label>
-            <p style="font-size:12px;color:var(--muted);margin:0 0 6px;">
-              ここでチェックを外したタブは、社員個人の設定に関わらず、全員に対して非表示になります（両方が「表示」の場合のみ表示されます）。
-            </p>
-            <div id="general-enabled-tabs-checks" style="display:flex;flex-wrap:wrap;gap:10px;border:1px solid var(--line);border-radius:8px;padding:10px;"></div>
-          </div>
         </div>
 
         <div class="panel" style="margin:0;">
@@ -716,9 +709,19 @@
             <label>タブの並び順（ドラッグで並び替え）</label>
             <div id="admin-tab-order-list" class="settings-draglist"></div>
           </div>
+          <div style="text-align:right;margin-top:14px;">
+            <button class="btn btn-primary" id="system-tab-defaults-save-btn">保存</button>
+          </div>
+        </div>
+
+        <div class="panel" style="margin:0;">
+          <h2>既定で有効にするタブ</h2>
+          <p style="font-size:12px;color:var(--muted);margin:0 0 10px;">
+            ここでチェックを外したタブは、社員個人の設定に関わらず、全員に対して非表示になります（両方が「表示」の場合のみ表示されます）。
+          </p>
+          <div id="general-enabled-tabs-checks" style="display:flex;flex-wrap:wrap;gap:10px;border:1px solid var(--line);border-radius:8px;padding:10px;"></div>
         </div>
       </div>
-      <button class="btn btn-primary" id="system-tab-defaults-save-btn" style="margin-top:16px;">保存</button>
     </section>
 
     <!-- ============ 業務情報 ファイル登録手順モーダル ============ -->
