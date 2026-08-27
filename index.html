@@ -806,13 +806,13 @@
         <div id="checkout-steelplates-panel" style="display:none;">
           <div class="section-toolbar">
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-              <button class="btn-primary" id="sp-new-btn">＋ 貸出・返却を記録</button>
+              <button class="btn-primary" id="sp-new-btn">貸出・返却を記録</button>
               <div class="seg-toggle" id="sp-view-toggle">
                 <button type="button" class="seg-btn active" data-spview="holdings">現場別</button>
                 <button type="button" class="seg-btn" data-spview="history">履歴</button>
               </div>
             </div>
-            <button class="btn-ghost" id="sp-type-add-btn" style="border:1px solid var(--line);display:none;">＋ 鉄板の種類を追加</button>
+            <button class="btn-ghost" id="sp-type-add-btn" style="border:1px solid var(--line);display:none;">鉄板の種類を追加</button>
           </div>
           <div id="sp-holdings-section" style="overflow-x:auto;">
             <table class="sp-holdings-table">
@@ -1009,7 +1009,7 @@
       <!-- ---- お知らせ ---- -->
       <section id="view-notices" style="display:none;">
         <div class="section-toolbar">
-          <button class="btn-primary" id="notice-new-btn" style="display:none;">＋ 新規投稿</button>
+          <button class="btn-primary" id="notice-new-btn" style="display:none;">新規投稿</button>
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-left:auto;">
             <button class="btn-ghost" id="notice-hide-read-btn" style="border:1px solid var(--line);display:none;">既読分を非表示</button>
             <button class="btn-ghost" id="notice-showall-btn" style="border:1px solid var(--line);">すべて表示</button>
@@ -1099,7 +1099,7 @@
       <!-- ---- 契約（入札関係情報） ---- -->
       <section id="view-contracts" style="display:none;">
         <div class="section-toolbar">
-          <button class="btn-primary" id="contract-new-btn" style="display:none;">＋ 追加</button>
+          <button class="btn-primary" id="contract-new-btn" style="display:none;">追加</button>
           <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text);cursor:pointer;">
             <input type="checkbox" id="contract-show-resolved-check" checked style="width:auto;">
             開札後のデータを表示する
@@ -1120,7 +1120,7 @@
       <section id="view-chat" style="display:none;">
         <div id="chat-list-view">
           <div class="section-toolbar">
-            <button class="btn-primary" id="chat-new-btn">＋ 新しいメッセージ</button>
+            <button class="btn-primary" id="chat-new-btn">新しいメッセージ</button>
           </div>
           <p style="font-size:12px;color:var(--muted);margin:-6px 0 12px;">メッセージは24時間経過すると自動的に削除されます。</p>
           <div id="chat-conversation-list"></div>
@@ -6269,7 +6269,7 @@ function renderSteelPlateSummary(){
   });
   thead.appendChild(tr);
   document.getElementById("sp-type-add-btn").style.display = (isAdmin || isEquipmentManager) ? "inline-block" : "none";
-  document.getElementById("sp-type-add-btn").textContent = `＋ ${selectedInventoryCategoryLabel()}の種類を追加`;
+  document.getElementById("sp-type-add-btn").textContent = `${selectedInventoryCategoryLabel()}の種類を追加`;
 }
 // 貸出タブで現在選んでいる「在庫数管理」カテゴリの名前（敷鉄板・H鋼・単管など）を返す
 function selectedInventoryCategoryLabel(){
@@ -6458,7 +6458,7 @@ function renderSpHoldingsList(){
   const colCount = 1 + spPlateTypesAll.length;
   tbody.innerHTML = "";
   if(spPlateTypesAll.length===0){
-    tbody.innerHTML = `<tr><td style="color:var(--muted);text-align:center;padding:16px;">${selectedInventoryCategoryLabel()}の種類がまだ登録されていません。「＋${selectedInventoryCategoryLabel()}の種類を追加」から登録してください。</td></tr>`;
+    tbody.innerHTML = `<tr><td style="color:var(--muted);text-align:center;padding:16px;">${selectedInventoryCategoryLabel()}の種類がまだ登録されていません。「${selectedInventoryCategoryLabel()}の種類を追加」から登録してください。</td></tr>`;
     return;
   }
   if(holdings.length===0){
@@ -6719,7 +6719,7 @@ document.getElementById("sp-delete-btn")?.addEventListener("click", async ()=>{
 function openSpTypeModal(typeId){
   spEditingTypeId = typeId || null;
   const t = typeId ? spPlateTypesAll.find(t=>t.id===typeId) : null;
-  document.getElementById("sp-type-modal-title").textContent = t ? `${selectedInventoryCategoryLabel()}の設定` : `＋ ${selectedInventoryCategoryLabel()}の種類を追加`;
+  document.getElementById("sp-type-modal-title").textContent = t ? `${selectedInventoryCategoryLabel()}の設定` : `${selectedInventoryCategoryLabel()}の種類を追加`;
   document.getElementById("sp-type-name-input").value = t?.name || "";
   document.getElementById("sp-type-total-input").value = t?.totalCount ?? "";
   document.getElementById("sp-type-price-input").value = t?.unitPricePerDay ?? "";
@@ -7440,7 +7440,7 @@ function renderChatConversationList(){
   const body = document.getElementById("chat-conversation-list");
   body.innerHTML = "";
   if(chatConversations.length===0){
-    body.innerHTML = `<div style="color:var(--muted);text-align:center;padding:24px;">まだメッセージはありません。「＋新しいメッセージ」から始められます。</div>`;
+    body.innerHTML = `<div style="color:var(--muted);text-align:center;padding:24px;">まだメッセージはありません。「新しいメッセージ」から始められます。</div>`;
     return;
   }
   chatConversations.forEach(conv=>{
