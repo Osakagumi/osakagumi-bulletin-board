@@ -1048,7 +1048,7 @@ const ADMIN_SECTION_PERMISSIONS = {
   whereabouts:   { permission: "isWhereaboutsEditor", generalTab: "whereabouts" },
   calendar:      { permission: "isCalendarEditor", generalTab: "calendar" },
   contracts:     { permission: "isContractEditor", generalTab: "contracts" },
-  bizinfo:       { permission: null, generalTab: null },
+  bizinfo:       { permission: null, generalTab: "bizinfo" },
   systemsettings:{ permission: null, generalTab: null }
 };
 let myAdminPermissions = {};
@@ -1056,10 +1056,10 @@ let mySectionAccess = {};
 function computeSectionAccess(){
   mySectionAccess = {};
   Object.entries(ADMIN_SECTION_PERMISSIONS).forEach(([section, def])=>{
-    if(myAdminPermissions.isAdmin){ mySectionAccess[section] = true; return; }
-    if(!def.permission){ mySectionAccess[section] = false; return; } // システム管理者専用セクション
-    const hasPermission = !!myAdminPermissions[def.permission];
-    const tabVisibleOnGeneralScreen = !myHiddenTabsForAdmin.includes(def.generalTab);
+    // 権限判定：システム管理者は常に権限ありとみなす。個別権限を持つ人もOK（対応する個別権限が無いセクションは管理者専用）。
+    const hasPermission = myAdminPermissions.isAdmin || (!!def.permission && !!myAdminPermissions[def.permission]);
+    // タブ表示判定：対応する一般画面タブが「無効」に設定されている場合は、システム管理者であってもこのセクションは表示しない。
+    const tabVisibleOnGeneralScreen = def.generalTab ? !myHiddenTabsForAdmin.includes(def.generalTab) : true;
     mySectionAccess[section] = hasPermission && tabVisibleOnGeneralScreen;
   });
 }
