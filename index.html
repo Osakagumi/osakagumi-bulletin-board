@@ -748,7 +748,7 @@
       <button class="tab-btn" data-view="reserve">予約</button>
       <button class="tab-btn" data-view="contracts">入札</button>
       <button class="tab-btn" data-view="bizinfo">業務情報</button>
-      <button class="tab-btn" data-view="checkout">資機材</button>
+      <button class="tab-btn" data-view="checkout">機材</button>
       <button class="tab-btn" data-view="safety" style="display:none;">安否確認</button>
       <button class="tab-btn" data-view="safetyresponse" style="display:none;">安否回答</button>
       <button class="tab-reorder-btn" id="tab-reorder-toggle" title="タブの並び替え">並び替え</button>
@@ -794,7 +794,7 @@
       </section>
       <div id="reserve-signage-error" style="display:none;padding:40px;text-align:center;font-size:16px;color:var(--muted);"></div>
 
-      <!-- ---- 資機材（測量機器・ドローン／敷鉄板） ---- -->
+      <!-- ---- 機材（測量機器・ドローン／敷鉄板） ---- -->
       <section id="view-checkout" style="display:none;">
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
           <div class="cat-row" id="checkout-cat-row" style="margin-bottom:0;flex:1;"></div>
@@ -837,8 +837,8 @@
           </div>
         </div>
 
-        <!-- ---- 借用中の資機材（測量機器/ドローンの借用・点検中、敷鉄板の自分の貸出中数量） ---- -->
-        <div class="section-divider" style="margin-top:24px;">借用中の資機材</div>
+        <!-- ---- 借用中の機材（測量機器/ドローンの借用・点検中、敷鉄板の自分の貸出中数量） ---- -->
+        <div class="section-divider" style="margin-top:24px;">借用中の機材</div>
         <table class="sp-history-table" style="min-width:0;">
           <thead><tr><th style="width:110px;">日付</th><th style="width:100px;">種別</th><th style="width:110px;">管理番号</th><th>設備名</th><th style="width:120px;">状態／数量</th></tr></thead>
           <tbody id="my-resources-list"></tbody>
@@ -998,8 +998,8 @@
             <div class="dash-card" id="dash-card-checkout">
               <div class="dash-card-head">
                 <span class="dash-drag-handle" title="ドラッグして並び替え">⠿</span>
-                <h3>借用中の資機材</h3>
-                <span class="dash-card-link" id="dash-checkout-link" title="資機材を見る">▶</span>
+                <h3>借用中の機材</h3>
+                <span class="dash-card-link" id="dash-checkout-link" title="機材を見る">▶</span>
               </div>
               <div id="dash-checkout-body"></div>
             </div>
@@ -2146,7 +2146,7 @@ function renderDashboard(){
     });
   }
 
-  // ---- 自分の資機材（借用中の測量機器/ドローン＋自分が注文者の敷鉄板） ----
+  // ---- 自分の機材（借用中の測量機器/ドローン＋自分が注文者の敷鉄板） ----
   const checkoutBody = document.getElementById("dash-checkout-body");
   checkoutBody.innerHTML = "";
   const myEquip = equipmentAll.filter(eq=>
@@ -2157,7 +2157,7 @@ function renderDashboard(){
     .map(t=>({ t, outstanding: spOutstandingCountByOrderer(t.id, myName) }))
     .filter(x=> x.outstanding > 0);
   if(myEquip.length===0 && mySteel.length===0){
-    checkoutBody.innerHTML = `<div class="dash-empty">現在、借用中の資機材はありません。</div>`;
+    checkoutBody.innerHTML = `<div class="dash-empty">現在、借用中の機材はありません。</div>`;
   } else {
     myEquip.forEach(eq=>{
       const st = equipmentStatusInfo(eq.status);
@@ -2528,7 +2528,7 @@ function renderCheckoutTab(){
   const spPanel = document.getElementById("checkout-steelplates-panel");
   if(equipPanel) equipPanel.style.display = isSteelPlates ? "none" : "block";
   if(spPanel) spPanel.style.display = isSteelPlates ? "block" : "none";
-  try{ renderMyResourcesSummary(); }catch(e){ console.error("[マイ資機材情報の表示エラー]", e); }
+  try{ renderMyResourcesSummary(); }catch(e){ console.error("[マイ機材情報の表示エラー]", e); }
   if(isSteelPlates){
     try{
       ensureSteelPlateCategoryAndMigrate();
@@ -2549,7 +2549,7 @@ function renderCheckoutTab(){
   renderCheckoutGrid(grid, items);
 }
 
-// 資機材タブの一番下に常に表示する「自分が持っている資機材」情報。
+// 機材タブの一番下に常に表示する「自分が持っている機材」情報。
 // ・測量機器／ドローン：自分が借用中、または点検に出したまま（holderEmailが自分）のもの
 // ・敷鉄板：現場ごとの個人持ちという概念がないため、種類ごとの「現在の貸出中数量（全体）」を表示する
 function renderMyResourcesSummary(){
@@ -2594,7 +2594,7 @@ function renderMyResourcesSummary(){
   });
 
   if(rows.length===0){
-    body.innerHTML = `<tr><td colspan="5" style="color:var(--muted);text-align:center;padding:14px;">現在、借用中の資機材はありません。</td></tr>`;
+    body.innerHTML = `<tr><td colspan="5" style="color:var(--muted);text-align:center;padding:14px;">現在、借用中の機材はありません。</td></tr>`;
     return;
   }
   rows.forEach(r=>{
@@ -6277,7 +6277,7 @@ function recomputeSpPlateTypes(){
   const catId = (selCat && selCat.mode==="inventory") ? selCat.id : null;
   spPlateTypesAll = catId ? equipmentAll.filter(e=>e.category===catId) : [];
   spPlateTypesAll.sort((a,b)=> (a.order??0)-(b.order??0));
-  // ダッシュボード・「自分の資機材」集計用：在庫数管理カテゴリ全部をまとめたもの
+  // ダッシュボード・「自分の機材」集計用：在庫数管理カテゴリ全部をまとめたもの
   const allInvCatIds = categoriesAll.filter(c=>c.mode==="inventory").map(c=>c.id);
   spAllInventoryTypes = equipmentAll.filter(e=> allInvCatIds.includes(e.category));
 }
@@ -6403,7 +6403,7 @@ function renderSteelPlateSummary(){
 // 貸出タブで現在選んでいる「在庫数管理」カテゴリの名前（敷鉄板・H鋼・単管など）を返す
 function selectedInventoryCategoryLabel(){
   const cat = categoriesAll.find(c=>c.id===selectedCheckoutCategory);
-  return (cat && cat.label) || "資機材";
+  return (cat && cat.label) || "機材";
 }
 function spTypeName(typeId){
   const t = spPlateTypesAll.find(t=>t.id===typeId);

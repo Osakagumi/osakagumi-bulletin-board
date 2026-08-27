@@ -1341,7 +1341,7 @@ function applyEquipmentFormModeUI(){
   document.getElementById("eq-last-inspection-field").style.display = isInventory ? "none" : "block";
   document.getElementById("eq-signage-field").style.display = isInventory ? "none" : "flex";
   const activeLabel = document.querySelector("#eq-active-field label");
-  if(activeLabel) activeLabel.textContent = isInventory ? "資機材タブに表示する" : "予約対象として表示する";
+  if(activeLabel) activeLabel.textContent = isInventory ? "機材タブに表示する" : "予約対象として表示する";
 }
 document.getElementById("eq-category").addEventListener("change", ()=>{
   if(editingEquipmentId) return; // 編集中はカテゴリを変えても自動採番しない
@@ -2309,7 +2309,7 @@ const GENERAL_TAB_ORDER_DEFS = [
   { id:"reserve", label:"予約" },
   { id:"contracts", label:"入札" },
   { id:"bizinfo", label:"業務情報" },
-  { id:"checkout", label:"資機材" },
+  { id:"checkout", label:"機材" },
   { id:"safety", label:"安否確認" },
   { id:"safetyresponse", label:"安否回答" }
 ];
@@ -2888,7 +2888,7 @@ const HIDEABLE_TABS = [
   { id:"whereabouts", label:"行き先" },
   { id:"chat", label:"チャット" },
   { id:"reserve", label:"予約" },
-  { id:"checkout", label:"資機材" },
+  { id:"checkout", label:"機材" },
   { id:"contracts", label:"入札" },
   { id:"bizinfo", label:"業務情報" }
 ];
