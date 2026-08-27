@@ -645,12 +645,38 @@
           Googleドライブ上にアップロード済みのExcelファイル（共有設定済みのもの）を登録すると、一般画面の「業務情報」タブにピルとして追加され、内容が閲覧できるようになります（編集は不可）。
         </p>
         <button class="btn btn-primary" id="bizinfo-add-btn">追加</button>
+        <button class="btn btn-ghost" id="bizinfo-guide-btn" style="border:1px solid var(--line);">ファイル登録手順</button>
         <table style="margin-top:14px;">
           <thead><tr><th>業務情報名</th><th>Googleドライブリンク</th><th>有効</th><th>操作</th></tr></thead>
           <tbody id="bizinfo-table-body"></tbody>
         </table>
       </div>
     </section>
+
+    <!-- ============ 業務情報 ファイル登録手順モーダル ============ -->
+    <div class="modal-overlay" id="bizinfo-guide-modal">
+      <div class="modal" style="max-width:560px;">
+        <h3>業務情報ファイルの登録手順</h3>
+        <div style="font-size:12.5px;color:var(--text);line-height:1.8;">
+          <p style="margin:0 0 14px;">
+            一般画面の「業務情報」タブに表示できるのは、<b>Googleドライブ上に置いた（かつ共有設定済みの）Excelファイル</b>です。以下の手順でファイルを準備してから、この画面で登録してください。
+          </p>
+          <ol style="margin:0 0 14px;padding-left:20px;">
+            <li style="margin-bottom:10px;">下のリンクからGoogleドライブを開き、登録したいExcelファイルを<b>アップロード</b>（すでにアップロード済みなら不要）</li>
+            <li style="margin-bottom:10px;">対象ファイルを右クリック→「共有」→<b>「リンクを知っている全員」が閲覧できる設定</b>に変更</li>
+            <li style="margin-bottom:10px;">発行された<b>共有リンクをコピー</b></li>
+            <li style="margin-bottom:10px;">この画面の「追加」ボタンから、<b>業務情報名</b>とコピーした<b>リンク</b>を入力して保存</li>
+          </ol>
+          <p style="margin:0 0 14px;color:var(--muted);">
+            ※ ファイルは`.xlsx`のまま登録できます（Googleスプレッドシート形式への変換は不要です）。ファイルを更新すれば、一般画面側の表示も自動的に最新の内容になります。編集は、ドライブ上でファイルをダブルクリックして開くとブラウザ上でそのまま行えます。
+          </p>
+          <a href="https://drive.google.com" target="_blank" rel="noopener noreferrer" class="btn btn-primary" style="display:inline-block;text-decoration:none;">Googleドライブを開く ↗</a>
+        </div>
+        <div class="row-btns">
+          <button class="btn btn-ghost" id="bizinfo-guide-close-btn" style="border:1px solid var(--line);">閉じる</button>
+        </div>
+      </div>
+    </div>
 
     <!-- ============ 業務情報 追加・編集モーダル ============ -->
     <div class="modal-overlay" id="bizinfo-edit-modal">
@@ -2220,7 +2246,7 @@ function downloadBizInfoShortcut(item){
     toast("Googleドライブのリンクからファイルを特定できませんでした。");
     return;
   }
-  const editUrl = `https://drive.google.com/file/d/${fileId}/view`;
+  const editUrl = `https://docs.google.com/spreadsheets/d/${fileId}/edit`;
   const content = `[InternetShortcut]\r\nURL=${editUrl}\r\n`;
   const blob = new Blob([content], { type: "application/internet-shortcut" });
   const a = document.createElement("a");
@@ -2242,6 +2268,12 @@ function openBizInfoEditModal(item){
   document.getElementById("bizinfo-edit-modal").classList.add("show");
 }
 document.getElementById("bizinfo-add-btn")?.addEventListener("click", ()=> openBizInfoEditModal(null));
+document.getElementById("bizinfo-guide-btn")?.addEventListener("click", ()=>{
+  document.getElementById("bizinfo-guide-modal").classList.add("show");
+});
+document.getElementById("bizinfo-guide-close-btn")?.addEventListener("click", ()=>{
+  document.getElementById("bizinfo-guide-modal").classList.remove("show");
+});
 document.getElementById("bizinfo-edit-cancel-btn")?.addEventListener("click", ()=>{
   document.getElementById("bizinfo-edit-modal").classList.remove("show");
 });
