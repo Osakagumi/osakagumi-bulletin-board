@@ -798,7 +798,8 @@
       <section id="view-checkout" style="display:none;">
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
           <div class="cat-row" id="checkout-cat-row" style="margin-bottom:0;flex:1;"></div>
-          <select id="checkout-managing-dept-filter" style="margin-left:auto;"></select>
+          <label style="margin-left:auto;font-size:13px;color:var(--muted);white-space:nowrap;">部門:</label>
+          <select id="checkout-managing-dept-filter"></select>
         </div>
         <div id="checkout-equipment-panel">
           <div class="checkout-grid" id="checkout-eq-grid"></div>
@@ -2316,10 +2317,12 @@ function renderCheckoutCategoryRow(){
       selectedCheckoutCategory = cat.id;
       recomputeSpPlateTypes();
       renderCheckoutCategoryRow();
+      populateCheckoutManagingDeptFilter();
       renderCheckoutTab();
     });
     row.appendChild(pill);
   });
+  populateCheckoutManagingDeptFilter();
 }
 
 function initCategoriesListener(){
@@ -2413,7 +2416,9 @@ function populateCheckoutManagingDeptFilter(){
   if(!sel) return;
   const prev = sel.value;
   sel.innerHTML = '<option value="">すべて</option>';
-  const usedDeptIds = new Set(equipmentAll.map(e=>e.managingDepartment).filter(Boolean));
+  // 現在表示中のカテゴリに該当する（かつ表示対象の）設備だけを対象に、その中で使われている管理部門だけを選択肢にする
+  const itemsInCurrentCategory = equipmentAll.filter(e=>e.category===selectedCheckoutCategory);
+  const usedDeptIds = new Set(itemsInCurrentCategory.map(e=>e.managingDepartment).filter(Boolean));
   const usedDepts = departmentsAll.filter(d=> usedDeptIds.has(d.id));
   usedDepts.forEach(d=>{
     const opt = document.createElement("option");
@@ -2421,6 +2426,7 @@ function populateCheckoutManagingDeptFilter(){
     sel.appendChild(opt);
   });
   if(usedDepts.some(d=>d.id===prev)) sel.value = prev;
+  else sel.value = ""; // 対象外になった値が残らないようにする
 }
 document.getElementById("checkout-managing-dept-filter")?.addEventListener("change", ()=> renderCheckoutTab());
 function renderCheckoutTab(){
