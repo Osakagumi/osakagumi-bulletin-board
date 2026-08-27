@@ -689,38 +689,42 @@
     <!-- ============ システム管理 ============ -->
     <section id="view-systemsettings" style="display:none;">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;">
-        <div class="panel" style="margin:0;">
-          <h2>一般画面のタブ設定（既定値）</h2>
-          <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-            ここで設定した内容は、社員が自分で並び替え・表示設定をまだ行っていない場合の初期値として使われます。社員本人が設定を変更した場合は、そちらが優先されます。
-          </p>
-          <div class="field">
-            <label>タブの並び順（ドラッグで並び替え）</label>
-            <div id="general-tab-order-list" class="settings-draglist"></div>
+        <div style="display:flex;flex-direction:column;gap:16px;">
+          <div class="panel" style="margin:0;">
+            <h2>一般画面のタブ設定（既定値）</h2>
+            <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
+              ここで設定した内容は、社員が自分で並び替え・表示設定をまだ行っていない場合の初期値として使われます。社員本人が設定を変更した場合は、そちらが優先されます。
+            </p>
+            <div class="field">
+              <label>タブの並び順（ドラッグで並び替え）</label>
+              <div id="general-tab-order-list" class="settings-draglist"></div>
+            </div>
+          </div>
+
+          <div class="panel" style="margin:0;">
+            <h2>既定で有効にするタブ</h2>
+            <p style="font-size:12px;color:var(--muted);margin:0 0 10px;">
+              ここでチェックを外したタブは、社員個人の設定に関わらず、全員に対して非表示になります（両方が「表示」の場合のみ表示されます）。
+            </p>
+            <div id="general-enabled-tabs-checks" style="display:flex;flex-wrap:wrap;gap:10px;border:1px solid var(--line);border-radius:8px;padding:10px;"></div>
           </div>
         </div>
 
-        <div class="panel" style="margin:0;">
-          <h2>管理画面のタブ設定（既定値）</h2>
-          <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-            管理画面で表示されるタブは、社員それぞれの権限によって決まりますが、その中での並び順をここで設定できます。
-          </p>
-          <div class="field">
-            <label>タブの並び順（ドラッグで並び替え）</label>
-            <div id="admin-tab-order-list" class="settings-draglist"></div>
+        <div style="display:flex;flex-direction:column;gap:16px;">
+          <div class="panel" style="margin:0;">
+            <h2>管理画面のタブ設定（既定値）</h2>
+            <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
+              管理画面で表示されるタブは、社員それぞれの権限によって決まりますが、その中での並び順をここで設定できます。
+            </p>
+            <div class="field">
+              <label>タブの並び順（ドラッグで並び替え）</label>
+              <div id="admin-tab-order-list" class="settings-draglist"></div>
+            </div>
           </div>
-        </div>
 
-        <div class="panel" style="margin:0;">
-          <h2>既定で有効にするタブ</h2>
-          <p style="font-size:12px;color:var(--muted);margin:0 0 10px;">
-            ここでチェックを外したタブは、社員個人の設定に関わらず、全員に対して非表示になります（両方が「表示」の場合のみ表示されます）。
-          </p>
-          <div id="general-enabled-tabs-checks" style="display:flex;flex-wrap:wrap;gap:10px;border:1px solid var(--line);border-radius:8px;padding:10px;"></div>
-        </div>
-
-        <div style="text-align:right;">
-          <button class="btn btn-primary" id="system-tab-defaults-save-btn">保存</button>
+          <div style="text-align:right;">
+            <button class="btn btn-primary" id="system-tab-defaults-save-btn">保存</button>
+          </div>
         </div>
       </div>
     </section>
