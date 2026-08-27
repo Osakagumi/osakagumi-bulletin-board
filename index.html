@@ -942,9 +942,6 @@
 
       <!-- ---- ダッシュボード ---- -->
       <section id="view-dashboard">
-        <div id="dash-startup-btn-wrap" style="display:none;text-align:right;margin-bottom:10px;">
-          <button type="button" class="btn-ghost" id="dash-startup-btn" style="border:1px solid var(--line);">スタートアップに登録する</button>
-        </div>
         <div class="dash-grid">
           <div class="dash-card" id="dash-card-safety" style="display:none;">
             <h3>⚠ 安否確認</h3>
@@ -1005,6 +1002,12 @@
                 <span class="dash-card-link" id="dash-checkout-link" title="資機材を見る">▶</span>
               </div>
               <div id="dash-checkout-body"></div>
+            </div>
+            <div id="dash-startup-btn-wrap" style="display:none;text-align:right;">
+              <button type="button" class="btn-ghost" id="dash-startup-btn" style="border:1px solid var(--line);">スタートアップ登録手順</button>
+            </div>
+            <div id="dash-homescreen-btn-wrap" style="display:none;text-align:right;">
+              <button type="button" class="btn-ghost" id="dash-homescreen-btn" style="border:1px solid var(--line);">ホーム画面追加手順</button>
             </div>
           </div>
         </div>
@@ -1359,34 +1362,46 @@
   <!-- ============ スタートアップ登録 案内モーダル ============ -->
   <div class="modal-overlay" id="startup-guide-modal">
     <div class="modal" style="max-width:520px;">
-      <h3>スタートアップに登録する</h3>
+      <h3>スタートアップ登録手順</h3>
       <div style="font-size:12.5px;color:var(--text);line-height:1.8;">
-        <p style="margin:0 0 14px;">
-          ブラウザの仕組み上、ボタン一つでパソコンの起動設定を自動的に変更することはできません。代わりに、このポータルを開くための<b>ショートカットファイル</b>をダウンロードできますので、それを「スタートアップ」フォルダに置くことで、パソコン起動時に自動的にこのページが開くようになります。
-        </p>
-        <div id="startup-guide-windows" style="display:none;">
-          <ol style="margin:0 0 14px;padding-left:20px;">
-            <li style="margin-bottom:10px;">下の「ショートカットをダウンロード」を押す</li>
-            <li style="margin-bottom:10px;">キーボードで<b>Windowsキー＋R</b>を押し、「ファイル名を指定して実行」に<b>shell:startup</b>と入力してEnter</li>
-            <li style="margin-bottom:10px;">開いたフォルダに、ダウンロードしたショートカットファイルを移動（またはコピー）する</li>
-            <li style="margin-bottom:10px;">次回パソコン起動時から、自動的にこのページが開きます</li>
-          </ol>
-        </div>
-        <div id="startup-guide-mac" style="display:none;">
-          <ol style="margin:0 0 14px;padding-left:20px;">
-            <li style="margin-bottom:10px;">下の「ショートカットをダウンロード」を押す</li>
-            <li style="margin-bottom:10px;">「システム設定」→「一般」→「ログイン項目」を開く</li>
-            <li style="margin-bottom:10px;">「＋」ボタンから、ダウンロードしたショートカットファイルを追加する</li>
-            <li style="margin-bottom:10px;">次回ログイン時から、自動的にこのページが開きます</li>
-          </ol>
-        </div>
-        <p style="margin:0 0 14px;color:var(--muted);">
-          ※ お使いのブラウザの設定によっては、パソコン起動後に手動でブラウザを開く必要がある場合があります。
+        <ol style="margin:0 0 14px;padding-left:20px;">
+          <li style="margin-bottom:10px;">下の「登録用ファイルをダウンロード」を押す</li>
+          <li style="margin-bottom:10px;">ダウンロードしたファイルを<b>ダブルクリックして実行</b>する</li>
+          <li style="margin-bottom:10px;">「登録が完了しました」というメッセージが出れば完了。次回パソコン起動時から、自動的にこのページが開きます</li>
+        </ol>
+        <p style="margin:0;color:var(--muted);">
+          ※ ダウンロード時や実行時に、Windowsやセキュリティソフトから警告が表示される場合があります。その場合は「詳細情報」→「実行」（または「保持する」）と進んで実行してください。心当たりのある社内システムのファイルであれば問題ありません。
         </p>
       </div>
       <div class="row-btns">
         <button class="btn-ghost" id="startup-guide-close-btn" style="border:1px solid var(--line);">閉じる</button>
-        <button class="btn-primary" id="startup-guide-download-btn">ショートカットをダウンロード</button>
+        <button class="btn-primary" id="startup-guide-download-btn">登録用ファイルをダウンロード</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ ホーム画面追加 案内モーダル（iPhone/Safari用） ============ -->
+  <div class="modal-overlay" id="homescreen-guide-modal">
+    <div class="modal" style="max-width:480px;">
+      <h3>ホーム画面追加手順</h3>
+      <div style="font-size:12.5px;color:var(--text);line-height:1.8;">
+        <div id="homescreen-guide-ios">
+          <ol style="margin:0;padding-left:20px;">
+            <li style="margin-bottom:10px;">画面下部（または上部）の<b>共有ボタン</b>（四角から矢印が上に伸びたアイコン）をタップ</li>
+            <li style="margin-bottom:10px;">メニューを下にスクロールし、「<b>ホーム画面に追加</b>」をタップ</li>
+            <li style="margin-bottom:10px;">名前を確認して「追加」をタップ</li>
+          </ol>
+        </div>
+        <div id="homescreen-guide-android" style="display:none;">
+          <ol style="margin:0;padding-left:20px;">
+            <li style="margin-bottom:10px;">画面右上の<b>「⋮」（縦の3点メニュー）</b>をタップ</li>
+            <li style="margin-bottom:10px;">「<b>ホーム画面に追加</b>」または「<b>アプリをインストール</b>」をタップ</li>
+            <li style="margin-bottom:10px;">確認画面で「追加」または「インストール」をタップ</li>
+          </ol>
+        </div>
+      </div>
+      <div class="row-btns">
+        <button class="btn-ghost" id="homescreen-guide-close-btn" style="border:1px solid var(--line);">閉じる</button>
       </div>
     </div>
   </div>
@@ -1915,8 +1930,14 @@ function initDashCardDragDrop(){
       e.preventDefault();
       col.classList.add("dash-col-dragover");
       const afterEl = dashCardAfterElement(col, e.clientY);
-      if(afterEl==null) col.appendChild(dragging);
-      else col.insertBefore(dragging, afterEl);
+      if(afterEl==null){
+        // カード以外の末尾要素（スタートアップ登録手順ボタン等）より下に来てしまわないよう、その直前に挿入する
+        const trailingNonCard = [...col.children].find(ch => !ch.classList.contains("dash-card"));
+        if(trailingNonCard) col.insertBefore(dragging, trailingNonCard);
+        else col.appendChild(dragging);
+      } else {
+        col.insertBefore(dragging, afterEl);
+      }
     });
     col.addEventListener("dragleave", (e)=>{
       if(e.target===col) col.classList.remove("dash-col-dragover");
@@ -1971,6 +1992,10 @@ function applyDashCardOrder(order){
     const el = document.getElementById(id);
     if(el && rightCol) rightCol.appendChild(el);
   });
+  // カード以外の末尾要素（スタートアップ登録手順ボタン等）を、並び替え後も一番下に留める
+  if(rightCol){
+    [...rightCol.children].filter(ch=>!ch.classList.contains("dash-card")).forEach(el=> rightCol.appendChild(el));
+  }
 }
 
 const TAB_ORDER_KEY = "osakagumi-portal-tab-order";
@@ -7759,16 +7784,14 @@ function loadBizInfoIframe(){
   iframe.src = `https://drive.google.com/file/d/${item.fileId}/preview?t=${Date.now()}`;
 }
 
-/* ---------- スタートアップ登録（PCのみ） ---------- */
+/* ---------- スタートアップ登録（Windows PCのみ） ---------- */
 const isMobileDevice = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-const isMacDevice = /Mac/i.test(navigator.userAgent) && !isMobileDevice;
-if(!isMobileDevice){
+const isWindowsDevice = /Windows/i.test(navigator.userAgent) && !isMobileDevice;
+if(isWindowsDevice){
   const wrap = document.getElementById("dash-startup-btn-wrap");
   if(wrap) wrap.style.display = "block";
 }
 document.getElementById("dash-startup-btn")?.addEventListener("click", ()=>{
-  document.getElementById("startup-guide-windows").style.display = isMacDevice ? "none" : "block";
-  document.getElementById("startup-guide-mac").style.display = isMacDevice ? "block" : "none";
   document.getElementById("startup-guide-modal").classList.add("show");
 });
 document.getElementById("startup-guide-close-btn")?.addEventListener("click", ()=>{
@@ -7777,21 +7800,54 @@ document.getElementById("startup-guide-close-btn")?.addEventListener("click", ()
 document.getElementById("startup-guide-download-btn")?.addEventListener("click", ()=>{
   const url = location.origin + location.pathname;
   const a = document.createElement("a");
-  if(isMacDevice){
-    const content = `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n\t<key>URL</key>\n\t<string>${url}</string>\n</dict>\n</plist>\n`;
-    const blob = new Blob([content], { type: "application/octet-stream" });
-    a.href = URL.createObjectURL(blob);
-    a.download = "社内ポータル.webloc";
-  } else {
-    const content = `[InternetShortcut]\r\nURL=${url}\r\n`;
-    const blob = new Blob([content], { type: "application/internet-shortcut" });
-    a.href = URL.createObjectURL(blob);
-    a.download = "社内ポータル.url";
-  }
+  // WScript.Shell の CreateShortcut を使い、実行するだけでスタートアップフォルダに
+  // ショートカット（.lnk）を自動作成するVBScript。手動でフォルダを開いて移動する手間が無くなる。
+  const escapedUrl = url.replace(/"/g, '""');
+  const content =
+    `Set objShell = CreateObject("WScript.Shell")\r\n` +
+    `strStartupFolder = objShell.SpecialFolders("Startup")\r\n` +
+    `Set objShortcut = objShell.CreateShortcut(strStartupFolder & "\\社内ポータル.lnk")\r\n` +
+    `objShortcut.TargetPath = "${escapedUrl}"\r\n` +
+    `objShortcut.Description = "大坂組社内ポータル"\r\n` +
+    `objShortcut.Save\r\n` +
+    `MsgBox "スタートアップへの登録が完了しました。" & vbCrLf & "次回パソコン起動時から、自動的にこのページが開きます。", vbInformation, "登録完了"\r\n`;
+  const blob = new Blob([content], { type: "application/octet-stream" });
+  a.href = URL.createObjectURL(blob);
+  a.download = "社内ポータル登録.vbs";
   document.body.appendChild(a);
   a.click();
   a.remove();
   setTimeout(()=> URL.revokeObjectURL(a.href), 3000);
+});
+
+/* ---------- ホーム画面に追加（スマホのみ） ---------- */
+const isIosDevice = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+const isAndroidDevice = /Android/i.test(navigator.userAgent);
+let deferredInstallPrompt = null;
+// Android Chrome: ブラウザが「インストール可能」と判断すると発火する。ここでイベントを保持しておき、
+// ボタンが押された時にプロンプトを呼び出す（発火しない場合は手順案内にフォールバックする）。
+window.addEventListener("beforeinstallprompt", (e)=>{
+  e.preventDefault();
+  deferredInstallPrompt = e;
+});
+if(isMobileDevice){
+  const wrap = document.getElementById("dash-homescreen-btn-wrap");
+  if(wrap) wrap.style.display = "block";
+}
+document.getElementById("dash-homescreen-btn")?.addEventListener("click", async ()=>{
+  if(deferredInstallPrompt){
+    deferredInstallPrompt.prompt();
+    await deferredInstallPrompt.userChoice;
+    deferredInstallPrompt = null;
+    return;
+  }
+  // インストールプロンプトが使えない場合（iOS、または発火タイミングを逃した場合など）は手順を案内する
+  document.getElementById("homescreen-guide-ios").style.display = isAndroidDevice ? "none" : "block";
+  document.getElementById("homescreen-guide-android").style.display = isAndroidDevice ? "block" : "none";
+  document.getElementById("homescreen-guide-modal").classList.add("show");
+});
+document.getElementById("homescreen-guide-close-btn")?.addEventListener("click", ()=>{
+  document.getElementById("homescreen-guide-modal").classList.remove("show");
 });
 
 </script>
