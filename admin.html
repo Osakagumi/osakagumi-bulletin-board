@@ -321,7 +321,7 @@
             <div id="single-emp-permissions-checks" style="display:flex;flex-direction:column;gap:8px;border:1px solid var(--line);border-radius:8px;padding:10px;"></div>
           </div>
         </div>
-        <button class="btn btn-primary" id="single-emp-register-btn">登録する</button>
+        <button class="btn btn-primary" id="single-emp-register-btn">登録</button>
         <div id="single-emp-status" style="font-size:12.5px;color:var(--muted);margin-top:10px;white-space:pre-line;"></div>
       </div>
 
@@ -344,7 +344,7 @@
           <label>CSVファイルを選択</label>
           <input type="file" id="userimport-file" accept=".csv,text/csv">
         </div>
-        <button class="btn btn-ghost" id="userimport-preview-btn">内容を確認する</button>
+        <button class="btn btn-ghost" id="userimport-preview-btn">内容を確認</button>
       </div>
 
       <div class="panel" id="userimport-preview-panel" style="display:none;">
@@ -353,7 +353,7 @@
           <thead><tr><th>社員番号</th><th>氏名</th><th>所属</th><th>システム管理者</th><th>お知らせ投稿</th><th>行き先編集</th><th>測量機器管理</th><th>入札編集</th><th>カレンダー編集</th><th>安否確認発信</th><th>メールアドレス</th><th>電話番号</th><th>備考</th></tr></thead>
           <tbody id="userimport-preview-body"></tbody>
         </table>
-        <button class="btn btn-primary" id="userimport-execute-btn" style="margin-top:12px;">この内容で登録を実行する</button>
+        <button class="btn btn-primary" id="userimport-execute-btn" style="margin-top:12px;">登録を実行</button>
         <div id="userimport-status" style="font-size:12.5px;color:var(--muted);margin-top:10px;white-space:pre-line;"></div>
       </div>
 
@@ -408,7 +408,7 @@
         <div class="row-btns" style="justify-content:space-between;flex-wrap:wrap;gap:8px;">
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <button class="btn btn-ghost" id="emp-edit-hide-btn" style="border:1px solid var(--danger);color:var(--danger);"></button>
-            <button class="btn btn-danger" id="emp-edit-purge-btn">完全に削除する</button>
+            <button class="btn btn-danger" id="emp-edit-purge-btn">削除</button>
           </div>
           <div style="display:flex;gap:8px;">
             <button class="btn btn-ghost" id="emp-edit-cancel-btn" style="border:1px solid var(--line);">キャンセル</button>
@@ -424,7 +424,7 @@
         <h3>ユーザーを完全に削除する手順</h3>
         <div style="font-size:12.5px;color:var(--text);line-height:1.8;">
           <p style="margin:0 0 14px;">
-            「完全に削除する」ボタンでは、社員データの消去と、そのアカウントでの<b>ログインをブロック</b>することができます。ただし、Firebaseの仕組み上、<b>ログイン用アカウント自体（メールアドレス・パスワード）の削除</b>は、管理画面から自動では行えません。本当にアカウントごと消したい場合は、以下の手順でFirebaseコンソールから手動で削除してください。
+            「削除」ボタンでは、社員データの消去と、そのアカウントでの<b>ログインをブロック</b>することができます。ただし、Firebaseの仕組み上、<b>ログイン用アカウント自体（メールアドレス・パスワード）の削除</b>は、管理画面から自動では行えません。本当にアカウントごと消したい場合は、以下の手順でFirebaseコンソールから手動で削除してください。
           </p>
           <ol style="margin:0 0 14px;padding-left:20px;">
             <li style="margin-bottom:10px;">下のリンクから、Firebaseコンソールの「Authentication（ユーザー）」画面を開く</li>
@@ -433,7 +433,7 @@
             <li style="margin-bottom:10px;">確認ダイアログが出るので「削除」を押して完了</li>
           </ol>
           <p style="margin:0 0 14px;color:var(--muted);">
-            ※ 先に「完全に削除する」ボタンで社員データを消去・ログインブロックしておけば、この手順を行うまでの間もそのユーザーはアプリを利用できません。手順④の作業は、都合の良いタイミングでまとめて行っていただいて構いません。
+            ※ 先に「削除」ボタンで社員データを消去・ログインブロックしておけば、この手順を行うまでの間もそのユーザーはアプリを利用できません。手順④の作業は、都合の良いタイミングでまとめて行っていただいて構いません。
           </p>
           <a href="https://console.firebase.google.com/project/osakagumi-bulletin-board/authentication/users" target="_blank" rel="noopener noreferrer" class="btn btn-primary" style="display:inline-block;text-decoration:none;">Firebaseコンソール（Authentication）を開く ↗</a>
         </div>
@@ -482,7 +482,7 @@
             <select id="cal-work-buffer-input"></select>
           </div>
         </div>
-        <button class="btn btn-primary" id="cal-work-save-btn">保存する</button>
+        <button class="btn btn-primary" id="cal-work-save-btn">保存</button>
       </div>
 
       <div class="panel">
@@ -502,7 +502,7 @@
             <input type="number" id="wb-fontsize-input" min="10" max="40" value="13">
           </div>
         </div>
-        <button class="btn btn-primary" id="wb-columns-save-btn">保存する</button>
+        <button class="btn btn-primary" id="wb-columns-save-btn">保存</button>
       </div>
 
       <div class="panel">
@@ -531,7 +531,7 @@
             </select>
           </div>
         </div>
-        <button class="btn btn-primary" id="wb-kiosk-save-btn">保存する</button>
+        <button class="btn btn-primary" id="wb-kiosk-save-btn">保存</button>
         <div style="margin-top:12px;">
           <a class="btn btn-ghost" id="wb-kiosk-open-link" href="index.html?display=1" target="_blank" style="text-decoration:none;display:inline-block;">サイネージ表示を開く（新しいタブ）</a>
         </div>
@@ -661,7 +661,7 @@
             <input type="number" id="cal-seed-year-input" min="2000" max="2100" value="2026">
           </div>
         </div>
-        <button class="btn btn-primary" id="cal-seed-btn">この年度の初期データを作成する</button>
+        <button class="btn btn-primary" id="cal-seed-btn">この年度の初期データを作成</button>
         <div id="cal-seed-status" style="font-size:12.5px;color:var(--muted);margin-top:10px;white-space:pre-line;"></div>
 
         <div id="cal-seed-limit-panel" style="display:none;margin-top:14px;padding:12px;border:1px dashed var(--danger);border-radius:8px;">
@@ -867,7 +867,7 @@ function resetCategoryForm(){
   document.getElementById("cat-color").value = "#2E9E8F";
   document.getElementById("cat-mode").value = "timeline";
   document.getElementById("cat-order").value = maxCategoryOrder() + 10;
-  document.getElementById("cat-save-btn").textContent = "追加する";
+  document.getElementById("cat-save-btn").textContent = "追加";
   document.getElementById("cat-cancel-edit").style.display = "none";
 }
 document.getElementById("cat-cancel-edit").addEventListener("click", resetCategoryForm);
@@ -1235,7 +1235,7 @@ function resetEquipmentForm(){
   document.getElementById("eq-active").checked = true;
   applyEquipmentFormModeUI();
   document.getElementById("eq-signage").checked = false;
-  document.getElementById("eq-save-btn").textContent = "追加する";
+  document.getElementById("eq-save-btn").textContent = "追加";
   document.getElementById("eq-cancel-edit").style.display = "none";
 }
 
@@ -1752,7 +1752,7 @@ function resetDeptForm(){
   editingDeptId = null;
   document.getElementById("dept-name").value = "";
   document.getElementById("dept-order").value = 0;
-  document.getElementById("dept-save-btn").textContent = "追加する";
+  document.getElementById("dept-save-btn").textContent = "追加";
   document.getElementById("dept-cancel-edit").style.display = "none";
 }
 document.getElementById("dept-save-btn").addEventListener("click", async ()=>{
@@ -1823,7 +1823,7 @@ function resetStatusForm(){
   document.getElementById("status-name").value = "";
   document.getElementById("status-color").value = "#4B5FA3";
   document.getElementById("status-order").value = 0;
-  document.getElementById("status-save-btn").textContent = "追加する";
+  document.getElementById("status-save-btn").textContent = "追加";
   document.getElementById("status-cancel-edit").style.display = "none";
 }
 document.getElementById("status-save-btn").addEventListener("click", async ()=>{
@@ -2253,7 +2253,7 @@ function showCalSeedLimitPanel(){
       if(!confirm(`${y.year}年度のカレンダーデータを削除しますか？この操作は元に戻せません。`)) return;
       await deleteCalendarYear(y.year);
       panel.style.display = "none";
-      document.getElementById("cal-seed-status").textContent = `${y.year}年度を削除しました。続けて作成する場合は、もう一度「この年度の初期データを作成する」を押してください。`;
+      document.getElementById("cal-seed-status").textContent = `${y.year}年度を削除しました。続けて作成する場合は、もう一度「この年度の初期データを作成」を押してください。`;
     });
     yearsWrap.appendChild(btn);
   });
