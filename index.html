@@ -1895,7 +1895,8 @@ const DASH_CARD_BY_VIEW = {
   checkout: "dash-card-checkout",
   contracts: "dash-card-contracts"
 };
-// システム管理者がユーザー毎に設定した「非表示にするタブ」を、自分のタブ・ダッシュボードのカードに反映する
+// システム管理者が設定した既定値。「タブの並び順」は個人設定が無い場合のみ適用される既定値。
+// 「有効なタブ」は個人設定と掛け合わせる（両方が「表示」の場合のみ表示する）システム全体のスイッチとして扱う。
 let systemTabDefaults = null;
 let hasPersonalTabOrderFlag = null; // null=未判定、true=個人設定あり、false=個人設定なし
 const GENERAL_HIDEABLE_TAB_IDS = ["notices","calendar","whereabouts","chat","reserve","checkout","contracts","bizinfo"];
@@ -1906,28 +1907,22 @@ function tryApplyOrgTabDefaults(){
     applyTabOrderArray(systemTabDefaults.tabOrder);
     localStorage.setItem(TAB_ORDER_KEY, JSON.stringify(systemTabDefaults.tabOrder));
   }
-  if(systemTabDefaults.initialTab){
-    const btn = document.querySelector(`#main-tabs .tab-btn[data-view="${systemTabDefaults.initialTab}"]`);
-    if(btn && btn.style.display !== "none"){
-      switchToTab(systemTabDefaults.initialTab);
-    }
-  }
 }
 function initSystemTabDefaultsListener(){
   onSnapshot(doc(db,"system_tab_defaults","general"), snap=>{
     systemTabDefaults = snap.exists() ? snap.data() : {};
     tryApplyOrgTabDefaults();
-    applyMyHiddenTabs(); // 既定の有効タブが変わった可能性があるので再適用
+    applyMyHiddenTabs(); // システム側の有効タブが変わった可能性があるので再適用
   }, (err)=>{ console.error("[一般画面タブ既定値取得エラー]", err); });
 }
 function applyMyHiddenTabs(){
   const me = employeesAll.find(e=>(e.email||"").toLowerCase()===(currentUser?.email||"").toLowerCase());
-  const hasPersonalHiddenTabs = me && Array.isArray(me.hiddenTabs);
-  const hidden = hasPersonalHiddenTabs
-    ? me.hiddenTabs
-    : (systemTabDefaults && Array.isArray(systemTabDefaults.enabledTabs)
-        ? GENERAL_HIDEABLE_TAB_IDS.filter(id => !systemTabDefaults.enabledTabs.includes(id))
-        : []);
+  // 個人設定・システム設定のどちらかが「非表示」なら非表示にする（両方が「表示」の場合のみ表示する）
+  const personalHidden = (me && Array.isArray(me.hiddenTabs)) ? me.hiddenTabs : [];
+  const systemHidden = (systemTabDefaults && Array.isArray(systemTabDefaults.enabledTabs))
+    ? GENERAL_HIDEABLE_TAB_IDS.filter(id => !systemTabDefaults.enabledTabs.includes(id))
+    : [];
+  const hidden = [...new Set([...personalHidden, ...systemHidden])];
   document.querySelectorAll("#main-tabs .tab-btn[data-view]").forEach(btn=>{
     const view = btn.dataset.view;
     if(view==="dashboard" || view==="safety" || view==="safetyresponse") return; // 常時表示

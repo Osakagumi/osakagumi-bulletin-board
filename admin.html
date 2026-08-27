@@ -698,11 +698,10 @@
           <div id="general-tab-order-list" class="settings-draglist"></div>
         </div>
         <div class="field">
-          <label>最初に表示するタブ</label>
-          <select id="general-initial-tab-select"></select>
-        </div>
-        <div class="field">
           <label>既定で有効にするタブ</label>
+          <p style="font-size:12px;color:var(--muted);margin:0 0 6px;">
+            ここでチェックを外したタブは、社員個人の設定に関わらず、全員に対して非表示になります（両方が「表示」の場合のみ表示されます）。
+          </p>
           <div id="general-enabled-tabs-checks" style="display:flex;flex-wrap:wrap;gap:10px;border:1px solid var(--line);border-radius:8px;padding:10px;"></div>
         </div>
         <button class="btn btn-primary" id="general-tab-defaults-save-btn">保存</button>
@@ -711,15 +710,11 @@
       <div class="panel">
         <h2>管理画面のタブ設定（既定値）</h2>
         <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-          管理画面で表示されるタブは、社員それぞれの権限によって決まりますが、その中での並び順・最初に表示するタブをここで設定できます。
+          管理画面で表示されるタブは、社員それぞれの権限によって決まりますが、その中での並び順をここで設定できます。
         </p>
         <div class="field">
           <label>タブの並び順（ドラッグで並び替え）</label>
           <div id="admin-tab-order-list" class="settings-draglist"></div>
-        </div>
-        <div class="field">
-          <label>最初に表示するタブ</label>
-          <select id="admin-initial-tab-select"></select>
         </div>
         <button class="btn btn-primary" id="admin-tab-defaults-save-btn">保存</button>
       </div>
@@ -1098,17 +1093,14 @@ onAuthStateChanged(auth, async (user)=>{
     isCalendarEditor: !!(calEditorDoc && calEditorDoc.exists()),
     isContractEditor: !!(contractEditorDoc && contractEditorDoc.exists())
   };
-  if(myEmpDoc && myEmpDoc.exists() && Array.isArray(myEmpDoc.data().hiddenTabs)){
-    // 本人が個人設定済み：そちらを優先する
-    myHiddenTabsForAdmin = myEmpDoc.data().hiddenTabs;
-  } else {
-    // 個人設定が無い場合は、システム既定の「有効なタブ」から非表示リストを逆算して使う
-    const generalDefaults = (generalDefaultsDoc && generalDefaultsDoc.exists()) ? generalDefaultsDoc.data() : {};
-    const enabledTabs = Array.isArray(generalDefaults.enabledTabs) ? generalDefaults.enabledTabs : null;
-    myHiddenTabsForAdmin = enabledTabs
-      ? GENERAL_HIDEABLE_TAB_IDS_FOR_ADMIN.filter(id => !enabledTabs.includes(id))
-      : [];
-  }
+  // 個人設定・システム設定のどちらかが「非表示」なら非表示にする（両方が「表示」の場合のみ表示する）
+  const personalHiddenTabs = (myEmpDoc && myEmpDoc.exists() && Array.isArray(myEmpDoc.data().hiddenTabs)) ? myEmpDoc.data().hiddenTabs : [];
+  const generalDefaults = (generalDefaultsDoc && generalDefaultsDoc.exists()) ? generalDefaultsDoc.data() : {};
+  const enabledTabs = Array.isArray(generalDefaults.enabledTabs) ? generalDefaults.enabledTabs : null;
+  const systemHiddenTabs = enabledTabs
+    ? GENERAL_HIDEABLE_TAB_IDS_FOR_ADMIN.filter(id => !enabledTabs.includes(id))
+    : [];
+  myHiddenTabsForAdmin = [...new Set([...personalHiddenTabs, ...systemHiddenTabs])];
   computeSectionAccess();
   const isAdmin = myAdminPermissions.isAdmin; // 以降の既存コードとの互換用
   const hasAnyAccess = Object.values(mySectionAccess).some(v=>v);
@@ -2365,23 +2357,11 @@ function readDragOrderList(containerId){
   if(!container) return [];
   return [...container.querySelectorAll(".settings-drag-row")].map(r=>r.dataset.id);
 }
-function populateInitialTabSelect(selectId, defs, currentValue){
-  const sel = document.getElementById(selectId);
-  if(!sel) return;
-  sel.innerHTML = "";
-  defs.forEach(d=>{
-    const opt = document.createElement("option");
-    opt.value = d.id; opt.textContent = d.label;
-    sel.appendChild(opt);
-  });
-  if(defs.some(d=>d.id===currentValue)) sel.value = currentValue;
-}
 
 function initGeneralTabDefaultsListener(){
   onSnapshot(doc(db,"system_tab_defaults","general"), snap=>{
     const data = snap.exists() ? snap.data() : {};
     buildDragOrderList("general-tab-order-list", GENERAL_TAB_ORDER_DEFS, data.tabOrder);
-    populateInitialTabSelect("general-initial-tab-select", GENERAL_TAB_ORDER_DEFS, data.initialTab || "dashboard");
     const enabledTabs = Array.isArray(data.enabledTabs) ? data.enabledTabs : HIDEABLE_TABS.map(t=>t.id);
     const checksEl = document.getElementById("general-enabled-tabs-checks");
     if(checksEl){
@@ -2403,10 +2383,9 @@ function initGeneralTabDefaultsListener(){
 }
 document.getElementById("general-tab-defaults-save-btn")?.addEventListener("click", async ()=>{
   const tabOrder = readDragOrderList("general-tab-order-list");
-  const initialTab = document.getElementById("general-initial-tab-select").value;
   const enabledTabs = [...document.querySelectorAll(".general-enabled-tab-check:checked")].map(cb=>cb.value);
   try{
-    await setDoc(doc(db,"system_tab_defaults","general"), { tabOrder, initialTab, enabledTabs }, { merge:true });
+    await setDoc(doc(db,"system_tab_defaults","general"), { tabOrder, enabledTabs }, { merge:true });
     toast("保存しました。");
   }catch(e){
     toast("保存に失敗しました。権限をご確認ください。");
@@ -2418,8 +2397,8 @@ function initAdminTabDefaultsListener(){
   onSnapshot(doc(db,"system_tab_defaults","admin"), snap=>{
     const data = snap.exists() ? snap.data() : {};
     buildDragOrderList("admin-tab-order-list", ADMIN_TAB_ORDER_DEFS, data.tabOrder);
-    populateInitialTabSelect("admin-initial-tab-select", ADMIN_TAB_ORDER_DEFS, data.initialTab || "equipment");
-    // 本人がまだ並び替え・初期表示タブを設定していない場合のみ、システム既定値を適用する（セッション中1回だけ）
+    // 本人がまだ並び替えを設定していない場合のみ、システム既定の並び順を適用する（セッション中1回だけ）。
+    // 最初にアクティブ化するタブは常に「現在の並び順で一番左の（アクセスできる）タブ」を使う。
     if(adminScreenDefaultsApplied) return;
     adminScreenDefaultsApplied = true;
     let personalOrder = null;
@@ -2432,19 +2411,17 @@ function initAdminTabDefaultsListener(){
           const btn = nav.querySelector(`.tab-btn[data-view="${viewName}"]`);
           if(btn) nav.insertBefore(btn, reorderBtn);
         });
-        const targetView = data.initialTab && mySectionAccess[data.initialTab] && nav.querySelector(`.tab-btn[data-view="${data.initialTab}"]`) ? data.initialTab : null;
-        if(targetView){
-          switchToAdminTab(targetView);
-        }
+        const navOrderedViews = [...nav.querySelectorAll(".tab-btn[data-view]")].map(b=>b.dataset.view);
+        const firstAccessible = navOrderedViews.find(s=>mySectionAccess[s]);
+        if(firstAccessible) switchToAdminTab(firstAccessible);
       }
     }
   }, (err)=>{ console.error("[管理画面タブ既定値取得エラー]", err); });
 }
 document.getElementById("admin-tab-defaults-save-btn")?.addEventListener("click", async ()=>{
   const tabOrder = readDragOrderList("admin-tab-order-list");
-  const initialTab = document.getElementById("admin-initial-tab-select").value;
   try{
-    await setDoc(doc(db,"system_tab_defaults","admin"), { tabOrder, initialTab }, { merge:true });
+    await setDoc(doc(db,"system_tab_defaults","admin"), { tabOrder }, { merge:true });
     toast("保存しました。");
   }catch(e){
     toast("保存に失敗しました。権限をご確認ください。");
