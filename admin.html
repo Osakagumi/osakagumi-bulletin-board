@@ -1121,7 +1121,8 @@ onAuthStateChanged(auth, async (user)=>{
 
   document.getElementById("admin-app").style.display = "block";
   applySectionAccessToNav();
-  const firstAccessibleSection = Object.keys(ADMIN_SECTION_PERMISSIONS).find(s=>mySectionAccess[s]);
+  const navOrderedViews = [...document.querySelectorAll("#main-tabs .tab-btn[data-view]")].map(b=>b.dataset.view);
+  const firstAccessibleSection = navOrderedViews.find(s=>mySectionAccess[s]);
   if(firstAccessibleSection) switchToAdminTab(firstAccessibleSection);
   updateStickyNavOffset();
   seedCategoriesIfEmpty().then(initCategoriesListener);
