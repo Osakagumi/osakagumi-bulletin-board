@@ -405,6 +405,7 @@
         <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">ログインすると自動的にここへ追加されます。CSV一括登録した場合は社員番号・電話番号・備考も反映されています。「編集」から詳細を変更できます。</p>
         <button class="btn btn-ghost" id="user-delete-guide-btn" style="border:1px solid var(--line);margin-bottom:14px;">ユーザー削除手順</button>
         <button class="btn btn-ghost" id="perm-matrix-open-btn" style="border:1px solid var(--line);margin-bottom:14px;">表形式で権限設定</button>
+        <button class="btn btn-ghost" id="tab-matrix-open-btn" style="border:1px solid var(--line);margin-bottom:14px;">表形式で表示タブを設定</button>
         <div id="emp-card-list"></div>
       </div>
     </section>
@@ -786,6 +787,20 @@
         <div id="perm-matrix-wrap" style="overflow:auto;max-height:70vh;border:1px solid var(--line);border-radius:8px;"></div>
         <div class="row-btns">
           <button class="btn btn-ghost" id="perm-matrix-close-btn" style="border:1px solid var(--line);">閉じる</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 表示タブマトリクス（全社員×全タブを一覧表示・設定） -->
+    <div class="modal-overlay" id="tab-matrix-modal">
+      <div class="modal" style="max-width:96vw;width:1100px;max-height:90vh;">
+        <h3>表形式で表示タブを設定</h3>
+        <p style="font-size:12px;color:var(--muted);margin:0 0 10px;">
+          チェック＝そのタブを表示する。変更するとその場ですぐに反映されます（保存ボタンは不要です）。システム全体の設定（システム管理タブ）で無効になっているタブは、ここでチェックしても表示されません。
+        </p>
+        <div id="tab-matrix-wrap" style="overflow:auto;max-height:70vh;border:1px solid var(--line);border-radius:8px;"></div>
+        <div class="row-btns">
+          <button class="btn btn-ghost" id="tab-matrix-close-btn" style="border:1px solid var(--line);">閉じる</button>
         </div>
       </div>
     </div>
@@ -3219,6 +3234,84 @@ function getFullHideableList(){
     label: "業務情報 - " + (item.name || "")
   }));
   return [...HIDEABLE_TABS, ...bizInfoSubItems];
+}
+
+/* ============================================================
+   表形式で表示タブを設定（全社員×全タブのマトリクス）
+============================================================ */
+function openTabMatrix(){
+  renderTabMatrix();
+  document.getElementById("tab-matrix-modal").classList.add("show");
+}
+document.getElementById("tab-matrix-open-btn")?.addEventListener("click", openTabMatrix);
+document.getElementById("tab-matrix-close-btn")?.addEventListener("click", ()=>{
+  document.getElementById("tab-matrix-modal").classList.remove("show");
+});
+function renderTabMatrix(){
+  const wrap = document.getElementById("tab-matrix-wrap");
+  if(!wrap) return;
+  const tabDefs = getFullHideableList();
+  const roster = employeesAll.filter(e=>!e.hidden);
+
+  const table = document.createElement("table");
+  table.className = "perm-matrix-table";
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  const cornerTh = document.createElement("th");
+  cornerTh.className = "perm-matrix-corner";
+  cornerTh.textContent = "社員";
+  headRow.appendChild(cornerTh);
+  tabDefs.forEach(t=>{
+    const th = document.createElement("th");
+    th.textContent = t.label;
+    headRow.appendChild(th);
+  });
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  roster.forEach(emp=>{
+    const tr = document.createElement("tr");
+    const nameTh = document.createElement("th");
+    nameTh.textContent = emp.name || emp.email;
+    tr.appendChild(nameTh);
+    const empHiddenTabs = Array.isArray(emp.hiddenTabs) ? emp.hiddenTabs : [];
+    tabDefs.forEach(t=>{
+      const td = document.createElement("td");
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = !empHiddenTabs.includes(t.id); // チェック＝表示する（未チェック＝非表示）
+      cb.addEventListener("change", ()=> toggleTabMatrixCell(cb, emp, t.id));
+      td.appendChild(cb);
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+
+  wrap.innerHTML = "";
+  if(roster.length===0){
+    wrap.innerHTML = `<div class="empty">まだ社員データがありません。</div>`;
+    return;
+  }
+  wrap.appendChild(table);
+}
+async function toggleTabMatrixCell(cb, emp, tabId){
+  cb.disabled = true;
+  try{
+    const currentHidden = Array.isArray(emp.hiddenTabs) ? emp.hiddenTabs : [];
+    const newHidden = cb.checked
+      ? currentHidden.filter(id=>id!==tabId) // チェック＝表示するので、非表示リストから外す
+      : [...new Set([...currentHidden, tabId])]; // 未チェック＝非表示にするので、非表示リストに加える
+    await updateDoc(doc(db,"employees", emp.email), { hiddenTabs: newHidden });
+    emp.hiddenTabs = newHidden; // ローカルのキャッシュも更新しておく（再描画までのタイムラグ対策）
+    toast("更新しました。");
+  }catch(e){
+    cb.checked = !cb.checked;
+    toast("更新に失敗しました。権限をご確認ください。");
+  }finally{
+    cb.disabled = false;
+  }
 }
 function renderEmployees(){
   const body = document.getElementById("emp-card-list");
