@@ -1197,7 +1197,11 @@ function computeSectionAccess(){
     let hasPermission = myAdminPermissions.isAdmin || (!!def.permission && !!myAdminPermissions[def.permission]);
     if(section==="bizinfo" && isBizInfoManager) hasPermission = true; // 業務情報だけは「情報管理者」指定でも入室可能
     // タブ表示判定：対応する一般画面タブが「無効」に設定されている場合は、システム管理者であってもこのセクションは表示しない。
-    const tabVisibleOnGeneralScreen = def.generalTab ? !myHiddenTabsForAdmin.includes(def.generalTab) : true;
+    // ただし「情報管理者」に指定されている場合は、この人向けの個人設定・システム設定に関わらず優先して表示する
+    // （情報管理者の指定は、特定の項目を任せるための個別・明示的な操作のため）。
+    const tabVisibleOnGeneralScreen = (section==="bizinfo" && isBizInfoManager)
+      ? true
+      : (def.generalTab ? !myHiddenTabsForAdmin.includes(def.generalTab) : true);
     mySectionAccess[section] = hasPermission && tabVisibleOnGeneralScreen;
   });
 }
