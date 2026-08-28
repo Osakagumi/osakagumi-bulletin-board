@@ -1092,7 +1092,7 @@
             <button id="cal-today-btn" class="btn-primary">今日</button>
           </div>
           <div id="cal-edit-hint" style="font-size:11.5px;color:var(--muted);"></div>
-          <span id="cal-status-badge" style="display:none;font-size:11.5px;font-weight:700;padding:3px 10px;border-radius:12px;margin-right:8px;"></span>
+          <span id="cal-status-badge" style="display:none;font-size:14px;font-weight:700;padding:4px 12px;border-radius:12px;margin-right:8px;"></span>
           <button id="cal-publish-btn" class="btn-primary" style="display:none;background:var(--danger);">公開する</button>
           <button id="cal-export-btn" class="btn-primary">Excel出力</button>
         </div>
@@ -6082,7 +6082,7 @@ function updateCalStatusUI(){
   if(isCalendarEditor){
     badge.style.display = "inline-block";
     if(status==="draft"){
-      badge.textContent = "編集中（未公開）";
+      badge.textContent = "編集中";
       badge.style.background = "#FDECEA"; badge.style.color = "var(--danger)";
       publishBtn.style.display = "inline-block";
     } else {
