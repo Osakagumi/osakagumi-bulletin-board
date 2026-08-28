@@ -6108,14 +6108,23 @@ document.getElementById("cal-publish-btn")?.addEventListener("click", async ()=>
   if(!isCalendarEditor) return;
   if(!confirm(`${calFiscalYearStart}年度のカレンダーを公開しますか？\n公開すると、全社員が閲覧できるようになります。`)) return;
   const publishBtn = document.getElementById("cal-publish-btn");
+  const originalLabel = publishBtn.textContent;
   publishBtn.disabled = true;
   try{
     const startId = `${calFiscalYearStart}-04-01`;
     const endId = `${calFiscalYearStart+1}-03-31`;
     const q = query(collection(db,"calendar_days"), where(documentId(), ">=", startId), where(documentId(), "<=", endId));
     const snap = await getDocs(q);
-    for(const d of snap.docs){
-      await setDoc(doc(db,"calendar_days_published", d.id), d.data());
+    const docs = snap.docs;
+    const total = docs.length;
+    const BATCH_SIZE = 25; // ある程度まとめて並列書き込みすることで、体感速度を上げつつ進捗も表示する
+    let done = 0;
+    publishBtn.textContent = `公開中… 0/${total}`;
+    for(let i=0; i<docs.length; i+=BATCH_SIZE){
+      const batch = docs.slice(i, i+BATCH_SIZE);
+      await Promise.all(batch.map(d => setDoc(doc(db,"calendar_days_published", d.id), d.data())));
+      done += batch.length;
+      publishBtn.textContent = `公開中… ${done}/${total}`;
     }
     await setDoc(doc(db,"calendar_years", String(calFiscalYearStart)), { status: "published" }, { merge:true });
     toast("公開しました。");
@@ -6123,6 +6132,7 @@ document.getElementById("cal-publish-btn")?.addEventListener("click", async ()=>
     toast("公開に失敗しました。権限をご確認ください。");
   }finally{
     publishBtn.disabled = false;
+    publishBtn.textContent = originalLabel;
   }
 });
 // 編集操作のたびに呼び出す。対象の日付が属する年度を「編集中」に戻す（未公開の状態にする）。
