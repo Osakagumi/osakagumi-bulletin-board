@@ -60,6 +60,11 @@
   .reorder-handle{
     display:inline-block;margin-right:4px;color:var(--muted);font-size:13px;
   }
+  .emp-picker-listbox{width:100%;height:200px;overflow-y:auto;border:1.5px solid var(--line);border-radius:8px;padding:2px;font-size:14px;background:#fff;}
+  .emp-picker-row{padding:9px 12px;border-radius:6px;cursor:pointer;font-size:14px;}
+  .emp-picker-row:hover{background:#F0F4FA;}
+  .emp-picker-row.selected{background:var(--brand);color:#fff;}
+  .emp-picker-row-empty{padding:12px;color:var(--muted);font-size:13px;text-align:center;}
 
   main{padding:16px;max-width:900px;margin:0 auto;}
   .panel{background:var(--surface);border:1.5px solid var(--line);border-radius:12px;padding:18px;margin-bottom:16px;}
@@ -739,6 +744,30 @@
       </div>
     </div>
 
+    <!-- 社員選択ダイアログ（共通部品：所属＋氏名で社員を1人選ぶ） -->
+    <div class="modal-overlay" id="employee-picker-modal">
+      <div class="modal">
+        <h3>社員を選択</h3>
+        <div class="field">
+          <label>所属</label>
+          <select id="emp-picker-dept-select"></select>
+        </div>
+        <div class="field">
+          <label>氏名で絞り込み（前方一致）</label>
+          <input type="text" id="emp-picker-search-input" placeholder="例：山田">
+        </div>
+        <div class="field">
+          <label>氏名</label>
+          <div id="emp-picker-name-list" class="emp-picker-listbox"></div>
+        </div>
+        <div id="emp-picker-error" style="color:var(--danger);font-size:12.5px;margin-top:4px;"></div>
+        <div class="row-btns">
+          <button class="btn btn-ghost" id="emp-picker-cancel-btn" style="border:1px solid var(--line);">キャンセル</button>
+          <button class="btn btn-primary" id="emp-picker-select-btn">選択</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ============ 業務情報 追加・編集モーダル ============ -->
     <div class="modal-overlay" id="bizinfo-edit-modal">
       <div class="modal" style="max-width:460px;">
@@ -756,13 +785,11 @@
           <label style="margin:0;font-size:12.5px;">有効にする（一般画面に表示する）</label>
         </div>
         <div class="field">
-          <label>情報管理者（最大3人まで、メールアドレス）</label>
+          <label>情報管理者（最大3人まで）</label>
           <p style="font-size:11.5px;color:var(--muted);margin:0 0 6px;">
-            ここに登録した人（またはシステム管理者）以外がこの一覧を開いた場合、この項目はグレーアウトされ操作できなくなります。空欄のままなら誰でも操作できます。
+            ここに登録した人（またはシステム管理者）以外がこの一覧を開いた場合、この項目はグレーアウトされ操作できなくなります。1人も設定しなければ誰でも操作できます。
           </p>
-          <input type="email" id="bizinfo-manager-input-1" placeholder="you@osakagumi.co.jp" style="margin-bottom:6px;">
-          <input type="email" id="bizinfo-manager-input-2" placeholder="（任意）" style="margin-bottom:6px;">
-          <input type="email" id="bizinfo-manager-input-3" placeholder="（任意）">
+          <div id="bizinfo-manager-slots"></div>
         </div>
         <div id="bizinfo-edit-error" style="color:var(--danger);font-size:12.5px;margin-top:4px;"></div>
         <div class="row-btns">
@@ -1043,6 +1070,93 @@ document.getElementById("cat-save-btn").addEventListener("click", async ()=>{
   }catch(e){
     toast("保存に失敗しました。権限をご確認ください。");
   }
+});
+
+/* ============================================================
+   社員選択ダイアログ（共通部品：所属＋氏名で社員を1人選ぶ）
+============================================================ */
+let empPickerResolve = null;
+let empPickerSelectedEmail = null;
+function openEmployeePicker(opts){
+  return new Promise((resolve)=>{
+    empPickerResolve = resolve;
+    empPickerSelectedEmail = null;
+    document.getElementById("emp-picker-error").textContent = "";
+    document.getElementById("emp-picker-search-input").value = "";
+    renderEmpPickerDeptSelect();
+    const defaultDeptId = opts?.defaultDeptId;
+    if(defaultDeptId){
+      const deptSel = document.getElementById("emp-picker-dept-select");
+      if([...deptSel.options].some(o=>o.value===defaultDeptId)){
+        deptSel.value = defaultDeptId;
+      }
+    }
+    renderEmpPickerNameSelect();
+    document.getElementById("employee-picker-modal").classList.add("show");
+  });
+}
+function renderEmpPickerDeptSelect(){
+  const sel = document.getElementById("emp-picker-dept-select");
+  if(!sel) return;
+  sel.innerHTML = "";
+  const allOpt = document.createElement("option");
+  allOpt.value = ""; allOpt.textContent = "すべて";
+  sel.appendChild(allOpt);
+  departmentsAll.forEach(d=>{
+    const opt = document.createElement("option");
+    opt.value = d.id; opt.textContent = d.name;
+    sel.appendChild(opt);
+  });
+  renderEmpPickerNameSelect();
+}
+function renderEmpPickerNameSelect(){
+  const deptSel = document.getElementById("emp-picker-dept-select");
+  const nameList = document.getElementById("emp-picker-name-list");
+  const searchInput = document.getElementById("emp-picker-search-input");
+  if(!deptSel || !nameList) return;
+  const deptId = deptSel.value;
+  const searchText = (searchInput?.value || "").trim();
+  // 社員番号順というアプリ共通の並び順に統一する（employeesAllは取得時点で社員番号順にソート済み）
+  let list = employeesAll.filter(e=> !e.hidden && (!deptId || empDepartmentsAdmin(e).includes(deptId)));
+  if(searchText){
+    list = list.filter(e=> (e.name||"").startsWith(searchText));
+  }
+  nameList.innerHTML = "";
+  if(list.length===0){
+    nameList.innerHTML = `<div class="emp-picker-row-empty">該当する社員がいません</div>`;
+    return;
+  }
+  if(!list.some(e=>e.email===empPickerSelectedEmail)){
+    empPickerSelectedEmail = null;
+  }
+  list.forEach(e=>{
+    const row = document.createElement("div");
+    row.className = "emp-picker-row" + (e.email===empPickerSelectedEmail ? " selected" : "");
+    row.textContent = e.name || e.email;
+    row.addEventListener("click", ()=>{
+      empPickerSelectedEmail = e.email;
+      nameList.querySelectorAll(".emp-picker-row").forEach(r=> r.classList.remove("selected"));
+      row.classList.add("selected");
+    });
+    nameList.appendChild(row);
+  });
+}
+document.getElementById("emp-picker-search-input")?.addEventListener("input", renderEmpPickerNameSelect);
+document.getElementById("emp-picker-dept-select")?.addEventListener("change", renderEmpPickerNameSelect);
+document.getElementById("emp-picker-cancel-btn")?.addEventListener("click", ()=>{
+  document.getElementById("employee-picker-modal").classList.remove("show");
+  if(empPickerResolve) empPickerResolve(null);
+  empPickerResolve = null;
+});
+document.getElementById("emp-picker-select-btn")?.addEventListener("click", ()=>{
+  const emp = employeesAll.find(e=>e.email===empPickerSelectedEmail);
+  if(!emp){
+    document.getElementById("emp-picker-error").textContent = "氏名を選択してください。";
+    return;
+  }
+  document.getElementById("employee-picker-modal").classList.remove("show");
+  if(empPickerResolve) empPickerResolve(emp);
+  empPickerResolve = null;
 });
 
 function nameForEmail(email){
@@ -2568,18 +2682,60 @@ function openBizInfoEditScreen(item){
   window.open(editUrl, "_blank", "noopener");
 }
 let editingBizInfoId = null;
+let bizInfoEditManagers = []; // [{email, name}, ...] 最大3件
 function openBizInfoEditModal(item){
   editingBizInfoId = item ? item.id : null;
   document.getElementById("bizinfo-edit-modal-title").textContent = item ? "業務情報を編集" : "業務情報を追加";
   document.getElementById("bizinfo-name-input").value = item ? (item.name||"") : "";
   document.getElementById("bizinfo-url-input").value = item ? (item.driveUrl||"") : "";
   document.getElementById("bizinfo-enabled-input").checked = item ? (item.enabled!==false) : true;
-  const managers = (item && Array.isArray(item.infoManagers)) ? item.infoManagers : [];
-  document.getElementById("bizinfo-manager-input-1").value = managers[0] || "";
-  document.getElementById("bizinfo-manager-input-2").value = managers[1] || "";
-  document.getElementById("bizinfo-manager-input-3").value = managers[2] || "";
+  const managerEmails = (item && Array.isArray(item.infoManagers)) ? item.infoManagers : [];
+  bizInfoEditManagers = managerEmails.map(email=>{
+    const emp = employeesAll.find(e=>e.email===email);
+    return { email, name: emp ? (emp.name||email) : email };
+  });
+  renderBizInfoManagerSlots();
   document.getElementById("bizinfo-edit-error").textContent = "";
   document.getElementById("bizinfo-edit-modal").classList.add("show");
+}
+function renderBizInfoManagerSlots(){
+  const wrap = document.getElementById("bizinfo-manager-slots");
+  if(!wrap) return;
+  wrap.innerHTML = "";
+  for(let i=0;i<3;i++){
+    const person = bizInfoEditManagers[i];
+    const row = document.createElement("div");
+    row.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:6px;";
+    const label = document.createElement("span");
+    label.style.cssText = "flex:1;font-size:13px;" + (person ? "color:var(--text);" : "color:var(--muted);");
+    label.textContent = person ? person.name : "（未設定）";
+    row.appendChild(label);
+    const selectBtn = document.createElement("button");
+    selectBtn.type = "button";
+    selectBtn.className = "btn btn-ghost";
+    selectBtn.style.border = "1px solid var(--line)";
+    selectBtn.textContent = person ? "変更" : "選択";
+    selectBtn.addEventListener("click", async ()=>{
+      const emp = await openEmployeePicker({});
+      if(!emp) return;
+      bizInfoEditManagers[i] = { email: emp.email, name: emp.name || emp.email };
+      renderBizInfoManagerSlots();
+    });
+    row.appendChild(selectBtn);
+    if(person){
+      const clearBtn = document.createElement("button");
+      clearBtn.type = "button";
+      clearBtn.className = "btn btn-ghost";
+      clearBtn.style.border = "1px solid var(--line)";
+      clearBtn.textContent = "解除";
+      clearBtn.addEventListener("click", ()=>{
+        bizInfoEditManagers[i] = null;
+        renderBizInfoManagerSlots();
+      });
+      row.appendChild(clearBtn);
+    }
+    wrap.appendChild(row);
+  }
 }
 document.getElementById("bizinfo-add-btn")?.addEventListener("click", ()=> openBizInfoEditModal(null));
 document.getElementById("bizinfo-guide-btn")?.addEventListener("click", ()=>{
@@ -2596,11 +2752,7 @@ document.getElementById("bizinfo-edit-save-btn")?.addEventListener("click", asyn
   const name = document.getElementById("bizinfo-name-input").value.trim();
   const driveUrl = document.getElementById("bizinfo-url-input").value.trim();
   const enabled = document.getElementById("bizinfo-enabled-input").checked;
-  const infoManagers = [
-    document.getElementById("bizinfo-manager-input-1").value.trim().toLowerCase(),
-    document.getElementById("bizinfo-manager-input-2").value.trim().toLowerCase(),
-    document.getElementById("bizinfo-manager-input-3").value.trim().toLowerCase()
-  ].filter(Boolean);
+  const infoManagers = bizInfoEditManagers.filter(Boolean).map(p=>p.email.toLowerCase());
   if(!name){ errEl.textContent = "業務情報名を入力してください。"; return; }
   if(!driveUrl){ errEl.textContent = "Googleドライブのリンクを入力してください。"; return; }
   const fileId = extractDriveFileId(driveUrl);
