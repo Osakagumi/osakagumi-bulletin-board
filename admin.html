@@ -372,14 +372,14 @@
         <h2>CSVで一括登録</h2>
         <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
           1行目はヘッダー行として無視されます。2行目以降を1人ずつ登録します。<br>
-          列の順番：<b>社員番号, 氏名, 所属, システム管理者フラグ, お知らせ投稿フラグ, 行き先編集権限フラグ, 設備管理者フラグ, 入札編集権限フラグ, カレンダー編集権限フラグ, 安否確認発信権限フラグ, メールアドレス, パスワード, 電話番号, 備考</b><br>
+          列の順番：<b id="userimport-column-order-text">社員番号, 氏名, 所属, システム管理者フラグ, お知らせ投稿フラグ, 行き先編集権限フラグ, 設備管理者フラグ, 入札編集権限フラグ, カレンダー編集権限フラグ, 安否確認発信権限フラグ, メールアドレス, パスワード, 電話番号, 備考</b><br>
           必須は「メールアドレス」「パスワード」のみで、他は省略可です。<br>
-          各権限フラグは <code>1</code> / <code>TRUE</code> / <code>○</code> / <code>はい</code> のいずれかを入れると有効になります（空欄は無効）。<br>
+          各権限フラグは <code>1</code> / <code>TRUE</code> / <code>○</code> / <code>はい</code> のいずれかを入れると有効になります（空欄は無効）。業務情報の情報管理者フラグは、各項目とも最大3人までです（超過分は登録されません）。<br>
           所属欄には「ユーザー管理」タブで登録済みの部署名をそのまま入力してください（一致しない場合は未所属として登録されます）。複数の部署に所属させたい場合は「、」または「/」区切りで入力してください（例：役員、営業部）。
         </p>
         <div class="field full" style="margin-bottom:12px;">
           <label>サンプル</label>
-          <pre style="background:#F7F8FA;border:1px solid var(--line);border-radius:7px;padding:10px 12px;font-size:12px;overflow-x:auto;">社員番号,氏名,所属,システム管理者フラグ,お知らせ投稿フラグ,行き先編集権限フラグ,設備管理者フラグ,入札編集権限フラグ,カレンダー編集権限フラグ,安否確認発信権限フラグ,メールアドレス,パスワード,電話番号,備考
+          <pre id="userimport-sample-text" style="background:#F7F8FA;border:1px solid var(--line);border-radius:7px;padding:10px 12px;font-size:12px;overflow-x:auto;">社員番号,氏名,所属,システム管理者フラグ,お知らせ投稿フラグ,行き先編集権限フラグ,設備管理者フラグ,入札編集権限フラグ,カレンダー編集権限フラグ,安否確認発信権限フラグ,メールアドレス,パスワード,電話番号,備考
 1001,山田太郎,工務部,,1,,,,,,yamada@osakagumi.co.jp,Osaka2026!,090-1234-5678,現場責任者
 1002,佐藤花子,総務経理部,1,1,1,,,,1,sato@osakagumi.co.jp,Osaka2026!,090-2345-6789,</pre>
         </div>
@@ -393,7 +393,7 @@
       <div class="panel" id="userimport-preview-panel" style="display:none;">
         <h2>登録内容の確認（<span id="userimport-count">0</span>件）</h2>
         <table>
-          <thead><tr><th>社員番号</th><th>氏名</th><th>所属</th><th>システム管理者</th><th>お知らせ投稿</th><th>行き先編集</th><th>測量機器管理</th><th>入札編集</th><th>カレンダー編集</th><th>安否確認発信</th><th>メールアドレス</th><th>電話番号</th><th>備考</th></tr></thead>
+          <thead><tr id="userimport-preview-headrow"><th>社員番号</th><th>氏名</th><th>所属</th><th>システム管理者</th><th>お知らせ投稿</th><th>行き先編集</th><th>測量機器管理</th><th>入札編集</th><th>カレンダー編集</th><th>安否確認発信</th><th>メールアドレス</th><th>電話番号</th><th>備考</th></tr></thead>
           <tbody id="userimport-preview-body"></tbody>
         </table>
         <button class="btn btn-primary" id="userimport-execute-btn" style="margin-top:12px;">登録を実行</button>
@@ -2596,6 +2596,8 @@ function initBizInfoListener(){
       applySectionAccessToNav();
     }
     renderBizInfoTable();
+    populateSingleEmpPermissionsChecks();
+    updateUserImportBizInfoColumns();
   }, (err)=>{ console.error("[業務情報取得エラー]", err); });
 }
 function renderBizInfoTable(){
@@ -3724,10 +3726,13 @@ function parseCsv(text){
   text = text.replace(/^\uFEFF/, "");
   const lines = text.split(/\r\n|\n|\r/).filter(l=>l.trim().length>0);
   const rows = [];
+  const fixedColCount = 10; // 社員番号〜安否確認発信権限フラグまでの固定列数
   for(let i=1;i<lines.length;i++){ // 1行目はヘッダーとして無視
     const cols = parseCsvLine(lines[i]);
     if(cols.length===0) continue;
-    const [employeeNo, name, department, adminFlag, posterFlag, wbEditorFlag, eqManagerFlag, contractEditorFlag, calEditorFlag, safetySenderFlag, email, password, phone, memo] = cols;
+    const [employeeNo, name, department, adminFlag, posterFlag, wbEditorFlag, eqManagerFlag, contractEditorFlag, calEditorFlag, safetySenderFlag] = cols;
+    const bizInfoFlags = bizInfoItemsAll.map((item, idx)=> cols[fixedColCount + idx]);
+    const [email, password, phone, memo] = cols.slice(fixedColCount + bizInfoItemsAll.length);
     if(!email || !email.trim()) continue;
     rows.push({
       employeeNo: (employeeNo||"").trim(),
@@ -3740,6 +3745,7 @@ function parseCsv(text){
       isContractEditor: isTruthyFlag(contractEditorFlag),
       isCalEditor: isTruthyFlag(calEditorFlag),
       isSafetySender: isTruthyFlag(safetySenderFlag),
+      bizInfoItemIds: bizInfoItemsAll.filter((item, idx)=> isTruthyFlag(bizInfoFlags[idx])).map(item=>item.id),
       email: email.trim(),
       password: (password||"").trim(),
       phone: (phone||"").trim(),
@@ -3800,10 +3806,21 @@ function renderUserImportPreview(){
   const panel = document.getElementById("userimport-preview-panel");
   const body = document.getElementById("userimport-preview-body");
   document.getElementById("userimport-count").textContent = userImportRows.length;
+  const totalCols = 13 + bizInfoItemsAll.length;
+  // ヘッダー行を業務情報の項目数に合わせて組み直す（固定10列の直後、メールアドレス列の手前に挿入）
+  const headRow = document.getElementById("userimport-preview-headrow");
+  headRow.querySelectorAll(".userimport-bizinfo-col").forEach(th=>th.remove());
+  const emailTh = headRow.children[10]; // 安否確認発信(9)の次＝メールアドレス列
+  bizInfoItemsAll.forEach(item=>{
+    const th = document.createElement("th");
+    th.className = "userimport-bizinfo-col";
+    th.textContent = item.name || "（無題）";
+    headRow.insertBefore(th, emailTh);
+  });
   body.innerHTML = "";
   if(userImportRows.length===0){
     panel.style.display = "block";
-    body.innerHTML = `<tr><td colspan="13" class="empty">読み取れる行がありませんでした。CSVの形式をご確認ください。</td></tr>`;
+    body.innerHTML = `<tr><td colspan="${totalCols}" class="empty">読み取れる行がありませんでした。CSVの形式をご確認ください。</td></tr>`;
     return;
   }
   userImportRows.forEach(row=>{
@@ -3811,6 +3828,12 @@ function renderUserImportPreview(){
     const deptCellHtml = deptNames.length===0
       ? "未所属"
       : deptNames.map(n=> escapeHtml(n) + (departmentIdByName(n) ? "" : "（未登録・未所属になります）")).join("、");
+    const bizInfoCellsHtml = bizInfoItemsAll.map(item=>{
+      if(!row.bizInfoItemIds.includes(item.id)) return "<td></td>";
+      const currentManagers = Array.isArray(item.infoManagers) ? item.infoManagers : [];
+      const wouldExceed = !currentManagers.includes(row.email) && currentManagers.length>=3;
+      return `<td>${wouldExceed ? "○（上限3人のため登録されません）" : "○"}</td>`;
+    }).join("");
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${escapeHtml(row.employeeNo)}</td>
@@ -3823,6 +3846,7 @@ function renderUserImportPreview(){
       <td>${row.isContractEditor ? "○" : ""}</td>
       <td>${row.isCalEditor ? "○" : ""}</td>
       <td>${row.isSafetySender ? "○" : ""}</td>
+      ${bizInfoCellsHtml}
       <td>${escapeHtml(row.email)}</td>
       <td>${escapeHtml(row.phone)}</td>
       <td style="max-width:160px;color:var(--muted);">${escapeHtml(row.memo)}</td>
@@ -3833,6 +3857,20 @@ function renderUserImportPreview(){
   document.getElementById("userimport-status").textContent = "";
 }
 
+function updateUserImportBizInfoColumns(){
+  const orderEl = document.getElementById("userimport-column-order-text");
+  const sampleEl = document.getElementById("userimport-sample-text");
+  if(!orderEl || !sampleEl) return;
+  const bizFlagLabels = bizInfoItemsAll.map(item => `${item.name || "（無題）"}情報管理者フラグ`);
+  orderEl.textContent =
+    ["社員番号", "氏名", "所属", "システム管理者フラグ", "お知らせ投稿フラグ", "行き先編集権限フラグ", "設備管理者フラグ", "入札編集権限フラグ", "カレンダー編集権限フラグ", "安否確認発信権限フラグ", ...bizFlagLabels, "メールアドレス", "パスワード", "電話番号", "備考"].join(", ");
+  const bizHeaderCols = bizInfoItemsAll.map(item => `${item.name || "（無題）"}情報管理者フラグ`).join(",");
+  const bizBlankCols = bizInfoItemsAll.map(()=> "").join(",");
+  const headerLine = `社員番号,氏名,所属,システム管理者フラグ,お知らせ投稿フラグ,行き先編集権限フラグ,設備管理者フラグ,入札編集権限フラグ,カレンダー編集権限フラグ,安否確認発信権限フラグ${bizHeaderCols ? ","+bizHeaderCols : ""},メールアドレス,パスワード,電話番号,備考`;
+  const row1 = `1001,山田太郎,工務部,,1,,,,,,${bizBlankCols ? bizBlankCols+"," : ""}yamada@osakagumi.co.jp,Osaka2026!,090-1234-5678,現場責任者`;
+  const row2 = `1002,佐藤花子,総務経理部,1,1,1,,,,1${bizBlankCols ? ","+bizBlankCols : ""},sato@osakagumi.co.jp,Osaka2026!,090-2345-6789,`;
+  sampleEl.textContent = `${headerLine}\n${row1}\n${row2}`;
+}
 function populateSingleEmpDeptSelect(){
   const sel = document.getElementById("single-emp-dept");
   if(!sel) return;
@@ -3858,6 +3896,23 @@ function populateSingleEmpPermissionsChecks(){
     label.appendChild(document.createTextNode(perm.label));
     el.appendChild(label);
   });
+  if(bizInfoItemsAll.length>0){
+    const divider = document.createElement("div");
+    divider.style.cssText = "font-size:11.5px;color:var(--muted);margin-top:4px;padding-top:6px;border-top:1px solid var(--line);";
+    divider.textContent = "業務情報の情報管理者（項目ごと最大3人まで）";
+    el.appendChild(divider);
+    bizInfoItemsAll.forEach(item=>{
+      const label = document.createElement("label");
+      label.style.cssText = "display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;";
+      const cb = document.createElement("input");
+      cb.type = "checkbox"; cb.style.width = "auto";
+      cb.className = "single-emp-permission-check";
+      cb.dataset.bizinfoItem = item.id;
+      label.appendChild(cb);
+      label.appendChild(document.createTextNode(item.name || "（無題）"));
+      el.appendChild(label);
+    });
+  }
 }
 document.getElementById("single-emp-register-btn")?.addEventListener("click", async ()=>{
   const statusEl = document.getElementById("single-emp-status");
@@ -3907,10 +3962,22 @@ document.getElementById("single-emp-register-btn")?.addEventListener("click", as
       createdBy: currentUser.email,
       importedAt: new Date().toISOString()
     }, { merge: true });
+    const cappedItems = [];
     for(const cb of permChecks){
+      if(cb.dataset.bizinfoItem){
+        const item = bizInfoItemsAll.find(i=>i.id===cb.dataset.bizinfoItem);
+        const currentManagers = (item && Array.isArray(item.infoManagers)) ? item.infoManagers : [];
+        if(!currentManagers.includes(email) && currentManagers.length>=3){
+          cappedItems.push(item?.name || cb.dataset.bizinfoItem);
+          continue;
+        }
+        await updateDoc(doc(db,"business_info_items", cb.dataset.bizinfoItem), { infoManagers: arrayUnion(email) });
+        continue;
+      }
       await setDoc(doc(db, cb.dataset.collection, email), { addedBy: currentUser.email, addedAt: new Date().toISOString() });
     }
-    statusEl.textContent = accountResult + " 社員情報を登録しました。";
+    statusEl.textContent = accountResult + " 社員情報を登録しました。" +
+      (cappedItems.length>0 ? ` ただし「${cappedItems.join("、")}」は情報管理者が既に3人のため追加できませんでした。` : "");
     statusEl.style.color = "var(--muted)";
     toast("登録しました。");
     // フォームをクリア
@@ -3988,6 +4055,12 @@ document.getElementById("userimport-execute-btn").addEventListener("click", asyn
       }
       if(row.isSafetySender){
         await setDoc(doc(db,"safety_senders", row.email), { addedBy: currentUser.email, addedAt: new Date().toISOString() });
+      }
+      for(const itemId of row.bizInfoItemIds){
+        const item = bizInfoItemsAll.find(i=>i.id===itemId);
+        const currentManagers = (item && Array.isArray(item.infoManagers)) ? item.infoManagers : [];
+        if(!currentManagers.includes(row.email) && currentManagers.length>=3) continue; // 上限3人のためスキップ
+        await updateDoc(doc(db,"business_info_items", itemId), { infoManagers: arrayUnion(row.email) });
       }
     }catch(e){ /* 権限エラー等は無視して続行 */ }
 
