@@ -2456,9 +2456,9 @@ function renderBizInfoTable(){
     `;
     const actionsTd = tr.querySelector(".actions");
     const shortcutBtn = document.createElement("button");
-    shortcutBtn.className = "btn btn-ghost"; shortcutBtn.textContent = "ショートカット作成";
+    shortcutBtn.className = "btn btn-ghost"; shortcutBtn.textContent = "編集画面を開く";
     shortcutBtn.style.border = "1px solid var(--line)";
-    shortcutBtn.addEventListener("click", ()=> downloadBizInfoShortcut(item));
+    shortcutBtn.addEventListener("click", ()=> openBizInfoEditScreen(item));
     actionsTd.appendChild(shortcutBtn);
     const editBtn = document.createElement("button");
     editBtn.className = "btn btn-ghost"; editBtn.textContent = "編集";
@@ -2482,22 +2482,16 @@ function renderBizInfoTable(){
 }
 // 編集用リンク（Googleドライブでそのファイルを開くページ）のショートカット（.url）ファイルを、
 // ブラウザのダウンロード機能を使ってダウンロードする（そのままデスクトップ等に保存できる）
-function downloadBizInfoShortcut(item){
+function openBizInfoEditScreen(item){
   const fileId = extractDriveFileId(item.driveUrl);
   if(!fileId){
     toast("Googleドライブのリンクからファイルを特定できませんでした。");
     return;
   }
   const editUrl = `https://docs.google.com/spreadsheets/d/${fileId}/edit`;
-  const content = `[InternetShortcut]\r\nURL=${editUrl}\r\n`;
-  const blob = new Blob([content], { type: "application/internet-shortcut" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `${(item.name||"業務情報").replace(/[\\/:*?"<>|]/g,"")}（編集用）.url`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(()=> URL.revokeObjectURL(a.href), 3000);
+  // ショートカットファイルのダウンロードは、Windowsの「インターネットから取得したファイル」保護
+  // （Mark of the Web）により毎回警告が出てしまうため、直接新しいタブで開く方式に変更した。
+  window.open(editUrl, "_blank", "noopener");
 }
 let editingBizInfoId = null;
 function openBizInfoEditModal(item){
