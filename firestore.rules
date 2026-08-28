@@ -182,10 +182,13 @@ service cloud.firestore {
       allow create, update, delete: if isSignedIn() && isContractEditor();
     }
 
-    // 業務情報（Googleドライブ上のファイルを一般画面にピル切り替えで表示する）: 全員が読める。管理はシステム管理者のみ。
+    // 業務情報（Googleドライブ上のファイルを一般画面にピル切り替えで表示する）: 全員が読める。
+    // 管理はシステム管理者、または各項目に指定された「情報管理者」（最大3人）のみ。
     match /business_info_items/{itemId} {
       allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow create: if isAdmin();
+      allow update, delete: if isAdmin() ||
+        (isSignedIn() && resource.data.infoManagers is list && request.auth.token.email in resource.data.infoManagers);
     }
 
     // ダイレクトメッセージ（1対1）: 送信者・受信者本人のみ読み書き可能。1日経過後に自動削除される。

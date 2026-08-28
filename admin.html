@@ -755,6 +755,15 @@
           <input type="checkbox" id="bizinfo-enabled-input" checked style="width:auto;">
           <label style="margin:0;font-size:12.5px;">有効にする（一般画面に表示する）</label>
         </div>
+        <div class="field">
+          <label>情報管理者（最大3人まで、メールアドレス）</label>
+          <p style="font-size:11.5px;color:var(--muted);margin:0 0 6px;">
+            ここに登録した人（またはシステム管理者）以外がこの一覧を開いた場合、この項目はグレーアウトされ操作できなくなります。空欄のままなら誰でも操作できます。
+          </p>
+          <input type="email" id="bizinfo-manager-input-1" placeholder="you@osakagumi.co.jp" style="margin-bottom:6px;">
+          <input type="email" id="bizinfo-manager-input-2" placeholder="（任意）" style="margin-bottom:6px;">
+          <input type="email" id="bizinfo-manager-input-3" placeholder="（任意）">
+        </div>
         <div id="bizinfo-edit-error" style="color:var(--danger);font-size:12.5px;margin-top:4px;"></div>
         <div class="row-btns">
           <button class="btn btn-ghost" id="bizinfo-edit-cancel-btn" style="border:1px solid var(--line);">キャンセル</button>
@@ -1065,11 +1074,13 @@ const ADMIN_SECTION_PERMISSIONS = {
 };
 let myAdminPermissions = {};
 let mySectionAccess = {};
+let isBizInfoManager = false; // 自分がいずれかの業務情報の「情報管理者」に指定されているか
 function computeSectionAccess(){
   mySectionAccess = {};
   Object.entries(ADMIN_SECTION_PERMISSIONS).forEach(([section, def])=>{
     // 権限判定：システム管理者は常に権限ありとみなす。個別権限を持つ人もOK（対応する個別権限が無いセクションは管理者専用）。
-    const hasPermission = myAdminPermissions.isAdmin || (!!def.permission && !!myAdminPermissions[def.permission]);
+    let hasPermission = myAdminPermissions.isAdmin || (!!def.permission && !!myAdminPermissions[def.permission]);
+    if(section==="bizinfo" && isBizInfoManager) hasPermission = true; // 業務情報だけは「情報管理者」指定でも入室可能
     // タブ表示判定：対応する一般画面タブが「無効」に設定されている場合は、システム管理者であってもこのセクションは表示しない。
     const tabVisibleOnGeneralScreen = def.generalTab ? !myHiddenTabsForAdmin.includes(def.generalTab) : true;
     mySectionAccess[section] = hasPermission && tabVisibleOnGeneralScreen;
@@ -1092,7 +1103,7 @@ onAuthStateChanged(auth, async (user)=>{
   }
   currentUser = user;
 
-  const [adminDoc, posterDoc, wbEditorDoc, eqManagerDoc, calEditorDoc, contractEditorDoc, myEmpDoc, generalDefaultsDoc] = await Promise.all([
+  const [adminDoc, posterDoc, wbEditorDoc, eqManagerDoc, calEditorDoc, contractEditorDoc, myEmpDoc, generalDefaultsDoc, bizInfoManagerSnap] = await Promise.all([
     getDoc(doc(db, "admins", user.email)).catch(()=>null),
     getDoc(doc(db, "announcement_posters", user.email)).catch(()=>null),
     getDoc(doc(db, "whereabouts_editors", user.email)).catch(()=>null),
@@ -1100,7 +1111,8 @@ onAuthStateChanged(auth, async (user)=>{
     getDoc(doc(db, "calendar_editors", user.email)).catch(()=>null),
     getDoc(doc(db, "contract_editors", user.email)).catch(()=>null),
     getDoc(doc(db, "employees", user.email)).catch(()=>null),
-    getDoc(doc(db, "system_tab_defaults", "general")).catch(()=>null)
+    getDoc(doc(db, "system_tab_defaults", "general")).catch(()=>null),
+    getDocs(query(collection(db, "business_info_items"), where("infoManagers", "array-contains", user.email.toLowerCase()))).catch(()=>null)
   ]);
   myAdminPermissions = {
     isAdmin: !!(adminDoc && adminDoc.exists()),
@@ -1110,6 +1122,7 @@ onAuthStateChanged(auth, async (user)=>{
     isCalendarEditor: !!(calEditorDoc && calEditorDoc.exists()),
     isContractEditor: !!(contractEditorDoc && contractEditorDoc.exists())
   };
+  isBizInfoManager = !!(bizInfoManagerSnap && !bizInfoManagerSnap.empty);
   // 個人設定・システム設定のどちらかが「非表示」なら非表示にする（両方が「表示」の場合のみ表示する）
   const personalHiddenTabs = (myEmpDoc && myEmpDoc.exists() && Array.isArray(myEmpDoc.data().hiddenTabs)) ? myEmpDoc.data().hiddenTabs : [];
   const generalDefaults = (generalDefaultsDoc && generalDefaultsDoc.exists()) ? generalDefaultsDoc.data() : {};
@@ -2442,6 +2455,13 @@ function initBizInfoListener(){
   onSnapshot(collection(db,"business_info_items"), snap=>{
     bizInfoItemsAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
     bizInfoItemsAll.sort((a,b)=> (a.order??0)-(b.order??0) || (a.name||"").localeCompare(b.name||"","ja"));
+    const myEmail = (currentUser?.email||"").toLowerCase();
+    const nowIsManager = bizInfoItemsAll.some(item => Array.isArray(item.infoManagers) && item.infoManagers.includes(myEmail));
+    if(nowIsManager !== isBizInfoManager){
+      isBizInfoManager = nowIsManager;
+      computeSectionAccess();
+      applySectionAccessToNav();
+    }
     renderBizInfoTable();
   }, (err)=>{ console.error("[業務情報取得エラー]", err); });
 }
@@ -2454,35 +2474,43 @@ function renderBizInfoTable(){
     return;
   }
   bizInfoItemsAll.forEach(item=>{
+    const managers = Array.isArray(item.infoManagers) ? item.infoManagers : [];
+    const canManage = myAdminPermissions.isAdmin || managers.length===0 || managers.includes((currentUser.email||"").toLowerCase());
     const tr = document.createElement("tr");
-    tr.draggable = true;
+    tr.draggable = canManage;
     tr.dataset.id = item.id;
-    tr.style.cursor = "grab";
+    tr.style.cursor = canManage ? "grab" : "default";
+    if(!canManage) tr.style.opacity = "0.45";
     tr.innerHTML = `
-      <td style="width:24px;color:var(--muted);">⠿</td>
+      <td style="width:24px;color:var(--muted);">${canManage ? "⠿" : ""}</td>
       <td>${escapeHtml(item.name||"")}</td>
       <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-size:12px;">${escapeHtml(item.driveUrl||"")}</td>
       <td>${item.enabled!==false ? "有効" : "無効"}</td>
       <td class="actions"></td>
     `;
-    tr.addEventListener("dragstart", ()=> tr.classList.add("dragging"));
-    tr.addEventListener("dragend", ()=>{
-      tr.classList.remove("dragging");
-      saveBizInfoOrder();
-    });
+    if(canManage){
+      tr.addEventListener("dragstart", ()=> tr.classList.add("dragging"));
+      tr.addEventListener("dragend", ()=>{
+        tr.classList.remove("dragging");
+        saveBizInfoOrder();
+      });
+    }
     const actionsTd = tr.querySelector(".actions");
     const shortcutBtn = document.createElement("button");
     shortcutBtn.className = "btn btn-ghost"; shortcutBtn.textContent = "ファイル修正";
     shortcutBtn.style.border = "1px solid var(--line)";
+    shortcutBtn.disabled = !canManage;
     shortcutBtn.addEventListener("click", ()=> openBizInfoEditScreen(item));
     actionsTd.appendChild(shortcutBtn);
     const editBtn = document.createElement("button");
     editBtn.className = "btn btn-ghost"; editBtn.textContent = "編集";
     editBtn.style.border = "1px solid var(--line)";
+    editBtn.disabled = !canManage;
     editBtn.addEventListener("click", ()=> openBizInfoEditModal(item));
     actionsTd.appendChild(editBtn);
     const deleteBtn = document.createElement("button");
     deleteBtn.className = "btn btn-danger"; deleteBtn.textContent = "削除";
+    deleteBtn.disabled = !canManage;
     deleteBtn.addEventListener("click", async ()=>{
       if(!confirm(`「${item.name||""}」を削除しますか？\n一般画面のピルも消えます。`)) return;
       try{
@@ -2546,6 +2574,10 @@ function openBizInfoEditModal(item){
   document.getElementById("bizinfo-name-input").value = item ? (item.name||"") : "";
   document.getElementById("bizinfo-url-input").value = item ? (item.driveUrl||"") : "";
   document.getElementById("bizinfo-enabled-input").checked = item ? (item.enabled!==false) : true;
+  const managers = (item && Array.isArray(item.infoManagers)) ? item.infoManagers : [];
+  document.getElementById("bizinfo-manager-input-1").value = managers[0] || "";
+  document.getElementById("bizinfo-manager-input-2").value = managers[1] || "";
+  document.getElementById("bizinfo-manager-input-3").value = managers[2] || "";
   document.getElementById("bizinfo-edit-error").textContent = "";
   document.getElementById("bizinfo-edit-modal").classList.add("show");
 }
@@ -2564,17 +2596,22 @@ document.getElementById("bizinfo-edit-save-btn")?.addEventListener("click", asyn
   const name = document.getElementById("bizinfo-name-input").value.trim();
   const driveUrl = document.getElementById("bizinfo-url-input").value.trim();
   const enabled = document.getElementById("bizinfo-enabled-input").checked;
+  const infoManagers = [
+    document.getElementById("bizinfo-manager-input-1").value.trim().toLowerCase(),
+    document.getElementById("bizinfo-manager-input-2").value.trim().toLowerCase(),
+    document.getElementById("bizinfo-manager-input-3").value.trim().toLowerCase()
+  ].filter(Boolean);
   if(!name){ errEl.textContent = "業務情報名を入力してください。"; return; }
   if(!driveUrl){ errEl.textContent = "Googleドライブのリンクを入力してください。"; return; }
   const fileId = extractDriveFileId(driveUrl);
   if(!fileId){ errEl.textContent = "リンクからファイルを特定できませんでした。URLをご確認ください。"; return; }
   try{
     if(editingBizInfoId){
-      await updateDoc(doc(db,"business_info_items", editingBizInfoId), { name, driveUrl, fileId, enabled });
+      await updateDoc(doc(db,"business_info_items", editingBizInfoId), { name, driveUrl, fileId, enabled, infoManagers });
       toast("更新しました。");
     } else {
       const maxOrder = bizInfoItemsAll.reduce((m,i)=>Math.max(m,i.order??0),0);
-      await addDoc(collection(db,"business_info_items"), { name, driveUrl, fileId, enabled, order: maxOrder+10 });
+      await addDoc(collection(db,"business_info_items"), { name, driveUrl, fileId, enabled, infoManagers, order: maxOrder+10 });
       toast("追加しました。");
     }
     document.getElementById("bizinfo-edit-modal").classList.remove("show");

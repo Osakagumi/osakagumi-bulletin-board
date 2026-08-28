@@ -4135,9 +4135,14 @@ function applyMainWidthForCurrentTab(){
   if(!mainEl) return;
   const wbSection = document.getElementById("view-whereabouts");
   const isWbActive = wbSection && wbSection.style.display !== "none";
+  const bizinfoSection = document.getElementById("view-bizinfo");
+  const isBizinfoActive = bizinfoSection && bizinfoSection.style.display !== "none";
   if(isWbActive){
     // 「行き先」タブ表示中は、幅設定に応じてmainの960px上限を広げる／解除する
     mainEl.style.maxWidth = wbDisplayWidthPx ? `${Math.max(960, wbDisplayWidthPx)}px` : "none";
+  } else if(isBizinfoActive){
+    // 「業務情報」タブ表示中は、常にブラウザの横幅いっぱいを使う
+    mainEl.style.maxWidth = "none";
   } else {
     // 他のタブでは今まで通り960pxで読みやすさを保つ
     mainEl.style.maxWidth = "";
