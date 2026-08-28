@@ -960,6 +960,7 @@
               <div class="dash-card-head">
                 <span class="dash-drag-handle" title="ドラッグして並び替え">⠿</span>
                 <h3>カレンダー</h3>
+                <span id="dash-cal-status-badge" style="display:none;font-size:12px;font-weight:700;padding:3px 9px;border-radius:10px;margin-left:2px;"></span>
                 <div class="dash-cal-nav">
                   <button type="button" class="date-nav-btn" id="dash-cal-prev-btn">◀</button>
                   <button type="button" class="btn-ghost" id="dash-cal-today-btn" style="border:1px solid var(--line);padding:5px 14px;font-size:12.5px;">今日</button>
@@ -6075,34 +6076,42 @@ function calYearStatus(year){
   return rec.status || "published";
 }
 function updateCalStatusUI(){
-  const badge = document.getElementById("cal-status-badge");
-  const publishBtn = document.getElementById("cal-publish-btn");
-  if(!badge || !publishBtn) return;
   const status = calYearStatus(calFiscalYearStart);
-  if(isCalendarEditor){
+  [document.getElementById("cal-status-badge"), document.getElementById("dash-cal-status-badge")].forEach(badge=>{
+    if(!badge) return;
     badge.style.display = "inline-block";
     if(status==="draft"){
       badge.textContent = "編集中";
       badge.style.background = "#FDECEA"; badge.style.color = "var(--danger)";
-      publishBtn.style.display = "inline-block";
     } else {
       badge.textContent = "公開中";
       badge.style.background = "#E8F5EE"; badge.style.color = "#1E8E4F";
-      publishBtn.style.display = "none";
     }
-  } else {
-    badge.style.display = "none";
-    publishBtn.style.display = "none";
+  });
+  const publishBtn = document.getElementById("cal-publish-btn");
+  if(publishBtn){
+    publishBtn.style.display = (isCalendarEditor && status==="draft") ? "inline-block" : "none";
   }
 }
 document.getElementById("cal-publish-btn")?.addEventListener("click", async ()=>{
   if(!isCalendarEditor) return;
   if(!confirm(`${calFiscalYearStart}年度のカレンダーを公開しますか？\n公開すると、全社員が閲覧できるようになります。`)) return;
+  const publishBtn = document.getElementById("cal-publish-btn");
+  publishBtn.disabled = true;
   try{
+    const startId = `${calFiscalYearStart}-04-01`;
+    const endId = `${calFiscalYearStart+1}-03-31`;
+    const q = query(collection(db,"calendar_days"), where(documentId(), ">=", startId), where(documentId(), "<=", endId));
+    const snap = await getDocs(q);
+    for(const d of snap.docs){
+      await setDoc(doc(db,"calendar_days_published", d.id), d.data());
+    }
     await setDoc(doc(db,"calendar_years", String(calFiscalYearStart)), { status: "published" }, { merge:true });
     toast("公開しました。");
   }catch(e){
     toast("公開に失敗しました。権限をご確認ください。");
+  }finally{
+    publishBtn.disabled = false;
   }
 });
 // 編集操作のたびに呼び出す。対象の日付が属する年度を「編集中」に戻す（未公開の状態にする）。
@@ -6116,16 +6125,12 @@ function loadCalendarYear(year){
   if(calDaysUnsub){ calDaysUnsub(); calDaysUnsub = null; }
   document.getElementById("cal-year-label").textContent = `${year}年度（${year}/4〜${year+1}/3）`;
   updateCalStatusUI();
-  const wrap = document.getElementById("cal-grid-wrap");
-  const status = calYearStatus(year);
-  if(!isCalendarEditor && status==="draft"){
-    wrap.innerHTML = `<div style="grid-column:1/-1;color:var(--muted);text-align:center;padding:40px;">この年度のカレンダーはまだ公開されていません。</div>`;
-    calDaysData = {};
-    return;
-  }
   const startId = `${year}-04-01`;
   const endId = `${year+1}-03-31`;
-  const q = query(collection(db,"calendar_days"), where(documentId(), ">=", startId), where(documentId(), "<=", endId));
+  // 編集権限者は編集中(ライブ)のデータを見る。それ以外の社員は、最後に公開されたスナップショットを見る
+  // （編集中でも、直前に公開されていた内容がそのまま表示され続ける）。
+  const collectionName = isCalendarEditor ? "calendar_days" : "calendar_days_published";
+  const q = query(collection(db,collectionName), where(documentId(), ">=", startId), where(documentId(), "<=", endId));
   calDaysUnsub = onSnapshot(q, snap=>{
     calDaysData = {};
     snap.docs.forEach(d=>{ calDaysData[d.id] = d.data(); });

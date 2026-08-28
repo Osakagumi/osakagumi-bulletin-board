@@ -118,6 +118,12 @@ service cloud.firestore {
       allow write: if isCalendarEditor();
     }
 
+    // 公開済みカレンダーのスナップショット。編集中でも、社員には最後に公開された内容が見え続けるようにするためのもの。
+    match /calendar_days_published/{dateId} {
+      allow read: if isSignedIn();
+      allow write: if isCalendarEditor();
+    }
+
     // 年間休日カレンダーの年度一覧（最大3年度分の管理用）: 全員が読める。編集はカレンダー編集権限者・システム管理者のみ。
     match /calendar_years/{yearId} {
       allow read: if isSignedIn();

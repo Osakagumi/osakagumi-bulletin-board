@@ -2815,6 +2815,9 @@ document.getElementById("cal-seed-btn").addEventListener("click", async ()=>{
     }
     try{
       await setDoc(doc(db,"calendar_days", dateStr), { isHoliday, label });
+      // まだ一度も「公開」されていない新規作成直後は例外的に、作成直後の内容をそのまま公開済みスナップショットにも反映する
+      // （ステータス自体は「編集中」のままだが、社員には空のカレンダーではなく作成直後の内容が見える）
+      await setDoc(doc(db,"calendar_days_published", dateStr), { isHoliday, label });
     }catch(e){
       statusEl.textContent = `${dateStr} の作成に失敗しました。権限をご確認ください。`;
       return;
