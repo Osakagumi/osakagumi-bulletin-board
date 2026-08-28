@@ -55,11 +55,11 @@
   .tab-reorder-btn{
     margin-left:auto;background:none;border:1px solid var(--line);border-radius:7px;padding:5px 11px;font-size:11.5px;color:var(--muted);white-space:nowrap;
   }
-  nav.tabs.reordering .tab-btn{background:#F4F8FC;border-radius:7px 7px 0 0;}
-  .reorder-arrow{
-    display:inline-block;padding:0 5px;color:var(--brand);font-size:11px;cursor:pointer;
+  nav.tabs.reordering .tab-btn{background:#F4F8FC;border-radius:7px 7px 0 0;cursor:grab;}
+  nav.tabs.reordering .tab-btn.dragging{opacity:0.4;cursor:grabbing;}
+  .reorder-handle{
+    display:inline-block;margin-right:4px;color:var(--muted);font-size:13px;
   }
-  .reorder-arrow:hover{color:var(--brand-dark);}
 
   main{padding:16px;max-width:900px;margin:0 auto;}
   .panel{background:var(--surface);border:1.5px solid var(--line);border-radius:12px;padding:18px;margin-bottom:16px;}
@@ -1165,6 +1165,7 @@ function switchToAdminTab(viewName){
 }
 document.querySelectorAll(".tab-btn").forEach(btn=>{
   btn.addEventListener("click", ()=>{
+    if(document.getElementById("main-tabs").classList.contains("reordering")) return;
     switchToAdminTab(btn.dataset.view);
   });
 });
@@ -1192,32 +1193,47 @@ function currentAdminTabOrder(){
 function saveAdminTabOrder(){
   localStorage.setItem(ADMIN_TAB_ORDER_KEY, JSON.stringify(currentAdminTabOrder()));
 }
-function moveAdminTab(viewName, direction){
-  const nav = document.getElementById("main-tabs");
-  const btn = nav.querySelector(`.tab-btn[data-view="${viewName}"]`);
-  if(!btn) return;
-  if(direction==="left" && btn.previousElementSibling && btn.previousElementSibling.classList.contains("tab-btn")){
-    nav.insertBefore(btn, btn.previousElementSibling);
-  } else if(direction==="right" && btn.nextElementSibling && btn.nextElementSibling.classList.contains("tab-btn")){
-    nav.insertBefore(btn.nextElementSibling, btn);
-  }
-  saveAdminTabOrder();
-  renderAdminReorderArrows();
-}
 function renderAdminReorderArrows(){
+  const nav = document.getElementById("main-tabs");
+  const reordering = nav.classList.contains("reordering");
   document.querySelectorAll("#main-tabs .tab-btn").forEach(btn=>{
-    btn.querySelectorAll(".reorder-arrow").forEach(a=>a.remove());
-    if(!document.getElementById("main-tabs").classList.contains("reordering")) return;
-    const left = document.createElement("span");
-    left.className = "reorder-arrow left";
-    left.textContent = "◀";
-    left.addEventListener("click", (e)=>{ e.stopPropagation(); moveAdminTab(btn.dataset.view, "left"); });
-    const right = document.createElement("span");
-    right.className = "reorder-arrow right";
-    right.textContent = "▶";
-    right.addEventListener("click", (e)=>{ e.stopPropagation(); moveAdminTab(btn.dataset.view, "right"); });
-    btn.prepend(left);
-    btn.appendChild(right);
+    btn.querySelectorAll(".reorder-handle").forEach(h=>h.remove());
+    btn.draggable = reordering;
+    if(!reordering) return;
+    const handle = document.createElement("span");
+    handle.className = "reorder-handle";
+    handle.textContent = "⠿";
+    btn.prepend(handle);
+  });
+}
+if(!window.__adminTabDndBound){
+  window.__adminTabDndBound = true;
+  const nav = document.getElementById("main-tabs");
+  nav.addEventListener("dragstart", (e)=>{
+    const btn = e.target.closest(".tab-btn");
+    if(!btn || !nav.classList.contains("reordering")) return;
+    btn.classList.add("dragging");
+  });
+  nav.addEventListener("dragend", (e)=>{
+    const btn = e.target.closest(".tab-btn");
+    if(!btn) return;
+    btn.classList.remove("dragging");
+    saveAdminTabOrder();
+  });
+  nav.addEventListener("dragover", (e)=>{
+    if(!nav.classList.contains("reordering")) return;
+    const dragging = nav.querySelector(".tab-btn.dragging");
+    if(!dragging) return;
+    e.preventDefault();
+    const reorderBtn = document.getElementById("tab-reorder-toggle");
+    const after = [...nav.querySelectorAll(".tab-btn:not(.dragging)")].reduce((closest, el)=>{
+      const box = el.getBoundingClientRect();
+      const offset = e.clientX - box.left - box.width/2;
+      if(offset < 0 && offset > closest.offset) return { offset, element: el };
+      return closest;
+    }, { offset:-Infinity, element:null }).element;
+    if(after==null) nav.insertBefore(dragging, reorderBtn);
+    else nav.insertBefore(dragging, after);
   });
 }
 document.getElementById("tab-reorder-toggle").addEventListener("click", ()=>{
