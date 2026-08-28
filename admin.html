@@ -98,6 +98,7 @@
   .settings-drag-row:last-child{margin-bottom:0;}
   .settings-drag-row:active{cursor:grabbing;}
   .settings-drag-row.dragging{opacity:0.4;}
+  tr.dragging{opacity:0.4;}
   .settings-drag-handle{color:var(--muted);font-size:15px;}
   .emp-card{background:var(--surface,#fff);border:1.5px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:8px;}
   .emp-card.emp-card-hidden{opacity:0.45;}
@@ -675,12 +676,12 @@
       <div class="panel">
         <h2>業務情報一覧</h2>
         <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-          Googleドライブ上にアップロード済みのExcelファイル（共有設定済みのもの）を登録すると、一般画面の「業務情報」タブにピルとして追加され、内容が閲覧できるようになります（編集は不可）。
+          Googleドライブ上にアップロード済みのExcelファイル（共有設定済みのもの）を登録すると、一般画面の「業務情報」タブにピルとして追加され、内容が閲覧できるようになります（編集は不可）。行の左端（⠿）をドラッグすると並び順を変更でき、一般画面のピルの表示順にもそのまま反映されます。
         </p>
         <button class="btn btn-primary" id="bizinfo-add-btn">追加</button>
         <button class="btn btn-ghost" id="bizinfo-guide-btn" style="border:1px solid var(--line);">ファイル登録手順</button>
         <table style="margin-top:14px;">
-          <thead><tr><th>業務情報名</th><th>Googleドライブリンク</th><th>有効</th><th>操作</th></tr></thead>
+          <thead><tr><th></th><th>業務情報名</th><th>Googleドライブリンク</th><th>有効</th><th>操作</th></tr></thead>
           <tbody id="bizinfo-table-body"></tbody>
         </table>
       </div>
@@ -2443,20 +2444,29 @@ function renderBizInfoTable(){
   if(!body) return;
   body.innerHTML = "";
   if(bizInfoItemsAll.length===0){
-    body.innerHTML = `<tr><td colspan="4" class="empty">まだ登録されていません。</td></tr>`;
+    body.innerHTML = `<tr><td colspan="5" class="empty">まだ登録されていません。</td></tr>`;
     return;
   }
   bizInfoItemsAll.forEach(item=>{
     const tr = document.createElement("tr");
+    tr.draggable = true;
+    tr.dataset.id = item.id;
+    tr.style.cursor = "grab";
     tr.innerHTML = `
+      <td style="width:24px;color:var(--muted);">⠿</td>
       <td>${escapeHtml(item.name||"")}</td>
       <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-size:12px;">${escapeHtml(item.driveUrl||"")}</td>
       <td>${item.enabled!==false ? "有効" : "無効"}</td>
       <td class="actions"></td>
     `;
+    tr.addEventListener("dragstart", ()=> tr.classList.add("dragging"));
+    tr.addEventListener("dragend", ()=>{
+      tr.classList.remove("dragging");
+      saveBizInfoOrder();
+    });
     const actionsTd = tr.querySelector(".actions");
     const shortcutBtn = document.createElement("button");
-    shortcutBtn.className = "btn btn-ghost"; shortcutBtn.textContent = "編集画面を開く";
+    shortcutBtn.className = "btn btn-ghost"; shortcutBtn.textContent = "ファイル修正";
     shortcutBtn.style.border = "1px solid var(--line)";
     shortcutBtn.addEventListener("click", ()=> openBizInfoEditScreen(item));
     actionsTd.appendChild(shortcutBtn);
@@ -2479,6 +2489,36 @@ function renderBizInfoTable(){
     actionsTd.appendChild(deleteBtn);
     body.appendChild(tr);
   });
+}
+if(!window.__bizInfoDndBound){
+  window.__bizInfoDndBound = true;
+  document.addEventListener("dragover", (e)=>{
+    const body = document.getElementById("bizinfo-table-body");
+    if(!body) return;
+    const dragging = body.querySelector(".dragging");
+    if(!dragging) return;
+    // ドラッグ中の行がこのテーブルの上にある時だけ、並び替えの挿入位置を計算する
+    if(!body.contains(e.target) && e.target !== body) return;
+    e.preventDefault();
+    const after = [...body.querySelectorAll("tr:not(.dragging)")].reduce((closest, row)=>{
+      const box = row.getBoundingClientRect();
+      const offset = e.clientY - box.top - box.height/2;
+      if(offset < 0 && offset > closest.offset) return { offset, element: row };
+      return closest;
+    }, { offset:-Infinity, element:null }).element;
+    if(after==null) body.appendChild(dragging);
+    else body.insertBefore(dragging, after);
+  });
+}
+async function saveBizInfoOrder(){
+  const body = document.getElementById("bizinfo-table-body");
+  if(!body) return;
+  const ids = [...body.querySelectorAll("tr[data-id]")].map(tr=>tr.dataset.id);
+  try{
+    await Promise.all(ids.map((id, idx)=> updateDoc(doc(db,"business_info_items", id), { order: (idx+1)*10 })));
+  }catch(e){
+    toast("並び順の保存に失敗しました。権限をご確認ください。");
+  }
 }
 // 編集用リンク（Googleドライブでそのファイルを開くページ）のショートカット（.url）ファイルを、
 // ブラウザのダウンロード機能を使ってダウンロードする（そのままデスクトップ等に保存できる）
