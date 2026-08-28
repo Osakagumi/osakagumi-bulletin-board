@@ -1004,6 +1004,14 @@
               </div>
               <div id="dash-checkout-body"></div>
             </div>
+            <div class="dash-card" id="dash-card-chat">
+              <div class="dash-card-head">
+                <span class="dash-drag-handle" title="ドラッグして並び替え">⠿</span>
+                <h3>チャット</h3>
+                <span class="dash-card-link" id="dash-chat-link" title="チャットを見る">▶</span>
+              </div>
+              <div id="dash-chat-body"></div>
+            </div>
           </div>
         </div>
       </section>
@@ -1868,7 +1876,8 @@ const DASH_CARD_BY_VIEW = {
   whereabouts: "dash-card-whereabouts",
   reserve: "dash-card-reserve",
   checkout: "dash-card-checkout",
-  contracts: "dash-card-contracts"
+  contracts: "dash-card-contracts",
+  chat: "dash-card-chat"
 };
 // システム管理者が設定した既定値。「タブの並び順」は個人設定が無い場合のみ適用される既定値。
 // 「有効なタブ」は個人設定と掛け合わせる（両方が「表示」の場合のみ表示する）システム全体のスイッチとして扱う。
@@ -2045,6 +2054,30 @@ function renderDashboard(){
     });
   }
 
+  // ---- チャット（最近の会話、未読を優先表示） ----
+  const chatBody = document.getElementById("dash-chat-body");
+  if(chatBody){
+    chatBody.innerHTML = "";
+    if(chatConversations.length===0){
+      chatBody.innerHTML = `<div class="dash-empty">まだメッセージはありません。</div>`;
+    } else {
+      const unreadCount = chatConversations.filter(c=>c.unread).length;
+      if(unreadCount>0){
+        const summary = document.createElement("div");
+        summary.style.cssText = "font-size:12.5px;color:var(--muted);margin-bottom:6px;";
+        summary.textContent = `未読 ${unreadCount}件`;
+        chatBody.appendChild(summary);
+      }
+      chatConversations.slice(0,4).forEach(conv=>{
+        const row = document.createElement("div");
+        row.className = "dash-row";
+        row.innerHTML = `<span>${conv.unread ? "● " : ""}${escapeHtml(conv.otherName)}</span><span class="dash-row-sub">${escapeHtml(conv.lastText||"")}</span>`;
+        row.addEventListener("click", ()=>{ switchToTab("chat"); openChatThread(conv.otherEmail, conv.otherName); });
+        chatBody.appendChild(row);
+      });
+    }
+  }
+
   // ---- 自分の行き先（バッジをクリックでその場で修正） ----
   const wbBody = document.getElementById("dash-wb-body");
   wbBody.innerHTML = "";
@@ -2194,6 +2227,7 @@ document.getElementById("dash-reserve-link").addEventListener("click", ()=> swit
 document.getElementById("dash-contracts-link").addEventListener("click", ()=> switchToTab("contracts"));
 document.getElementById("dash-checkout-link").addEventListener("click", ()=> switchToTab("checkout"));
 document.getElementById("dash-calendar-link").addEventListener("click", ()=> switchToTab("calendar"));
+document.getElementById("dash-chat-link").addEventListener("click", ()=> switchToTab("chat"));
 
 function switchToTab(viewName){
   const previousView = document.querySelector(".tab-btn.active")?.dataset.view;
@@ -7680,6 +7714,7 @@ function rebuildChatConversations(){
   if(chatCurrentConversationId){
     updateChatThreadTitleAndUnread();
   }
+  refreshDashboardIfActive();
 }
 // 一覧の「削除」ボタンから、その会話の全メッセージを削除する（相手側からも見えなくなる）
 async function deleteChatConversation(conv){
