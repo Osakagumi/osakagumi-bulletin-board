@@ -401,11 +401,14 @@
       </div>
 
       <div class="panel">
-        <h2>社員一覧（氏名・所属・タブ表示・並び順・電話番号・備考の編集）</h2>
+        <h2>社員一覧（氏名・メールアドレスの一覧。詳細は「編集」から）</h2>
         <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">ログインすると自動的にここへ追加されます。CSV一括登録した場合は社員番号・電話番号・備考も反映されています。「編集」から詳細を変更できます。</p>
-        <button class="btn btn-ghost" id="user-delete-guide-btn" style="border:1px solid var(--line);margin-bottom:14px;">ユーザー削除手順</button>
-        <button class="btn btn-ghost" id="perm-matrix-open-btn" style="border:1px solid var(--line);margin-bottom:14px;">表形式で権限設定</button>
-        <button class="btn btn-ghost" id="tab-matrix-open-btn" style="border:1px solid var(--line);margin-bottom:14px;">表形式で表示タブを設定</button>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
+          <input type="text" id="emp-search-input" placeholder="氏名で絞り込み（前方一致）" style="max-width:220px;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:13.5px;">
+          <button class="btn btn-ghost" id="perm-matrix-open-btn" style="border:1px solid var(--line);">表形式で権限設定</button>
+          <button class="btn btn-ghost" id="tab-matrix-open-btn" style="border:1px solid var(--line);">表形式で表示タブを設定</button>
+          <button class="btn btn-ghost" id="user-delete-guide-btn" style="border:1px solid var(--line);margin-left:auto;">ユーザー削除手順</button>
+        </div>
         <div id="emp-card-list"></div>
       </div>
     </section>
@@ -3317,11 +3320,21 @@ function renderEmployees(){
   const body = document.getElementById("emp-card-list");
   if(!body) return;
   body.innerHTML = "";
+  const searchInput = document.getElementById("emp-search-input");
+  const searchText = (searchInput?.value || "").trim();
+  let list = sortByDeptAndEmployeeNo(employeesAll);
+  if(searchText){
+    list = list.filter(e=> (e.name||"").startsWith(searchText));
+  }
   if(employeesAll.length===0){
     body.innerHTML = `<div class="empty" style="padding:16px;color:var(--muted);text-align:center;">まだ社員データがありません。対象の人がログインするか、CSV一括登録すると追加されます。</div>`;
     return;
   }
-  sortByDeptAndEmployeeNo(employeesAll).forEach(emp=>{
+  if(list.length===0){
+    body.innerHTML = `<div class="empty" style="padding:16px;color:var(--muted);text-align:center;">該当する社員がいません。</div>`;
+    return;
+  }
+  list.forEach(emp=>{
     const card = document.createElement("div");
     card.className = "emp-card" + (emp.hidden ? " emp-card-hidden" : "");
 
@@ -3348,20 +3361,10 @@ function renderEmployees(){
     head.appendChild(editBtn);
     card.appendChild(head);
 
-    const deptNames = empDepartmentsAdmin(emp).map(id=>departmentNameById(id));
-    const hiddenTabNames = (Array.isArray(emp.hiddenTabs) ? emp.hiddenTabs : [])
-      .map(id=> getFullHideableList().find(t=>t.id===id)?.label).filter(Boolean);
-    const summaryLine = document.createElement("div");
-    summaryLine.className = "emp-card-summary";
-    summaryLine.textContent =
-      `社員番号：${emp.employeeNo || "未設定"}　／　所属：${deptNames.length ? deptNames.join("・") : "未所属"}　／　` +
-      `非表示タブ：${hiddenTabNames.length ? hiddenTabNames.join("・") : "なし"}　／　` +
-      `電話：${emp.phone || "未設定"}　／　備考：${emp.memo || "なし"}`;
-    card.appendChild(summaryLine);
-
     body.appendChild(card);
   });
 }
+document.getElementById("emp-search-input")?.addEventListener("input", renderEmployees);
 
 let editingEmpEmail = null;
 function openEmpEditModal(emp){
