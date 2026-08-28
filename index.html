@@ -1669,6 +1669,7 @@ let isEquipmentManager = false;
 let isCalendarEditor = false;
 let isContractEditor = false;
 let isSafetySender = false;
+let isBizInfoManager = false;
 let chatConversations = []; // [{conversationId, otherEmail, otherName, lastText, lastAt, lastSenderEmail, unread}]
 let chatCurrentConversationId = null;
 let chatCurrentOtherEmail = null;
@@ -1788,14 +1789,15 @@ onAuthStateChanged(auth, async (user)=>{
     updateHeaderUserLabel();
     // 権限チェックは直列でawaitすると往復通信が5回分積み重なり、
     // 回線が遅いと数秒〜十数秒のロスになる。並列で一度に取得する。
-    const [adminDoc, posterDoc, wbEditorDoc, eqManagerDoc, calEditorDoc, contractEditorDoc, safetySenderDoc] = await Promise.all([
+    const [adminDoc, posterDoc, wbEditorDoc, eqManagerDoc, calEditorDoc, contractEditorDoc, safetySenderDoc, bizInfoManagerSnap] = await Promise.all([
       getDoc(doc(db, "admins", user.email)).catch(()=>null),
       getDoc(doc(db, "announcement_posters", user.email)).catch(()=>null),
       getDoc(doc(db, "whereabouts_editors", user.email)).catch(()=>null),
       getDoc(doc(db, "equipment_managers", user.email)).catch(()=>null),
       getDoc(doc(db, "calendar_editors", user.email)).catch(()=>null),
       getDoc(doc(db, "contract_editors", user.email)).catch(()=>null),
-      getDoc(doc(db, "safety_senders", user.email)).catch(()=>null)
+      getDoc(doc(db, "safety_senders", user.email)).catch(()=>null),
+      getDocs(query(collection(db, "business_info_items"), where("infoManagers", "array-contains", user.email.toLowerCase()))).catch(()=>null)
     ]);
     isAdmin = !!(adminDoc && adminDoc.exists());
     isPoster = isAdmin || !!(posterDoc && posterDoc.exists());
@@ -1804,8 +1806,9 @@ onAuthStateChanged(auth, async (user)=>{
     isCalendarEditor = isAdmin || !!(calEditorDoc && calEditorDoc.exists());
     isContractEditor = isAdmin || !!(contractEditorDoc && contractEditorDoc.exists());
     isSafetySender = isAdmin || !!(safetySenderDoc && safetySenderDoc.exists());
+    isBizInfoManager = !!(bizInfoManagerSnap && !bizInfoManagerSnap.empty);
     document.getElementById("admin-link").style.display =
-      (isAdmin || isPoster || isWhereaboutsEditor || isEquipmentManager || isCalendarEditor || isContractEditor)
+      (isAdmin || isPoster || isWhereaboutsEditor || isEquipmentManager || isCalendarEditor || isContractEditor || isBizInfoManager)
         ? "inline-block" : "none";
     document.getElementById("notice-new-btn").style.display = isPoster ? "inline-block" : "none";
     document.getElementById("contract-new-btn").style.display = isContractEditor ? "inline-block" : "none";

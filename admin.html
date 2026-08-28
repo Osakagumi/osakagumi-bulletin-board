@@ -2730,8 +2730,12 @@ function renderBizInfoManagerSlots(){
       clearBtn.style.border = "1px solid var(--line)";
       clearBtn.textContent = "解除";
       clearBtn.addEventListener("click", ()=>{
+        const removedPerson = bizInfoEditManagers[i];
         bizInfoEditManagers[i] = null;
         renderBizInfoManagerSlots();
+        if(removedPerson){
+          alert(`${removedPerson.name}さんを情報管理者から外しました（保存を押すと確定します）。\n\nこの操作だけでは、他の権限設定（ユーザー管理タブのチェック等）は自動的に削除されません。心当たりがあれば、あわせて見直してください。`);
+        }
       });
       row.appendChild(clearBtn);
     }
