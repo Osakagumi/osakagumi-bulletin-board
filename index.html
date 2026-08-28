@@ -1356,6 +1356,26 @@
     </div>
   </div>
 
+  <!-- ============ 安否確認メール プレビュー ============ -->
+  <div class="modal-overlay" id="safety-email-preview-modal">
+    <div class="modal" style="max-width:520px;">
+      <h3>メールのプレビュー</h3>
+      <p style="font-size:11.5px;color:var(--muted);margin:-8px 0 12px;">
+        実際にEmailJSへ登録しているテンプレートをもとに再現しています（テンプレートを後から直接編集している場合、実際のメールと多少異なる可能性があります）。ボタンやリンクはこの画面では動作しません。
+      </p>
+      <div style="border:1px solid var(--line);border-radius:8px;overflow:hidden;">
+        <div style="background:#F7F8FA;padding:10px 14px;border-bottom:1px solid var(--line);">
+          <div style="font-size:11px;color:var(--muted);">件名</div>
+          <div id="safety-email-preview-subject" style="font-size:14px;font-weight:700;"></div>
+        </div>
+        <div id="safety-email-preview-body" style="padding:16px;font-size:13.5px;line-height:1.7;background:#fff;"></div>
+      </div>
+      <div class="row-btns">
+        <button class="btn-ghost" id="safety-email-preview-close-btn" style="border:1px solid var(--line);">閉じる</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ============ WHEREABOUTS EDIT MODAL ============ -->
   <div class="modal-overlay" id="wb-modal">
     <div class="modal">
@@ -5574,12 +5594,34 @@ function buildSafetySendForm(){
       <input type="checkbox" id="safety-send-email-check" checked style="width:auto;">
       <label style="margin:0;font-size:12.5px;color:var(--text);">社員全員にメールでも通知する</label>
     </div>
+    <button type="button" class="btn-ghost" id="safety-send-preview-btn" style="border:1px solid var(--line);margin-right:8px;">メールのプレビュー</button>
     <button type="button" class="btn-primary" id="safety-send-launch-btn">発信</button>
     <div id="safety-send-status" style="font-size:12.5px;color:var(--muted);margin-top:8px;"></div>
   `;
   wrap.querySelector("#safety-send-launch-btn").addEventListener("click", ()=> launchSafetyCampaignFromGeneralScreen());
+  wrap.querySelector("#safety-send-preview-btn").addEventListener("click", ()=> showSafetyEmailPreview());
   return wrap;
 }
+function showSafetyEmailPreview(){
+  const title = document.getElementById("safety-send-title-input").value.trim() || "（タイトル未入力）";
+  const message = document.getElementById("safety-send-message-input").value.trim() || "（本文未入力）";
+  const modal = document.getElementById("safety-email-preview-modal");
+  document.getElementById("safety-email-preview-subject").textContent = title;
+  document.getElementById("safety-email-preview-body").innerHTML = `
+    <p style="white-space:pre-wrap;">${escapeHtml(message)}</p>
+    <p>以下のボタンから、そのまま回答できます（未ログインの場合のみログイン画面が挟まります）。</p>
+    <p>
+      <a href="#" onclick="return false;" style="background:#2E9E8F;color:#fff;padding:10px 16px;text-decoration:none;border-radius:6px;margin-right:8px;display:inline-block;">無事です</a>
+      <a href="#" onclick="return false;" style="background:#C0392B;color:#fff;padding:10px 16px;text-decoration:none;border-radius:6px;margin-right:8px;display:inline-block;">被害があります</a>
+      <a href="#" onclick="return false;" style="background:#E8853F;color:#fff;padding:10px 16px;text-decoration:none;border-radius:6px;display:inline-block;">わからない・確認中</a>
+    </p>
+    <p><a href="#" onclick="return false;">システムを開く（回答内容を確認してから送信）</a></p>
+  `;
+  modal.classList.add("show");
+}
+document.getElementById("safety-email-preview-close-btn")?.addEventListener("click", ()=>{
+  document.getElementById("safety-email-preview-modal").classList.remove("show");
+});
 async function deleteSafetyCampaignWithResponses(campaignId){
   const respSnap = await getDocs(query(collection(db,"safety_responses"), where("campaignId","==", campaignId)));
   for(const d of respSnap.docs){
