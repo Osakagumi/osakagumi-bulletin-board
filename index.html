@@ -6077,17 +6077,28 @@ function calYearStatus(year){
 }
 function updateCalStatusUI(){
   const status = calYearStatus(calFiscalYearStart);
-  [document.getElementById("cal-status-badge"), document.getElementById("dash-cal-status-badge")].forEach(badge=>{
-    if(!badge) return;
-    badge.style.display = "inline-block";
+  const calBadge = document.getElementById("cal-status-badge");
+  if(calBadge){
+    calBadge.style.display = "inline-block";
     if(status==="draft"){
-      badge.textContent = "編集中";
-      badge.style.background = "#FDECEA"; badge.style.color = "var(--danger)";
+      calBadge.textContent = "編集中";
+      calBadge.style.background = "#FDECEA"; calBadge.style.color = "var(--danger)";
     } else {
-      badge.textContent = "公開中";
-      badge.style.background = "#E8F5EE"; badge.style.color = "#1E8E4F";
+      calBadge.textContent = "公開中";
+      calBadge.style.background = "#E8F5EE"; calBadge.style.color = "#1E8E4F";
     }
-  });
+  }
+  // ダッシュボードのバッジは「編集中」の場合のみ表示する（公開中は何も表示しない）
+  const dashBadge = document.getElementById("dash-cal-status-badge");
+  if(dashBadge){
+    if(status==="draft"){
+      dashBadge.style.display = "inline-block";
+      dashBadge.textContent = "編集中";
+      dashBadge.style.background = "#FDECEA"; dashBadge.style.color = "var(--danger)";
+    } else {
+      dashBadge.style.display = "none";
+    }
+  }
   const publishBtn = document.getElementById("cal-publish-btn");
   if(publishBtn){
     publishBtn.style.display = (isCalendarEditor && status==="draft") ? "inline-block" : "none";
