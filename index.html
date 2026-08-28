@@ -5610,11 +5610,9 @@ function showSafetyEmailPreview(){
   document.getElementById("safety-email-preview-body").innerHTML = `
     <p style="white-space:pre-wrap;">${escapeHtml(message)}</p>
     <p>以下のボタンから、そのまま回答できます（未ログインの場合のみログイン画面が挟まります）。</p>
-    <p>
-      <a href="#" onclick="return false;" style="background:#2E9E8F;color:#fff;padding:10px 16px;text-decoration:none;border-radius:6px;margin-right:8px;display:inline-block;">無事です</a>
-      <a href="#" onclick="return false;" style="background:#C0392B;color:#fff;padding:10px 16px;text-decoration:none;border-radius:6px;margin-right:8px;display:inline-block;">被害があります</a>
-      <a href="#" onclick="return false;" style="background:#E8853F;color:#fff;padding:10px 16px;text-decoration:none;border-radius:6px;display:inline-block;">わからない・確認中</a>
-    </p>
+    <a href="#" onclick="return false;" style="display:block;box-sizing:border-box;width:100%;background:#2E9E8F;color:#fff;padding:12px 16px;text-decoration:none;border-radius:8px;margin-bottom:8px;text-align:center;font-weight:600;">無事です</a>
+    <a href="#" onclick="return false;" style="display:block;box-sizing:border-box;width:100%;background:#C0392B;color:#fff;padding:12px 16px;text-decoration:none;border-radius:8px;margin-bottom:8px;text-align:center;font-weight:600;">被害があります</a>
+    <a href="#" onclick="return false;" style="display:block;box-sizing:border-box;width:100%;background:#E8853F;color:#fff;padding:12px 16px;text-decoration:none;border-radius:8px;margin-bottom:12px;text-align:center;font-weight:600;">わからない・確認中</a>
     <p><a href="#" onclick="return false;">システムを開く（回答内容を確認してから送信）</a></p>
   `;
   modal.classList.add("show");
