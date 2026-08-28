@@ -5609,7 +5609,7 @@ function showSafetyEmailPreview(){
   document.getElementById("safety-email-preview-subject").textContent = title;
   document.getElementById("safety-email-preview-body").innerHTML = `
     <p style="white-space:pre-wrap;">${escapeHtml(message)}</p>
-    <p>以下のボタンから、そのまま回答できます（未ログインの場合のみログイン画面が挟まります）。</p>
+    <p>以下のボタンを押すとシステムに接続して回答することができます。</p>
     <table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr>
       <td align="center" bgcolor="#2E9E8F" width="260">
         <a href="#" onclick="return false;" style="display:block;width:260px;padding:12px 0;font-size:14px;font-weight:600;color:#fff;text-decoration:none;text-align:center;box-sizing:border-box;">無事です</a>
@@ -5628,7 +5628,6 @@ function showSafetyEmailPreview(){
       </td>
     </tr></table>
     <div style="font-size:16px;line-height:16px;">&nbsp;</div>
-    <p><a href="#" onclick="return false;">システムを開く（回答内容を確認してから送信）</a></p>
     <hr style="border:none;border-top:1px solid #E0E0E0;margin:20px 0 10px;">
     <p style="font-size:11px;color:#9AA0A6;">Email sent via <a href="#" onclick="return false;" style="color:#9AA0A6;">EmailJS.com</a></p>
   `;
