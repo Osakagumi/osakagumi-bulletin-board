@@ -71,6 +71,16 @@
   .perm-matrix-table thead th.perm-matrix-corner{left:0;z-index:4;}
   .perm-matrix-table tbody th{position:sticky;left:0;background:#fff;z-index:1;text-align:left;font-weight:600;}
   .perm-matrix-table input[type="checkbox"]{width:auto;}
+  #bizinfo-dropzone{
+    border:2px dashed var(--line);border-radius:10px;padding:28px 14px;text-align:center;color:var(--muted);
+    cursor:pointer;transition:border-color .15s,background .15s;
+  }
+  #bizinfo-dropzone.drag-over{border-color:var(--brand);background:#F4F8FC;color:var(--brand-dark);}
+  .spinner{
+    width:26px;height:26px;border:3px solid var(--line);border-top-color:var(--brand);border-radius:50%;
+    margin:0 auto;animation:spin 0.8s linear infinite;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
 
   main{padding:16px;max-width:900px;margin:0 auto;}
   .panel{background:var(--surface);border:1.5px solid var(--line);border-radius:12px;padding:18px;margin-bottom:16px;}
@@ -818,7 +828,10 @@
         </div>
         <div class="field">
           <label>Googleドライブの共有リンク</label>
-          <input type="text" id="bizinfo-url-input" placeholder="https://drive.google.com/...">
+          <div style="display:flex;gap:8px;">
+            <input type="text" id="bizinfo-url-input" placeholder="https://drive.google.com/..." style="flex:1;">
+            <button type="button" class="btn btn-ghost" id="bizinfo-attach-btn" style="border:1px solid var(--line);white-space:nowrap;">ファイル添付</button>
+          </div>
         </div>
         <div class="field" style="display:flex;align-items:center;gap:6px;">
           <input type="checkbox" id="bizinfo-enabled-input" checked style="width:auto;">
@@ -828,6 +841,37 @@
         <div class="row-btns">
           <button class="btn btn-ghost" id="bizinfo-edit-cancel-btn" style="border:1px solid var(--line);">キャンセル</button>
           <button class="btn btn-primary" id="bizinfo-edit-save-btn">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 業務情報 ファイル添付（Googleドライブへアップロード） ============ -->
+    <div class="modal-overlay" id="bizinfo-attach-modal">
+      <div class="modal">
+        <h3>ファイルを添付</h3>
+        <p style="font-size:12px;color:var(--muted);margin:-6px 0 12px;">
+          ファイルをドロップすると、Googleドライブへアップロードしてリンクを自動で取得します。すでにログイン済みのため、別途ログインを求められることはありません。
+        </p>
+        <div id="bizinfo-dropzone">
+          <div id="bizinfo-dropzone-idle">
+            <div style="font-size:28px;margin-bottom:8px;">📎</div>
+            <div>ここにファイルをドラッグ＆ドロップ</div>
+            <div style="font-size:11.5px;color:var(--muted);margin-top:6px;">またはクリックしてファイルを選択</div>
+            <input type="file" id="bizinfo-file-input" style="display:none;">
+          </div>
+          <div id="bizinfo-dropzone-selected" style="display:none;">
+            <div style="font-size:28px;margin-bottom:8px;">📄</div>
+            <div id="bizinfo-selected-filename" style="word-break:break-all;font-size:12.5px;"></div>
+          </div>
+          <div id="bizinfo-dropzone-busy" style="display:none;">
+            <div class="spinner"></div>
+            <div id="bizinfo-dropzone-status" style="margin-top:10px;font-size:12.5px;color:var(--muted);"></div>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="bizinfo-upload-confirm-btn" style="display:none;width:100%;margin-top:12px;">このファイルをアップロードする</button>
+        <div id="bizinfo-attach-error" style="color:var(--danger);font-size:12.5px;margin-top:8px;min-height:16px;"></div>
+        <div class="row-btns">
+          <button class="btn btn-ghost" id="bizinfo-attach-cancel" style="border:1px solid var(--line);">閉じる</button>
         </div>
       </div>
     </div>
@@ -909,7 +953,7 @@ import {
   query, where, onSnapshot, orderBy, limit, Timestamp, arrayUnion, arrayRemove
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig, CATEGORIES as SEED_CATEGORIES, EQUIPMENT_STATUSES, SAFETY_STATUSES, EMAILJS_CONFIG, resolveMailRecipients, isMailOverrideActive, MAIL_SEND_TARGET } from "./firebase-config.js";
-import { initStorageHelper, deleteFileFromStorage } from "./storage-helper.js";
+import { initStorageHelper, uploadFileToStorage, deleteFileFromStorage } from "./storage-helper.js";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -2762,6 +2806,92 @@ document.getElementById("bizinfo-edit-save-btn")?.addEventListener("click", asyn
   }catch(e){
     errEl.textContent = "保存に失敗しました。権限をご確認ください。";
   }
+});
+
+/* =========================================================
+   業務情報：ファイル添付（Googleドライブへアップロード）
+   ※ 業務情報タブは、選んだファイルをその場でプレビュー表示するため、
+   （お知らせ添付とは違い）実際にGoogleドライブ上に置かれたファイルである必要がある。
+========================================================= */
+let bizInfoPendingUploadFile = null;
+function resetBizInfoDropzone(){
+  bizInfoPendingUploadFile = null;
+  document.getElementById("bizinfo-dropzone-idle").style.display = "block";
+  document.getElementById("bizinfo-dropzone-selected").style.display = "none";
+  document.getElementById("bizinfo-dropzone-busy").style.display = "none";
+  document.getElementById("bizinfo-upload-confirm-btn").style.display = "none";
+}
+function selectBizInfoFileForUpload(file){
+  bizInfoPendingUploadFile = file;
+  document.getElementById("bizinfo-attach-error").textContent = "";
+  document.getElementById("bizinfo-dropzone-idle").style.display = "none";
+  document.getElementById("bizinfo-dropzone-selected").style.display = "block";
+  document.getElementById("bizinfo-dropzone-busy").style.display = "none";
+  document.getElementById("bizinfo-selected-filename").textContent = file.name;
+  document.getElementById("bizinfo-upload-confirm-btn").style.display = "block";
+}
+async function uploadFileForBizInfo(file){
+  const statusEl = document.getElementById("bizinfo-dropzone-status");
+  const errEl = document.getElementById("bizinfo-attach-error");
+  const busyEl = document.getElementById("bizinfo-dropzone-busy");
+  errEl.textContent = "";
+  document.getElementById("bizinfo-dropzone-selected").style.display = "none";
+  document.getElementById("bizinfo-upload-confirm-btn").style.display = "none";
+  busyEl.style.display = "block";
+  try{
+    const { webViewLink } = await uploadFileToStorage(file, (msg)=>{ statusEl.textContent = msg; });
+    document.getElementById("bizinfo-url-input").value = webViewLink;
+    toast("ファイルをアップロードし、リンクを取得しました。");
+    document.getElementById("bizinfo-attach-modal").classList.remove("show");
+    resetBizInfoDropzone();
+  }catch(e){
+    errEl.textContent = e.message || "アップロードに失敗しました。";
+    busyEl.style.display = "none";
+    document.getElementById("bizinfo-dropzone-selected").style.display = "block";
+    document.getElementById("bizinfo-upload-confirm-btn").style.display = "block";
+    statusEl.textContent = "";
+    return;
+  }
+  busyEl.style.display = "none";
+  statusEl.textContent = "";
+}
+document.getElementById("bizinfo-attach-btn")?.addEventListener("click", ()=>{
+  document.getElementById("bizinfo-attach-error").textContent = "";
+  resetBizInfoDropzone();
+  document.getElementById("bizinfo-attach-modal").classList.add("show");
+});
+document.getElementById("bizinfo-attach-cancel")?.addEventListener("click", ()=>{
+  document.getElementById("bizinfo-attach-modal").classList.remove("show");
+});
+const bizInfoDropzone = document.getElementById("bizinfo-dropzone");
+bizInfoDropzone?.addEventListener("click", ()=>{
+  if(bizInfoPendingUploadFile) return; // 選択済みの間はファイル再選択させない
+  document.getElementById("bizinfo-file-input").click();
+});
+document.getElementById("bizinfo-file-input")?.addEventListener("change", (e)=>{
+  const file = e.target.files[0];
+  if(file) selectBizInfoFileForUpload(file);
+  e.target.value = "";
+});
+["dragenter","dragover"].forEach(evt=>{
+  bizInfoDropzone?.addEventListener(evt, (e)=>{
+    e.preventDefault(); e.stopPropagation();
+    bizInfoDropzone.classList.add("drag-over");
+  });
+});
+["dragleave","drop"].forEach(evt=>{
+  bizInfoDropzone?.addEventListener(evt, (e)=>{
+    e.preventDefault(); e.stopPropagation();
+    bizInfoDropzone.classList.remove("drag-over");
+  });
+});
+bizInfoDropzone?.addEventListener("drop", (e)=>{
+  const file = e.dataTransfer.files && e.dataTransfer.files[0];
+  if(file) uploadFileForBizInfo(file);
+});
+document.getElementById("bizinfo-upload-confirm-btn")?.addEventListener("click", ()=>{
+  if(!bizInfoPendingUploadFile) return;
+  uploadFileForBizInfo(bizInfoPendingUploadFile);
 });
 
 let lastContractEditorEmails = [];
