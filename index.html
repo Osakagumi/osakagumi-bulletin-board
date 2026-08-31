@@ -1291,7 +1291,7 @@
     <div class="modal">
       <h3>ファイルを添付</h3>
       <p style="font-size:12px;color:var(--muted);margin:-6px 0 12px;">
-        ファイルをドロップすると、このシステムのストレージへアップロードしてリンクを自動で取得します。すでにログイン済みのため、別途ログインを求められることはありません。
+        ファイルをドロップすると、このシステムのストレージへアップロードしてリンクを自動で取得します。Googleへのログイン確認は行われません（社内共通のドライブに自動保存されます）。
       </p>
       <div id="notice-dropzone">
         <div id="notice-dropzone-idle">
@@ -2071,7 +2071,8 @@ function renderDashboard(){
       chatConversations.slice(0,4).forEach(conv=>{
         const row = document.createElement("div");
         row.className = "dash-row";
-        row.innerHTML = `<span>${conv.unread ? "● " : ""}${escapeHtml(conv.otherName)}</span><span class="dash-row-sub">${escapeHtml(conv.lastText||"")}</span>`;
+        const timeLabel = conv.lastAt ? formatChatTime(conv.lastAt) : "";
+        row.innerHTML = `<span>${conv.unread ? "● " : ""}${escapeHtml(conv.otherName)}</span><span class="dash-row-sub">${escapeHtml(timeLabel)}</span>`;
         row.addEventListener("click", ()=>{ switchToTab("chat"); openChatThread(conv.otherEmail, conv.otherName); });
         chatBody.appendChild(row);
       });
