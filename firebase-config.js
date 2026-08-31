@@ -44,15 +44,15 @@ export const SAFETY_STATUSES = [
   { id: "unknown",  label: "わからない・確認中", color: "#E8853F" }
 ];
 
-// 安否確認・お知らせメール通知（EmailJS）の設定
+// 安否確認メール通知（EmailJS）の設定
 // https://www.emailjs.com/ で無料アカウントを作成し、以下の値を貼り付けてください。
 // 未設定（YOUR_で始まる値のまま）の場合は、メール送信をスキップしてシステム内表示のみになります。
-// EmailJSの無料プランはテンプレートを2つまで作成できるので、安否確認用・お知らせ用を分けて登録してください。
+// ※お知らせのメール通知はEmailJSを使っていません（mailto方式。詳細はREADME参照）。そのため
+// 　テンプレートは安否確認用の1つだけで足ります（EmailJS無料プランのテンプレート上限は2つ）。
 export const EMAILJS_CONFIG = {
   publicKey: "29JtZyFekWscWEfBU",
   serviceId: "service_10htgiq",
-  safetyTemplateId: "template_7pjv16s",
-  noticeTemplateId: "template_41c80qr"
+  safetyTemplateId: "template_7pjv16s"
 };
 
 // メール送信先の上書き設定（テスト・誤送信防止用）
