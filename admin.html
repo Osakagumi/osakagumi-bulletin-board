@@ -2607,31 +2607,39 @@ function initBizInfoListener(){
   }, (err)=>{ console.error("[業務情報取得エラー]", err); });
 }
 function renderBizInfoTable(){
+  const addBtn = document.getElementById("bizinfo-add-btn");
+  if(addBtn) addBtn.style.display = myAdminPermissions.isAdmin ? "" : "none";
   const body = document.getElementById("bizinfo-table-body");
   if(!body) return;
   body.innerHTML = "";
-  if(bizInfoItemsAll.length===0){
+  const myEmail = (currentUser?.email||"").toLowerCase();
+  // システム管理者は全件、情報管理者は自分が指定されている項目のみを一覧に表示する
+  const visibleItems = myAdminPermissions.isAdmin
+    ? bizInfoItemsAll
+    : bizInfoItemsAll.filter(item => Array.isArray(item.infoManagers) && item.infoManagers.includes(myEmail));
+  if(visibleItems.length===0){
     body.innerHTML = `<tr><td colspan="4" class="empty">まだ登録されていません。</td></tr>`;
     return;
   }
-  bizInfoItemsAll.forEach(item=>{
+  visibleItems.forEach(item=>{
     const managers = Array.isArray(item.infoManagers) ? item.infoManagers : [];
-    const canManage = myAdminPermissions.isAdmin || managers.length===0 || managers.includes((currentUser.email||"").toLowerCase());
+    const canManage = myAdminPermissions.isAdmin || managers.includes(myEmail);
+    const canDrag = myAdminPermissions.isAdmin; // 並び替え（ドラッググリップ）はシステム管理者のみ
     const tr = document.createElement("tr");
-    tr.draggable = canManage;
+    tr.draggable = canDrag;
     tr.dataset.id = item.id;
-    tr.style.cursor = canManage ? "grab" : "default";
+    tr.style.cursor = canDrag ? "grab" : "default";
     if(!canManage) tr.style.opacity = "0.45";
     const nameCell = item.lastFileName
       ? `${escapeHtml(item.name||"")}<div style="font-size:11px;color:var(--muted);margin-top:2px;">元ファイル：${escapeHtml(item.lastFileName)}</div>`
       : escapeHtml(item.name||"");
     tr.innerHTML = `
-      <td style="width:24px;color:var(--muted);">${canManage ? "⠿" : ""}</td>
+      <td style="width:24px;color:var(--muted);">${canDrag ? "⠿" : ""}</td>
       <td>${nameCell}</td>
       <td>${item.enabled!==false ? "有効" : "無効"}</td>
       <td class="actions"></td>
     `;
-    if(canManage){
+    if(canDrag){
       tr.addEventListener("dragstart", ()=> tr.classList.add("dragging"));
       tr.addEventListener("dragend", ()=>{
         tr.classList.remove("dragging");
