@@ -687,7 +687,7 @@
       <div class="panel">
         <h2>業務情報一覧</h2>
         <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-          「追加」でファイルをドラッグ&ドロップまたは選択して登録すると、一般画面の「業務情報」タブにピルとして追加され、内容が閲覧できるようになります（一般画面での編集は不可）。ファイルの中身が変わったら、一覧の「更新」から同じファイルを選び直すと上書きされます（PC上の元のファイルを更新のたびに選び直す運用を想定しています）。行の左端（⠿）をドラッグすると並び順を変更でき、一般画面のピルの表示順にもそのまま反映されます。
+          「追加」でファイルをドラッグ&ドロップまたは選択して登録すると、一般画面の「業務情報」タブに追加され、内容が閲覧できるようになります（一般画面での編集は不可）。ファイルの中身が変わったら、一覧の「更新」から同じファイルを選び直すと上書きされます。行の左端（⠿）をドラッグすると並び順を変更でき、一般画面のボタンの表示順にもそのまま反映されます。
         </p>
         <button class="btn btn-primary" id="bizinfo-add-btn">追加</button>
         <table style="margin-top:14px;">
@@ -802,7 +802,7 @@
         </div>
         <div class="field" id="bizinfo-modal-dropzone-field">
           <label>ファイル</label>
-          <p style="font-size:11.5px;color:var(--muted);margin:0 0 8px;">
+          <p id="bizinfo-modal-dropzone-hint" style="font-size:11.5px;color:var(--muted);margin:0 0 8px;">
             ドロップまたは選択したファイルをアップロードします。Googleへのログイン確認は行われません（社内共通のドライブに自動保存されます）。
           </p>
           <div id="bizinfo-dropzone">
@@ -2658,6 +2658,12 @@ function renderBizInfoTable(){
       });
     }
     const actionsTd = tr.querySelector(".actions");
+    const shortcutBtn = document.createElement("button");
+    shortcutBtn.className = "btn btn-ghost"; shortcutBtn.textContent = "ファイル修正";
+    shortcutBtn.style.border = "1px solid var(--line)";
+    shortcutBtn.disabled = !canManage;
+    shortcutBtn.addEventListener("click", ()=> openBizInfoEditScreen(item));
+    actionsTd.appendChild(shortcutBtn);
     const updateBtn = document.createElement("button");
     updateBtn.className = "btn btn-ghost"; updateBtn.textContent = "更新";
     updateBtn.title = "ファイルを選び直して、内容を上書きします";
@@ -2722,6 +2728,18 @@ async function saveBizInfoOrder(){
 // 　ファイル選択ダイアログが開く「ワンクリック再選択」方式にしている。ファイル名は次回の
 // 　目印として保存する。ブラウザは直前に選んだフォルダを覚えていることが多いので、
 // 　実際の手間はダイアログを開いてクリックするだけで済むことが多い）
+// 「ファイル修正」：Googleドライブ上のファイルを直接、新しいタブで開いて編集する
+// （Googleスプレッドシート形式のファイル向け。ショートカットファイルのダウンロードは、Windowsの
+// 「インターネットから取得したファイル」保護（Mark of the Web）により毎回警告が出てしまうため、
+// 直接新しいタブで開く方式にしている）
+function openBizInfoEditScreen(item){
+  if(!item.fileId){
+    toast("ファイルが登録されていません。");
+    return;
+  }
+  const editUrl = `https://docs.google.com/spreadsheets/d/${item.fileId}/edit`;
+  window.open(editUrl, "_blank", "noopener");
+}
 let bizInfoUpdatingItemId = null;
 function startBizInfoFileUpdate(item){
   bizInfoUpdatingItemId = item.id;
@@ -2758,8 +2776,10 @@ function openBizInfoEditModal(item){
   document.getElementById("bizinfo-name-input").value = item ? (item.name||"") : "";
   document.getElementById("bizinfo-enabled-input").checked = item ? (item.enabled!==false) : true;
   document.getElementById("bizinfo-edit-error").textContent = "";
-  // ファイルの添付欄は「追加」の時だけ表示する（既存項目の中身の差し替えは一覧の「更新」ボタンで行う）
-  document.getElementById("bizinfo-modal-dropzone-field").style.display = item ? "none" : "block";
+  // ファイルの添付欄は追加・編集どちらでも表示する。編集時は未選択なら既存ファイルのまま。
+  document.getElementById("bizinfo-modal-dropzone-hint").textContent = item
+    ? "ファイルを選び直すと、既存のGoogleドライブ上のファイルを削除して置き換えます。未選択なら中身はそのままです。"
+    : "ドロップまたは選択したファイルをアップロードします。Googleへのログイン確認は行われません（社内共通のドライブに自動保存されます）。";
   resetBizInfoDropzone();
   document.getElementById("bizinfo-edit-modal").classList.add("show");
 }
@@ -2774,7 +2794,17 @@ document.getElementById("bizinfo-edit-save-btn")?.addEventListener("click", asyn
   if(!name){ errEl.textContent = "業務情報名を入力してください。"; return; }
   try{
     if(editingBizInfoId){
-      await updateDoc(doc(db,"business_info_items", editingBizInfoId), { name, enabled });
+      const patch = { name, enabled };
+      if(pendingBizInfoUpload){
+        patch.driveUrl = pendingBizInfoUpload.driveUrl;
+        patch.fileId = pendingBizInfoUpload.fileId;
+        patch.lastFileName = pendingBizInfoUpload.fileName;
+      }
+      const oldItem = bizInfoItemsAll.find(i=>i.id===editingBizInfoId);
+      await updateDoc(doc(db,"business_info_items", editingBizInfoId), patch);
+      if(pendingBizInfoUpload && oldItem?.fileId && oldItem.fileId !== pendingBizInfoUpload.fileId){
+        deleteFileFromStorage(oldItem.fileId); // 失敗しても無視してよい（storage-helper.js側で握りつぶし済み）
+      }
       toast("更新しました。");
     } else {
       if(!pendingBizInfoUpload){ errEl.textContent = "ファイルを追加してください。"; return; }
