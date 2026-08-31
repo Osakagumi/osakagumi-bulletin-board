@@ -687,7 +687,7 @@
       <div class="panel">
         <h2>業務情報一覧</h2>
         <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-          「追加」でファイルをドラッグ&ドロップまたは選択して登録すると、一般画面の「業務情報」タブに追加され、内容が閲覧できるようになります（一般画面での編集は不可）。ファイルの中身が変わったら、一覧の「更新」から同じファイルを選び直すと上書きされます。行の左端（⠿）をドラッグすると並び順を変更でき、一般画面のボタンの表示順にもそのまま反映されます。
+          「追加」でファイルをドラッグ&ドロップまたは選択して登録すると、一般画面の「業務情報」タブに追加され、内容が閲覧できるようになります（一般画面での編集は不可）。ファイルの中身が変わったら、一覧の「編集」からファイルを選び直すと上書きされます。行の左端（⠿）をドラッグすると並び順を変更でき、一般画面のボタンの表示順にもそのまま反映されます。
         </p>
         <button class="btn btn-primary" id="bizinfo-add-btn">追加</button>
         <table style="margin-top:14px;">
@@ -835,9 +835,6 @@
         </div>
       </div>
     </div>
-
-    <!-- 業務情報「更新」ボタン用の隠しファイル入力（1個を使い回す） -->
-    <input type="file" id="bizinfo-update-file-input" style="display:none;">
 
     <!-- ============ カレンダー管理 ============ -->
     <section id="view-calendar" style="display:none;">
@@ -2664,13 +2661,6 @@ function renderBizInfoTable(){
     shortcutBtn.disabled = !canManage;
     shortcutBtn.addEventListener("click", ()=> openBizInfoEditScreen(item));
     actionsTd.appendChild(shortcutBtn);
-    const updateBtn = document.createElement("button");
-    updateBtn.className = "btn btn-ghost"; updateBtn.textContent = "更新";
-    updateBtn.title = "ファイルを選び直して、内容を上書きします";
-    updateBtn.style.border = "1px solid var(--line)";
-    updateBtn.disabled = !canManage;
-    updateBtn.addEventListener("click", ()=> startBizInfoFileUpdate(item));
-    actionsTd.appendChild(updateBtn);
     const editBtn = document.createElement("button");
     editBtn.className = "btn btn-ghost"; editBtn.textContent = "編集";
     editBtn.style.border = "1px solid var(--line)";
@@ -2723,11 +2713,6 @@ async function saveBizInfoOrder(){
     toast("並び順の保存に失敗しました。権限をご確認ください。");
   }
 }
-// 一覧の「更新」ボタン：ファイルを選び直して、既存の業務情報項目の中身を上書きする
-// （フルパスそのものはブラウザのセキュリティ上取得できないため、選び直した回数分だけ
-// 　ファイル選択ダイアログが開く「ワンクリック再選択」方式にしている。ファイル名は次回の
-// 　目印として保存する。ブラウザは直前に選んだフォルダを覚えていることが多いので、
-// 　実際の手間はダイアログを開いてクリックするだけで済むことが多い）
 // 「ファイル修正」：Googleドライブ上のファイルを直接、新しいタブで開いて編集する
 // （Googleスプレッドシート形式のファイル向け。ショートカットファイルのダウンロードは、Windowsの
 // 「インターネットから取得したファイル」保護（Mark of the Web）により毎回警告が出てしまうため、
@@ -2740,33 +2725,6 @@ function openBizInfoEditScreen(item){
   const editUrl = `https://docs.google.com/spreadsheets/d/${item.fileId}/edit`;
   window.open(editUrl, "_blank", "noopener");
 }
-let bizInfoUpdatingItemId = null;
-function startBizInfoFileUpdate(item){
-  bizInfoUpdatingItemId = item.id;
-  document.getElementById("bizinfo-update-file-input").click();
-}
-document.getElementById("bizinfo-update-file-input")?.addEventListener("change", async (e)=>{
-  const file = e.target.files[0];
-  e.target.value = "";
-  const itemId = bizInfoUpdatingItemId;
-  bizInfoUpdatingItemId = null;
-  if(!file || !itemId) return;
-  const item = bizInfoItemsAll.find(i=>i.id===itemId);
-  if(!item) return;
-  toast(`アップロード中…（${file.name}）`);
-  try{
-    const { path: newFileId, webViewLink } = await uploadFileToStorage(file);
-    await updateDoc(doc(db,"business_info_items", itemId), {
-      driveUrl: webViewLink, fileId: newFileId, lastFileName: file.name
-    });
-    if(item.fileId && item.fileId !== newFileId){
-      deleteFileFromStorage(item.fileId); // 失敗しても無視してよい（storage-helper.js側で握りつぶし済み）
-    }
-    toast("更新しました。");
-  }catch(e){
-    toast(e.message || "更新に失敗しました。");
-  }
-});
 let editingBizInfoId = null;
 let pendingBizInfoUpload = null; // {driveUrl, fileId, fileName} 追加時にアップロードしたファイルの一時保存
 function openBizInfoEditModal(item){
