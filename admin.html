@@ -905,7 +905,6 @@
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js" async></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -914,31 +913,13 @@ import {
   getFirestore, collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, setDoc,
   query, where, onSnapshot, orderBy, limit, Timestamp, arrayUnion, arrayRemove
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig, CATEGORIES as SEED_CATEGORIES, EQUIPMENT_STATUSES, SAFETY_STATUSES, EMAILJS_CONFIG, resolveMailRecipients, isMailOverrideActive, MAIL_SEND_TARGET } from "./firebase-config.js";
+import { firebaseConfig, CATEGORIES as SEED_CATEGORIES, EQUIPMENT_STATUSES } from "./firebase-config.js";
 import { initStorageHelper, uploadFileToStorage, deleteFileFromStorage } from "./storage-helper.js";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 initStorageHelper(app);
-
-let emailjsReady = false;
-function initEmailJsIfAvailable(){
-  if(window.emailjs && EMAILJS_CONFIG.publicKey && !EMAILJS_CONFIG.publicKey.startsWith("YOUR_")){
-    window.emailjs.init(EMAILJS_CONFIG.publicKey);
-    emailjsReady = true;
-    return true;
-  }
-  return false;
-}
-if(!initEmailJsIfAvailable()){
-  // CDNの読み込みが非同期（async）になったため、まだ間に合っていない場合は少し待って再確認する
-  let emailjsRetries = 0;
-  const emailjsRetryTimer = setInterval(()=>{
-    emailjsRetries++;
-    if(initEmailJsIfAvailable() || emailjsRetries > 25){ clearInterval(emailjsRetryTimer); }
-  }, 200);
-}
 
 function toast(msg){
   const t = document.getElementById("toast");
@@ -3716,115 +3697,17 @@ document.getElementById("emp-edit-save-btn")?.addEventListener("click", async ()
 });
 
 /* ============================================================
-   安否確認管理
+   共通ユーティリティ（旧・安否確認管理セクションにあったが、他タブからも使われているため残置）
+   ※安否確認の発信・履歴管理・回答集計は、2026年8月に一般画面（index.html）へ全面移行済み。
+   　admin.html側にあった実装（安否確認管理タブのUI・関連イベントリスナー等）は、対応するHTML
+   　（ナビボタン・セクションdiv）が既に存在せず、一切呼び出されない状態になっていたため削除しました。
 ============================================================ */
-let safetyCampaignsAll = [];
-let selectedSafetyCampaignId = null;
-let safetyResponsesUnsub = null;
-
-const MAX_SAFETY_CAMPAIGNS = 5;
-
-function initSafetyCampaignsListener(){
-  const q = query(collection(db,"safety_campaigns"), orderBy("createdAt","desc"));
-  onSnapshot(q, snap=>{
-    safetyCampaignsAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
-    renderSafetyCampaignSelect();
-  });
-}
-function renderSafetyCampaignSelect(){
-  const sel = document.getElementById("safety-campaign-select");
-  const prevValue = selectedSafetyCampaignId;
-  sel.innerHTML = "";
-  if(safetyCampaignsAll.length===0){
-    sel.innerHTML = `<option value="">表示できる過去の安否確認はありません</option>`;
-    selectedSafetyCampaignId = null;
-    document.getElementById("safety-close-btn").style.display = "none";
-    document.getElementById("safety-delete-btn").style.display = "none";
-    renderSafetyDashboard();
-    return;
-  }
-  const placeholder = document.createElement("option");
-  placeholder.value = "";
-  placeholder.textContent = "表示する過去の安否確認を選択してください";
-  sel.appendChild(placeholder);
-  safetyCampaignsAll.forEach(c=>{
-    const opt = document.createElement("option");
-    opt.value = c.id;
-    opt.textContent = `${c.active ? "【発信中】":"【終了】"} ${c.title} (${tsToStr(c.createdAt)})`;
-    sel.appendChild(opt);
-  });
-  // 発信直後などプルダウンに残っている選択は維持し、それ以外は毎回プレースホルダーに戻す
-  if(prevValue && safetyCampaignsAll.some(c=>c.id===prevValue)){
-    sel.value = prevValue;
-    selectedSafetyCampaignId = prevValue;
-  } else {
-    sel.value = "";
-    selectedSafetyCampaignId = null;
-  }
-  document.getElementById("safety-delete-btn").style.display = selectedSafetyCampaignId ? "inline-block" : "none";
-  watchSelectedCampaignResponses();
-}
-document.getElementById("safety-campaign-select")?.addEventListener("change", e=>{
-  selectedSafetyCampaignId = e.target.value || null;
-  document.getElementById("safety-delete-btn").style.display = selectedSafetyCampaignId ? "inline-block" : "none";
-  watchSelectedCampaignResponses();
-});
-
-async function deleteSafetyCampaignWithResponses(campaignId){
-  const respSnap = await getDocs(query(collection(db,"safety_responses"), where("campaignId","==", campaignId)));
-  for(const d of respSnap.docs){
-    await deleteDoc(doc(db,"safety_responses", d.id));
-  }
-  await deleteDoc(doc(db,"safety_campaigns", campaignId));
-}
-
-// 発信のたびに呼び出し、最大保存件数(MAX_SAFETY_CAMPAIGNS)を超えた分を古い順に削除する
-async function enforceSafetyCampaignLimit(){
-  try{
-    const snap = await getDocs(query(collection(db,"safety_campaigns"), orderBy("createdAt","desc")));
-    const all = snap.docs.map(d=>({id:d.id}));
-    if(all.length <= MAX_SAFETY_CAMPAIGNS) return;
-    const toDelete = all.slice(MAX_SAFETY_CAMPAIGNS); // 新しい順に並んでいるので、はみ出した古い分
-    for(const c of toDelete){
-      await deleteSafetyCampaignWithResponses(c.id);
-    }
-  }catch(e){
-    console.error("[安否確認 上限超過分の自動削除エラー]", e);
-  }
-}
-
-document.getElementById("safety-delete-btn")?.addEventListener("click", async ()=>{
-  if(!selectedSafetyCampaignId) return;
-  const campaign = safetyCampaignsAll.find(c=>c.id===selectedSafetyCampaignId);
-  const label = campaign ? campaign.title : "この安否確認";
-  if(!confirm(`「${label}」を削除しますか？\n回答データも含めて完全に削除され、元に戻せません。`)) return;
-  try{
-    await deleteSafetyCampaignWithResponses(selectedSafetyCampaignId);
-    selectedSafetyCampaignId = null;
-    toast("削除しました。");
-  }catch(e){
-    toast("削除に失敗しました。権限をご確認ください。");
-  }
-});
-
-function watchSelectedCampaignResponses(){
-  if(safetyResponsesUnsub){ safetyResponsesUnsub(); safetyResponsesUnsub = null; }
-  const campaign = safetyCampaignsAll.find(c=>c.id===selectedSafetyCampaignId);
-  document.getElementById("safety-close-btn").style.display = (campaign && campaign.active) ? "inline-block" : "none";
-  if(!selectedSafetyCampaignId){ renderSafetyDashboard([]); return; }
-  const q = query(collection(db,"safety_responses"), where("campaignId","==", selectedSafetyCampaignId));
-  safetyResponsesUnsub = onSnapshot(q, snap=>{
-    renderSafetyDashboard(snap.docs.map(d=>({id:d.id, ...d.data()})));
-  });
-}
-
 function tsToStr(ts){
   if(!ts) return "";
   const d = ts.toDate ? ts.toDate() : new Date(ts);
   const pad2 = n=>String(n).padStart(2,"0");
   return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
-function safetyStatusInfo(id){ return SAFETY_STATUSES.find(s=>s.id===id) || {label:id, color:"#888"}; }
 function departmentNameById(id){
   const d = departmentsAll.find(x=>x.id===id);
   return d ? d.name : "未所属";
@@ -3839,140 +3722,9 @@ function departmentNamesJoinedAdmin(emp){
   if(ids.length===0) return "未所属";
   return ids.map(id=>departmentNameById(id)).join("・");
 }
-
-function renderSafetyDashboard(responses){
-  const body = document.getElementById("safety-table-body");
-  const summary = document.getElementById("safety-dashboard-summary");
-  body.innerHTML = "";
-  if(!selectedSafetyCampaignId){
-    summary.textContent = "";
-    body.innerHTML = `<tr><td colspan="5" class="empty">安否確認を発信すると、ここに回答状況が表示されます。</td></tr>`;
-    return;
-  }
-  const respMap = new Map((responses||[]).map(r=>[r.userEmail, r]));
-  const roster = sortByDeptAndEmployeeNo(employeesAll);
-  const answeredCount = roster.filter(e=>respMap.has(e.email)).length;
-  summary.textContent = `回答済み: ${answeredCount} / ${roster.length} 人`;
-
-  if(roster.length===0){
-    body.innerHTML = `<tr><td colspan="5" class="empty">社員データがまだありません。</td></tr>`;
-    return;
-  }
-  roster.forEach(emp=>{
-    const resp = respMap.get(emp.email);
-    const tr = document.createElement("tr");
-    if(!resp) tr.classList.add("unanswered-row");
-    const statusCell = resp
-      ? `<span class="status-pill-admin" style="background:${safetyStatusInfo(resp.status).color}">${escapeHtml(safetyStatusInfo(resp.status).label)}</span>`
-      : `<span style="color:var(--muted);font-size:12px;">未回答</span>`;
-    tr.innerHTML = `
-      <td>${escapeHtml(emp.name||emp.email)}</td>
-      <td>${escapeHtml(departmentNamesJoinedAdmin(emp))}</td>
-      <td>${statusCell}</td>
-      <td style="color:var(--muted);max-width:200px;">${escapeHtml(resp?.comment||"")}</td>
-      <td style="font-size:12px;color:var(--muted);">${resp ? tsToStr(resp.respondedAt) : ""}</td>
-    `;
-    body.appendChild(tr);
-  });
-}
-
 function indexPageUrl(){
   return location.href.replace(/admin\.html.*$/i, "index.html");
 }
-
-async function sendSafetyEmails(campaignId, title, message){
-  const statusEl = document.getElementById("safety-launch-status");
-  if(!emailjsReady){
-    statusEl.textContent = "（EmailJSが未設定のため、メール送信はスキップされました）";
-    return;
-  }
-  const recipients = resolveMailRecipients(employeesAll);
-  if(recipients.length===0){
-    statusEl.textContent = "送信先の社員データがありません。";
-    return;
-  }
-  let ok = 0, fail = 0;
-  const base = indexPageUrl();
-  const buildLink = (email, status) =>
-    `${base}?campaign=${encodeURIComponent(campaignId)}&status=${status}&email=${encodeURIComponent(email)}`;
-  for(const emp of recipients){
-    try{
-      await window.emailjs.send(EMAILJS_CONFIG.serviceId, EMAILJS_CONFIG.safetyTemplateId, {
-        to_email: emp.email,
-        to_name: emp.name || emp.email,
-        title, message,
-        link: buildLink(emp.email, ""),
-        link_safe: buildLink(emp.email, "safe"),
-        link_damage: buildLink(emp.email, "damage"),
-        link_unknown: buildLink(emp.email, "unknown")
-      });
-      ok++;
-    }catch(e){
-      fail++;
-    }
-    statusEl.textContent = `メール送信中… ${ok+fail}/${recipients.length}（成功${ok}・失敗${fail}）`;
-    await new Promise(r=>setTimeout(r, 300));
-  }
-  statusEl.textContent = `メール送信完了：${recipients.length}件中 ${ok}件成功${fail>0 ? `（${fail}件失敗）` : ""}`;
-}
-
-document.getElementById("safety-launch-btn")?.addEventListener("click", async ()=>{
-  const title = document.getElementById("safety-title-input").value.trim();
-  const message = document.getElementById("safety-message-input").value.trim();
-  const sendEmail = document.getElementById("safety-send-email").checked;
-  const statusEl = document.getElementById("safety-launch-status");
-  if(!title){ toast("タイトルを入力してください。"); return; }
-
-  // 発信直前に、キャッシュではなくFirestoreから直接最新の社員名簿を取得する
-  // （CSV登録直後などにキャッシュが古いまま確認ダイアログが出るのを防ぐため）
-  try{
-    const freshSnap = await getDocs(collection(db,"employees"));
-    employeesAll = freshSnap.docs.map(d=>({email:d.id, ...d.data()}));
-  }catch(e){ /* 取得失敗時はキャッシュのまま表示を続行 */ }
-
-  const recipients = resolveMailRecipients(employeesAll);
-  const overrideNotice = isMailOverrideActive()
-    ? `\n\n※現在メール送信先が「${MAIL_SEND_TARGET}」に上書き設定されているため、上記の人数・宛先のみに送信されます（全社員には送信されません）。`
-    : "";
-  const confirmMsg = sendEmail
-    ? `この内容で安否確認を発信します。\n\n${recipients.length} 名にメールも送信されます。${overrideNotice}\n\nよろしいですか？`
-    : `この内容で安否確認を発信します（メール送信はチェックが外れているため行いません）。\n\nよろしいですか？`;
-  if(!confirm(confirmMsg)) return;
-
-  statusEl.textContent = "";
-  try{
-    const activeOnes = safetyCampaignsAll.filter(c=>c.active);
-    for(const c of activeOnes){
-      await updateDoc(doc(db,"safety_campaigns", c.id), { active:false });
-    }
-    const newCampaignRef = await addDoc(collection(db,"safety_campaigns"), {
-      title, message,
-      active: true,
-      createdBy: currentUser.email,
-      createdAt: Timestamp.now()
-    });
-    document.getElementById("safety-title-input").value = "";
-    document.getElementById("safety-message-input").value = "";
-    toast("安否確認を発信しました。");
-    await enforceSafetyCampaignLimit();
-    if(sendEmail){
-      await sendSafetyEmails(newCampaignRef.id, title, message);
-    }
-  }catch(e){
-    toast("発信に失敗しました。");
-  }
-});
-
-document.getElementById("safety-close-btn")?.addEventListener("click", async ()=>{
-  if(!selectedSafetyCampaignId) return;
-  if(!confirm("この安否確認を終了しますか？")) return;
-  try{
-    await updateDoc(doc(db,"safety_campaigns", selectedSafetyCampaignId), { active:false });
-    toast("安否確認を終了しました。");
-  }catch(e){
-    toast("操作に失敗しました。");
-  }
-});
 
 /* ============================================================
    ユーザー登録（CSV一括）
