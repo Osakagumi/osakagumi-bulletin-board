@@ -2548,11 +2548,12 @@ function initGeneralTabDefaultsListener(){
   onSnapshot(doc(db,"system_tab_defaults","general"), snap=>{
     const data = snap.exists() ? snap.data() : {};
     buildDragOrderList("general-tab-order-list", GENERAL_TAB_ORDER_DEFS, data.tabOrder);
-    const enabledTabs = Array.isArray(data.enabledTabs) ? data.enabledTabs : HIDEABLE_TABS.map(t=>t.id);
+    const generalToggleableTabs = [...HIDEABLE_TABS, ...SAFETY_SYSTEM_TOGGLE_TABS];
+    const enabledTabs = Array.isArray(data.enabledTabs) ? data.enabledTabs : generalToggleableTabs.map(t=>t.id);
     const checksEl = document.getElementById("general-enabled-tabs-checks");
     if(checksEl){
       checksEl.innerHTML = "";
-      HIDEABLE_TABS.forEach(t=>{
+      generalToggleableTabs.forEach(t=>{
         const label = document.createElement("label");
         label.style.cssText = "display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;";
         const cb = document.createElement("input");
@@ -3337,6 +3338,12 @@ function getFullHideableList(){
   }));
   return [...HIDEABLE_TABS, ...bizInfoSubItems];
 }
+// システム管理画面（既定で有効にするタブ）でのみON/OFFできるタブ。個人ごとの非表示設定（HIDEABLE_TABS）には
+// あえて含めない（緊急時に個人設定でうっかり非表示にしてしまうのを防ぐため）が、運用しない組織向けに、
+// 全社一律でのOFFはシステム管理者が行えるようにする。
+const SAFETY_SYSTEM_TOGGLE_TABS = [
+  { id:"safety", label:"安否確認" }
+];
 
 /* ============================================================
    表形式で表示タブを設定（全社員×全タブのマトリクス）

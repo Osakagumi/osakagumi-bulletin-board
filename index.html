@@ -1252,12 +1252,33 @@
         <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">本文</label>
         <textarea id="notice-body" style="min-height:110px;"></textarea>
       </div>
-      <div class="field">
-        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">リンク（任意。ファイルを添付するか、Googleドライブなどの共有リンクを直接貼り付けてください）</label>
-        <div style="display:flex;gap:8px;">
-          <input type="url" id="notice-attachment-url" placeholder="https://drive.google.com/..." style="flex:1;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;">
-          <button type="button" class="btn-ghost" id="notice-attach-btn" style="border:1px solid var(--line);white-space:nowrap;">ファイル添付</button>
+      <div class="field" id="notice-attach-field">
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">添付ファイル（任意）</label>
+        <p id="notice-dropzone-hint" style="font-size:11.5px;color:var(--muted);margin:0 0 8px;">
+          ドロップまたは選択したファイルをアップロードします。Googleへのログイン確認は行われません（社内共通のドライブに自動保存されます）。
+        </p>
+        <div id="notice-dropzone">
+          <div id="notice-dropzone-idle">
+            <div style="font-size:28px;margin-bottom:8px;">📎</div>
+            <div>ここにファイルをドラッグ＆ドロップ</div>
+            <div style="font-size:11.5px;color:var(--muted);margin-top:6px;">またはクリックしてファイルを選択</div>
+            <input type="file" id="notice-file-input" style="display:none;">
+          </div>
+          <div id="notice-dropzone-selected" style="display:none;">
+            <div style="font-size:28px;margin-bottom:8px;">📄</div>
+            <div id="notice-selected-filename" style="word-break:break-all;font-size:12.5px;"></div>
+          </div>
+          <div id="notice-dropzone-busy" style="display:none;">
+            <div class="spinner"></div>
+            <div id="notice-dropzone-status" style="margin-top:10px;font-size:12.5px;color:var(--muted);"></div>
+          </div>
         </div>
+        <button type="button" class="btn-primary" id="notice-upload-confirm-btn" style="display:none;width:100%;margin-top:12px;">このファイルをアップロードする</button>
+        <div id="notice-existing-attachment-row" style="display:none;align-items:center;gap:8px;font-size:12px;color:var(--text);margin-top:10px;">
+          <span id="notice-existing-attachment-label">登録済みの添付ファイルがあります。</span>
+          <button type="button" id="notice-remove-attachment-btn" class="btn-ghost" style="border:1px solid var(--line);padding:3px 10px;font-size:11.5px;white-space:nowrap;">添付を削除</button>
+        </div>
+        <div class="modal-err" id="notice-attach-error"></div>
       </div>
       <div class="field" id="notice-send-email-row" style="display:flex;align-items:center;gap:6px;">
         <input type="checkbox" id="notice-send-email" checked style="width:auto;">
@@ -1282,37 +1303,6 @@
       <div id="notice-mailto-batches"></div>
       <div class="row-btns">
         <button class="btn-primary" id="notice-mailto-close">閉じる</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ============ ファイル添付（Googleドライブへアップロード） ============ -->
-  <div class="modal-overlay" id="notice-attach-modal">
-    <div class="modal">
-      <h3>ファイルを添付</h3>
-      <p style="font-size:12px;color:var(--muted);margin:-6px 0 12px;">
-        ファイルをドロップすると、このシステムのストレージへアップロードしてリンクを自動で取得します。Googleへのログイン確認は行われません（社内共通のドライブに自動保存されます）。
-      </p>
-      <div id="notice-dropzone">
-        <div id="notice-dropzone-idle">
-          <div style="font-size:28px;margin-bottom:8px;">📎</div>
-          <div>ここにファイルをドラッグ＆ドロップ</div>
-          <div style="font-size:11.5px;color:var(--muted);margin-top:6px;">またはクリックしてファイルを選択</div>
-          <input type="file" id="notice-file-input" style="display:none;">
-        </div>
-        <div id="notice-dropzone-selected" style="display:none;">
-          <div style="font-size:28px;margin-bottom:8px;">📄</div>
-          <div id="notice-selected-filename" style="word-break:break-all;font-size:12.5px;"></div>
-        </div>
-        <div id="notice-dropzone-busy" style="display:none;">
-          <div class="spinner"></div>
-          <div id="notice-dropzone-status" style="margin-top:10px;font-size:12.5px;color:var(--muted);"></div>
-        </div>
-      </div>
-      <button class="btn-primary" id="notice-upload-confirm-btn" style="display:none;width:100%;margin-top:12px;">このファイルをアップロードする</button>
-      <div class="modal-err" id="notice-attach-error"></div>
-      <div class="row-btns">
-        <button class="btn-ghost" id="notice-attach-cancel" style="border:1px solid var(--line);">閉じる</button>
       </div>
     </div>
   </div>
@@ -1715,7 +1705,11 @@ let myReadNoticeIds = [];
 let myKeepVisibleNoticeIds = [];
 let editingNoticeId = null;
 let originalAttachmentStoragePath = null;
+let originalAttachmentUrl = null;
+let originalAttachmentFileName = null;
 let attachmentUploadFailed = false;
+let pendingNoticeUpload = null; // このモーダルを開いてから新しくアップロードしたファイル {url, storagePath, fileName}
+let removeExistingNoticeAttachment = false; // 編集時に「添付を削除」が押されたか
 let activeSafetyCampaign = null;
 let mySafetyResponse = null;
 let wbEditingEmail = null;
@@ -1884,6 +1878,12 @@ const DASH_CARD_BY_VIEW = {
 let systemTabDefaults = null;
 let hasPersonalTabOrderFlag = null; // null=未判定、true=個人設定あり、false=個人設定なし
 const GENERAL_HIDEABLE_TAB_IDS = ["notices","calendar","whereabouts","chat","reserve","checkout","contracts","bizinfo"];
+// 特定のタブが、システム管理画面の「既定で有効にするタブ」設定で有効になっているかどうかを判定する
+// （未設定（system_tab_defaultsドキュメント自体が無い、またはenabledTabsが未設定）の場合は既定で有効として扱う）
+function isGeneralTabSystemEnabled(tabId){
+  if(!systemTabDefaults || !Array.isArray(systemTabDefaults.enabledTabs)) return true;
+  return systemTabDefaults.enabledTabs.includes(tabId);
+}
 function tryApplyOrgTabDefaults(){
   if(hasPersonalTabOrderFlag !== false) return; // 個人設定がある、またはまだ判定できていない場合は何もしない
   if(!systemTabDefaults) return;
@@ -1897,6 +1897,7 @@ function initSystemTabDefaultsListener(){
     systemTabDefaults = snap.exists() ? snap.data() : {};
     tryApplyOrgTabDefaults();
     applyMyHiddenTabs(); // システム側の有効タブが変わった可能性があるので再適用
+    updateSafetyTabVisibility(); // 「安否確認」タブの表示可否もシステム側の設定に連動するため再適用
   }, (err)=>{ console.error("[一般画面タブ既定値取得エラー]", err); });
 }
 function applyMyHiddenTabs(){
@@ -3901,9 +3902,13 @@ document.getElementById("notice-new-btn").addEventListener("click", ()=>{
   document.getElementById("notice-send-email-label").textContent = "社員全員に同じ内容をメールでも送信する";
   document.getElementById("notice-title").value = "";
   document.getElementById("notice-body").value = "";
-  document.getElementById("notice-attachment-url").value = "";
-  document.getElementById("notice-attachment-url").dataset.storagePath = "";
+  originalAttachmentUrl = null;
+  originalAttachmentFileName = null;
+  removeExistingNoticeAttachment = false;
   attachmentUploadFailed = false;
+  document.getElementById("notice-dropzone-hint").textContent = "ドロップまたは選択したファイルをアップロードします。Googleへのログイン確認は行われません（社内共通のドライブに自動保存されます）。";
+  resetNoticeDropzone();
+  document.getElementById("notice-existing-attachment-row").style.display = "none";
   document.getElementById("notice-error").textContent = "";
   document.getElementById("notice-send-status").textContent = "";
   noticeModal.classList.add("show");
@@ -3912,6 +3917,9 @@ document.getElementById("notice-new-btn").addEventListener("click", ()=>{
 function openNoticeEditModal(n){
   editingNoticeId = n.id;
   originalAttachmentStoragePath = n.attachmentStoragePath || null;
+  originalAttachmentUrl = n.attachmentUrl || null;
+  originalAttachmentFileName = n.attachmentFileName || null;
+  removeExistingNoticeAttachment = false;
   attachmentUploadFailed = false;
   document.getElementById("notice-modal-title").textContent = "お知らせを編集";
   document.getElementById("notice-send-email-row").style.display = "flex";
@@ -3919,28 +3927,55 @@ function openNoticeEditModal(n){
   document.getElementById("notice-send-email-label").textContent = "更新内容を社員全員にメールでも送信する（自分のメールソフトが起動します）";
   document.getElementById("notice-title").value = n.title || "";
   document.getElementById("notice-body").value = n.body || "";
-  document.getElementById("notice-attachment-url").value = n.attachmentUrl || "";
-  document.getElementById("notice-attachment-url").dataset.storagePath = n.attachmentStoragePath || "";
+  document.getElementById("notice-dropzone-hint").textContent = "ファイルを選び直すと、既存の添付ファイルを削除して置き換えます。未選択なら添付ファイルはそのままです。";
+  resetNoticeDropzone();
+  const existingRow = document.getElementById("notice-existing-attachment-row");
+  if(n.attachmentUrl){
+    document.getElementById("notice-existing-attachment-label").textContent = n.attachmentFileName
+      ? `登録済みの添付ファイル：${n.attachmentFileName}`
+      : "登録済みの添付ファイルがあります。";
+    existingRow.style.display = "flex";
+  } else {
+    existingRow.style.display = "none";
+  }
   document.getElementById("notice-error").textContent = "";
   document.getElementById("notice-send-status").textContent = "";
   noticeModal.classList.add("show");
 }
-// リンク欄を手動で書き換えた場合は、添付ファイルとの対応が取れなくなるため紐付けを解除する
-document.getElementById("notice-attachment-url").addEventListener("input", (e)=>{
-  e.target.dataset.storagePath = "";
-  attachmentUploadFailed = false;
+document.getElementById("notice-remove-attachment-btn")?.addEventListener("click", ()=>{
+  removeExistingNoticeAttachment = true;
+  pendingNoticeUpload = null; // 新規アップロード予約があれば取り消す
+  resetNoticeDropzone();
+  document.getElementById("notice-existing-attachment-row").style.display = "none";
+  toast("「保存」を押すと添付ファイルが削除されます。");
 });
 document.getElementById("notice-cancel").addEventListener("click", ()=> noticeModal.classList.remove("show"));
 document.getElementById("notice-submit").addEventListener("click", async ()=>{
   const title = document.getElementById("notice-title").value.trim();
   const body = document.getElementById("notice-body").value.trim();
-  const attachmentUrl = document.getElementById("notice-attachment-url").value.trim();
-  const attachmentStoragePath = document.getElementById("notice-attachment-url").dataset.storagePath || "";
+  let attachmentUrl, attachmentStoragePath, attachmentFileName;
+  if(pendingNoticeUpload){
+    // このモーダルを開いてから新しくアップロードした
+    attachmentUrl = pendingNoticeUpload.url;
+    attachmentStoragePath = pendingNoticeUpload.storagePath;
+    attachmentFileName = pendingNoticeUpload.fileName;
+  } else if(removeExistingNoticeAttachment){
+    // 「添付を削除」が押された
+    attachmentUrl = ""; attachmentStoragePath = ""; attachmentFileName = "";
+  } else if(editingNoticeId){
+    // 編集時、ファイルを選び直していなければ既存のまま
+    attachmentUrl = originalAttachmentUrl || "";
+    attachmentStoragePath = originalAttachmentStoragePath || "";
+    attachmentFileName = originalAttachmentFileName || "";
+  } else {
+    // 新規投稿で添付なし
+    attachmentUrl = ""; attachmentStoragePath = ""; attachmentFileName = "";
+  }
   const errEl = document.getElementById("notice-error");
   const statusEl = document.getElementById("notice-send-status");
   if(!title){ errEl.textContent = "タイトルを入力してください。"; return; }
   if(attachmentUploadFailed){
-    errEl.textContent = "添付ファイルのアップロードに失敗した状態です。もう一度アップロードするか、リンク欄を空にしてから投稿してください。";
+    errEl.textContent = "添付ファイルのアップロードに失敗した状態です。もう一度アップロードするか、ファイルを外した状態で投稿してください。";
     return;
   }
   errEl.textContent = "";
@@ -3967,7 +4002,7 @@ document.getElementById("notice-submit").addEventListener("click", async ()=>{
   if(editingNoticeId){
     try{
       await updateDoc(doc(db,"announcements", editingNoticeId), {
-        title, body, attachmentUrl, attachmentStoragePath,
+        title, body, attachmentUrl, attachmentStoragePath, attachmentFileName,
         updatedAt: Timestamp.now()
       });
       // 添付が別のものに差し替わった／削除された場合は、以前のファイルをドライブから完全削除する
@@ -3988,7 +4023,7 @@ document.getElementById("notice-submit").addEventListener("click", async ()=>{
   try{
     await addDoc(collection(db,"announcements"), {
       title, body,
-      attachmentUrl, attachmentStoragePath,
+      attachmentUrl, attachmentStoragePath, attachmentFileName,
       authorEmail: currentUser.email,
       authorName: myDisplayName(),
       createdAt: Timestamp.now()
@@ -4059,22 +4094,28 @@ document.getElementById("notice-mailto-close").addEventListener("click", ()=>{
 
 /* =========================================================
    お知らせ：ファイル添付（Googleドライブへアップロード）
+   ※ 投稿・編集モーダルに直接埋め込まれたドロップゾーン。アップロードが完了しても
+   モーダル自体は閉じず、pendingNoticeUploadに保持しておくだけ（「投稿」「保存」を
+   押すまでは確定しない）。リンクの生パスは画面に表示せず、ファイル名のみ表示する。
 ========================================================= */
 async function uploadFileToNoticeStorage(file){
   const statusEl = document.getElementById("notice-dropzone-status");
   const errEl = document.getElementById("notice-attach-error");
   const busyEl = document.getElementById("notice-dropzone-busy");
   errEl.textContent = "";
+  document.getElementById("notice-dropzone-selected").style.display = "none";
+  document.getElementById("notice-upload-confirm-btn").style.display = "none";
   busyEl.style.display = "block";
   try{
     const { path, webViewLink } = await uploadFileToStorage(file, (msg)=>{ statusEl.textContent = msg; });
-
-    document.getElementById("notice-attachment-url").value = webViewLink;
-    document.getElementById("notice-attachment-url").dataset.storagePath = path;
+    pendingNoticeUpload = { url: webViewLink, storagePath: path, fileName: file.name };
+    removeExistingNoticeAttachment = false; // 新しくアップロードしたので、削除フラグは解除する
+    document.getElementById("notice-existing-attachment-row").style.display = "none";
+    document.getElementById("notice-selected-filename").textContent = `アップロード済み：${file.name}`;
+    document.getElementById("notice-dropzone-selected").style.display = "block";
     attachmentUploadFailed = false;
-    toast("ファイルをアップロードし、リンクを取得しました。");
-    document.getElementById("notice-attach-modal").classList.remove("show");
-    resetNoticeDropzone();
+    toast("ファイルをアップロードしました。");
+    pendingUploadFile = null;
   }catch(e){
     attachmentUploadFailed = true;
     errEl.textContent = e.message || "アップロードに失敗しました。";
@@ -4092,10 +4133,12 @@ async function uploadFileToNoticeStorage(file){
 let pendingUploadFile = null;
 function resetNoticeDropzone(){
   pendingUploadFile = null;
+  pendingNoticeUpload = null;
   document.getElementById("notice-dropzone-idle").style.display = "block";
   document.getElementById("notice-dropzone-selected").style.display = "none";
   document.getElementById("notice-dropzone-busy").style.display = "none";
   document.getElementById("notice-upload-confirm-btn").style.display = "none";
+  document.getElementById("notice-attach-error").textContent = "";
 }
 function selectFileForUpload(file){
   pendingUploadFile = file;
@@ -4107,14 +4150,6 @@ function selectFileForUpload(file){
   document.getElementById("notice-upload-confirm-btn").style.display = "block";
 }
 
-document.getElementById("notice-attach-btn").addEventListener("click", ()=>{
-  document.getElementById("notice-attach-error").textContent = "";
-  resetNoticeDropzone();
-  document.getElementById("notice-attach-modal").classList.add("show");
-});
-document.getElementById("notice-attach-cancel").addEventListener("click", ()=>{
-  document.getElementById("notice-attach-modal").classList.remove("show");
-});
 const noticeDropzone = document.getElementById("notice-dropzone");
 noticeDropzone.addEventListener("click", ()=>{
   if(pendingUploadFile) return; // 選択済みの間はファイル再選択させない
@@ -5429,15 +5464,18 @@ function updateSafetyTabVisibility(){
   const manageBtn = document.querySelector('.tab-btn[data-view="safety"]');
   const responseBtn = document.querySelector('.tab-btn[data-view="safetyresponse"]');
   const hasActive = !!activeSafetyCampaign;
+  const safetyTabSystemEnabled = isGeneralTabSystemEnabled("safety");
   if(manageBtn){
-    // 「安否確認」タブ（発信・回答状況管理）は、発信権限者・システム管理者にのみ常時表示する
-    manageBtn.style.display = isSafetySender ? "inline-block" : "none";
+    // 「安否確認」タブ（発信・回答状況管理）は、発信権限者・システム管理者であり、
+    // かつシステム管理画面で「安否確認」タブが無効化されていない場合にのみ表示する
+    manageBtn.style.display = (isSafetySender && safetyTabSystemEnabled) ? "inline-block" : "none";
   }
   if(responseBtn){
-    // 「安否回答」タブ（自分の回答）は、発信中のみ全員に表示する
+    // 「安否回答」タブ（自分の回答）は、発信中のみ全員に表示する（この条件は変更しない。
+    // システム管理画面の「安否確認」タブ設定とは独立している）
     responseBtn.style.display = hasActive ? "inline-block" : "none";
     if(!hasActive && responseBtn.classList.contains("active")){
-      switchToTab(isSafetySender ? "safety" : "notices");
+      switchToTab((isSafetySender && safetyTabSystemEnabled) ? "safety" : "notices");
     }
   }
 }
