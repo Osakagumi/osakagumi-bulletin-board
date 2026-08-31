@@ -1877,6 +1877,7 @@ const DASH_CARD_BY_VIEW = {
 // 「有効なタブ」は個人設定と掛け合わせる（両方が「表示」の場合のみ表示する）システム全体のスイッチとして扱う。
 let systemTabDefaults = null;
 let hasPersonalTabOrderFlag = null; // null=未判定、true=個人設定あり、false=個人設定なし
+let hasPersonalDashCardOrderFlag = null; // null=未判定、true=個人設定あり、false=個人設定なし（ダッシュボードカード用）
 const GENERAL_HIDEABLE_TAB_IDS = ["notices","calendar","whereabouts","chat","reserve","checkout","contracts","bizinfo"];
 // 特定のタブが、システム管理画面の「既定で有効にするタブ」設定で有効になっているかどうかを判定する
 // （未設定（system_tab_defaultsドキュメント自体が無い、またはenabledTabsが未設定）の場合は既定で有効として扱う）
@@ -1892,10 +1893,28 @@ function tryApplyOrgTabDefaults(){
     localStorage.setItem(TAB_ORDER_KEY, JSON.stringify(systemTabDefaults.tabOrder));
   }
 }
+// システム管理画面の「一般画面のタブ表示順」から、ダッシュボードカードの並び順を導き出して適用する。
+// 個人がダッシュボードカードを一度も並び替えていない場合のみ適用される既定値（tryApplyOrgTabDefaultsと同じ考え方）。
+// タブ順のうち、対応するダッシュボードカードを持つもの（DASH_CARD_BY_VIEWのキー）だけを抜き出し、
+// 既定レイアウトと同じ列数（左列2枚・右列はそれ以外）で振り分ける。
+const DASH_LEFT_COL_CARD_COUNT = 2;
+function tryApplyOrgDashCardOrder(){
+  if(hasPersonalDashCardOrderFlag !== false) return; // 個人設定がある、またはまだ判定できていない場合は何もしない
+  if(!systemTabDefaults || !Array.isArray(systemTabDefaults.tabOrder) || !systemTabDefaults.tabOrder.length) return;
+  const orderedCardIds = systemTabDefaults.tabOrder
+    .filter(view => DASH_CARD_BY_VIEW[view])
+    .map(view => DASH_CARD_BY_VIEW[view]);
+  if(orderedCardIds.length===0) return;
+  applyDashCardOrder({
+    left: orderedCardIds.slice(0, DASH_LEFT_COL_CARD_COUNT),
+    right: orderedCardIds.slice(DASH_LEFT_COL_CARD_COUNT)
+  });
+}
 function initSystemTabDefaultsListener(){
   onSnapshot(doc(db,"system_tab_defaults","general"), snap=>{
     systemTabDefaults = snap.exists() ? snap.data() : {};
     tryApplyOrgTabDefaults();
+    tryApplyOrgDashCardOrder(); // ダッシュボードカード順も、タブ表示順の既定値変更に連動して再適用する
     applyMyHiddenTabs(); // システム側の有効タブが変わった可能性があるので再適用
     updateSafetyTabVisibility(); // 「安否確認」タブの表示可否もシステム側の設定に連動するため再適用
   }, (err)=>{ console.error("[一般画面タブ既定値取得エラー]", err); });
@@ -7158,7 +7177,11 @@ function initUserPrefsListener(){
       tryApplyOrgTabDefaults();
     }
     if(prefs.dashboardCardOrder){
+      hasPersonalDashCardOrderFlag = true;
       applyDashCardOrder(prefs.dashboardCardOrder);
+    } else if(hasPersonalDashCardOrderFlag === null){
+      hasPersonalDashCardOrderFlag = false;
+      tryApplyOrgDashCardOrder();
     }
   }, (err)=>{ console.error("[個人設定取得エラー]", err); });
 }
