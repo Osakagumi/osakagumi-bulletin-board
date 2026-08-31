@@ -4007,6 +4007,7 @@ document.getElementById("userimport-execute-btn").addEventListener("click", asyn
   const statusEl = document.getElementById("userimport-status");
   let ok = 0, exists = 0, fail = 0;
   const failDetails = [];
+  const bizInfoCapDetails = [];
 
   // システム管理者自身のログイン状態を保ったまま作成するため、別名のセカンダリFirebaseアプリを使う
   const secondaryApp = initializeApp(firebaseConfig, "userImportApp_" + Date.now());
@@ -4069,7 +4070,10 @@ document.getElementById("userimport-execute-btn").addEventListener("click", asyn
       for(const itemId of row.bizInfoItemIds){
         const item = bizInfoItemsAll.find(i=>i.id===itemId);
         const currentManagers = (item && Array.isArray(item.infoManagers)) ? item.infoManagers : [];
-        if(!currentManagers.includes(row.email) && currentManagers.length>=3) continue; // 上限3人のためスキップ
+        if(!currentManagers.includes(row.email) && currentManagers.length>=3){
+          bizInfoCapDetails.push(`${row.email}: 「${item?.name||itemId}」は情報管理者が既に3人のため追加できませんでした`);
+          continue; // 上限3人のためスキップ
+        }
         await updateDoc(doc(db,"business_info_items", itemId), { infoManagers: arrayUnion(row.email) });
       }
     }catch(e){ /* 権限エラー等は無視して続行 */ }
@@ -4081,6 +4085,9 @@ document.getElementById("userimport-execute-btn").addEventListener("click", asyn
   let summary = `完了：新規作成${ok}件・既存スキップ${exists}件・失敗${fail}件`;
   if(failDetails.length>0){
     summary += "\n\n【失敗の詳細】\n" + failDetails.join("\n");
+  }
+  if(bizInfoCapDetails.length>0){
+    summary += "\n\n【情報管理者の上限超過】\n" + bizInfoCapDetails.join("\n");
   }
   statusEl.textContent = summary;
   toast("CSV一括登録が完了しました。");
