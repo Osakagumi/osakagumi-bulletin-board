@@ -687,7 +687,7 @@
       <div class="panel">
         <h2>業務情報一覧</h2>
         <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-          「追加」からファイルをドラッグ&ドロップでアップロードするか、既存のGoogleドライブファイルの共有リンクを登録すると、一般画面の「業務情報」タブにピルとして追加され、内容が閲覧できるようになります（編集は不可）。行の左端（⠿）をドラッグすると並び順を変更でき、一般画面のピルの表示順にもそのまま反映されます。
+          「追加」でファイルをドラッグ&ドロップまたは選択して登録すると、一般画面の「業務情報」タブにピルとして追加され、内容が閲覧できるようになります（一般画面での編集は不可）。ファイルの中身が変わったら、一覧の「更新」から同じファイルを選び直すと上書きされます（PC上の元のファイルを更新のたびに選び直す運用を想定しています）。行の左端（⠿）をドラッグすると並び順を変更でき、一般画面のピルの表示順にもそのまま反映されます。
         </p>
         <button class="btn btn-primary" id="bizinfo-add-btn">追加</button>
         <table style="margin-top:14px;">
@@ -800,12 +800,29 @@
           <label>業務情報名</label>
           <input type="text" id="bizinfo-name-input" placeholder="例）工事一覧">
         </div>
-        <div class="field">
-          <label>Googleドライブの共有リンク</label>
-          <div style="display:flex;gap:8px;">
-            <input type="text" id="bizinfo-url-input" placeholder="https://drive.google.com/..." style="flex:1;">
-            <button type="button" class="btn btn-ghost" id="bizinfo-attach-btn" style="border:1px solid var(--line);white-space:nowrap;">ファイル添付</button>
+        <div class="field" id="bizinfo-modal-dropzone-field">
+          <label>ファイル</label>
+          <p style="font-size:11.5px;color:var(--muted);margin:0 0 8px;">
+            ドロップまたは選択したファイルをアップロードします。Googleへのログイン確認は行われません（社内共通のドライブに自動保存されます）。
+          </p>
+          <div id="bizinfo-dropzone">
+            <div id="bizinfo-dropzone-idle">
+              <div style="font-size:28px;margin-bottom:8px;">📎</div>
+              <div>ここにファイルをドラッグ＆ドロップ</div>
+              <div style="font-size:11.5px;color:var(--muted);margin-top:6px;">またはクリックしてファイルを選択</div>
+              <input type="file" id="bizinfo-file-input" style="display:none;">
+            </div>
+            <div id="bizinfo-dropzone-selected" style="display:none;">
+              <div style="font-size:28px;margin-bottom:8px;">📄</div>
+              <div id="bizinfo-selected-filename" style="word-break:break-all;font-size:12.5px;"></div>
+            </div>
+            <div id="bizinfo-dropzone-busy" style="display:none;">
+              <div class="spinner"></div>
+              <div id="bizinfo-dropzone-status" style="margin-top:10px;font-size:12.5px;color:var(--muted);"></div>
+            </div>
           </div>
+          <button type="button" class="btn btn-primary" id="bizinfo-upload-confirm-btn" style="display:none;width:100%;margin-top:12px;">このファイルをアップロードする</button>
+          <div id="bizinfo-attach-error" style="color:var(--danger);font-size:12.5px;margin-top:8px;min-height:16px;"></div>
         </div>
         <div class="field" style="display:flex;align-items:center;gap:6px;">
           <input type="checkbox" id="bizinfo-enabled-input" checked style="width:auto;">
@@ -819,36 +836,8 @@
       </div>
     </div>
 
-    <!-- ============ 業務情報 ファイル添付（Googleドライブへアップロード） ============ -->
-    <div class="modal-overlay" id="bizinfo-attach-modal">
-      <div class="modal">
-        <h3>ファイルを添付</h3>
-        <p style="font-size:12px;color:var(--muted);margin:-6px 0 12px;">
-          ファイルをドロップすると、Googleドライブへアップロードしてリンクを自動で取得します。Googleへのログイン確認は行われません（社内共通のドライブに自動保存されます）。
-        </p>
-        <div id="bizinfo-dropzone">
-          <div id="bizinfo-dropzone-idle">
-            <div style="font-size:28px;margin-bottom:8px;">📎</div>
-            <div>ここにファイルをドラッグ＆ドロップ</div>
-            <div style="font-size:11.5px;color:var(--muted);margin-top:6px;">またはクリックしてファイルを選択</div>
-            <input type="file" id="bizinfo-file-input" style="display:none;">
-          </div>
-          <div id="bizinfo-dropzone-selected" style="display:none;">
-            <div style="font-size:28px;margin-bottom:8px;">📄</div>
-            <div id="bizinfo-selected-filename" style="word-break:break-all;font-size:12.5px;"></div>
-          </div>
-          <div id="bizinfo-dropzone-busy" style="display:none;">
-            <div class="spinner"></div>
-            <div id="bizinfo-dropzone-status" style="margin-top:10px;font-size:12.5px;color:var(--muted);"></div>
-          </div>
-        </div>
-        <button class="btn btn-primary" id="bizinfo-upload-confirm-btn" style="display:none;width:100%;margin-top:12px;">このファイルをアップロードする</button>
-        <div id="bizinfo-attach-error" style="color:var(--danger);font-size:12.5px;margin-top:8px;min-height:16px;"></div>
-        <div class="row-btns">
-          <button class="btn btn-ghost" id="bizinfo-attach-cancel" style="border:1px solid var(--line);">閉じる</button>
-        </div>
-      </div>
-    </div>
+    <!-- 業務情報「更新」ボタン用の隠しファイル入力（1個を使い回す） -->
+    <input type="file" id="bizinfo-update-file-input" style="display:none;">
 
     <!-- ============ カレンダー管理 ============ -->
     <section id="view-calendar" style="display:none;">
@@ -2652,9 +2641,12 @@ function renderBizInfoTable(){
     tr.dataset.id = item.id;
     tr.style.cursor = canManage ? "grab" : "default";
     if(!canManage) tr.style.opacity = "0.45";
+    const nameCell = item.lastFileName
+      ? `${escapeHtml(item.name||"")}<div style="font-size:11px;color:var(--muted);margin-top:2px;">元ファイル：${escapeHtml(item.lastFileName)}</div>`
+      : escapeHtml(item.name||"");
     tr.innerHTML = `
       <td style="width:24px;color:var(--muted);">${canManage ? "⠿" : ""}</td>
-      <td>${escapeHtml(item.name||"")}</td>
+      <td>${nameCell}</td>
       <td>${item.enabled!==false ? "有効" : "無効"}</td>
       <td class="actions"></td>
     `;
@@ -2666,12 +2658,13 @@ function renderBizInfoTable(){
       });
     }
     const actionsTd = tr.querySelector(".actions");
-    const shortcutBtn = document.createElement("button");
-    shortcutBtn.className = "btn btn-ghost"; shortcutBtn.textContent = "ファイル修正";
-    shortcutBtn.style.border = "1px solid var(--line)";
-    shortcutBtn.disabled = !canManage;
-    shortcutBtn.addEventListener("click", ()=> openBizInfoEditScreen(item));
-    actionsTd.appendChild(shortcutBtn);
+    const updateBtn = document.createElement("button");
+    updateBtn.className = "btn btn-ghost"; updateBtn.textContent = "更新";
+    updateBtn.title = "ファイルを選び直して、内容を上書きします";
+    updateBtn.style.border = "1px solid var(--line)";
+    updateBtn.disabled = !canManage;
+    updateBtn.addEventListener("click", ()=> startBizInfoFileUpdate(item));
+    actionsTd.appendChild(updateBtn);
     const editBtn = document.createElement("button");
     editBtn.className = "btn btn-ghost"; editBtn.textContent = "編集";
     editBtn.style.border = "1px solid var(--line)";
@@ -2724,27 +2717,50 @@ async function saveBizInfoOrder(){
     toast("並び順の保存に失敗しました。権限をご確認ください。");
   }
 }
-// 編集用リンク（Googleドライブでそのファイルを開くページ）のショートカット（.url）ファイルを、
-// ブラウザのダウンロード機能を使ってダウンロードする（そのままデスクトップ等に保存できる）
-function openBizInfoEditScreen(item){
-  const fileId = extractDriveFileId(item.driveUrl);
-  if(!fileId){
-    toast("Googleドライブのリンクからファイルを特定できませんでした。");
-    return;
-  }
-  const editUrl = `https://docs.google.com/spreadsheets/d/${fileId}/edit`;
-  // ショートカットファイルのダウンロードは、Windowsの「インターネットから取得したファイル」保護
-  // （Mark of the Web）により毎回警告が出てしまうため、直接新しいタブで開く方式に変更した。
-  window.open(editUrl, "_blank", "noopener");
+// 一覧の「更新」ボタン：ファイルを選び直して、既存の業務情報項目の中身を上書きする
+// （フルパスそのものはブラウザのセキュリティ上取得できないため、選び直した回数分だけ
+// 　ファイル選択ダイアログが開く「ワンクリック再選択」方式にしている。ファイル名は次回の
+// 　目印として保存する。ブラウザは直前に選んだフォルダを覚えていることが多いので、
+// 　実際の手間はダイアログを開いてクリックするだけで済むことが多い）
+let bizInfoUpdatingItemId = null;
+function startBizInfoFileUpdate(item){
+  bizInfoUpdatingItemId = item.id;
+  document.getElementById("bizinfo-update-file-input").click();
 }
+document.getElementById("bizinfo-update-file-input")?.addEventListener("change", async (e)=>{
+  const file = e.target.files[0];
+  e.target.value = "";
+  const itemId = bizInfoUpdatingItemId;
+  bizInfoUpdatingItemId = null;
+  if(!file || !itemId) return;
+  const item = bizInfoItemsAll.find(i=>i.id===itemId);
+  if(!item) return;
+  toast(`アップロード中…（${file.name}）`);
+  try{
+    const { path: newFileId, webViewLink } = await uploadFileToStorage(file);
+    await updateDoc(doc(db,"business_info_items", itemId), {
+      driveUrl: webViewLink, fileId: newFileId, lastFileName: file.name
+    });
+    if(item.fileId && item.fileId !== newFileId){
+      deleteFileFromStorage(item.fileId); // 失敗しても無視してよい（storage-helper.js側で握りつぶし済み）
+    }
+    toast("更新しました。");
+  }catch(e){
+    toast(e.message || "更新に失敗しました。");
+  }
+});
 let editingBizInfoId = null;
+let pendingBizInfoUpload = null; // {driveUrl, fileId, fileName} 追加時にアップロードしたファイルの一時保存
 function openBizInfoEditModal(item){
   editingBizInfoId = item ? item.id : null;
+  pendingBizInfoUpload = null;
   document.getElementById("bizinfo-edit-modal-title").textContent = item ? "業務情報を編集" : "業務情報を追加";
   document.getElementById("bizinfo-name-input").value = item ? (item.name||"") : "";
-  document.getElementById("bizinfo-url-input").value = item ? (item.driveUrl||"") : "";
   document.getElementById("bizinfo-enabled-input").checked = item ? (item.enabled!==false) : true;
   document.getElementById("bizinfo-edit-error").textContent = "";
+  // ファイルの添付欄は「追加」の時だけ表示する（既存項目の中身の差し替えは一覧の「更新」ボタンで行う）
+  document.getElementById("bizinfo-modal-dropzone-field").style.display = item ? "none" : "block";
+  resetBizInfoDropzone();
   document.getElementById("bizinfo-edit-modal").classList.add("show");
 }
 document.getElementById("bizinfo-add-btn")?.addEventListener("click", ()=> openBizInfoEditModal(null));
@@ -2754,19 +2770,19 @@ document.getElementById("bizinfo-edit-cancel-btn")?.addEventListener("click", ()
 document.getElementById("bizinfo-edit-save-btn")?.addEventListener("click", async ()=>{
   const errEl = document.getElementById("bizinfo-edit-error");
   const name = document.getElementById("bizinfo-name-input").value.trim();
-  const driveUrl = document.getElementById("bizinfo-url-input").value.trim();
   const enabled = document.getElementById("bizinfo-enabled-input").checked;
   if(!name){ errEl.textContent = "業務情報名を入力してください。"; return; }
-  if(!driveUrl){ errEl.textContent = "Googleドライブのリンクを入力してください。"; return; }
-  const fileId = extractDriveFileId(driveUrl);
-  if(!fileId){ errEl.textContent = "リンクからファイルを特定できませんでした。URLをご確認ください。"; return; }
   try{
     if(editingBizInfoId){
-      await updateDoc(doc(db,"business_info_items", editingBizInfoId), { name, driveUrl, fileId, enabled });
+      await updateDoc(doc(db,"business_info_items", editingBizInfoId), { name, enabled });
       toast("更新しました。");
     } else {
+      if(!pendingBizInfoUpload){ errEl.textContent = "ファイルを追加してください。"; return; }
       const maxOrder = bizInfoItemsAll.reduce((m,i)=>Math.max(m,i.order??0),0);
-      await addDoc(collection(db,"business_info_items"), { name, driveUrl, fileId, enabled, infoManagers: [], order: maxOrder+10 });
+      await addDoc(collection(db,"business_info_items"), {
+        name, driveUrl: pendingBizInfoUpload.driveUrl, fileId: pendingBizInfoUpload.fileId,
+        lastFileName: pendingBizInfoUpload.fileName, enabled, infoManagers: [], order: maxOrder+10
+      });
       toast("追加しました。");
     }
     document.getElementById("bizinfo-edit-modal").classList.remove("show");
@@ -2776,9 +2792,11 @@ document.getElementById("bizinfo-edit-save-btn")?.addEventListener("click", asyn
 });
 
 /* =========================================================
-   業務情報：ファイル添付（Googleドライブへアップロード）
+   業務情報：ファイル添付（追加モーダル内、Googleドライブへアップロード）
    ※ 業務情報タブは、選んだファイルをその場でプレビュー表示するため、
    （お知らせ添付とは違い）実際にGoogleドライブ上に置かれたファイルである必要がある。
+   アップロードが完了しても、このモーダル自体は閉じない（名前入力・有効チェックと合わせて
+   「保存」を押すまでは pendingBizInfoUpload に保持しておくだけ）。
 ========================================================= */
 let bizInfoPendingUploadFile = null;
 function resetBizInfoDropzone(){
@@ -2787,6 +2805,7 @@ function resetBizInfoDropzone(){
   document.getElementById("bizinfo-dropzone-selected").style.display = "none";
   document.getElementById("bizinfo-dropzone-busy").style.display = "none";
   document.getElementById("bizinfo-upload-confirm-btn").style.display = "none";
+  document.getElementById("bizinfo-attach-error").textContent = "";
 }
 function selectBizInfoFileForUpload(file){
   bizInfoPendingUploadFile = file;
@@ -2806,14 +2825,14 @@ async function uploadFileForBizInfo(file){
   document.getElementById("bizinfo-upload-confirm-btn").style.display = "none";
   busyEl.style.display = "block";
   try{
-    const { webViewLink } = await uploadFileToStorage(file, (msg)=>{ statusEl.textContent = msg; });
-    document.getElementById("bizinfo-url-input").value = webViewLink;
-    toast("ファイルをアップロードし、リンクを取得しました。");
-    document.getElementById("bizinfo-attach-modal").classList.remove("show");
-    resetBizInfoDropzone();
+    const { path: fileId, webViewLink } = await uploadFileToStorage(file, (msg)=>{ statusEl.textContent = msg; });
+    pendingBizInfoUpload = { driveUrl: webViewLink, fileId, fileName: file.name };
+    document.getElementById("bizinfo-selected-filename").textContent = `アップロード済み：${file.name}`;
+    document.getElementById("bizinfo-dropzone-selected").style.display = "block";
+    toast("ファイルをアップロードしました。「保存」を押すと追加されます。");
+    bizInfoPendingUploadFile = null;
   }catch(e){
     errEl.textContent = e.message || "アップロードに失敗しました。";
-    busyEl.style.display = "none";
     document.getElementById("bizinfo-dropzone-selected").style.display = "block";
     document.getElementById("bizinfo-upload-confirm-btn").style.display = "block";
     statusEl.textContent = "";
@@ -2822,17 +2841,9 @@ async function uploadFileForBizInfo(file){
   busyEl.style.display = "none";
   statusEl.textContent = "";
 }
-document.getElementById("bizinfo-attach-btn")?.addEventListener("click", ()=>{
-  document.getElementById("bizinfo-attach-error").textContent = "";
-  resetBizInfoDropzone();
-  document.getElementById("bizinfo-attach-modal").classList.add("show");
-});
-document.getElementById("bizinfo-attach-cancel")?.addEventListener("click", ()=>{
-  document.getElementById("bizinfo-attach-modal").classList.remove("show");
-});
 const bizInfoDropzone = document.getElementById("bizinfo-dropzone");
 bizInfoDropzone?.addEventListener("click", ()=>{
-  if(bizInfoPendingUploadFile) return; // 選択済みの間はファイル再選択させない
+  if(bizInfoPendingUploadFile || pendingBizInfoUpload) return; // 選択・アップロード済みの間は再選択させない
   document.getElementById("bizinfo-file-input").click();
 });
 document.getElementById("bizinfo-file-input")?.addEventListener("change", (e)=>{
@@ -2853,6 +2864,7 @@ document.getElementById("bizinfo-file-input")?.addEventListener("change", (e)=>{
   });
 });
 bizInfoDropzone?.addEventListener("drop", (e)=>{
+  if(pendingBizInfoUpload) return; // 追加モーダルで既にアップロード済みなら差し替えさせない
   const file = e.dataTransfer.files && e.dataTransfer.files[0];
   if(file) uploadFileForBizInfo(file);
 });
