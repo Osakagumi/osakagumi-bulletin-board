@@ -71,6 +71,8 @@
   .perm-matrix-table thead th.perm-matrix-corner{left:0;z-index:4;}
   .perm-matrix-table tbody th{position:sticky;left:0;background:#fff;z-index:1;text-align:left;font-weight:600;}
   .perm-matrix-table input[type="checkbox"]{width:auto;}
+  .perm-matrix-table th.matrix-toggle-th{cursor:pointer;}
+  .perm-matrix-table th.matrix-toggle-th:hover{filter:brightness(0.94);}
   #bizinfo-dropzone{
     border:2px dashed var(--line);border-radius:10px;padding:28px 14px;text-align:center;color:var(--muted);
     cursor:pointer;transition:border-color .15s,background .15s;
@@ -3364,6 +3366,9 @@ function renderTabMatrix(){
   tabDefs.forEach(t=>{
     const th = document.createElement("th");
     th.textContent = t.label;
+    th.className = "matrix-toggle-th";
+    th.title = "クリックで列全体（全社員）のON/OFFを切り替えます";
+    th.addEventListener("click", ()=> toggleTabMatrixColumn(t.id));
     headRow.appendChild(th);
   });
   thead.appendChild(headRow);
@@ -3374,6 +3379,9 @@ function renderTabMatrix(){
     const tr = document.createElement("tr");
     const nameTh = document.createElement("th");
     nameTh.textContent = emp.name || emp.email;
+    nameTh.className = "matrix-toggle-th";
+    nameTh.title = "クリックで行全体（全タブ）のON/OFFを切り替えます";
+    nameTh.addEventListener("click", ()=> toggleTabMatrixRow(emp));
     tr.appendChild(nameTh);
     const empHiddenTabs = Array.isArray(emp.hiddenTabs) ? emp.hiddenTabs : [];
     tabDefs.forEach(t=>{
@@ -3411,6 +3419,56 @@ async function toggleTabMatrixCell(cb, emp, tabId){
     toast("更新に失敗しました。権限をご確認ください。");
   }finally{
     cb.disabled = false;
+  }
+}
+// 見出しクリック：列全体（対象タブ×全社員）のON/OFFを一括切り替える
+// 判定基準：現在、全員が表示中（＝どの社員の非表示リストにも含まれていない）なら、
+// 「全員表示済み」とみなして全員非表示に倒す。ひとりでも非表示の社員がいれば、逆に全員表示に揃える。
+async function toggleTabMatrixColumn(tabId){
+  const roster = employeesAll.filter(e=>!e.hidden);
+  if(roster.length===0) return;
+  const allVisible = roster.every(emp=>{
+    const hiddenTabs = Array.isArray(emp.hiddenTabs) ? emp.hiddenTabs : [];
+    return !hiddenTabs.includes(tabId);
+  });
+  const wrap = document.getElementById("tab-matrix-wrap");
+  if(wrap){ wrap.style.opacity = "0.5"; wrap.style.pointerEvents = "none"; }
+  let failCount = 0;
+  await Promise.all(roster.map(async emp=>{
+    const currentHidden = Array.isArray(emp.hiddenTabs) ? emp.hiddenTabs : [];
+    const newHidden = allVisible
+      ? [...new Set([...currentHidden, tabId])] // 全員表示中だったので、全員非表示にする
+      : currentHidden.filter(id=>id!==tabId); // 誰か非表示だったので、全員表示にする
+    try{
+      await updateDoc(doc(db,"employees", emp.email), { hiddenTabs: newHidden });
+      emp.hiddenTabs = newHidden;
+    }catch(e){
+      failCount++;
+    }
+  }));
+  if(wrap){ wrap.style.opacity = ""; wrap.style.pointerEvents = ""; }
+  toast(failCount===0 ? "列全体を更新しました。" : `更新に失敗した社員が${failCount}件あります。権限をご確認ください。`);
+  renderTabMatrix();
+}
+// 氏名クリック：行全体（対象社員×全タブ）のON/OFFを一括切り替える
+// 判定基準は列と同様（全タブ表示中なら全タブ非表示へ、ひとつでも非表示があれば全タブ表示へ）
+async function toggleTabMatrixRow(emp){
+  const tabDefs = getFullHideableList();
+  if(tabDefs.length===0) return;
+  const currentHidden = Array.isArray(emp.hiddenTabs) ? emp.hiddenTabs : [];
+  const allVisible = tabDefs.every(t=> !currentHidden.includes(t.id));
+  const newHidden = allVisible ? tabDefs.map(t=>t.id) : [];
+  const wrap = document.getElementById("tab-matrix-wrap");
+  if(wrap){ wrap.style.opacity = "0.5"; wrap.style.pointerEvents = "none"; }
+  try{
+    await updateDoc(doc(db,"employees", emp.email), { hiddenTabs: newHidden });
+    emp.hiddenTabs = newHidden;
+    toast("行全体を更新しました。");
+  }catch(e){
+    toast("更新に失敗しました。権限をご確認ください。");
+  }finally{
+    if(wrap){ wrap.style.opacity = ""; wrap.style.pointerEvents = ""; }
+    renderTabMatrix();
   }
 }
 function renderEmployees(){
