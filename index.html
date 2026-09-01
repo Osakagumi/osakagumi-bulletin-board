@@ -611,7 +611,7 @@
   .wb-table{width:100%;border-collapse:collapse;font-size:var(--wb-font-size);background:var(--surface);border:1.5px solid var(--line);border-radius:10px;overflow:hidden;}
   .wb-table th{text-align:left;padding:var(--wb-row-pad-v, 9px) 10px;background:#F0F3F8;color:var(--muted);font-size:calc(var(--wb-font-size) * 0.885);font-weight:700;border-bottom:1px solid var(--line);}
   .wb-table td{padding:var(--wb-row-pad-v, 9px) 10px;border-bottom:1px solid var(--line);vertical-align:middle;}
-  .wb-table th:first-child, .wb-table td:first-child{
+  .wb-table th.dept-cell, .wb-table td.dept-cell{
     width:calc(var(--wb-font-size) * 4); max-width:calc(var(--wb-font-size) * 4);
     white-space:nowrap; overflow:hidden;
   }
@@ -627,8 +627,8 @@
   }
   .wb-editable{cursor:pointer;}
   .wb-editable:hover{text-decoration:underline;}
-  .wb-table .drag-grip-cell{width:0;padding:0;overflow:hidden;color:var(--muted);cursor:grab;text-align:center;}
-  #wb-preset-columns.wb-reorder-mode .wb-table .drag-grip-cell{width:28px;padding:var(--wb-row-pad-v, 9px) 4px;}
+  .wb-table .drag-grip-cell{display:none;color:var(--muted);cursor:grab;text-align:center;width:28px;padding:var(--wb-row-pad-v, 9px) 4px;}
+  #wb-preset-columns.wb-reorder-mode .wb-table .drag-grip-cell{display:table-cell;}
   #wb-preset-columns .wb-table tr.wb-order-dragging{opacity:0.4;}
   .wb-board{display:grid;grid-template-columns:repeat(var(--wb-board-cols, 5), minmax(150px, 1fr));gap:10px;overflow-x:auto;padding-bottom:4px;}
   @media (max-width:900px){
@@ -4675,6 +4675,7 @@ const deptMeasureCtx = deptMeasureCanvas.getContext("2d");
 const DEPT_CELL_MIN_FONT_PX = 8; // これ未満に縮めると読みにくくなる下限
 const DEPT_CELL_H_PADDING = 20; // 左右パディング合計（.wb-table tdのpadding指定と合わせる）
 function setDeptCellText(td, text){
+  td.className = "dept-cell";
   td.textContent = text;
   const fontPx = wbFontSizePx || 13;
   const targetWidth = (fontPx * 4) - DEPT_CELL_H_PADDING - 2;
@@ -4743,7 +4744,7 @@ function renderWbList(){
     const table = document.createElement("table");
     table.className = "wb-table";
     const thead = document.createElement("thead");
-    thead.innerHTML = `<tr><th>所属</th><th>氏名</th><th>状態</th><th>備考</th></tr>`;
+    thead.innerHTML = `<tr><th class="dept-cell">所属</th><th>氏名</th><th>状態</th><th>備考</th></tr>`;
     const tbody = document.createElement("tbody");
     chunk.forEach(emp=> tbody.appendChild(buildRow(emp)));
     table.appendChild(thead); table.appendChild(tbody);
@@ -5122,7 +5123,7 @@ function renderWbPresetTable(){
     const table = document.createElement("table");
     table.className = "wb-table";
     const thead = document.createElement("thead");
-    thead.innerHTML = `<tr><th class="drag-grip-cell"></th><th>所属</th><th>氏名</th><th>状態</th><th>備考</th></tr>`;
+    thead.innerHTML = `<tr><th class="drag-grip-cell"></th><th class="dept-cell">所属</th><th>氏名</th><th>状態</th><th>備考</th></tr>`;
     const tbody = document.createElement("tbody");
     chunk.forEach(emp=>{
       const preset = editingDefaults ? (wbPresetDefaults[emp.email] || null) : (dayPresets[emp.email] || null);
