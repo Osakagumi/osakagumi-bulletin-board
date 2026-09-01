@@ -609,8 +609,8 @@
   }
   #view-whereabouts{ --wb-font-size: 13px; }
   .wb-table{width:100%;border-collapse:collapse;font-size:var(--wb-font-size);background:var(--surface);border:1.5px solid var(--line);border-radius:10px;overflow:hidden;}
-  .wb-table th{text-align:left;padding:9px 10px;background:#F0F3F8;color:var(--muted);font-size:calc(var(--wb-font-size) * 0.885);font-weight:700;border-bottom:1px solid var(--line);}
-  .wb-table td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:middle;}
+  .wb-table th{text-align:left;padding:var(--wb-row-pad-v, 9px) 10px;background:#F0F3F8;color:var(--muted);font-size:calc(var(--wb-font-size) * 0.885);font-weight:700;border-bottom:1px solid var(--line);}
+  .wb-table td{padding:var(--wb-row-pad-v, 9px) 10px;border-bottom:1px solid var(--line);vertical-align:middle;}
   .wb-table tr.dept-row td{background:#FAFBFC;font-size:calc(var(--wb-font-size) * 0.846);font-weight:700;color:var(--brand-dark);letter-spacing:.03em;padding:6px 10px;}
   .wb-table tr:last-child td{border-bottom:none;}
   .wb-status-badge{display:inline-block;padding:4px 10px;border-radius:14px;font-size:calc(var(--wb-font-size) * 0.923);font-weight:700;color:#fff;white-space:nowrap;}
@@ -4692,6 +4692,29 @@ function renderWbList(){
     chunk.forEach(emp=> tbody.appendChild(buildRow(emp)));
     table.appendChild(thead); table.appendChild(tbody);
     container.appendChild(table);
+  }
+
+  // 画面の縦幅が十分あるとき（PC・サイネージ幅）は、文字サイズ設定はそのままに、
+  // 行の上下の余白（パディング）だけを必要な分だけ詰めて、縦スクロールが出ないようにする
+  const isWideEnough = window.innerWidth > 900;
+  if(isWideEnough){
+    fitWbListToHeight(container);
+  } else {
+    container.style.removeProperty("--wb-row-pad-v");
+  }
+}
+// 行き先「一覧」の各列（部署ごとにまとめた表）が、画面の縦幅に収まるよう行の余白を自動調整する。
+// 文字サイズ（行き先管理の設定）は変えず、パディングだけを「快適な既定値」から下限まで詰めていく。
+const WB_ROW_PAD_COMFORT = 9; // 既定のpadding（px）＝これまでの見た目
+const WB_ROW_PAD_MIN = 3; // これ未満に詰めると読みにくくなる下限
+function fitWbListToHeight(container){
+  container.style.setProperty("--wb-row-pad-v", `${WB_ROW_PAD_COMFORT}px`);
+  const rect = container.getBoundingClientRect();
+  const availableHeight = Math.max(150, window.innerHeight - rect.top - 16);
+  let pad = WB_ROW_PAD_COMFORT;
+  while(container.scrollHeight > availableHeight && pad > WB_ROW_PAD_MIN){
+    pad -= 1;
+    container.style.setProperty("--wb-row-pad-v", `${pad}px`);
   }
 }
 
