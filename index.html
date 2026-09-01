@@ -2837,8 +2837,7 @@ function openCheckoutModal(eq, targetStatus, mode){
   if(isLend){
     const select = document.getElementById("checkout-recipient-select");
     select.innerHTML = "";
-    const sortedEmployees = employeesAll.slice().filter(e=>!!e.email && !e.hidden)
-      .sort((a,b)=> (a.name||a.email).localeCompare(b.name||b.email, "ja"));
+    const sortedEmployees = sortEmployeesByNo(employeesAll.filter(e=>!!e.email && !e.hidden));
     sortedEmployees.forEach(emp=>{
       const opt = document.createElement("option");
       opt.value = emp.email;
@@ -3779,8 +3778,9 @@ function buildReadByModalHtml(n, empList){
   }).sort((a,b)=> a.dt.localeCompare(b.dt));
 
   const activeEmployees = empList.filter(e=>!e.hidden);
-  const unreadEmployees = activeEmployees.filter(e => !readEmails.some(re=>re.toLowerCase()===(e.email||"").toLowerCase()))
-    .sort((a,b)=> (a.name||"").localeCompare(b.name||"","ja"));
+  const unreadEmployees = sortEmployeesByNo(
+    activeEmployees.filter(e => !readEmails.some(re=>re.toLowerCase()===(e.email||"").toLowerCase()))
+  );
 
   let html = `<div style="font-size:12.5px;font-weight:700;color:var(--muted);margin:4px 0 6px;">既読者（${readRows.length}名）</div>`;
   if(readRows.length===0){
@@ -4393,8 +4393,8 @@ function renderEmpPickerNameSelect(){
   if(!deptSel || !nameList) return;
   const deptId = deptSel.value;
   const searchText = (searchInput?.value || "").trim();
-  // 所属(表示)順→社員番号順というアプリ共通の並び順に統一する
-  let list = getSortedEmployees().filter(e=> !deptId || empDepartments(e).includes(deptId));
+  // 社員番号順（行き先の表示順とは独立した、アプリ共通の並び順）に統一する
+  let list = sortEmployeesByNo(employeesAll.filter(e=>!e.hidden)).filter(e=> !deptId || empDepartments(e).includes(deptId));
   if(searchText){
     list = list.filter(e=> (e.name||"").startsWith(searchText));
   }
@@ -4588,6 +4588,20 @@ function getSortedEmployees(){
     const da = departmentSortIndex(empDepartments(a)[0]);
     const db = departmentSortIndex(empDepartments(b)[0]);
     if(da!==db) return da-db;
+    const na = a.employeeNo ? Number(a.employeeNo) : null;
+    const nb = b.employeeNo ? Number(b.employeeNo) : null;
+    const validA = na!==null && !isNaN(na);
+    const validB = nb!==null && !isNaN(nb);
+    if(validA && validB && na!==nb) return na-nb;
+    if(validA && !validB) return -1; // 社員番号ありを先に
+    if(!validA && validB) return 1;
+    return (a.name||"").localeCompare(b.name||"","ja");
+  });
+}
+// 「行き先」以外の画面・ダイアログ・コントロールで社員を列挙する際は、こちらの純粋な社員番号順を使う
+// （getSortedEmployeesは行き先専用で、「社員の表示順」システム設定を優先するため用途が異なる）
+function sortEmployeesByNo(list){
+  return list.slice().sort((a,b)=>{
     const na = a.employeeNo ? Number(a.employeeNo) : null;
     const nb = b.employeeNo ? Number(b.employeeNo) : null;
     const validA = na!==null && !isNaN(na);
@@ -5834,7 +5848,7 @@ function renderSafetyDashboardGeneral(responses){
     return;
   }
   const respMap = new Map((responses||[]).map(r=>[r.userEmail, r]));
-  const roster = getSortedEmployees();
+  const roster = sortEmployeesByNo(employeesAll.filter(e=>!e.hidden));
   const answeredCount = roster.filter(e=>respMap.has(e.email)).length;
   summary.textContent = `回答済み: ${answeredCount} / ${roster.length} 人`;
   if(roster.length===0){

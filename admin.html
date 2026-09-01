@@ -1845,7 +1845,7 @@ function renderReservationsTable(){
 let lastAdminEmails = [];
 function initAdminsListener(){
   onSnapshot(collection(db,"admins"), snap=>{
-    lastAdminEmails = snap.docs.map(d=>d.id);
+    lastAdminEmails = sortEmailsByEmployeeNo(snap.docs.map(d=>d.id));
     renderAdminsTable(lastAdminEmails);
   });
 }
@@ -1898,7 +1898,7 @@ document.getElementById("notice-cleanup-save-btn")?.addEventListener("click", as
 });
 function initPostersListener(){
   onSnapshot(collection(db,"announcement_posters"), snap=>{
-    lastPosterEmails = snap.docs.map(d=>d.id);
+    lastPosterEmails = sortEmailsByEmployeeNo(snap.docs.map(d=>d.id));
     renderPosters(lastPosterEmails);
   });
 }
@@ -1991,8 +1991,8 @@ function buildReadByModalHtml(n, empList){
   }).sort((a,b)=> a.dt.localeCompare(b.dt));
 
   const activeEmployees = empList.filter(e=>!e.hidden);
-  const unreadEmployees = activeEmployees.filter(e => !readEmails.some(re=>re.toLowerCase()===(e.email||"").toLowerCase()))
-    .sort((a,b)=> (a.name||"").localeCompare(b.name||"","ja"));
+  // empListは既に社員番号順（employeesAll由来）なので、絞り込むだけで順序は保たれる
+  const unreadEmployees = activeEmployees.filter(e => !readEmails.some(re=>re.toLowerCase()===(e.email||"").toLowerCase()));
 
   let html = `<div style="font-size:12.5px;font-weight:700;color:var(--muted);margin:4px 0 6px;">既読者（${readRows.length}名）</div>`;
   if(readRows.length===0){
@@ -2211,7 +2211,7 @@ let editingDeptId = null;
 let lastSafetySenderEmails = [];
 function initSafetySendersListener(){
   onSnapshot(collection(db,"safety_senders"), snap=>{
-    lastSafetySenderEmails = snap.docs.map(d=>d.id);
+    lastSafetySenderEmails = sortEmailsByEmployeeNo(snap.docs.map(d=>d.id));
   });
 }
 function initDepartmentsListener(){
@@ -2381,7 +2381,7 @@ document.getElementById("status-seed-btn").addEventListener("click", async ()=>{
 let lastWbEditorEmails = [];
 function initWbEditorsListener(){
   onSnapshot(collection(db,"whereabouts_editors"), snap=>{
-    lastWbEditorEmails = snap.docs.map(d=>d.id);
+    lastWbEditorEmails = sortEmailsByEmployeeNo(snap.docs.map(d=>d.id));
     renderWbEditors(lastWbEditorEmails);
   });
 }
@@ -2414,7 +2414,7 @@ function renderWbEditors(list){
 let lastEqManagerEmails = [];
 function initEquipmentManagersListener(){
   onSnapshot(collection(db,"equipment_managers"), snap=>{
-    lastEqManagerEmails = snap.docs.map(d=>d.id);
+    lastEqManagerEmails = sortEmailsByEmployeeNo(snap.docs.map(d=>d.id));
     renderEquipmentManagers(lastEqManagerEmails);
   });
 }
@@ -2856,7 +2856,7 @@ document.getElementById("bizinfo-upload-confirm-btn")?.addEventListener("click",
 let lastContractEditorEmails = [];
 function initContractEditorsListener(){
   onSnapshot(collection(db,"contract_editors"), snap=>{
-    lastContractEditorEmails = snap.docs.map(d=>d.id);
+    lastContractEditorEmails = sortEmailsByEmployeeNo(snap.docs.map(d=>d.id));
     renderContractEditors(lastContractEditorEmails);
   });
 }
@@ -2964,7 +2964,7 @@ function renderContractEditors(list){
 let lastCalEditorEmails = [];
 function initCalendarEditorsListener(){
   onSnapshot(collection(db,"calendar_editors"), snap=>{
-    lastCalEditorEmails = snap.docs.map(d=>d.id);
+    lastCalEditorEmails = sortEmailsByEmployeeNo(snap.docs.map(d=>d.id));
     renderCalendarEditors(lastCalEditorEmails);
   });
 }
@@ -3192,6 +3192,17 @@ function sortByDeptAndEmployeeNo(list){
     if(validA && !validB) return -1;
     if(!validA && validB) return 1;
     return (a.name||"").localeCompare(b.name||"","ja");
+  });
+}
+// メールアドレスの配列（権限保持者一覧など）を、対応する社員の社員番号順に並び替える。
+// employeesAll自体が既に社員番号順（3160行目付近）なので、その並び順に合わせて絞り込むだけでよい。
+function sortEmailsByEmployeeNo(emails){
+  const order = new Map(employeesAll.map((e,idx)=>[e.email, idx]));
+  return emails.slice().sort((a,b)=>{
+    const ia = order.has(a) ? order.get(a) : Infinity;
+    const ib = order.has(b) ? order.get(b) : Infinity;
+    if(ia!==ib) return ia-ib;
+    return a.localeCompare(b, "ja"); // 社員データがまだ無い場合（読み込み中など）のフォールバック
   });
 }
 // 各種権限の一覧（コレクション名・チェックボックスのラベル・現在の付与者一覧を取得する関数）
@@ -3473,7 +3484,8 @@ function renderEmployees(){
   body.innerHTML = "";
   const searchInput = document.getElementById("emp-search-input");
   const searchText = (searchInput?.value || "").trim();
-  let list = sortByDeptAndEmployeeNo(employeesAll);
+  // employeesAllは既に社員番号順（initEmployeesListener内でソート済み）なので、そのまま使う
+  let list = employeesAll.slice();
   if(searchText){
     list = list.filter(e=> (e.name||"").startsWith(searchText));
   }
