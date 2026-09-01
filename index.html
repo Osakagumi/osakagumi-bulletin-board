@@ -4539,7 +4539,7 @@ function getWbNoteLines(emp){
   if(tl){
     if(tl.type==="am") tlText = "AM休";
     else if(tl.type==="pm") tlText = "PM休";
-    else tlText = `時間休 ${tl.start}〜${tl.end}`;
+    else tlText = `休${tl.start}〜${tl.end}`;
   }
   return { tlText, baseNote };
 }
@@ -5008,7 +5008,7 @@ function presetNoteLines(preset){
   if(preset.timeLeaveType){
     if(preset.timeLeaveType==="am") tlText = "AM休";
     else if(preset.timeLeaveType==="pm") tlText = "PM休";
-    else tlText = `時間休 ${preset.timeLeaveStart}〜${preset.timeLeaveEnd}`;
+    else tlText = `休${preset.timeLeaveStart}〜${preset.timeLeaveEnd}`;
   }
   return { tlText, baseNote: preset.note || "" };
 }
