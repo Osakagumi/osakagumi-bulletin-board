@@ -1072,22 +1072,34 @@
               <button class="btn-primary" id="wb-preset-bulk-done-btn" style="display:none;">完了</button>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
-              <button class="btn-ghost" id="wb-order-open-btn" style="border:1px solid var(--line);">社員の表示順を編集</button>
+              <button class="btn-ghost" id="wb-order-toggle-btn" style="border:1px solid var(--line);">社員の表示順を編集</button>
               <button class="btn-primary" id="wb-preset-save-btn">保存</button>
             </div>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
-            <span style="font-size:12.5px;color:var(--muted);white-space:nowrap;">保存済：</span>
-            <div id="wb-preset-dates-list" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+
+          <!-- 通常の事前設定編集UI（表示順の並び替えモード中は隠す） -->
+          <div id="wb-preset-normal-wrap">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+              <span style="font-size:12.5px;color:var(--muted);white-space:nowrap;">保存済：</span>
+              <div id="wb-preset-dates-list" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+            </div>
+            <div class="howto" id="wb-preset-date-label"></div>
+            <div class="wb-list-columns" id="wb-preset-columns"></div>
+            <p style="font-size:11.5px;color:var(--muted);margin-top:10px;">
+              指定できるのは、カレンダー上で休日になっていない日のみです。事前設定は最大7日分まで保持されます（過去の日付は自動的に削除されます）。<br>
+              「保存」を押すと、個別に変更していない社員も含めて、今表示されている内容がこの日の事前設定として保存されます。<br>
+              「保存済：」の「初期状態」を編集しておくと、事前設定していない日を開いたときの初期値として使われます。<br>
+              当日、本人が「自分の行き先を入力」でその場で変更した場合は、その内容が優先して表示されます。
+            </p>
           </div>
-          <div class="howto" id="wb-preset-date-label"></div>
-          <div class="wb-list-columns" id="wb-preset-columns"></div>
-          <p style="font-size:11.5px;color:var(--muted);margin-top:10px;">
-            指定できるのは、カレンダー上で休日になっていない日のみです。事前設定は最大7日分まで保持されます（過去の日付は自動的に削除されます）。<br>
-            「保存」を押すと、個別に変更していない社員も含めて、今表示されている内容がこの日の事前設定として保存されます。<br>
-            「保存済：」の「初期状態」を編集しておくと、事前設定していない日を開いたときの初期値として使われます。<br>
-            当日、本人が「自分の行き先を入力」でその場で変更した場合は、その内容が優先して表示されます。
-          </p>
+
+          <!-- 社員の表示順（並び替えモード中のみ表示。システム全体の設定） -->
+          <div id="wb-order-panel" style="display:none;">
+            <p style="font-size:12px;color:var(--muted);margin:0 0 12px;">
+              ドラッグして並び順を変更できます。ここで設定した順番は個人ごとの設定ではなく、「行き先」の一覧・行き先別・事前設定など、システム全体の表示順として全員に反映されます。
+            </p>
+            <div id="wb-order-list" style="max-width:480px;border:1px solid var(--line);border-radius:8px;"></div>
+          </div>
         </div>
       </section>
 
@@ -1247,20 +1259,6 @@
         <button class="btn-ghost" id="contract-delete-btn" style="border:1px solid var(--danger);color:var(--danger);display:none;">削除</button>
         <button class="btn-ghost" id="contract-cancel-btn" style="border:1px solid var(--line);">キャンセル</button>
         <button class="btn-primary" id="contract-save-btn">保存</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ============ 行き先：社員の表示順 ============ -->
-  <div class="modal-overlay" id="wb-order-modal">
-    <div class="modal" style="max-width:480px;">
-      <h3>社員の表示順</h3>
-      <p style="font-size:12px;color:var(--muted);margin:-6px 0 12px;">
-        ドラッグして並び順を変更できます。ここで設定した順番は個人ごとの設定ではなく、「行き先」の一覧・行き先別・事前設定など、システム全体の表示順として全員に反映されます。
-      </p>
-      <div id="wb-order-list" style="max-height:60vh;overflow-y:auto;border:1px solid var(--line);border-radius:8px;"></div>
-      <div class="modal-actions">
-        <button class="btn-ghost" id="wb-order-close-btn" style="border:1px solid var(--line);">閉じる</button>
       </div>
     </div>
   </div>
@@ -5402,12 +5400,21 @@ function renderWbOrderList(){
     listEl.appendChild(row);
   });
 }
-document.getElementById("wb-order-open-btn")?.addEventListener("click", ()=>{
-  renderWbOrderList();
-  document.getElementById("wb-order-modal").classList.add("show");
-});
-document.getElementById("wb-order-close-btn")?.addEventListener("click", ()=>{
-  document.getElementById("wb-order-modal").classList.remove("show");
+document.getElementById("wb-order-toggle-btn")?.addEventListener("click", ()=>{
+  const panel = document.getElementById("wb-order-panel");
+  const normalWrap = document.getElementById("wb-preset-normal-wrap");
+  const btn = document.getElementById("wb-order-toggle-btn");
+  const entering = panel.style.display === "none";
+  if(entering){
+    renderWbOrderList();
+    panel.style.display = "block";
+    normalWrap.style.display = "none";
+    btn.textContent = "完了";
+  } else {
+    panel.style.display = "none";
+    normalWrap.style.display = "block";
+    btn.textContent = "社員の表示順を編集";
+  }
 });
 async function saveWbOrder(){
   const rows = [...document.querySelectorAll("#wb-order-list .wb-order-row")];
