@@ -627,6 +627,12 @@
   }
   .wb-editable{cursor:pointer;}
   .wb-editable:hover{text-decoration:underline;}
+  .wb-order-row{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line);background:#fff;cursor:grab;}
+  .wb-order-row:last-child{border-bottom:none;}
+  .wb-order-row.dragging{opacity:0.4;cursor:grabbing;}
+  .wb-order-row .grip{color:var(--muted);width:16px;text-align:center;flex:0 0 auto;}
+  .wb-order-row .name{font-weight:600;font-size:13.5px;}
+  .wb-order-row .dept{font-size:11.5px;color:var(--muted);}
   .wb-board{display:grid;grid-template-columns:repeat(var(--wb-board-cols, 5), minmax(150px, 1fr));gap:10px;overflow-x:auto;padding-bottom:4px;}
   @media (max-width:900px){
     .wb-board{grid-template-columns:repeat(auto-fit,minmax(160px,1fr));}
@@ -1066,6 +1072,7 @@
               <button class="btn-primary" id="wb-preset-bulk-done-btn" style="display:none;">完了</button>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button class="btn-ghost" id="wb-order-open-btn" style="border:1px solid var(--line);">社員の表示順を編集</button>
               <button class="btn-primary" id="wb-preset-save-btn">保存</button>
             </div>
           </div>
@@ -1240,6 +1247,20 @@
         <button class="btn-ghost" id="contract-delete-btn" style="border:1px solid var(--danger);color:var(--danger);display:none;">削除</button>
         <button class="btn-ghost" id="contract-cancel-btn" style="border:1px solid var(--line);">キャンセル</button>
         <button class="btn-primary" id="contract-save-btn">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 行き先：社員の表示順 ============ -->
+  <div class="modal-overlay" id="wb-order-modal">
+    <div class="modal" style="max-width:480px;">
+      <h3>社員の表示順</h3>
+      <p style="font-size:12px;color:var(--muted);margin:-6px 0 12px;">
+        ドラッグして並び順を変更できます。ここで設定した順番は個人ごとの設定ではなく、「行き先」の一覧・行き先別・事前設定など、システム全体の表示順として全員に反映されます。
+      </p>
+      <div id="wb-order-list" style="max-height:60vh;overflow-y:auto;border:1px solid var(--line);border-radius:8px;"></div>
+      <div class="modal-actions">
+        <button class="btn-ghost" id="wb-order-close-btn" style="border:1px solid var(--line);">閉じる</button>
       </div>
     </div>
   </div>
@@ -4570,6 +4591,14 @@ function departmentSortIndex(id){
 }
 function getSortedEmployees(){
   return employeesAll.filter(e=>!e.hidden).slice().sort((a,b)=>{
+    // 「社員の表示順」（システム全体の設定、行き先の事前設定画面で編集）が設定されていれば最優先する
+    const hasOa = a.order!==undefined && a.order!==null;
+    const hasOb = b.order!==undefined && b.order!==null;
+    if(hasOa && hasOb && a.order!==b.order) return a.order-b.order;
+    if(hasOa && !hasOb) return -1; // 表示順が設定済みの社員を先に
+    if(!hasOa && hasOb) return 1;
+    // どちらも未設定の場合は、これまで通り部署順→社員番号順→氏名順にフォールバックする
+    // （新しく追加された社員は、表示順を編集し直すまでは一覧の末尾側に自動的に入る）
     const da = departmentSortIndex(empDepartments(a)[0]);
     const db = departmentSortIndex(empDepartments(b)[0]);
     if(da!==db) return da-db;
@@ -5347,6 +5376,74 @@ document.getElementById("wb-preset-save-btn").addEventListener("click", async ()
   }
   toast(`${formatDateJP(dateStr)}の内容を保存しました（${count}件を初期状態から反映）。`);
 });
+
+/* =========================================================
+   行き先：社員の表示順（システム全体の設定。個人ごとの設定ではない）
+   「事前設定」画面から開くモーダルで、単純な縦1列のドラッグ並び替えにしている
+   （一覧・事前設定の新聞折り返しレイアウトのまま並び替えると、列をまたいだ挿入位置の
+   　判定が複雑になるため、並び替え専用のシンプルな一覧を別に用意した）
+========================================================= */
+function renderWbOrderList(){
+  const listEl = document.getElementById("wb-order-list");
+  if(!listEl) return;
+  listEl.innerHTML = "";
+  getSortedEmployees().forEach(emp=>{
+    const row = document.createElement("div");
+    row.className = "wb-order-row";
+    row.draggable = true;
+    row.dataset.email = emp.email;
+    row.innerHTML = `
+      <span class="grip">⠿</span>
+      <div>
+        <div class="name">${escapeHtml(emp.name || emp.email)}</div>
+        <div class="dept">${escapeHtml(primaryDepartmentName(emp))}</div>
+      </div>
+    `;
+    listEl.appendChild(row);
+  });
+}
+document.getElementById("wb-order-open-btn")?.addEventListener("click", ()=>{
+  renderWbOrderList();
+  document.getElementById("wb-order-modal").classList.add("show");
+});
+document.getElementById("wb-order-close-btn")?.addEventListener("click", ()=>{
+  document.getElementById("wb-order-modal").classList.remove("show");
+});
+async function saveWbOrder(){
+  const rows = [...document.querySelectorAll("#wb-order-list .wb-order-row")];
+  let failCount = 0;
+  await Promise.all(rows.map((row, idx)=>
+    updateDoc(doc(db,"employees", row.dataset.email), { order: (idx+1)*10 }).catch(()=>{ failCount++; })
+  ));
+  toast(failCount===0 ? "表示順を保存しました。" : `一部の保存に失敗しました（${failCount}件）。権限をご確認ください。`);
+}
+{
+  const orderListEl = document.getElementById("wb-order-list");
+  orderListEl?.addEventListener("dragstart", (e)=>{
+    const row = e.target.closest(".wb-order-row");
+    if(!row) return;
+    row.classList.add("dragging");
+  });
+  orderListEl?.addEventListener("dragend", (e)=>{
+    const row = e.target.closest(".wb-order-row");
+    if(!row) return;
+    row.classList.remove("dragging");
+    saveWbOrder();
+  });
+  orderListEl?.addEventListener("dragover", (e)=>{
+    const dragging = orderListEl.querySelector(".wb-order-row.dragging");
+    if(!dragging) return;
+    e.preventDefault();
+    const after = [...orderListEl.querySelectorAll(".wb-order-row:not(.dragging)")].reduce((closest, el)=>{
+      const box = el.getBoundingClientRect();
+      const offset = e.clientY - box.top - box.height/2;
+      if(offset < 0 && offset > closest.offset) return { offset, element: el };
+      return closest;
+    }, { offset:-Infinity, element:null }).element;
+    if(after==null) orderListEl.appendChild(dragging);
+    else orderListEl.insertBefore(dragging, after);
+  });
+}
 
 const WB_DEFAULTS_KEY = "_defaults";
 function isEditingWbDefaults(){
