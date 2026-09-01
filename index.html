@@ -1893,22 +1893,31 @@ function tryApplyOrgTabDefaults(){
     localStorage.setItem(TAB_ORDER_KEY, JSON.stringify(systemTabDefaults.tabOrder));
   }
 }
-// システム管理画面の「一般画面のタブ表示順」から、ダッシュボードカードの並び順を導き出して適用する。
+// システム管理画面の「一般画面のタブ表示順」（未設定ならタブ本来の既定順=ALL_VIEWS）から、
+// ダッシュボードカードの並び順を導き出して適用する。
 // 個人がダッシュボードカードを一度も並び替えていない場合のみ適用される既定値（tryApplyOrgTabDefaultsと同じ考え方）。
-// タブ順のうち、対応するダッシュボードカードを持つもの（DASH_CARD_BY_VIEWのキー）だけを抜き出し、
-// 既定レイアウトと同じ列数（左列2枚・右列はそれ以外）で振り分ける。
-const DASH_LEFT_COL_CARD_COUNT = 2;
+// 列数は固定せず、その時点の各カードの実際の高さを見て、左右の合計高さができるだけ均等になるよう振り分ける
+// （2列は同じ幅なので、今measureした高さをそのまま使って判断できる）。中身の分量はお知らせ件数などで
+// 変わるため、renderDashboard()のたびに呼び直して再計算している。
 function tryApplyOrgDashCardOrder(){
   if(hasPersonalDashCardOrderFlag !== false) return; // 個人設定がある、またはまだ判定できていない場合は何もしない
-  if(!systemTabDefaults || !Array.isArray(systemTabDefaults.tabOrder) || !systemTabDefaults.tabOrder.length) return;
-  const orderedCardIds = systemTabDefaults.tabOrder
+  const baseOrder = (systemTabDefaults && Array.isArray(systemTabDefaults.tabOrder) && systemTabDefaults.tabOrder.length)
+    ? systemTabDefaults.tabOrder
+    : ALL_VIEWS;
+  const orderedCardIds = baseOrder
     .filter(view => DASH_CARD_BY_VIEW[view])
     .map(view => DASH_CARD_BY_VIEW[view]);
   if(orderedCardIds.length===0) return;
-  applyDashCardOrder({
-    left: orderedCardIds.slice(0, DASH_LEFT_COL_CARD_COUNT),
-    right: orderedCardIds.slice(DASH_LEFT_COL_CARD_COUNT)
+  let leftHeight = 0, rightHeight = 0;
+  const left = [], right = [];
+  orderedCardIds.forEach(id=>{
+    const el = document.getElementById(id);
+    if(!el || el.style.display==="none"){ return; } // 非表示カード（非表示タブ設定中）は高さ計算に含めない
+    const h = el.offsetHeight;
+    if(leftHeight <= rightHeight){ left.push(id); leftHeight += h; }
+    else { right.push(id); rightHeight += h; }
   });
+  applyDashCardOrder({ left, right });
 }
 function initSystemTabDefaultsListener(){
   onSnapshot(doc(db,"system_tab_defaults","general"), snap=>{
@@ -2225,6 +2234,10 @@ function renderDashboard(){
   }
   document.getElementById("dash-cal-prev-btn").disabled = (curYm <= minYm);
   document.getElementById("dash-cal-next-btn").disabled = (curYm >= maxYm);
+
+  // カード本文を描画し終えた（＝実際の高さが確定した）このタイミングで、個人設定が無い場合のみ
+  // 左右の高さバランスを再計算する。中身の分量は都度変わりうるため、描画のたびに再適用する。
+  tryApplyOrgDashCardOrder();
 }
 document.getElementById("dash-cal-prev-btn").addEventListener("click", ()=>{
   dashCalMonth--;
@@ -4704,18 +4717,22 @@ function renderWbBoard(){
     return { col, members };
   });
 
-  let availableHeight = 0;
+  let availableHeight = 0, availableWidth = 0;
   if(isPcFit){
     const rect = board.getBoundingClientRect();
     availableHeight = Math.max(220, window.innerHeight - rect.top - 16);
     board.style.height = `${availableHeight}px`;
+    availableWidth = (isDisplayMode ? window.innerWidth : board.clientWidth || window.innerWidth) - 16;
   } else {
     board.style.height = "";
   }
 
   const fontPx = wbFontSizePx || 13;
   const HEAD_HEIGHT = Math.round(fontPx * 1.4) + 20;
-  const ROW_HEIGHT = Math.round(fontPx * 1.9) + 6;
+  // 行き先管理で設定した文字サイズから決まる「理想の」1人分の高さ。まずはこれで収まるか試す。
+  const COMFORT_ROW_HEIGHT = Math.round(fontPx * 1.9) + 6;
+  // これ未満に詰めると読みにくくなる下限（画面に収まらない場合の最終ライン）
+  const MIN_ROW_HEIGHT = Math.round(fontPx * 1.15) + 3;
   const CHIP_COL_WIDTH = Math.round(64 * (fontPx/13)) + 34;
   const measureCanvas = document.createElement("canvas");
   const measureCtx = measureCanvas.getContext("2d");
@@ -4723,8 +4740,42 @@ function renderWbBoard(){
     measureCtx.font = `700 ${fontPx}px sans-serif`;
     return measureCtx.measureText(text).width; // 見出しは折り返さず1行で収める前提の幅
   }
+  const headerMinWidths = colData.map(({col}) => isPcFit ? Math.ceil(headerTextWidth(col.name)) + 32 : 0);
 
-  colData.forEach(({col, members})=>{
+  // 与えられた「1人分の高さ」で計算したとき、ボード全体が横に何pxになるかを求める
+  function computeLayout(rowHeight){
+    let totalWidth = 0;
+    const layouts = colData.map(({members}, idx)=>{
+      const headerMinWidth = headerMinWidths[idx];
+      if(members.length===0){
+        const w = Math.max(56, headerMinWidth);
+        totalWidth += w + 10;
+        return { width: w, contentHeight: 0 };
+      }
+      const maxContentHeight = Math.max(60, availableHeight - HEAD_HEIGHT - 20);
+      const maxRowsPerSubCol = Math.max(1, Math.floor(maxContentHeight / rowHeight));
+      const subCols = Math.max(1, Math.ceil(members.length / maxRowsPerSubCol));
+      const rowsNeeded = Math.ceil(members.length / subCols);
+      const contentHeight = Math.min(maxContentHeight, rowsNeeded * rowHeight);
+      const width = Math.max(subCols*CHIP_COL_WIDTH + (subCols-1)*10 + 18, headerMinWidth);
+      totalWidth += width + 10;
+      return { width, contentHeight };
+    });
+    return { totalWidth, layouts };
+  }
+
+  // 「理想の高さ」から始め、ボード全体の横幅が画面に収まらない場合は、下限に達するまで
+  // 1人分の枠の高さを少しずつ詰めて再計算する（それでも収まらない場合は横スクロールにフォールバック）
+  let rowHeight = COMFORT_ROW_HEIGHT;
+  let { totalWidth, layouts } = isPcFit ? computeLayout(rowHeight) : { totalWidth:0, layouts:[] };
+  if(isPcFit && availableWidth>0){
+    while(totalWidth > availableWidth && rowHeight > MIN_ROW_HEIGHT){
+      rowHeight -= 1;
+      ({ totalWidth, layouts } = computeLayout(rowHeight));
+    }
+  }
+
+  colData.forEach(({col, members}, idx)=>{
     const colEl = document.createElement("div");
     colEl.className = "wb-board-col";
     const head = document.createElement("div");
@@ -4733,7 +4784,6 @@ function renderWbBoard(){
     head.textContent = col.name;
     const bodyEl = document.createElement("div");
     bodyEl.className = "col-body";
-    const headerMinWidth = isPcFit ? Math.ceil(headerTextWidth(col.name)) + 32 : 0;
 
     if(members.length===0){
       colEl.classList.add("is-empty");
@@ -4741,34 +4791,32 @@ function renderWbBoard(){
       e.className = "empty-col";
       e.textContent = "-";
       bodyEl.appendChild(e);
-      if(isPcFit) colEl.style.flex = `0 0 ${Math.max(56, headerMinWidth)}px`;
+      if(isPcFit) colEl.style.flex = `0 0 ${layouts[idx].width}px`;
     } else {
       members.forEach(emp=>{
         const chip = document.createElement("div");
         chip.className = "name-chip";
         chip.textContent = emp.name || emp.email;
+        // 1人分の表示枠の高さ：line-heightで調整することで、長い名前が2行に折り返しても
+        // 表示が欠けることなく、詰めた分だけ行間が狭くなる（ハードな高さ指定はしない）
+        if(isPcFit) chip.style.lineHeight = `${rowHeight}px`;
         bodyEl.appendChild(chip);
       });
       if(isPcFit){
-        const maxContentHeight = Math.max(60, availableHeight - HEAD_HEIGHT - 20);
-        const maxRowsPerSubCol = Math.max(1, Math.floor(maxContentHeight / ROW_HEIGHT));
-        const subCols = Math.max(1, Math.ceil(members.length / maxRowsPerSubCol));
-        // 列数に対して実際に必要な行数分だけの高さにし、無駄な余白を減らす
-        const rowsNeeded = Math.ceil(members.length / subCols);
-        const contentHeight = Math.min(maxContentHeight, rowsNeeded * ROW_HEIGHT);
+        const layout = layouts[idx];
         bodyEl.style.display = "block";
         bodyEl.style.columnWidth = `${CHIP_COL_WIDTH}px`;
         bodyEl.style.columnGap = "10px";
         bodyEl.style.columnFill = "auto"; // 上から詰めて表示し、あふれた分だけ次の列へ
-        bodyEl.style.height = `${contentHeight}px`;
-        const minWidth = Math.max(subCols*CHIP_COL_WIDTH + (subCols-1)*10 + 18, headerMinWidth);
-        colEl.style.flex = `0 0 ${minWidth}px`; // 必要最小限の幅のみ確保し、他の枠のために広げすぎない
+        bodyEl.style.height = `${layout.contentHeight}px`;
+        colEl.style.flex = `0 0 ${layout.width}px`; // 必要最小限の幅のみ確保し、他の枠のために広げすぎない
       }
     }
     colEl.appendChild(head); colEl.appendChild(bodyEl);
     board.appendChild(colEl);
   });
 }
+
 
 /* =========================================================
    行き先：事前設定（日付指定・最大7日分）・初期状態
