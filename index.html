@@ -4637,14 +4637,18 @@ setInterval(()=>{
 }, 60000);
 
 // 所属セルは幅を全角4文字分に固定しているため、それより長い所属名は折り返さず、
-// 1行に収まるようフォントサイズを自動的に下げて設定する（全角1文字 ≈ 1emとして計算）
+// 1行に収まるようフォントサイズを自動的に下げて設定する（全角1文字 ≈ 1emとして計算）。
+// ページ全体がbox-sizing:border-boxのため、CSSで指定した「4文字分」の幅には左右パディング
+// （10px×2＝20px）も含まれる。実際に文字を置ける幅はそこからパディング分を引いた値になる
+// （さらに測定誤差の安全マージンとして2pxも引いておく）。
 const deptMeasureCanvas = document.createElement("canvas");
 const deptMeasureCtx = deptMeasureCanvas.getContext("2d");
 const DEPT_CELL_MIN_FONT_PX = 8; // これ未満に縮めると読みにくくなる下限
+const DEPT_CELL_H_PADDING = 20; // 左右パディング合計（.wb-table tdのpadding指定と合わせる）
 function setDeptCellText(td, text){
   td.textContent = text;
   const fontPx = wbFontSizePx || 13;
-  const targetWidth = fontPx * 4;
+  const targetWidth = (fontPx * 4) - DEPT_CELL_H_PADDING - 2;
   deptMeasureCtx.font = `${fontPx}px sans-serif`;
   const naturalWidth = deptMeasureCtx.measureText(text).width;
   if(naturalWidth > targetWidth){
