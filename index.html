@@ -4695,26 +4695,32 @@ function renderWbList(){
   }
 
   // 画面の縦幅が十分あるとき（PC・サイネージ幅）は、文字サイズ設定はそのままに、
-  // 行の上下の余白（パディング）だけを必要な分だけ詰めて、縦スクロールが出ないようにする
+  // 行の上下の余白（パディング）だけを必要な分だけ詰めて、縦スクロールが出ないようにする。
+  // このCSS変数は「行き先」タブ全体の共通の祖先（#view-whereabouts）に設定するため、
+  // 同じ.wb-tableを使う「事前設定」ビューにも同じ余白がそのまま反映される
+  // （事前設定側は上部にボタン類があり、収まりきらずスクロールバーが出ても問題ない前提のため、
+  // 　事前設定自身では高さの再計算はしない）。
+  const wbCommonWrap = document.getElementById("view-whereabouts");
   const isWideEnough = window.innerWidth > 900;
   if(isWideEnough){
-    fitWbListToHeight(container);
-  } else {
-    container.style.removeProperty("--wb-row-pad-v");
+    fitWbListToHeight(container, wbCommonWrap);
+  } else if(wbCommonWrap){
+    wbCommonWrap.style.removeProperty("--wb-row-pad-v");
   }
 }
 // 行き先「一覧」の各列（部署ごとにまとめた表）が、画面の縦幅に収まるよう行の余白を自動調整する。
 // 文字サイズ（行き先管理の設定）は変えず、パディングだけを「快適な既定値」から下限まで詰めていく。
 const WB_ROW_PAD_COMFORT = 9; // 既定のpadding（px）＝これまでの見た目
 const WB_ROW_PAD_MIN = 3; // これ未満に詰めると読みにくくなる下限
-function fitWbListToHeight(container){
-  container.style.setProperty("--wb-row-pad-v", `${WB_ROW_PAD_COMFORT}px`);
+function fitWbListToHeight(container, targetEl){
+  if(!targetEl) targetEl = container;
+  targetEl.style.setProperty("--wb-row-pad-v", `${WB_ROW_PAD_COMFORT}px`);
   const rect = container.getBoundingClientRect();
   const availableHeight = Math.max(150, window.innerHeight - rect.top - 16);
   let pad = WB_ROW_PAD_COMFORT;
   while(container.scrollHeight > availableHeight && pad > WB_ROW_PAD_MIN){
     pad -= 1;
-    container.style.setProperty("--wb-row-pad-v", `${pad}px`);
+    targetEl.style.setProperty("--wb-row-pad-v", `${pad}px`);
   }
 }
 
