@@ -611,6 +611,10 @@
   .wb-table{width:100%;border-collapse:collapse;font-size:var(--wb-font-size);background:var(--surface);border:1.5px solid var(--line);border-radius:10px;overflow:hidden;}
   .wb-table th{text-align:left;padding:var(--wb-row-pad-v, 9px) 10px;background:#F0F3F8;color:var(--muted);font-size:calc(var(--wb-font-size) * 0.885);font-weight:700;border-bottom:1px solid var(--line);}
   .wb-table td{padding:var(--wb-row-pad-v, 9px) 10px;border-bottom:1px solid var(--line);vertical-align:middle;}
+  .wb-table th:first-child, .wb-table td:first-child{
+    width:calc(var(--wb-font-size) * 4); max-width:calc(var(--wb-font-size) * 4);
+    white-space:nowrap; overflow:hidden;
+  }
   .wb-table tr.dept-row td{background:#FAFBFC;font-size:calc(var(--wb-font-size) * 0.846);font-weight:700;color:var(--brand-dark);letter-spacing:.03em;padding:6px 10px;}
   .wb-table tr:last-child td{border-bottom:none;}
   .wb-status-badge{display:inline-block;padding:4px 10px;border-radius:14px;font-size:calc(var(--wb-font-size) * 0.923);font-weight:700;color:#fff;white-space:nowrap;}
@@ -4632,6 +4636,25 @@ setInterval(()=>{
   }
 }, 60000);
 
+// 所属セルは幅を全角4文字分に固定しているため、それより長い所属名は折り返さず、
+// 1行に収まるようフォントサイズを自動的に下げて設定する（全角1文字 ≈ 1emとして計算）
+const deptMeasureCanvas = document.createElement("canvas");
+const deptMeasureCtx = deptMeasureCanvas.getContext("2d");
+const DEPT_CELL_MIN_FONT_PX = 8; // これ未満に縮めると読みにくくなる下限
+function setDeptCellText(td, text){
+  td.textContent = text;
+  const fontPx = wbFontSizePx || 13;
+  const targetWidth = fontPx * 4;
+  deptMeasureCtx.font = `${fontPx}px sans-serif`;
+  const naturalWidth = deptMeasureCtx.measureText(text).width;
+  if(naturalWidth > targetWidth){
+    const scaledPx = Math.max(DEPT_CELL_MIN_FONT_PX, fontPx * (targetWidth / naturalWidth));
+    td.style.fontSize = `${scaledPx}px`;
+  } else {
+    td.style.fontSize = "";
+  }
+}
+
 function renderWbList(){
   const container = document.getElementById("wb-list-columns");
   if(!container) return;
@@ -4644,7 +4667,7 @@ function renderWbList(){
     const st = effStatus==="OFFHOURS" ? { name:"時間外", color:"#8A8F98" } : wbStatusInfo(effStatus);
     const tr = document.createElement("tr");
     const tdDept = document.createElement("td");
-    tdDept.textContent = primaryDepartmentName(emp);
+    setDeptCellText(tdDept, primaryDepartmentName(emp));
     const tdName = document.createElement("td");
     tdName.textContent = emp.name || emp.email;
     const tdStatus = document.createElement("td");
@@ -5075,7 +5098,7 @@ function renderWbPresetTable(){
       const st = effective ? wbStatusInfo(effective.status) : null;
       const tr = document.createElement("tr");
       const tdDept = document.createElement("td");
-      tdDept.textContent = primaryDepartmentName(emp);
+      setDeptCellText(tdDept, primaryDepartmentName(emp));
       const tdName = document.createElement("td");
       tdName.textContent = emp.name || emp.email;
       const tdStatus = document.createElement("td");
