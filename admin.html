@@ -372,6 +372,15 @@
             <input type="text" id="single-emp-memo">
           </div>
           <div class="field full">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+              <input type="checkbox" id="single-emp-shared-account-check" style="width:auto;">
+              共用アカウント（掲示板端末など、特定の個人に紐づかないアカウント）
+            </label>
+            <p style="font-size:11px;color:var(--muted);margin:4px 0 0;">
+              チェックすると、お知らせの既読対象・行き先の表示対象・チャットの相手選択から除外されます。
+            </p>
+          </div>
+          <div class="field full">
             <label>権限</label>
             <div id="single-emp-permissions-checks" style="display:flex;flex-direction:column;gap:8px;border:1px solid var(--line);border-radius:8px;padding:10px;"></div>
           </div>
@@ -3973,6 +3982,7 @@ document.getElementById("single-emp-register-btn")?.addEventListener("click", as
   const phone = document.getElementById("single-emp-phone").value.trim();
   const memo = document.getElementById("single-emp-memo").value.trim();
   const selectedDepts = [...document.getElementById("single-emp-dept").selectedOptions].map(o=>o.value);
+  const isSharedAccount = document.getElementById("single-emp-shared-account-check").checked;
   const permChecks = [...document.querySelectorAll(".single-emp-permission-check:checked")];
 
   if(!email || !password){
@@ -4009,6 +4019,7 @@ document.getElementById("single-emp-register-btn")?.addEventListener("click", as
       departments: selectedDepts,
       department: selectedDepts[0] || "", // 旧バージョン互換用
       phone, memo, order: 0,
+      isSharedAccount,
       createdBy: currentUser.email,
       importedAt: new Date().toISOString()
     }, { merge: true });
@@ -4034,6 +4045,7 @@ document.getElementById("single-emp-register-btn")?.addEventListener("click", as
     ["single-emp-no","single-emp-name","single-emp-email","single-emp-password","single-emp-phone","single-emp-memo"]
       .forEach(id=> document.getElementById(id).value = "");
     document.querySelectorAll(".single-emp-permission-check").forEach(cb=> cb.checked = false);
+    document.getElementById("single-emp-shared-account-check").checked = false;
     document.getElementById("single-emp-dept").selectedIndex = -1;
   }catch(e){
     statusEl.textContent = accountResult + " ただし社員情報の登録に失敗しました：" + (e.code || e.message);
