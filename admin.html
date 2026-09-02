@@ -458,6 +458,15 @@
           <input type="text" id="emp-edit-phone-input">
         </div>
         <div class="field">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="checkbox" id="emp-edit-shared-account-check" style="width:auto;">
+            共用アカウント（掲示板端末など、特定の個人に紐づかないアカウント）
+          </label>
+          <p style="font-size:11px;color:var(--muted);margin:4px 0 0;">
+            チェックすると、お知らせの既読対象・行き先の表示対象・チャットの相手選択から除外されます。
+          </p>
+        </div>
+        <div class="field">
           <label>備考</label>
           <input type="text" id="emp-edit-memo-input">
         </div>
@@ -1930,7 +1939,7 @@ function renderNoticesAdminTable(notices){
     document.getElementById("notices-select-all").checked = false;
     return;
   }
-  const totalCount = employeesAll.filter(e=>!e.hidden).length;
+  const totalCount = employeesAll.filter(e=>!e.hidden && !e.isSharedAccount).length;
   notices.forEach(n=>{
     const tr = document.createElement("tr");
     const readByAt = n.readByAt || {};
@@ -1990,7 +1999,7 @@ function buildReadByModalHtml(n, empList){
     return { name, email, dtLabel, dt: (parsedDt && !isNaN(parsedDt.getTime())) ? dt : "" };
   }).sort((a,b)=> a.dt.localeCompare(b.dt));
 
-  const activeEmployees = empList.filter(e=>!e.hidden);
+  const activeEmployees = empList.filter(e=>!e.hidden && !e.isSharedAccount);
   // empListは既に社員番号順（employeesAll由来）なので、絞り込むだけで順序は保たれる
   const unreadEmployees = activeEmployees.filter(e => !readEmails.some(re=>re.toLowerCase()===(e.email||"").toLowerCase()));
 
@@ -2053,7 +2062,7 @@ function renderNoticeDetailView(n){
     : escapeHtml(n.authorName||"");
   const readByAt = n.readByAt || {};
   const readCount = Object.keys(readByAt).filter(k => k.includes("@")).length;
-  const totalCount = employeesAll.filter(e=>!e.hidden).length;
+  const totalCount = employeesAll.filter(e=>!e.hidden && !e.isSharedAccount).length;
   document.getElementById("notice-detail-meta").innerHTML = `${authorHtml} ・ ${escapeHtml(tsToStr(n.createdAt))} ・ 既読：${readCount}/${totalCount}`;
   document.getElementById("notice-detail-body").textContent = n.body || "";
   const attEl = document.getElementById("notice-detail-attachment");
@@ -3547,6 +3556,7 @@ function openEmpEditModal(emp){
   document.getElementById("emp-edit-no-input").value = emp.employeeNo || "";
   document.getElementById("emp-edit-phone-input").value = emp.phone || "";
   document.getElementById("emp-edit-memo-input").value = emp.memo || "";
+  document.getElementById("emp-edit-shared-account-check").checked = !!emp.isSharedAccount;
 
   const empCurrentDepts = empDepartmentsAdmin(emp);
   const deptChecksEl = document.getElementById("emp-edit-dept-checks");
@@ -3686,7 +3696,8 @@ document.getElementById("emp-edit-save-btn")?.addEventListener("click", async ()
       department: selectedDepts[0] || "", // 旧バージョン互換用（先頭の所属を単一値としても保持）
       hiddenTabs: selectedHiddenTabs,
       phone: document.getElementById("emp-edit-phone-input").value.trim(),
-      memo: document.getElementById("emp-edit-memo-input").value.trim()
+      memo: document.getElementById("emp-edit-memo-input").value.trim(),
+      isSharedAccount: document.getElementById("emp-edit-shared-account-check").checked
     });
     // 各種権限の付与・取り消しを反映する
     const permChecks = [...document.querySelectorAll(".emp-edit-permission-check")];

@@ -77,7 +77,7 @@ export function resolveMailRecipients(employeesAll){
   const override = (MAIL_SEND_TARGET || "").trim();
   if(override === "" || override === "*"){
     return (employeesAll || [])
-      .filter(e => !!e.email)
+      .filter(e => !!e.email && !e.isSharedAccount)
       .map(e => ({ email: e.email, name: e.name || e.email }));
   }
   const overrideEmails = override.split(";").map(s=>s.trim()).filter(Boolean);

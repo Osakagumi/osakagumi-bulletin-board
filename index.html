@@ -92,6 +92,28 @@
   body.kiosk-mode #wb-edit-my-btn{ display:none !important; }
   body.kiosk-mode #header-clock-kiosk{ display:flex !important; }
 
+  /* ---------- お知らせ掲示板モード（共用アカウント専用端末） ---------- */
+  #notice-board-view{ display:none; }
+  body.notice-board-mode header,
+  body.notice-board-mode nav.tabs,
+  body.notice-board-mode main{ display:none !important; }
+  body.notice-board-mode #notice-board-view{
+    display:flex; flex-direction:column; position:fixed; inset:0; z-index:500;
+    background:#F4F6F9; padding:40px 60px; box-sizing:border-box;
+  }
+  #notice-board-header{
+    display:flex; align-items:center; justify-content:space-between;
+    font-size:22px; font-weight:700; color:var(--brand-dark);
+    padding-bottom:16px; border-bottom:3px solid var(--brand); margin-bottom:28px; flex:0 0 auto;
+  }
+  #notice-board-progress{ font-size:16px; font-weight:400; color:var(--muted); }
+  #notice-board-content{ flex:1 1 auto; overflow-y:auto; }
+  .nb-meta{ font-size:18px; color:var(--muted); margin-bottom:10px; }
+  .nb-title{ font-size:40px; font-weight:700; color:var(--text); margin-bottom:24px; line-height:1.3; }
+  .nb-body{ font-size:26px; line-height:1.7; white-space:pre-wrap; color:var(--text); }
+  .nb-attachment{ font-size:18px; color:var(--muted); margin-top:20px; }
+  .nb-empty{ font-size:28px; color:var(--muted); text-align:center; margin-top:80px; }
+
   /* ---------- サイネージ表示モード（時間枠予約） ---------- */
   body.reserve-signage-mode header,
   body.reserve-signage-mode nav.tabs{ display:none !important; }
@@ -729,6 +751,13 @@
 
   <!-- ============ APP ============ -->
   <div id="app">
+    <div id="notice-board-view">
+      <div id="notice-board-header">
+        <span>📌 お知らせ</span>
+        <span id="notice-board-progress"></span>
+      </div>
+      <div id="notice-board-content"></div>
+    </div>
     <div id="kiosk-qr-badge">
       <img id="kiosk-qr-img" alt="システムのQRコード">
       <div class="kiosk-qr-label">スマホで見る</div>
@@ -1602,6 +1631,11 @@ if(reserveSignageEquipmentId){
 }
 let signageTodayOnly = false;
 
+/* ---------- お知らせ掲示板モード（共用アカウント専用端末） ----------
+   URLではなく、ログインした本人が「共用アカウント」（isSharedAccount）かどうかで判定する。
+   ログイン前は誰のアカウントか分からないため、判定・body classの付与はログイン成功後に行う
+   （onAuthStateChangedのコールバック内、isSharedAccountを求めた直後を参照）。--------- */
+
 /* ---------- helpers ---------- */
 const pad2 = n => String(n).padStart(2,"0");
 const todayStr = () => {
@@ -1678,6 +1712,7 @@ let isCalendarEditor = false;
 let isContractEditor = false;
 let isSafetySender = false;
 let isBizInfoManager = false;
+let isSharedAccount = false; // ログイン中の自分自身が「共用アカウント」かどうか
 let chatConversations = []; // [{conversationId, otherEmail, otherName, lastText, lastAt, lastSenderEmail, unread}]
 let chatCurrentConversationId = null;
 let chatCurrentOtherEmail = null;
@@ -1801,7 +1836,7 @@ onAuthStateChanged(auth, async (user)=>{
     updateHeaderUserLabel();
     // 権限チェックは直列でawaitすると往復通信が5回分積み重なり、
     // 回線が遅いと数秒〜十数秒のロスになる。並列で一度に取得する。
-    const [adminDoc, posterDoc, wbEditorDoc, eqManagerDoc, calEditorDoc, contractEditorDoc, safetySenderDoc, bizInfoManagerSnap] = await Promise.all([
+    const [adminDoc, posterDoc, wbEditorDoc, eqManagerDoc, calEditorDoc, contractEditorDoc, safetySenderDoc, bizInfoManagerSnap, meDoc] = await Promise.all([
       getDoc(doc(db, "admins", user.email)).catch(()=>null),
       getDoc(doc(db, "announcement_posters", user.email)).catch(()=>null),
       getDoc(doc(db, "whereabouts_editors", user.email)).catch(()=>null),
@@ -1809,7 +1844,8 @@ onAuthStateChanged(auth, async (user)=>{
       getDoc(doc(db, "calendar_editors", user.email)).catch(()=>null),
       getDoc(doc(db, "contract_editors", user.email)).catch(()=>null),
       getDoc(doc(db, "safety_senders", user.email)).catch(()=>null),
-      getDocs(query(collection(db, "business_info_items"), where("infoManagers", "array-contains", user.email.toLowerCase()))).catch(()=>null)
+      getDocs(query(collection(db, "business_info_items"), where("infoManagers", "array-contains", user.email.toLowerCase()))).catch(()=>null),
+      getDoc(doc(db, "employees", user.email)).catch(()=>null)
     ]);
     isAdmin = !!(adminDoc && adminDoc.exists());
     isPoster = isAdmin || !!(posterDoc && posterDoc.exists());
@@ -1819,6 +1855,7 @@ onAuthStateChanged(auth, async (user)=>{
     isContractEditor = isAdmin || !!(contractEditorDoc && contractEditorDoc.exists());
     isSafetySender = isAdmin || !!(safetySenderDoc && safetySenderDoc.exists());
     isBizInfoManager = !!(bizInfoManagerSnap && !bizInfoManagerSnap.empty);
+    isSharedAccount = !!(meDoc && meDoc.exists() && meDoc.data().isSharedAccount);
     document.getElementById("admin-link").style.display =
       (isAdmin || isPoster || isWhereaboutsEditor || isEquipmentManager || isCalendarEditor || isContractEditor || isBizInfoManager)
         ? "inline-block" : "none";
@@ -1863,6 +1900,10 @@ onAuthStateChanged(auth, async (user)=>{
     }
     if(reserveSignageEquipmentId){
       switchToTab("reserve");
+    }
+    if(isSharedAccount){
+      document.body.classList.add("notice-board-mode");
+      startNoticeBoardCycle();
     }
   }else{
     currentUser = null;
@@ -2836,7 +2877,7 @@ function openCheckoutModal(eq, targetStatus, mode){
   if(isLend){
     const select = document.getElementById("checkout-recipient-select");
     select.innerHTML = "";
-    const sortedEmployees = sortEmployeesByNo(employeesAll.filter(e=>!!e.email && !e.hidden));
+    const sortedEmployees = sortEmployeesByNo(employeesAll.filter(e=>!!e.email && !e.hidden && !e.isSharedAccount));
     sortedEmployees.forEach(emp=>{
       const opt = document.createElement("option");
       opt.value = emp.email;
@@ -3617,6 +3658,7 @@ function initNoticesListener(){
     noticesAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
     renderNotices();
     refreshDashboardIfActive();
+    renderNoticeBoardCurrent(); // 掲示板モード中でなければ内部で何もしない
   }, (err)=>{ console.error("[お知らせ取得エラー]", err); });
 }
 
@@ -3719,6 +3761,53 @@ async function setNoticeKeepVisible(noticeId, keep){
   }
 }
 
+/* =========================================================
+   お知らせ掲示板モード（共用アカウント専用端末）
+   admin.htmlの社員編集で「共用アカウント」（isSharedAccount）にチェックされたアカウントで
+   ログインすると、URLに関わらず自動的にこのモードになる。
+   一定間隔で、新しい順のお知らせを1件ずつ自動的に切り替えて表示する。
+   既読/未読の管理はせず（共用アカウントのため個人の既読状態には意味がない）、
+   単に見せるだけの読み取り専用表示。
+========================================================= */
+let noticeBoardIndex = 0;
+let noticeBoardTimer = null;
+const NOTICE_BOARD_INTERVAL_MS = 20000; // 20秒ごとに次のお知らせへ切り替える
+function renderNoticeBoardCurrent(){
+  if(!isSharedAccount) return;
+  const contentEl = document.getElementById("notice-board-content");
+  const progressEl = document.getElementById("notice-board-progress");
+  if(!contentEl) return;
+  const list = noticesAll; // 既にcreatedAt降順（新しい順）
+  if(list.length===0){
+    contentEl.innerHTML = `<div class="nb-empty">お知らせはまだありません。</div>`;
+    progressEl.textContent = "";
+    return;
+  }
+  if(noticeBoardIndex >= list.length) noticeBoardIndex = 0;
+  const n = list[noticeBoardIndex];
+  const authorName = n.authorName || n.authorEmail || "";
+  const attachmentHtml = n.attachmentUrl
+    ? `<div class="nb-attachment">📎 添付ファイルがあります（詳細は一般画面でご確認ください）</div>`
+    : "";
+  contentEl.innerHTML = `
+    <div class="nb-meta">${escapeHtml(tsToStr(n.createdAt))}　${escapeHtml(authorName)}</div>
+    <div class="nb-title">${escapeHtml(n.title||"")}</div>
+    <div class="nb-body">${escapeHtml(n.body||"")}</div>
+    ${attachmentHtml}
+  `;
+  contentEl.scrollTop = 0; // 前のお知らせのスクロール位置を引き継がないようにする
+  progressEl.textContent = list.length>1 ? `${noticeBoardIndex+1} / ${list.length}` : "";
+}
+function startNoticeBoardCycle(){
+  noticeBoardIndex = 0;
+  renderNoticeBoardCurrent();
+  if(noticeBoardTimer) clearInterval(noticeBoardTimer);
+  noticeBoardTimer = setInterval(()=>{
+    noticeBoardIndex++;
+    renderNoticeBoardCurrent();
+  }, NOTICE_BOARD_INTERVAL_MS);
+}
+
 function renderNotices(){
   const el = document.getElementById("notice-list");
   el.innerHTML = "";
@@ -3740,7 +3829,7 @@ function renderNotices(){
       : escapeHtml(n.authorName||"");
     const readByAt = n.readByAt || {};
     const readCount = Object.keys(readByAt).filter(k => k.includes("@")).length;
-    const totalCount = employeesAll.filter(e=>!e.hidden).length;
+    const totalCount = employeesAll.filter(e=>!e.hidden && !e.isSharedAccount).length;
     const statusLabel = !isRead ? "未読" : (isKeptVisible ? "既読" : "非表示");
     tr.innerHTML = `
       <td class="n-date-cell">${escapeHtml(tsToStr(n.createdAt))}</td>
@@ -3776,7 +3865,7 @@ function buildReadByModalHtml(n, empList){
     return { name, email, dtLabel, dt: (parsedDt && !isNaN(parsedDt.getTime())) ? dt : "" };
   }).sort((a,b)=> a.dt.localeCompare(b.dt));
 
-  const activeEmployees = empList.filter(e=>!e.hidden);
+  const activeEmployees = empList.filter(e=>!e.hidden && !e.isSharedAccount);
   const unreadEmployees = sortEmployeesByNo(
     activeEmployees.filter(e => !readEmails.some(re=>re.toLowerCase()===(e.email||"").toLowerCase()))
   );
@@ -3851,7 +3940,7 @@ function renderNoticeDetailView(n){
     : escapeHtml(n.authorName||"");
   const readByAt = n.readByAt || {};
   const readCount = Object.keys(readByAt).filter(k => k.includes("@")).length;
-  const totalCount = employeesAll.filter(e=>!e.hidden).length;
+  const totalCount = employeesAll.filter(e=>!e.hidden && !e.isSharedAccount).length;
   document.getElementById("notice-detail-meta").innerHTML = `${authorHtml} ・ ${escapeHtml(tsToStr(n.createdAt))} ・ 既読：${readCount}/${totalCount}`;
   document.getElementById("notice-detail-body").textContent = n.body || "";
   const attEl = document.getElementById("notice-detail-attachment");
@@ -4393,7 +4482,7 @@ function renderEmpPickerNameSelect(){
   const deptId = deptSel.value;
   const searchText = (searchInput?.value || "").trim();
   // 社員番号順（行き先の表示順とは独立した、アプリ共通の並び順）に統一する
-  let list = sortEmployeesByNo(employeesAll.filter(e=>!e.hidden)).filter(e=> !deptId || empDepartments(e).includes(deptId));
+  let list = sortEmployeesByNo(employeesAll.filter(e=>!e.hidden && !e.isSharedAccount)).filter(e=> !deptId || empDepartments(e).includes(deptId));
   if(searchText){
     list = list.filter(e=> (e.name||"").startsWith(searchText));
   }
@@ -4575,7 +4664,7 @@ function departmentSortIndex(id){
   return idx===-1 ? 9999 : idx; // 未所属・不明な部署は最後に
 }
 function getSortedEmployees(){
-  return employeesAll.filter(e=>!e.hidden).slice().sort((a,b)=>{
+  return employeesAll.filter(e=>!e.hidden && !e.isSharedAccount).slice().sort((a,b)=>{
     // 「社員の表示順」（システム全体の設定、行き先の事前設定画面で編集）が設定されていれば最優先する
     const hasOa = a.order!==undefined && a.order!==null;
     const hasOb = b.order!==undefined && b.order!==null;
@@ -5837,7 +5926,7 @@ function renderSafetyDashboardGeneral(responses){
     return;
   }
   const respMap = new Map((responses||[]).map(r=>[r.userEmail, r]));
-  const roster = sortEmployeesByNo(employeesAll.filter(e=>!e.hidden));
+  const roster = sortEmployeesByNo(employeesAll.filter(e=>!e.hidden && !e.isSharedAccount));
   const answeredCount = roster.filter(e=>respMap.has(e.email)).length;
   summary.textContent = `回答済み: ${answeredCount} / ${roster.length} 人`;
   if(roster.length===0){
