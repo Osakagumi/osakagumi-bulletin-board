@@ -1066,11 +1066,10 @@
                 <span style="font-size:12.5px;color:var(--muted);white-space:nowrap;margin-left:1em;">連続設定：</span>
                 <div class="seg-toggle" id="wb-preset-bulk-status-toggle"></div>
               </div>
-              <button class="btn-primary" id="wb-preset-bulk-done-btn" style="display:none;">完了</button>
+              <button class="btn-primary" id="wb-preset-bulk-done-btn" style="display:none;">連続設定を終了</button>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
               <button class="btn-ghost" id="wb-order-toggle-btn" style="border:1px solid var(--line);">社員の表示順を編集</button>
-              <button class="btn-primary" id="wb-preset-save-btn">保存</button>
             </div>
           </div>
           <p id="wb-order-hint" style="display:none;font-size:12px;color:var(--muted);margin:0 0 10px;">
@@ -1084,8 +1083,8 @@
           <div class="wb-list-columns" id="wb-preset-columns"></div>
           <p style="font-size:11.5px;color:var(--muted);margin-top:10px;">
             指定できるのは、カレンダー上で休日になっていない日のみです。事前設定は最大7日分まで保持されます（過去の日付は自動的に削除されます）。<br>
-            「保存」を押すと、個別に変更していない社員も含めて、今表示されている内容がこの日の事前設定として保存されます。<br>
-            「保存済：」の「初期状態」を編集しておくと、事前設定していない日を開いたときの初期値として使われます。<br>
+            各社員の状態をクリックして変更すると、その場で即座に保存されます。<br>
+            個別に変更していない社員は、「保存済：」の「初期状態」の内容がそのまま使われます（初期状態を後から変更すると、個別に変更していない日にはさかのぼって反映されます）。<br>
             当日、本人が「自分の行き先を入力」でその場で変更した場合は、その内容が優先して表示されます。
           </p>
         </div>
@@ -5020,6 +5019,7 @@ function renderWbPresetBulkToggle(){
     btn.textContent = s.name;
     btn.addEventListener("click", ()=>{
       wbPresetBulkStatus = (wbPresetBulkStatus===s.id) ? null : s.id;
+      if(wbPresetBulkStatus) exitWbReorderMode(); // 連続設定に入るときは、並び替えモードは自動的に終了させる
       renderWbPresetBulkToggle();
     });
     wrap.appendChild(btn);
@@ -5080,13 +5080,10 @@ function renderWbPresetTable(){
   pickerLabel.textContent = formatDateJP(wbPresetSelectedDate);
 
   const storedDates = wbPresetStoredDates();
-  const saveBtn = document.getElementById("wb-preset-save-btn");
   if(editingDefaults){
     dateLabel.innerHTML = `<b>初期状態</b>を編集しています。ここで設定した内容が、事前設定していない日を開いたときの初期値として使われます。`;
-    if(saveBtn) saveBtn.style.display = "none";
   } else {
     dateLabel.innerHTML = `<b>${formatDateJP(wbPresetSelectedDate)}</b> の行き先を事前設定します。保存中の日付：${storedDates.length}/7件`;
-    if(saveBtn) saveBtn.style.display = "inline-block";
   }
   renderWbPresetDatesList();
 
@@ -5353,36 +5350,6 @@ async function saveWbDefaultForEmployee(email, status, note){
   });
 }
 
-document.getElementById("wb-preset-save-btn").addEventListener("click", async ()=>{
-  const dateStr = wbPresetSelectedDate;
-  const storedDates = wbPresetStoredDates();
-  if(!storedDates.includes(dateStr) && storedDates.length >= 7){
-    const oldest = storedDates[0];
-    if(!confirm(`事前設定は最大7日分までです。最も古い ${formatDateJP(oldest)} を削除して、${formatDateJP(dateStr)} を保存しますか？`)){
-      return;
-    }
-    await deleteWbPresetsForDate(oldest);
-  }
-  const list = getSortedEmployees();
-  const dayPresets = wbPresetsByDate[dateStr] || {};
-  let count = 0;
-  for(const emp of list){
-    if(dayPresets[emp.email]) continue; // 既に個別設定済みの人はそのまま
-    const fallback = wbPresetDefaults[emp.email] || null;
-    if(!fallback || !fallback.status) continue; // 初期状態も無い（未設定のまま）の人はスキップ
-    try{
-      await setDoc(doc(db,"wb_presets", `${dateStr}_${emp.email}`), {
-        date: dateStr, email: emp.email,
-        status: fallback.status, note: fallback.note||"",
-        timeLeaveType: "", timeLeaveStart: "", timeLeaveEnd: "",
-        updatedBy: currentUser.email, updatedAt: new Date().toISOString()
-      });
-      count++;
-    }catch(e){ /* 無視して続行 */ }
-  }
-  toast(`${formatDateJP(dateStr)}の内容を保存しました（${count}件を初期状態から反映）。`);
-});
-
 /* =========================================================
    行き先：社員の表示順（システム全体の設定。個人ごとの設定ではない）
    「事前設定」の表そのもの（新聞折り返しの複数テーブル）に、左端のグリップ「⠿」から
@@ -5393,14 +5360,27 @@ document.getElementById("wb-preset-save-btn").addEventListener("click", async ()
    離した時点（dragend）で、#wb-preset-columns内の行のDOM順（＝テーブル→行の読み順）を
    そのまま新しい表示順として保存する。
 ========================================================= */
+function enterWbReorderMode(){
+  const columnsWrap = document.getElementById("wb-preset-columns");
+  document.getElementById("wb-order-hint").style.display = "block";
+  document.getElementById("wb-order-toggle-btn").textContent = "並び替えを終了";
+  columnsWrap.classList.add("wb-reorder-mode");
+  // 並び替えモードに入るときは、連続設定モードは自動的に終了させる（完了ボタンが2つ出るのを防ぐ）
+  if(wbPresetBulkStatus){
+    wbPresetBulkStatus = null;
+    renderWbPresetBulkToggle();
+  }
+}
+function exitWbReorderMode(){
+  const columnsWrap = document.getElementById("wb-preset-columns");
+  document.getElementById("wb-order-hint").style.display = "none";
+  document.getElementById("wb-order-toggle-btn").textContent = "社員の表示順を編集";
+  columnsWrap.classList.remove("wb-reorder-mode");
+}
 document.getElementById("wb-order-toggle-btn")?.addEventListener("click", ()=>{
   const columnsWrap = document.getElementById("wb-preset-columns");
-  const hint = document.getElementById("wb-order-hint");
-  const btn = document.getElementById("wb-order-toggle-btn");
-  const entering = !columnsWrap.classList.contains("wb-reorder-mode");
-  columnsWrap.classList.toggle("wb-reorder-mode", entering);
-  hint.style.display = entering ? "block" : "none";
-  btn.textContent = entering ? "完了" : "社員の表示順を編集";
+  if(columnsWrap.classList.contains("wb-reorder-mode")) exitWbReorderMode();
+  else enterWbReorderMode();
 });
 async function saveWbOrder(){
   const rows = [...document.querySelectorAll("#wb-preset-columns tr[data-email]")];
