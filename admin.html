@@ -1958,8 +1958,7 @@ function renderNoticesAdminTable(notices){
     const readByAt = n.readByAt || {};
     const readCount = Object.keys(readByAt).filter(k => k.includes("@")).length;
     const targetDepts = Array.isArray(n.targetDepartments) ? n.targetDepartments : [];
-    const totalCount = employeesAll.filter(e=>!e.hidden && !e.isSharedAccount)
-      .filter(e => targetDepts.length===0 || empDepartmentsAdmin(e).some(d=>targetDepts.includes(d))).length;
+    const totalCount = employeesAll.filter(e=>!e.hidden && !e.isSharedAccount && isNoticeTargetedTo(n, e)).length;
     tr.innerHTML = `
       <td><input type="checkbox" class="notice-row-check" data-id="${n.id}" style="width:auto;"${selectedNoticeIds.has(n.id) ? " checked" : ""}></td>
       <td style="font-size:12px;color:var(--muted);white-space:nowrap;">${escapeHtml(tsToStr(n.createdAt))}</td>
@@ -2015,9 +2014,7 @@ function buildReadByModalHtml(n, empList){
     return { name, email, dtLabel, dt: (parsedDt && !isNaN(parsedDt.getTime())) ? dt : "" };
   }).sort((a,b)=> a.dt.localeCompare(b.dt));
 
-  const targetDepts = Array.isArray(n.targetDepartments) ? n.targetDepartments : [];
-  const activeEmployees = empList.filter(e=>!e.hidden && !e.isSharedAccount)
-    .filter(e => targetDepts.length===0 || empDepartmentsAdmin(e).some(d=>targetDepts.includes(d)));
+  const activeEmployees = empList.filter(e=>!e.hidden && !e.isSharedAccount && isNoticeTargetedTo(n, e));
   // empListは既に社員番号順（employeesAll由来）なので、絞り込むだけで順序は保たれる
   const unreadEmployees = activeEmployees.filter(e => !readEmails.some(re=>re.toLowerCase()===(e.email||"").toLowerCase()));
 
@@ -2080,9 +2077,7 @@ function renderNoticeDetailView(n){
     : escapeHtml(n.authorName||"");
   const readByAt = n.readByAt || {};
   const readCount = Object.keys(readByAt).filter(k => k.includes("@")).length;
-  const noticeTargetDepts = Array.isArray(n.targetDepartments) ? n.targetDepartments : [];
-  const totalCount = employeesAll.filter(e=>!e.hidden && !e.isSharedAccount)
-    .filter(e => noticeTargetDepts.length===0 || empDepartmentsAdmin(e).some(d=>noticeTargetDepts.includes(d))).length;
+  const totalCount = employeesAll.filter(e=>!e.hidden && !e.isSharedAccount && isNoticeTargetedTo(n, e)).length;
   document.getElementById("notice-detail-meta").innerHTML = `${authorHtml} ・ ${escapeHtml(tsToStr(n.createdAt))} ・ 宛先：${escapeHtml(noticeTargetSummary(n, true))} ・ 既読：${readCount}/${totalCount}`;
   document.getElementById("notice-detail-body").textContent = n.body || "";
   const attEl = document.getElementById("notice-detail-attachment");
@@ -3791,6 +3786,14 @@ function noticeTargetSummary(n, full){
   const names = targetDepts.map(id => departmentNameById(id));
   if(full) return names.join("・");
   return names.length===1 ? names[0] : `${names[0]}ほか`;
+}
+// お知らせnが、社員empの対象かどうかを判定する（発信先の部署条件 AND 個別除外リストに入っていないこと）
+function isNoticeTargetedTo(n, emp){
+  if(!emp) return false;
+  const excluded = Array.isArray(n.excludedEmails) ? n.excludedEmails : [];
+  if(excluded.includes(emp.email)) return false;
+  const targetDepts = Array.isArray(n.targetDepartments) ? n.targetDepartments : [];
+  return targetDepts.length===0 || empDepartmentsAdmin(emp).some(d=>targetDepts.includes(d));
 }
 function indexPageUrl(){
   return location.href.replace(/admin\.html.*$/i, "index.html");
