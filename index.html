@@ -67,6 +67,12 @@
   .field{margin-bottom:14px;}
   .field label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin:16px 0 6px;}
   .modal h3 + .field label, .field:first-child label{margin-top:0;}
+  /* チェックボックスを内包する、またはチェックボックス直後のラベルは「見出し」ではなく「選択肢」側の
+     テキストなので、太字にしない（例：「全社に送信する」「Eメールでも送信する」） */
+  .field label:has(input[type="checkbox"]),
+  .field input[type="checkbox"] + label{
+    font-weight:400; margin:0;
+  }
   .field input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font-size:14px;}
   .field input:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 3px rgba(28,90,165,.15);}
   #login-btn{width:100%;padding:11px;background:var(--brand);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;margin-top:6px;}
