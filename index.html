@@ -1947,14 +1947,19 @@ onAuthStateChanged(auth, async (user)=>{
     if(reserveSignageEquipmentId){
       switchToTab("reserve");
     }
+    // toggleで明示的にON/OFFする（前回、共用アカウントでログインしていた場合の
+    // クラスの残留を防ぐため。addだけだと、共用アカウント→ログアウト→通常アカウントと
+    // ログインし直した際に、notice-board-modeが外れずキオスク画面が残ってしまう）
+    document.body.classList.toggle("notice-board-mode", isSharedAccount);
     if(isSharedAccount){
-      document.body.classList.add("notice-board-mode");
+      closeNoticeBoardDetail(); // 前回セッションで詳細を開いたままだった場合に備えて閉じておく
       renderNoticeBoardCards();
     }
   }else{
     currentUser = null;
     document.getElementById("login-screen").style.display = "flex";
     document.getElementById("app").style.display = "none";
+    document.body.classList.remove("notice-board-mode"); // 前回、共用アカウントでログインしていた場合の残留防止
   }
 });
 
