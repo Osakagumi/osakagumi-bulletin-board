@@ -1948,11 +1948,13 @@ function renderNoticesAdminTable(notices){
     document.getElementById("notices-select-all").checked = false;
     return;
   }
-  const totalCount = employeesAll.filter(e=>!e.hidden && !e.isSharedAccount).length;
   notices.forEach(n=>{
     const tr = document.createElement("tr");
     const readByAt = n.readByAt || {};
     const readCount = Object.keys(readByAt).filter(k => k.includes("@")).length;
+    const targetDepts = Array.isArray(n.targetDepartments) ? n.targetDepartments : [];
+    const totalCount = employeesAll.filter(e=>!e.hidden && !e.isSharedAccount)
+      .filter(e => targetDepts.length===0 || empDepartmentsAdmin(e).some(d=>targetDepts.includes(d))).length;
     tr.innerHTML = `
       <td><input type="checkbox" class="notice-row-check" data-id="${n.id}" style="width:auto;"${selectedNoticeIds.has(n.id) ? " checked" : ""}></td>
       <td style="font-size:12px;color:var(--muted);white-space:nowrap;">${escapeHtml(tsToStr(n.createdAt))}</td>
@@ -2008,7 +2010,9 @@ function buildReadByModalHtml(n, empList){
     return { name, email, dtLabel, dt: (parsedDt && !isNaN(parsedDt.getTime())) ? dt : "" };
   }).sort((a,b)=> a.dt.localeCompare(b.dt));
 
-  const activeEmployees = empList.filter(e=>!e.hidden && !e.isSharedAccount);
+  const targetDepts = Array.isArray(n.targetDepartments) ? n.targetDepartments : [];
+  const activeEmployees = empList.filter(e=>!e.hidden && !e.isSharedAccount)
+    .filter(e => targetDepts.length===0 || empDepartmentsAdmin(e).some(d=>targetDepts.includes(d)));
   // empListは既に社員番号順（employeesAll由来）なので、絞り込むだけで順序は保たれる
   const unreadEmployees = activeEmployees.filter(e => !readEmails.some(re=>re.toLowerCase()===(e.email||"").toLowerCase()));
 
@@ -2071,7 +2075,9 @@ function renderNoticeDetailView(n){
     : escapeHtml(n.authorName||"");
   const readByAt = n.readByAt || {};
   const readCount = Object.keys(readByAt).filter(k => k.includes("@")).length;
-  const totalCount = employeesAll.filter(e=>!e.hidden && !e.isSharedAccount).length;
+  const noticeTargetDepts = Array.isArray(n.targetDepartments) ? n.targetDepartments : [];
+  const totalCount = employeesAll.filter(e=>!e.hidden && !e.isSharedAccount)
+    .filter(e => noticeTargetDepts.length===0 || empDepartmentsAdmin(e).some(d=>noticeTargetDepts.includes(d))).length;
   document.getElementById("notice-detail-meta").innerHTML = `${authorHtml} ・ ${escapeHtml(tsToStr(n.createdAt))} ・ 既読：${readCount}/${totalCount}`;
   document.getElementById("notice-detail-body").textContent = n.body || "";
   const attEl = document.getElementById("notice-detail-attachment");

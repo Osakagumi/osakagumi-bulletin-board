@@ -1340,6 +1340,16 @@
         <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">本文</label>
         <textarea id="notice-body" style="min-height:110px;"></textarea>
       </div>
+      <div class="field">
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">発信先</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:8px;">
+          <input type="checkbox" id="notice-target-all" checked style="width:auto;">
+          全社に送信する
+        </label>
+        <div id="notice-target-depts-wrap" style="display:none;">
+          <div id="notice-target-depts-checks" style="display:flex;flex-wrap:wrap;gap:6px 14px;border:1px solid var(--line);border-radius:8px;padding:10px;max-height:160px;overflow-y:auto;"></div>
+        </div>
+      </div>
       <div class="field" id="notice-attach-field">
         <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">添付ファイル（任意）</label>
         <p id="notice-dropzone-hint" style="font-size:11.5px;color:var(--muted);margin:0 0 8px;">
@@ -2174,7 +2184,14 @@ function renderDashboard(){
 
   // ---- お知らせ（未読上位） ----
   const noticesBody = document.getElementById("dash-notices-body");
-  const unread = noticesAll.filter(n => !myReadNoticeIds.includes(n.id));
+  const dashMe = employeesAll.find(e=>(e.email||"").toLowerCase()===(currentUser?.email||"").toLowerCase());
+  const dashMyDepts = dashMe ? empDepartments(dashMe) : [];
+  const unread = noticesAll.filter(n=>{
+    if(myReadNoticeIds.includes(n.id)) return false;
+    if(n.authorEmail === currentUser?.email) return true;
+    const targetDepts = Array.isArray(n.targetDepartments) ? n.targetDepartments : [];
+    return targetDepts.length===0 || targetDepts.some(d=>dashMyDepts.includes(d));
+  });
   if(unread.length===0){
     noticesBody.innerHTML = `<div class="dash-empty">未読のお知らせはありません。</div>`;
   } else {
@@ -3829,7 +3846,13 @@ function renderNoticeBoardCards(){
   const cardsEl = document.getElementById("notice-board-cards");
   if(!cardsEl) return;
   cardsEl.innerHTML = "";
-  const list = noticesAll; // 既にcreatedAt降順（新しい順）
+  const me = employeesAll.find(e=>(e.email||"").toLowerCase()===(currentUser?.email||"").toLowerCase());
+  const myDepts = me ? empDepartments(me) : [];
+  // 発信先が「全社」、または自分（共用アカウント）の所属部署宛てのものだけを表示する
+  const list = noticesAll.filter(n=>{
+    const targetDepts = Array.isArray(n.targetDepartments) ? n.targetDepartments : [];
+    return targetDepts.length===0 || targetDepts.some(d=>myDepts.includes(d));
+  }); // 既にcreatedAt降順（新しい順）
   if(list.length===0){
     cardsEl.innerHTML = `<div class="nb-empty">お知らせはまだありません。</div>`;
     return;
@@ -3879,11 +3902,18 @@ function renderNotices(){
   const el = document.getElementById("notice-list");
   el.innerHTML = "";
   document.getElementById("notice-hide-read-btn").style.display = myKeepVisibleNoticeIds.length > 0 ? "inline-block" : "none";
+  const me = employeesAll.find(e=>(e.email||"").toLowerCase()===(currentUser?.email||"").toLowerCase());
+  const myDepts = me ? empDepartments(me) : [];
+  const visibleNotices = noticesAll.filter(n=>{
+    if(n.authorEmail === currentUser?.email) return true; // 自分の投稿は発信先に関わらず見える
+    const targetDepts = Array.isArray(n.targetDepartments) ? n.targetDepartments : [];
+    return targetDepts.length===0 || targetDepts.some(d=>myDepts.includes(d)); // 全社、または自分の所属部署宛て
+  });
   const list = noticeShowAllMode
-    ? noticesAll
-    : noticesAll.filter(n => !myReadNoticeIds.includes(n.id) || myKeepVisibleNoticeIds.includes(n.id));
+    ? visibleNotices
+    : visibleNotices.filter(n => !myReadNoticeIds.includes(n.id) || myKeepVisibleNoticeIds.includes(n.id));
   if(list.length===0){
-    el.innerHTML = `<tr><td colspan="6" class="empty-state">${noticesAll.length===0 ? "お知らせはまだありません。" : "未読のお知らせはありません。"}</td></tr>`;
+    el.innerHTML = `<tr><td colspan="6" class="empty-state">${visibleNotices.length===0 ? "お知らせはまだありません。" : "未読のお知らせはありません。"}</td></tr>`;
     return;
   }
   list.forEach(n=>{
@@ -3896,7 +3926,9 @@ function renderNotices(){
       : escapeHtml(n.authorName||"");
     const readByAt = n.readByAt || {};
     const readCount = Object.keys(readByAt).filter(k => k.includes("@")).length;
-    const totalCount = employeesAll.filter(e=>!e.hidden && !e.isSharedAccount).length;
+    const noticeTargetDepts = Array.isArray(n.targetDepartments) ? n.targetDepartments : [];
+    const totalCount = employeesAll.filter(e=>!e.hidden && !e.isSharedAccount)
+      .filter(e => noticeTargetDepts.length===0 || empDepartments(e).some(d=>noticeTargetDepts.includes(d))).length;
     const statusLabel = !isRead ? "未読" : (isKeptVisible ? "既読" : "非表示");
     tr.innerHTML = `
       <td class="n-date-cell">${escapeHtml(tsToStr(n.createdAt))}</td>
@@ -3932,7 +3964,9 @@ function buildReadByModalHtml(n, empList){
     return { name, email, dtLabel, dt: (parsedDt && !isNaN(parsedDt.getTime())) ? dt : "" };
   }).sort((a,b)=> a.dt.localeCompare(b.dt));
 
-  const activeEmployees = empList.filter(e=>!e.hidden && !e.isSharedAccount);
+  const targetDepts = Array.isArray(n.targetDepartments) ? n.targetDepartments : [];
+  const activeEmployees = empList.filter(e=>!e.hidden && !e.isSharedAccount)
+    .filter(e => targetDepts.length===0 || empDepartments(e).some(d=>targetDepts.includes(d)));
   const unreadEmployees = sortEmployeesByNo(
     activeEmployees.filter(e => !readEmails.some(re=>re.toLowerCase()===(e.email||"").toLowerCase()))
   );
@@ -4007,7 +4041,9 @@ function renderNoticeDetailView(n){
     : escapeHtml(n.authorName||"");
   const readByAt = n.readByAt || {};
   const readCount = Object.keys(readByAt).filter(k => k.includes("@")).length;
-  const totalCount = employeesAll.filter(e=>!e.hidden && !e.isSharedAccount).length;
+  const noticeTargetDepts = Array.isArray(n.targetDepartments) ? n.targetDepartments : [];
+  const totalCount = employeesAll.filter(e=>!e.hidden && !e.isSharedAccount)
+    .filter(e => noticeTargetDepts.length===0 || empDepartments(e).some(d=>noticeTargetDepts.includes(d))).length;
   document.getElementById("notice-detail-meta").innerHTML = `${authorHtml} ・ ${escapeHtml(tsToStr(n.createdAt))} ・ 既読：${readCount}/${totalCount}`;
   document.getElementById("notice-detail-body").textContent = n.body || "";
   const attEl = document.getElementById("notice-detail-attachment");
@@ -4091,6 +4127,27 @@ document.getElementById("notice-detail-delete-btn").addEventListener("click", as
 
 const noticeModal = document.getElementById("notice-modal");
 
+function renderNoticeTargetDeptChecks(selectedIds){
+  const wrap = document.getElementById("notice-target-depts-checks");
+  if(!wrap) return;
+  wrap.innerHTML = "";
+  departmentsAll.forEach(dept=>{
+    const label = document.createElement("label");
+    label.style.cssText = "display:flex;align-items:center;gap:5px;font-size:12.5px;cursor:pointer;";
+    const cb = document.createElement("input");
+    cb.type = "checkbox"; cb.style.width = "auto";
+    cb.value = dept.id;
+    cb.checked = selectedIds.includes(dept.id);
+    cb.className = "notice-target-dept-check";
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(dept.name || ""));
+    wrap.appendChild(label);
+  });
+}
+document.getElementById("notice-target-all").addEventListener("change", (e)=>{
+  document.getElementById("notice-target-depts-wrap").style.display = e.target.checked ? "none" : "block";
+});
+
 document.getElementById("notice-new-btn").addEventListener("click", ()=>{
   editingNoticeId = null;
   originalAttachmentStoragePath = null;
@@ -4100,6 +4157,9 @@ document.getElementById("notice-new-btn").addEventListener("click", ()=>{
   document.getElementById("notice-send-email-label").textContent = "社員全員に同じ内容をメールでも送信する";
   document.getElementById("notice-title").value = "";
   document.getElementById("notice-body").value = "";
+  document.getElementById("notice-target-all").checked = true;
+  document.getElementById("notice-target-depts-wrap").style.display = "none";
+  renderNoticeTargetDeptChecks([]);
   originalAttachmentUrl = null;
   originalAttachmentFileName = null;
   removeExistingNoticeAttachment = false;
@@ -4125,6 +4185,10 @@ function openNoticeEditModal(n){
   document.getElementById("notice-send-email-label").textContent = "更新内容を社員全員にメールでも送信する（自分のメールソフトが起動します）";
   document.getElementById("notice-title").value = n.title || "";
   document.getElementById("notice-body").value = n.body || "";
+  const targetDepts = Array.isArray(n.targetDepartments) ? n.targetDepartments : [];
+  document.getElementById("notice-target-all").checked = targetDepts.length===0;
+  document.getElementById("notice-target-depts-wrap").style.display = targetDepts.length===0 ? "none" : "block";
+  renderNoticeTargetDeptChecks(targetDepts);
   document.getElementById("notice-dropzone-hint").textContent = "ファイルを選び直すと、既存の添付ファイルを削除して置き換えます。未選択なら添付ファイルはそのままです。";
   resetNoticeDropzone();
   const existingRow = document.getElementById("notice-existing-attachment-row");
@@ -4176,6 +4240,14 @@ document.getElementById("notice-submit").addEventListener("click", async ()=>{
     errEl.textContent = "添付ファイルのアップロードに失敗した状態です。もう一度アップロードするか、ファイルを外した状態で投稿してください。";
     return;
   }
+  const sendToAll = document.getElementById("notice-target-all").checked;
+  const targetDepartments = sendToAll
+    ? []
+    : [...document.querySelectorAll(".notice-target-dept-check:checked")].map(cb=>cb.value);
+  if(!sendToAll && targetDepartments.length===0){
+    errEl.textContent = "発信先の部署を1つ以上選択するか、「全社に送信する」を選んでください。";
+    return;
+  }
   errEl.textContent = "";
   statusEl.textContent = "";
 
@@ -4188,6 +4260,13 @@ document.getElementById("notice-submit").addEventListener("click", async ()=>{
       employeesAll = freshSnap.docs.map(d=>({email:d.id, ...d.data()}));
     }catch(e){ /* 取得失敗時はキャッシュのまま表示を続行 */ }
     recipients = resolveMailRecipients(employeesAll);
+    if(targetDepartments.length>0){
+      // 発信先が部署指定の場合は、宛先もその部署の社員だけに絞り込む
+      recipients = recipients.filter(r=>{
+        const emp = employeesAll.find(e=>e.email===r.email);
+        return emp && empDepartments(emp).some(d=>targetDepartments.includes(d));
+      });
+    }
     const overrideNotice = isMailOverrideActive()
       ? `\n\n※現在メール送信先が「${MAIL_SEND_TARGET}」に上書き設定されているため、上記の人数・宛先のみが対象になります（全社員には送信されません）。`
       : "";
@@ -4200,7 +4279,7 @@ document.getElementById("notice-submit").addEventListener("click", async ()=>{
   if(editingNoticeId){
     try{
       await updateDoc(doc(db,"announcements", editingNoticeId), {
-        title, body, attachmentUrl, attachmentStoragePath, attachmentFileName,
+        title, body, attachmentUrl, attachmentStoragePath, attachmentFileName, targetDepartments,
         updatedAt: Timestamp.now()
       });
       // 添付が別のものに差し替わった／削除された場合は、以前のファイルをドライブから完全削除する
@@ -4221,7 +4300,7 @@ document.getElementById("notice-submit").addEventListener("click", async ()=>{
   try{
     await addDoc(collection(db,"announcements"), {
       title, body,
-      attachmentUrl, attachmentStoragePath, attachmentFileName,
+      attachmentUrl, attachmentStoragePath, attachmentFileName, targetDepartments,
       authorEmail: currentUser.email,
       authorName: myDisplayName(),
       createdAt: Timestamp.now()
