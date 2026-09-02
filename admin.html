@@ -3157,7 +3157,16 @@ let employeesAll = [];
 function initEmployeesListener(){
   onSnapshot(collection(db,"employees"), snap=>{
     employeesAll = snap.docs.map(d=>({email:d.id, ...d.data()}));
+    // 初期状態は社員番号順。ただし「行き先」の事前設定画面（index.html）で表示順（社員のorder）を
+    // 変更した場合は、そちらが最優先される（社員番号順は、まだ並び替えていない社員だけのフォールバック）。
+    // ここでソートしておくことで、この一覧・権限保持者一覧・各種マトリクス等、employeesAllを参照する
+    // 全ての画面に自動的に反映される。
     employeesAll.sort((a,b)=>{
+      const hasOa = a.order!==undefined && a.order!==null;
+      const hasOb = b.order!==undefined && b.order!==null;
+      if(hasOa && hasOb && a.order!==b.order) return a.order-b.order;
+      if(hasOa && !hasOb) return -1;
+      if(!hasOa && hasOb) return 1;
       const na = a.employeeNo ? Number(a.employeeNo) : null;
       const nb = b.employeeNo ? Number(b.employeeNo) : null;
       const validA = na!==null && !isNaN(na);
