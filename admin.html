@@ -90,7 +90,8 @@
 
   .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;}
   .form-grid .full{grid-column:1/-1;}
-  .field label{display:block;font-size:11.5px;color:var(--muted);margin-bottom:5px;}
+  .field label{display:block;font-size:11.5px;font-weight:700;color:var(--muted);margin:14px 0 5px;}
+  .field:first-child label, .modal h3 + .field label, h2 + .field label{margin-top:0;}
   .field input, .field select, .field textarea{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:13.5px;}
   .field textarea{min-height:50px;resize:vertical;}
   .btn{border:none;border-radius:7px;padding:9px 16px;font-size:13px;font-weight:600;}
