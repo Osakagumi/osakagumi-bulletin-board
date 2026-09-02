@@ -1964,7 +1964,7 @@ function renderNoticesAdminTable(notices){
       <td><input type="checkbox" class="notice-row-check" data-id="${n.id}" style="width:auto;"${selectedNoticeIds.has(n.id) ? " checked" : ""}></td>
       <td style="font-size:12px;color:var(--muted);white-space:nowrap;">${escapeHtml(tsToStr(n.createdAt))}</td>
       <td>${escapeHtml(n.authorName||n.authorEmail||"")}</td>
-      <td>${escapeHtml(n.title||"")}</td>
+      <td>${escapeHtml(n.title||"")}<div style="font-size:11px;color:var(--muted);margin-top:2px;">宛先：${escapeHtml(noticeTargetSummary(n, false))}</div></td>
       <td style="font-size:12px;color:var(--muted);white-space:nowrap;">${readCount}/${totalCount}</td>
       <td class="actions"></td>
     `;
@@ -2083,7 +2083,7 @@ function renderNoticeDetailView(n){
   const noticeTargetDepts = Array.isArray(n.targetDepartments) ? n.targetDepartments : [];
   const totalCount = employeesAll.filter(e=>!e.hidden && !e.isSharedAccount)
     .filter(e => noticeTargetDepts.length===0 || empDepartmentsAdmin(e).some(d=>noticeTargetDepts.includes(d))).length;
-  document.getElementById("notice-detail-meta").innerHTML = `${authorHtml} ・ ${escapeHtml(tsToStr(n.createdAt))} ・ 既読：${readCount}/${totalCount}`;
+  document.getElementById("notice-detail-meta").innerHTML = `${authorHtml} ・ ${escapeHtml(tsToStr(n.createdAt))} ・ 宛先：${escapeHtml(noticeTargetSummary(n, true))} ・ 既読：${readCount}/${totalCount}`;
   document.getElementById("notice-detail-body").textContent = n.body || "";
   const attEl = document.getElementById("notice-detail-attachment");
   attEl.innerHTML = n.attachmentUrl
@@ -3781,6 +3781,16 @@ function departmentNamesJoinedAdmin(emp){
   const ids = empDepartmentsAdmin(emp);
   if(ids.length===0) return "未所属";
   return ids.map(id=>departmentNameById(id)).join("・");
+}
+// お知らせの発信先（targetDepartments）を表示用の文字列にする。
+// full=false（一覧向け）：全社／単一部署名／複数なら「先頭の部署名＋ほか」に短縮
+// full=true（詳細向け）：全社／該当する部署名をすべて「・」で連結
+function noticeTargetSummary(n, full){
+  const targetDepts = Array.isArray(n.targetDepartments) ? n.targetDepartments : [];
+  if(targetDepts.length===0) return "全社";
+  const names = targetDepts.map(id => departmentNameById(id));
+  if(full) return names.join("・");
+  return names.length===1 ? names[0] : `${names[0]}ほか`;
 }
 function indexPageUrl(){
   return location.href.replace(/admin\.html.*$/i, "index.html");

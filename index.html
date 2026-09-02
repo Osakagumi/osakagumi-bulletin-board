@@ -3940,7 +3940,7 @@ function renderNotices(){
     tr.innerHTML = `
       <td class="n-date-cell">${escapeHtml(tsToStr(n.createdAt))}</td>
       <td class="n-author-cell">${authorNameHtml}</td>
-      <td class="n-title-cell">${escapeHtml(n.title)}</td>
+      <td class="n-title-cell">${escapeHtml(n.title)}<div style="font-size:11px;color:var(--muted);margin-top:2px;">宛先：${escapeHtml(noticeTargetSummary(n, false))}</div></td>
       <td class="n-read-count-cell">${readCount}/${totalCount}</td>
       <td class="n-status-cell n-status-${isRead ? (isKeptVisible?"read":"hidden") : "unread"}" style="${noticeShowAllMode ? "" : "display:none;"}">${statusLabel}</td>
       <td></td>
@@ -4051,7 +4051,7 @@ function renderNoticeDetailView(n){
   const noticeTargetDepts = Array.isArray(n.targetDepartments) ? n.targetDepartments : [];
   const totalCount = employeesAll.filter(e=>!e.hidden && !e.isSharedAccount)
     .filter(e => noticeTargetDepts.length===0 || empDepartments(e).some(d=>noticeTargetDepts.includes(d))).length;
-  document.getElementById("notice-detail-meta").innerHTML = `${authorHtml} ・ ${escapeHtml(tsToStr(n.createdAt))} ・ 既読：${readCount}/${totalCount}`;
+  document.getElementById("notice-detail-meta").innerHTML = `${authorHtml} ・ ${escapeHtml(tsToStr(n.createdAt))} ・ 宛先：${escapeHtml(noticeTargetSummary(n, true))} ・ 既読：${readCount}/${totalCount}`;
   document.getElementById("notice-detail-body").textContent = n.body || "";
   const attEl = document.getElementById("notice-detail-attachment");
   attEl.innerHTML = n.attachmentUrl
@@ -4581,6 +4581,16 @@ function departmentNamesJoined(emp){
   const ids = empDepartments(emp);
   if(ids.length===0) return "未所属";
   return ids.map(id=>departmentName(id)).join("・");
+}
+// お知らせの発信先（targetDepartments）を表示用の文字列にする。
+// full=false（一覧向け）：全社／単一部署名／複数なら「先頭の部署名＋ほか」に短縮
+// full=true（詳細向け）：全社／該当する部署名をすべて「・」で連結
+function noticeTargetSummary(n, full){
+  const targetDepts = Array.isArray(n.targetDepartments) ? n.targetDepartments : [];
+  if(targetDepts.length===0) return "全社";
+  const names = targetDepts.map(id => departmentName(id));
+  if(full) return names.join("・");
+  return names.length===1 ? names[0] : `${names[0]}ほか`;
 }
 // 複数所属のうち、部署の並び順で一番先頭のものだけを表示したい場面向け（行き先ボードなど）
 function primaryDepartmentName(emp){
