@@ -121,6 +121,26 @@
   th{color:var(--muted);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.02em;}
   td.actions{white-space:nowrap;}
   td.actions button{margin-right:6px;}
+
+  /* スマホ幅では、列が窮屈になって文字が1文字ずつ縦に折り返されてしまうのを防ぐため、
+     セルに最低限の横幅を確保し、テーブルごと横スクロールできるようにする
+     （権限設定マトリクス・タブ設定マトリクスは既に専用の枠で横スクロールに対応済みのため、
+     　ここでは対象外にする）。通常の折り返し（wrap）自体は残すので、タイトルや備考など
+     長めの文章が入る列は、複数行に収まる形で読める（横に間延びしすぎない）。 */
+  @media (max-width:720px){
+    table:not(.perm-matrix-table){
+      display:block;
+      overflow-x:auto;
+      -webkit-overflow-scrolling:touch;
+    }
+    table:not(.perm-matrix-table) th,
+    table:not(.perm-matrix-table) td{
+      min-width:90px;
+    }
+    table:not(.perm-matrix-table) td.actions{
+      min-width:0;
+    }
+  }
   .tag{font-size:10.5px;font-weight:700;color:#fff;padding:2px 7px;border-radius:4px;font-family:var(--mono);white-space:nowrap;display:inline-block;}
   .settings-draglist{border:1px solid var(--line);border-radius:8px;padding:6px;max-width:360px;}
   .settings-drag-row{display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:6px;font-size:13px;background:var(--surface,#fff);margin-bottom:4px;cursor:grab;}
