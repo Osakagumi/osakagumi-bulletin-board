@@ -95,6 +95,11 @@
   /* form-gridは横並びのレイアウトなので、1番目の子要素だけ上余白ゼロにすると、
      同じ行の2列目・3列目とだけ縦位置がずれてしまう。行内の全項目で統一する。 */
   .form-grid .field label{margin-top:0;}
+  /* CSS Gridの初期値では、グリッド項目は中身（内容物）の最小サイズより縮まない
+     （min-width:autoが既定）。iOSのtype="time"のネイティブUIは内容物としての最小幅が
+     大きいため、それに引っ張られて.field自体が列の幅をはみ出して広がってしまう
+     （Androidでは起きない、内部UIの実装差）。明示的にmin-width:0にして縮めるようにする。 */
+  .form-grid .field{min-width:0;}
   .field label:has(input[type="checkbox"]),
   .field input[type="checkbox"] + label{
     font-weight:400; margin:0;
