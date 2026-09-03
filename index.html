@@ -409,7 +409,9 @@
   .chat-conv-delete-btn:hover{background:var(--danger);color:#fff;}
   .chat-conv-row:hover{border-color:var(--brand);}
   .chat-conv-row.chat-conv-unread{border-color:var(--brand);background:#F4F8FC;}
-  .chat-conv-avatar{width:36px;height:36px;border-radius:50%;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0;}
+  .chat-conv-avatar{width:36px;height:36px;border-radius:50%;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0;position:relative;}
+  .online-dot{position:absolute;right:-1px;bottom:-1px;width:10px;height:10px;border-radius:50%;background:#2FB344;border:2px solid #fff;}
+  .online-dot-inline{display:inline-block;width:8px;height:8px;border-radius:50%;background:#2FB344;margin-right:6px;vertical-align:middle;}
   .chat-conv-main{flex:1;min-width:0;}
   .chat-conv-name{font-size:13.5px;font-weight:700;}
   .chat-conv-preview{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
@@ -427,6 +429,7 @@
   .chat-bubble-row:not(.chat-mine) .chat-bubble{background:#F0F2F5;color:var(--text);border-bottom-left-radius:4px;}
   .chat-bubble-time{font-size:10px;color:var(--muted);margin-top:3px;text-align:right;}
   .chat-bubble-row:not(.chat-mine) .chat-bubble-time{text-align:left;}
+  .chat-bubble-read{display:inline-block;font-size:10px;color:var(--brand);margin-left:5px;font-weight:600;}
   .chat-input-row{display:flex;gap:8px;margin-top:10px;}
   .chat-input-row input{flex:1;padding:10px 14px;border:1px solid var(--line);border-radius:20px;font-size:13.5px;}
   .chat-input-row button{border-radius:20px;padding:10px 20px;}
@@ -1243,7 +1246,10 @@
         <div id="chat-thread-view" style="display:none;">
           <div class="section-toolbar" style="position:relative;">
             <button class="btn-ghost" id="chat-back-btn" style="border:1px solid var(--line);">← 一覧に戻る</button>
-            <div id="chat-thread-title" style="font-weight:700;font-size:14.5px;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);white-space:nowrap;"></div>
+            <div id="chat-thread-title" style="font-weight:700;font-size:14.5px;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);white-space:nowrap;display:flex;align-items:center;gap:6px;justify-content:center;">
+              <span id="chat-thread-title-text"></span>
+              <span id="chat-thread-online-label" style="display:none;font-size:11px;font-weight:600;color:#2FB344;white-space:nowrap;">● オンライン</span>
+            </div>
           </div>
           <div id="chat-messages" class="chat-messages"></div>
           <div class="chat-input-row">
@@ -1820,6 +1826,53 @@ function stopFaviconBlink(){
   if(faviconBlinkTimer){ clearInterval(faviconBlinkTimer); faviconBlinkTimer = null; }
   setFaviconHref(ORIGINAL_FAVICON_HREF);
 }
+
+/* =========================================================
+   在席状況（ポータルサイトを開いているかどうか）
+   ログイン中は自分の presence/{email} ドキュメントを一定間隔で更新し続け（ハートビート）、
+   他の画面（チャット・社員選択モーダル）では「最終更新が一定時間以内かどうか」でオンライン扱いにする。
+   「閉じた瞬間にオフラインにする」処理はブラウザの都合上確実に検知できないため行わず、
+   更新が止まって一定時間経てば自然にオフライン扱いになる方式にしている。
+========================================================= */
+const PRESENCE_HEARTBEAT_MS = 60000; // 1分ごとに更新
+const PRESENCE_ONLINE_THRESHOLD_MS = 150000; // 最終更新から2分30秒以内ならオンライン扱い
+let presenceLastActiveAt = {}; // { email: 最終更新日時（ISO文字列） }
+let presenceHeartbeatTimer = null;
+function initPresence(){
+  const writeHeartbeat = async ()=>{
+    try{ await setDoc(doc(db,"presence", currentUser.email), { lastActiveAt: new Date().toISOString() }, { merge:true }); }
+    catch(e){ /* 失敗しても次回の更新に任せる */ }
+  };
+  writeHeartbeat();
+  if(presenceHeartbeatTimer) clearInterval(presenceHeartbeatTimer);
+  presenceHeartbeatTimer = setInterval(writeHeartbeat, PRESENCE_HEARTBEAT_MS);
+  onSnapshot(collection(db,"presence"), snap=>{
+    presenceLastActiveAt = {};
+    snap.docs.forEach(d=>{ presenceLastActiveAt[d.id] = d.data().lastActiveAt || null; });
+    refreshOnlineMarksIfActive();
+  }, (err)=>{ console.error("[在席状況取得エラー]", err); });
+}
+function isUserOnline(email){
+  const lastActiveAt = presenceLastActiveAt[email];
+  if(!lastActiveAt) return false;
+  const diff = Date.now() - new Date(lastActiveAt).getTime();
+  return diff >= 0 && diff <= PRESENCE_ONLINE_THRESHOLD_MS;
+}
+// 在席状況は1分ごとにしか更新されないため、表示中の画面のオンラインマークも定期的に再チェックする
+// （例えば相手がタブを閉じてから2分半経った、というタイミングを反映するため）
+function refreshOnlineMarksIfActive(){
+  if(document.getElementById("chat-list-view")?.style.display !== "none"){
+    renderChatConversationList();
+  }
+  if(chatCurrentOtherEmail){
+    updateChatThreadOnlineMark();
+  }
+  if(document.getElementById("employee-picker-modal")?.classList.contains("show")){
+    renderEmpPickerNameSelect();
+  }
+}
+setInterval(refreshOnlineMarksIfActive, 30000); // 30秒ごとに再チェック（新たな書き込みが無くても経過時間で変わるため）
+
 let categoriesAll = [];
 function catInfo(id){ return categoriesAll.find(c=>c.id===id) || {label:id, color:"#888"}; }
 function formatDateJP(dateStr){
@@ -2019,6 +2072,7 @@ onAuthStateChanged(auth, async (user)=>{
     initContractsListener();
     initBizInfoListener();
     initChatListeners();
+    initPresence();
     initContractSettingsListener();
     initUserPrefsListener();
     initSystemTabDefaultsListener();
@@ -4763,7 +4817,9 @@ function renderEmpPickerNameSelect(){
     const row = document.createElement("div");
     const isSelected = empPickerMulti ? empPickerSelectedEmails.has(e.email) : e.email===empPickerSelectedEmail;
     row.className = "emp-picker-row" + (isSelected ? " selected" : "");
-    row.textContent = (empPickerMulti ? (isSelected ? "☑ " : "☐ ") : "") + (e.name || e.email);
+    const checkPrefix = empPickerMulti ? (isSelected ? "☑ " : "☐ ") : "";
+    const onlineDotHtml = isUserOnline(e.email) ? `<span class="online-dot-inline" title="オンライン"></span>` : "";
+    row.innerHTML = `${onlineDotHtml}${escapeHtml(checkPrefix + (e.name || e.email))}`;
     row.addEventListener("click", ()=>{
       if(empPickerMulti){
         if(empPickerSelectedEmails.has(e.email)) empPickerSelectedEmails.delete(e.email);
@@ -8363,8 +8419,9 @@ function renderChatConversationList(){
     row.className = "chat-conv-row" + (conv.unread ? " chat-conv-unread" : "");
     const initial = (conv.otherName||"?").charAt(0);
     const timeLabel = conv.lastAt ? formatChatTime(conv.lastAt) : "";
+    const onlineDotHtml = isUserOnline(conv.otherEmail) ? `<span class="online-dot" title="オンライン"></span>` : "";
     row.innerHTML = `
-      <div class="chat-conv-avatar">${escapeHtml(initial)}</div>
+      <div class="chat-conv-avatar">${escapeHtml(initial)}${onlineDotHtml}</div>
       <div class="chat-conv-main">
         <div class="chat-conv-name">${escapeHtml(conv.otherName)}</div>
         <div class="chat-conv-preview">${escapeHtml(conv.lastText)}</div>
@@ -8400,7 +8457,8 @@ function openChatThread(otherEmail, otherName){
   chatCurrentConversationId = chatConversationId(currentUser.email, otherEmail);
   chatCurrentOtherEmail = otherEmail;
   chatCurrentOtherName = otherName;
-  document.getElementById("chat-thread-title").textContent = `${otherName}さんとの会話`;
+  document.getElementById("chat-thread-title-text").textContent = `${otherName}さんとの会話`;
+  updateChatThreadOnlineMark();
   document.getElementById("chat-list-view").style.display = "none";
   document.getElementById("chat-thread-view").style.display = "block";
   document.getElementById("chat-messages").innerHTML = "";
@@ -8429,6 +8487,11 @@ function openChatThread(otherEmail, otherName){
   );
   setTimeout(()=> document.getElementById("chat-input")?.focus(), 100);
 }
+function updateChatThreadOnlineMark(){
+  const label = document.getElementById("chat-thread-online-label");
+  if(!label || !chatCurrentOtherEmail) return;
+  label.style.display = isUserOnline(chatCurrentOtherEmail) ? "inline" : "none";
+}
 function renderChatMessages(msgs){
   const body = document.getElementById("chat-messages");
   const wasAtBottom = body.scrollTop + body.clientHeight >= body.scrollHeight - 20;
@@ -8438,10 +8501,11 @@ function renderChatMessages(msgs){
     const row = document.createElement("div");
     row.className = "chat-bubble-row" + (isMine ? " chat-mine" : "");
     const timeLabel = formatChatTime(m.createdAt);
+    const readLabel = (isMine && m.read) ? `<div class="chat-bubble-read">既読</div>` : "";
     row.innerHTML = `
       <div class="chat-bubble-wrap">
         <div class="chat-bubble">${escapeHtml(m.text||"")}</div>
-        <div class="chat-bubble-time">${escapeHtml(timeLabel)}</div>
+        <div class="chat-bubble-time">${escapeHtml(timeLabel)}${readLabel}</div>
       </div>
     `;
     body.appendChild(row);

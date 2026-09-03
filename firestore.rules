@@ -163,6 +163,12 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // 在席状況（ポータルサイトを開いているかどうか）。全員が読める。書き込みは本人のみ（なりすまし防止）。
+    match /presence/{email} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.token.email == email;
+    }
+
     // 設備管理者一覧（点検日の編集・貸出状態の管理ができる人）: 全員が読める。書き込みはシステム管理者のみ。
     match /equipment_managers/{email} {
       allow read: if isSignedIn();
