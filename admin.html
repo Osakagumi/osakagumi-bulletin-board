@@ -107,10 +107,14 @@
   .field input, .field select, .field textarea{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:13.5px;}
   .field textarea{min-height:50px;resize:vertical;}
   /* type="time"・type="date"は、スマホのネイティブ入力UI（内部の時刻ホイール等）の都合で、
-     width:100%だけでは他の入力欄と揃わず、はみ出して広く見えることがあるため明示的に抑える。 */
+     width:100%だけでは他の入力欄と揃わず、はみ出して広く見えることがあるため明示的に抑える。
+     max-width/box-sizingだけでは直らなかったため、iOS独自のネイティブ描画
+     （-webkit-appearance）自体を解除し、こちらのCSSで指定した幅を優先させる。 */
   .field input[type="time"], .field input[type="date"], .field input[type="datetime-local"]{
     max-width:100%;
     box-sizing:border-box;
+    -webkit-appearance:none;
+    appearance:none;
   }
   .btn{border:none;border-radius:7px;padding:9px 16px;font-size:13px;font-weight:600;}
   .btn-primary{background:var(--brand);color:#fff;}
