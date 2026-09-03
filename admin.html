@@ -173,6 +173,8 @@
      （権限設定マトリクス・タブ設定マトリクスは既に専用の枠で横スクロールに対応済みのため、
      　ここでは対象外にする）。通常の折り返し（wrap）自体は残すので、タイトルや備考など
      長めの文章が入る列は、複数行に収まる形で読める（横に間延びしすぎない）。 */
+  .sysgrid-2col{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;}
+
   @media (max-width:720px){
     table:not(.perm-matrix-table){
       display:block;
@@ -190,6 +192,11 @@
        特にtype="time"のようなOS標準の入力コントロールで縦位置がずれて見えることがあるため、
        狭い画面では1列に積んで、各項目をフル幅で表示する。 */
     .form-grid{
+      grid-template-columns:1fr;
+    }
+    /* システム管理の2×2カードも、スマホでは1列に積む
+      （ドライブ空き容量→タブON/OFF設定→一般画面デフォルトタブ順→管理画面デフォルトタブ順の順） */
+    .sysgrid-2col{
       grid-template-columns:1fr;
     }
   }
@@ -849,52 +856,52 @@
 
     <!-- ============ システム管理 ============ -->
     <section id="view-systemsettings" style="display:none;">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;">
-        <div style="display:flex;flex-direction:column;gap:16px;">
-          <div class="panel" style="margin:0;">
-            <h2>一般画面のタブ設定（既定値）</h2>
-            <!-- <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-              ここで設定した内容は、社員が自分で並び替え・表示設定をまだ行っていない場合の初期値として使われます。社員本人が設定を変更した場合は、そちらが優先されます。
-            </p> -->
-            <div class="field">
-              <label>タブの並び順（ドラッグで並び替え）</label>
-              <div id="general-tab-order-list" class="settings-draglist"></div>
-            </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <h2 style="margin:0;font-size:16px;">システム管理</h2>
+        <button class="btn btn-primary" id="system-tab-defaults-save-btn">保存</button>
+      </div>
+      <div class="sysgrid-2col">
+        <!-- 左上：ドライブ空き容量 -->
+        <div class="panel" style="margin:0;">
+          <div class="panel-h2-row">
+            <h2>保存先の空き容量（お知らせ添付・業務情報）</h2>
+            <button type="button" class="icon-help-btn" id="storage-info-refresh-btn" title="更新" aria-label="更新">⟳</button>
           </div>
-
-          <div class="panel" style="margin:0;">
-            <h2>既定で有効にするタブ</h2>
-            <!-- <p style="font-size:12px;color:var(--muted);margin:0 0 10px;">
-              ここでチェックを外したタブは、社員個人の設定に関わらず、全員に対して非表示になります（両方が「表示」の場合のみ表示されます）。
-            </p> -->
-            <div id="general-enabled-tabs-checks" style="display:flex;flex-wrap:wrap;gap:10px;border:1px solid var(--line);border-radius:8px;padding:10px;"></div>
-          </div>
-
-          <div class="panel" style="margin:0;">
-            <div class="panel-h2-row">
-              <h2>保存先の空き容量（お知らせ添付・業務情報）</h2>
-              <button type="button" class="icon-help-btn" id="storage-info-refresh-btn" title="更新" aria-label="更新">⟳</button>
-            </div>
-            <div id="storage-info-body">
-              <div style="font-size:12.5px;color:var(--muted);">読み込み中…</div>
-            </div>
+          <div id="storage-info-body">
+            <div style="font-size:12.5px;color:var(--muted);">読み込み中…</div>
           </div>
         </div>
 
-        <div style="display:flex;flex-direction:column;gap:16px;">
-          <div class="panel" style="margin:0;">
-            <h2>管理画面のタブ設定（既定値）</h2>
-            <!-- <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-              管理画面で表示されるタブは、社員それぞれの権限によって決まりますが、その中での並び順をここで設定できます。
-            </p> -->
-            <div class="field">
-              <label>タブの並び順（ドラッグで並び替え）</label>
-              <div id="admin-tab-order-list" class="settings-draglist"></div>
-            </div>
-          </div>
+        <!-- 右上：タブON/OFF設定 -->
+        <div class="panel" style="margin:0;">
+          <h2>既定で有効にするタブ</h2>
+          <!-- <p style="font-size:12px;color:var(--muted);margin:0 0 10px;">
+            ここでチェックを外したタブは、社員個人の設定に関わらず、全員に対して非表示になります（両方が「表示」の場合のみ表示されます）。
+          </p> -->
+          <div id="general-enabled-tabs-checks" style="display:flex;flex-wrap:wrap;gap:10px;border:1px solid var(--line);border-radius:8px;padding:10px;"></div>
+        </div>
 
-          <div style="text-align:right;">
-            <button class="btn btn-primary" id="system-tab-defaults-save-btn">保存</button>
+        <!-- 左下：一般画面デフォルトタブ順 -->
+        <div class="panel" style="margin:0;">
+          <h2>一般画面のタブ設定（既定値）</h2>
+          <!-- <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
+            ここで設定した内容は、社員が自分で並び替え・表示設定をまだ行っていない場合の初期値として使われます。社員本人が設定を変更した場合は、そちらが優先されます。
+          </p> -->
+          <div class="field">
+            <label>タブの並び順（ドラッグで並び替え）</label>
+            <div id="general-tab-order-list" class="settings-draglist"></div>
+          </div>
+        </div>
+
+        <!-- 右下：管理画面デフォルトタブ順 -->
+        <div class="panel" style="margin:0;">
+          <h2>管理画面のタブ設定（既定値）</h2>
+          <!-- <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
+            管理画面で表示されるタブは、社員それぞれの権限によって決まりますが、その中での並び順をここで設定できます。
+          </p> -->
+          <div class="field">
+            <label>タブの並び順（ドラッグで並び替え）</label>
+            <div id="admin-tab-order-list" class="settings-draglist"></div>
           </div>
         </div>
       </div>
