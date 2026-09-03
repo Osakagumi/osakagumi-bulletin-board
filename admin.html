@@ -146,6 +146,14 @@
   .modal-overlay .modal h3{margin:0 0 14px;font-size:15px;}
   .modal-overlay .row-btns{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;}
   .modal-overlay .row-btns button{padding:8px 16px;border-radius:8px;font-size:13px;}
+  /* .modal-actionsは.row-btnsと同じ見た目にする（CSVインポート/エクスポート系のモーダルで使用） */
+  .modal-overlay .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;}
+  .modal-overlay .modal-actions button{padding:8px 16px;border-radius:8px;font-size:13px;}
+  /* CSVインポートのプレビュー表：列が多いため、見出しは折り返し許容のまま、明細行だけ1行に
+     圧縮して横スクロールに任せる（縦に間延びするのを防ぐ） */
+  #userimport-preview-body td, #eqimport-preview-body td{
+    white-space:nowrap; padding:5px 8px;
+  }
 
   table{width:100%;border-collapse:collapse;font-size:13px;}
   th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top;}
@@ -356,7 +364,7 @@
         <h3>登録内容の確認（<span id="eqimport-count">0</span>件）</h3>
         <div style="max-height:50vh;overflow:auto;">
           <table>
-            <thead><tr><th>設備名</th><th>管理番号</th><th>カテゴリ</th><th>管理部門</th><th>備考</th><th>表示順</th><th>総数</th><th>単価</th></tr></thead>
+            <thead><tr><th>登録区分</th><th>設備名</th><th>管理番号</th><th>カテゴリ</th><th>管理部門</th><th>備考</th><th>総数</th><th>単価</th></tr></thead>
             <tbody id="eqimport-preview-body"></tbody>
           </table>
         </div>
@@ -373,6 +381,10 @@
       <div class="modal">
         <h3>設備一覧をエクスポート</h3>
         <!-- <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">現在登録されている設備一覧をCSVファイルとして保存します。</p> -->
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:8px;">
+          <input type="checkbox" id="eq-export-headers-only" style="width:auto;">
+          項目見出しのみ（設備情報を含まない）
+        </label>
         <div class="modal-actions">
           <button class="btn-ghost" id="eq-export-cancel-btn" style="border:1px solid var(--line);">キャンセル</button>
           <button class="btn-primary" id="eq-export-download-btn">ダウンロード</button>
@@ -652,7 +664,7 @@
             <th style="width:140px;">投稿者</th>
             <th>タイトル</th>
             <th style="width:90px;">既読数</th>
-            <th style="text-align:right;"><button class="btn btn-danger" id="notices-bulk-delete-btn" style="font-size:11.5px;padding:5px 10px;">選択したものを削除</button></th>
+            <th style="text-align:right;"><button class="btn btn-danger" id="notices-bulk-delete-btn" style="font-size:11.5px;padding:5px 10px;display:none;">削除</button></th>
           </tr></thead>
           <tbody id="notices-admin-table-body"></tbody>
         </table>
@@ -1756,7 +1768,7 @@ function parseEquipmentCsv(text){
   for(let i=1;i<lines.length;i++){ // 1行目はヘッダーとして無視
     const cols = parseCsvLine(lines[i]);
     if(cols.length===0) continue;
-    const [name, assetNo, categoryName, deptName, note, order, totalCount, unitPrice] = cols;
+    const [name, assetNo, categoryName, deptName, note, totalCount, unitPrice] = cols;
     if(!name || !name.trim()) continue;
     if(!assetNo || !assetNo.trim()) continue; // 管理番号は必須項目
     rows.push({
@@ -1765,7 +1777,6 @@ function parseEquipmentCsv(text){
       categoryName: (categoryName||"").trim(),
       deptName: (deptName||"").trim(),
       note: (note||"").trim(),
-      order: Number(order)||0,
       totalCount: Number(totalCount)||0,
       unitPrice: Number(unitPrice)||0
     });
@@ -1791,20 +1802,23 @@ document.getElementById("eqimport-file")?.addEventListener("change", async ()=>{
     document.getElementById("eqimport-modal").classList.add("show");
     return;
   }
+  const knownEquipmentForPreview = equipmentAll.map(e=>({ assetNo:e.assetNo||"" }));
   eqImportRows.forEach(row=>{
     const cat = categoriesAll.find(c=>c.label===row.categoryName);
     const catCellHtml = row.categoryName
       ? escapeHtml(row.categoryName) + (cat ? "" : "（未登録・この行は登録されません）")
       : "（未入力・この行は登録されません）";
     const isInventory = cat && cat.mode==="inventory";
+    // 管理番号が既存設備と一致するかどうかで、新規/更新を判定する（実際の登録処理と同じ基準）
+    const isUpdate = knownEquipmentForPreview.some(e => e.assetNo && e.assetNo===row.assetNo);
     const tr = document.createElement("tr");
     tr.innerHTML = `
+      <td style="white-space:nowrap;color:${isUpdate ? "var(--brand-dark)" : "var(--text)"};font-weight:${isUpdate ? "700" : "400"};">${isUpdate ? "更新" : "新規"}</td>
       <td>${escapeHtml(row.name)}</td>
       <td>${escapeHtml(row.assetNo)}</td>
       <td>${catCellHtml}</td>
       <td>${row.deptName ? escapeHtml(row.deptName) + (departmentIdByName(row.deptName) ? "" : "（未登録・未設定になります）") : "未設定"}</td>
       <td style="max-width:160px;color:var(--muted);">${escapeHtml(row.note)}</td>
-      <td>${row.order}</td>
       <td>${isInventory ? row.totalCount : "-"}</td>
       <td>${isInventory ? row.unitPrice : "-"}</td>
     `;
@@ -1821,6 +1835,7 @@ document.getElementById("eqimport-execute-btn")?.addEventListener("click", async
   const failDetails = [];
   // equipmentAll は非同期のリアルタイム更新なので、今回の実行中に新規作成した分もここに追記しながら照合する
   const knownEquipment = equipmentAll.map(e=>({ id:e.id, name:e.name, assetNo:e.assetNo||"" }));
+  const categoryOrderCounters = {}; // カテゴリごとの新規追加時の並び順（今回のインポート中、重複しないようローカルで進める）
   for(const row of eqImportRows){
     const categoryId = categoryIdByName(row.categoryName);
     if(!categoryId){
@@ -1837,8 +1852,8 @@ document.getElementById("eqimport-execute-btn")?.addEventListener("click", async
         const updatePayload = {
           category: categoryId,
           managingDepartment: departmentIdByName(row.deptName),
-          note: row.note,
-          order: row.order
+          note: row.note
+          // order（表示順）は更新しない。ドラッグで並び替えた順序をCSV再取込で崩さないため
         };
         if(isInventory){
           updatePayload.totalCount = row.totalCount;
@@ -1854,7 +1869,7 @@ document.getElementById("eqimport-execute-btn")?.addEventListener("click", async
           category: categoryId,
           managingDepartment: departmentIdByName(row.deptName),
           note: row.note,
-          order: row.order,
+          order: (categoryOrderCounters[categoryId] = (categoryOrderCounters[categoryId] ?? maxOrderInCategory(categoryId)) + 10), // 新規はカテゴリ内の末尾に追加
           active: true
         };
         if(isInventory){
@@ -1897,34 +1912,37 @@ function csvEscapeCell(value){
   return s;
 }
 document.getElementById("eq-export-btn")?.addEventListener("click", ()=>{
+  document.getElementById("eq-export-headers-only").checked = false;
   document.getElementById("eq-export-modal").classList.add("show");
 });
 document.getElementById("eq-export-cancel-btn")?.addEventListener("click", ()=>{
   document.getElementById("eq-export-modal").classList.remove("show");
 });
 document.getElementById("eq-export-download-btn")?.addEventListener("click", ()=>{
-  const header = ["設備名","管理番号","カテゴリ名","管理部門名","備考","表示順","総数","単価"];
+  const header = ["設備名","管理番号","カテゴリ名","管理部門名","備考","総数","単価"];
   const rows = [header];
-  equipmentAll.forEach(eq=>{
-    const cat = catInfo(eq.category);
-    const isInventory = cat && cat.mode==="inventory";
-    rows.push([
-      eq.name || "",
-      eq.assetNo || "",
-      cat ? cat.label : "",
-      eq.managingDepartment ? departmentNameById(eq.managingDepartment) : "",
-      eq.note || "",
-      eq.order ?? 0,
-      isInventory ? (eq.totalCount ?? 0) : "",
-      isInventory ? (eq.unitPricePerDay ?? 0) : ""
-    ]);
-  });
+  const headersOnly = document.getElementById("eq-export-headers-only").checked;
+  if(!headersOnly){
+    equipmentAll.forEach(eq=>{
+      const cat = catInfo(eq.category);
+      const isInventory = cat && cat.mode==="inventory";
+      rows.push([
+        eq.name || "",
+        eq.assetNo || "",
+        cat ? cat.label : "",
+        eq.managingDepartment ? departmentNameById(eq.managingDepartment) : "",
+        eq.note || "",
+        isInventory ? (eq.totalCount ?? 0) : "",
+        isInventory ? (eq.unitPricePerDay ?? 0) : ""
+      ]);
+    });
+  }
   const csvText = rows.map(r=> r.map(csvEscapeCell).join(",")).join("\r\n");
   const blob = new Blob(["\uFEFF" + csvText], { type: "text/csv;charset=utf-8;" }); // BOM付きでExcelでも文字化けしないようにする
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   const today = new Date().toISOString().slice(0,10);
-  a.download = `設備一覧_${today}.csv`;
+  a.download = headersOnly ? `設備一覧_見出しのみ_${today}.csv` : `設備一覧_${today}.csv`;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -2074,6 +2092,7 @@ function renderNoticesAdminTable(notices){
   if(notices.length===0){
     body.innerHTML = `<tr><td colspan="6" class="empty">掲示中のお知らせはありません。</td></tr>`;
     document.getElementById("notices-select-all").checked = false;
+    updateNoticesBulkDeleteBtnVisibility();
     return;
   }
   notices.forEach(n=>{
@@ -2093,6 +2112,7 @@ function renderNoticesAdminTable(notices){
     tr.querySelector(".notice-row-check").addEventListener("change", (e)=>{
       if(e.target.checked) selectedNoticeIds.add(n.id); else selectedNoticeIds.delete(n.id);
       document.getElementById("notices-select-all").checked = selectedNoticeIds.size===notices.length;
+      updateNoticesBulkDeleteBtnVisibility();
     });
     const detailBtn = document.createElement("button");
     detailBtn.className = "btn btn-ghost"; detailBtn.textContent = "詳細";
@@ -2101,6 +2121,12 @@ function renderNoticesAdminTable(notices){
     body.appendChild(tr);
   });
   document.getElementById("notices-select-all").checked = notices.length>0 && selectedNoticeIds.size===notices.length;
+  updateNoticesBulkDeleteBtnVisibility();
+}
+// チェックが1件以上ある時だけ「削除」ボタンを表示する
+function updateNoticesBulkDeleteBtnVisibility(){
+  const btn = document.getElementById("notices-bulk-delete-btn");
+  if(btn) btn.style.display = selectedNoticeIds.size>0 ? "inline-block" : "none";
 }
 document.getElementById("notices-select-all").addEventListener("change", (e)=>{
   if(e.target.checked){
