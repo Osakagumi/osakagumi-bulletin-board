@@ -430,6 +430,7 @@
   .chat-bubble-time{font-size:10px;color:var(--muted);margin-top:3px;text-align:right;}
   .chat-bubble-row:not(.chat-mine) .chat-bubble-time{text-align:left;}
   .chat-bubble-read{display:inline-block;font-size:10px;color:var(--brand);margin-left:5px;font-weight:600;}
+  .dash-online-label{display:inline-block;font-size:10.5px;color:#2FB344;font-weight:700;margin-left:6px;}
   .chat-input-row{display:flex;gap:8px;margin-top:10px;}
   .chat-input-row input{flex:1;padding:10px 14px;border:1px solid var(--line);border-radius:20px;font-size:13.5px;}
   .chat-input-row button{border-radius:20px;padding:10px 20px;}
@@ -1869,6 +1870,7 @@ function refreshOnlineMarksIfActive(){
   if(document.getElementById("employee-picker-modal")?.classList.contains("show")){
     renderEmpPickerNameSelect();
   }
+  refreshDashboardIfActive();
 }
 setInterval(refreshOnlineMarksIfActive, 30000); // 30秒ごとに再チェック（新たな書き込みが無くても経過時間で変わるため）
 
@@ -2349,7 +2351,8 @@ function renderDashboard(){
         const row = document.createElement("div");
         row.className = "dash-row";
         const timeLabel = conv.lastAt ? formatChatTime(conv.lastAt) : "";
-        row.innerHTML = `<span>${conv.unread ? "● " : ""}${escapeHtml(conv.otherName)}</span><span class="dash-row-sub">${escapeHtml(timeLabel)}</span>`;
+        const onlineLabelHtml = isUserOnline(conv.otherEmail) ? `<span class="dash-online-label">オンライン</span>` : "";
+        row.innerHTML = `<span>${conv.unread ? "● " : ""}${escapeHtml(conv.otherName)}${onlineLabelHtml}</span><span class="dash-row-sub">${escapeHtml(timeLabel)}</span>`;
         row.addEventListener("click", ()=>{ switchToTab("chat"); openChatThread(conv.otherEmail, conv.otherName); });
         chatBody.appendChild(row);
       });
