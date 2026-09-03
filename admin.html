@@ -140,6 +140,12 @@
     table:not(.perm-matrix-table) td.actions{
       min-width:0;
     }
+    /* 「始業時刻」「終業時刻」など、横並びの入力欄が2列だとスマホでは窮屈になり、
+       特にtype="time"のようなOS標準の入力コントロールで縦位置がずれて見えることがあるため、
+       狭い画面では1列に積んで、各項目をフル幅で表示する。 */
+    .form-grid{
+      grid-template-columns:1fr;
+    }
   }
   .tag{font-size:10.5px;font-weight:700;color:#fff;padding:2px 7px;border-radius:4px;font-family:var(--mono);white-space:nowrap;display:inline-block;}
   .settings-draglist{border:1px solid var(--line);border-radius:8px;padding:6px;max-width:360px;}
@@ -365,7 +371,7 @@
       <div class="panel">
         <h2>社員を1件登録</h2>
         <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-          この画面から1人ずつログインアカウントを作成できます。メールアドレス・パスワードは必須、他は省略可です。所属はCtrl（Macは⌘）+クリックで複数選択できます。
+          この画面から1人ずつログインアカウントを作成できます。メールアドレス・パスワードは必須、他は省略可です。所属は複数選択できます。
         </p>
         <div class="form-grid">
           <div class="field">
@@ -378,7 +384,7 @@
           </div>
           <div class="field">
             <label>所属</label>
-            <select id="single-emp-dept" multiple size="4"></select>
+            <div id="single-emp-dept-checks" style="display:flex;flex-wrap:wrap;gap:10px;border:1px solid var(--line);border-radius:8px;padding:10px;max-height:150px;overflow-y:auto;"></div>
           </div>
           <div class="field">
             <label>メールアドレス <span style="color:var(--danger);">*</span></label>
@@ -3975,13 +3981,21 @@ function updateUserImportBizInfoColumns(){
   sampleEl.textContent = `${headerLine}\n${row1}\n${row2}`;
 }
 function populateSingleEmpDeptSelect(){
-  const sel = document.getElementById("single-emp-dept");
-  if(!sel) return;
-  sel.innerHTML = "";
+  const el = document.getElementById("single-emp-dept-checks");
+  if(!el) return;
+  el.innerHTML = "";
+  if(departmentsAll.length===0){
+    el.innerHTML = `<span style="font-size:12.5px;color:var(--muted);">部署が登録されていません。</span>`;
+  }
   departmentsAll.forEach(d=>{
-    const opt = document.createElement("option");
-    opt.value = d.id; opt.textContent = d.name;
-    sel.appendChild(opt);
+    const label = document.createElement("label");
+    label.style.cssText = "display:flex;align-items:center;gap:5px;font-size:12.5px;cursor:pointer;";
+    const cb = document.createElement("input");
+    cb.type = "checkbox"; cb.value = d.id; cb.style.width = "auto";
+    cb.className = "single-emp-dept-check";
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(d.name));
+    el.appendChild(label);
   });
 }
 function populateSingleEmpPermissionsChecks(){
@@ -4025,7 +4039,7 @@ document.getElementById("single-emp-register-btn")?.addEventListener("click", as
   const employeeNo = document.getElementById("single-emp-no").value.trim();
   const phone = document.getElementById("single-emp-phone").value.trim();
   const memo = document.getElementById("single-emp-memo").value.trim();
-  const selectedDepts = [...document.getElementById("single-emp-dept").selectedOptions].map(o=>o.value);
+  const selectedDepts = [...document.querySelectorAll(".single-emp-dept-check:checked")].map(cb=>cb.value);
   const isSharedAccount = document.getElementById("single-emp-shared-account-check").checked;
   const permChecks = [...document.querySelectorAll(".single-emp-permission-check:checked")];
 
@@ -4090,7 +4104,7 @@ document.getElementById("single-emp-register-btn")?.addEventListener("click", as
       .forEach(id=> document.getElementById(id).value = "");
     document.querySelectorAll(".single-emp-permission-check").forEach(cb=> cb.checked = false);
     document.getElementById("single-emp-shared-account-check").checked = false;
-    document.getElementById("single-emp-dept").selectedIndex = -1;
+    document.querySelectorAll(".single-emp-dept-check").forEach(cb=> cb.checked = false);
   }catch(e){
     statusEl.textContent = accountResult + " ただし社員情報の登録に失敗しました：" + (e.code || e.message);
     statusEl.style.color = "var(--danger)";
