@@ -87,6 +87,15 @@
   main{padding:16px;max-width:900px;margin:0 auto;}
   .panel{background:var(--surface);border:1.5px solid var(--line);border-radius:12px;padding:18px;margin-bottom:16px;}
   .panel h2{font-size:14.5px;margin:0 0 14px;}
+  .panel-h2-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;}
+  .panel-h2-row h2{margin:0;}
+  /* 手順・使い方などを説明するボタンは、本文の見出し行の右端に「？」アイコンのみで配置する統一形式 */
+  .icon-help-btn{
+    flex:0 0 auto; width:26px; height:26px; border-radius:50%; border:1px solid var(--line);
+    background:#fff; color:var(--muted); font-size:13px; font-weight:700; cursor:pointer;
+    display:inline-flex; align-items:center; justify-content:center; padding:0;
+  }
+  .icon-help-btn:hover{background:#F0F3F8; color:var(--text);}
 
   .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;}
   .form-grid .full{grid-column:1/-1;}
@@ -267,8 +276,8 @@
             <input type="text" id="eq-name" placeholder="例）トータルステーション①">
           </div>
           <div class="field">
-            <label>管理番号</label>
-            <input type="text" id="eq-asset-no" placeholder="例）ST-001">
+            <label>管理番号 <span style="color:var(--danger);">*</span></label>
+            <input type="text" id="eq-asset-no" placeholder="例）ST-001" required>
           </div>
           <div class="field">
             <label>カテゴリ</label>
@@ -484,7 +493,10 @@
       -->
 
       <div class="panel">
-        <h2>社員一覧（氏名・メールアドレスの一覧。詳細は「編集」から）</h2>
+        <div class="panel-h2-row">
+          <h2>社員一覧（氏名・メールアドレスの一覧。詳細は「編集」から）</h2>
+          <button type="button" class="icon-help-btn" id="user-delete-guide-btn" title="ユーザー削除手順" aria-label="ユーザー削除手順">?</button>
+        </div>
         <!-- <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">ログインすると自動的にここへ追加されます。CSV一括登録した場合は社員番号・電話番号・備考も反映されています。「編集」から詳細を変更できます。</p> -->
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
           <input type="text" id="emp-search-input" placeholder="氏名で絞り込み（前方一致）" style="max-width:220px;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:13.5px;">
@@ -493,7 +505,6 @@
           <input type="file" id="userimport-file" accept=".csv,text/csv" style="display:none;">
           <button class="btn btn-ghost" id="perm-matrix-open-btn" style="border:1px solid var(--line);">表形式で権限設定</button>
           <button class="btn btn-ghost" id="tab-matrix-open-btn" style="border:1px solid var(--line);">表形式で表示タブを設定</button>
-          <button class="btn btn-ghost" id="user-delete-guide-btn" style="border:1px solid var(--line);margin-left:auto;">ユーザー削除手順</button>
         </div>
         <div id="emp-card-list"></div>
       </div>
@@ -505,7 +516,7 @@
         <h3>登録内容の確認（<span id="userimport-count">0</span>件）</h3>
         <div style="max-height:50vh;overflow:auto;">
           <table>
-            <thead><tr id="userimport-preview-headrow"><th>社員番号</th><th>氏名</th><th>所属</th><th>システム管理者</th><th>お知らせ投稿</th><th>行き先編集</th><th>測量機器管理</th><th>入札編集</th><th>カレンダー編集</th><th>安否確認発信</th><th>メールアドレス</th><th>電話番号</th><th>備考</th></tr></thead>
+            <thead><tr id="userimport-preview-headrow"><th>登録区分</th><th>社員番号</th><th>氏名</th><th>所属</th><th>システム管理者</th><th>お知らせ投稿</th><th>行き先編集</th><th>測量機器管理</th><th>入札編集</th><th>カレンダー編集</th><th>安否確認発信</th><th>メールアドレス</th><th>電話番号</th><th>備考</th></tr></thead>
             <tbody id="userimport-preview-body"></tbody>
           </table>
         </div>
@@ -522,6 +533,10 @@
       <div class="modal">
         <h3>社員一覧をエクスポート</h3>
         <!-- <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">現在登録されている社員一覧をCSVファイルとして保存します（パスワードは含まれません）。</p> -->
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:8px;">
+          <input type="checkbox" id="user-export-headers-only" style="width:auto;">
+          項目見出しのみ（社員情報を含まない）
+        </label>
         <div class="modal-actions">
           <button class="btn-ghost" id="user-export-cancel-btn" style="border:1px solid var(--line);">キャンセル</button>
           <button class="btn-primary" id="user-export-download-btn">ダウンロード</button>
@@ -630,14 +645,15 @@
       <div class="panel">
         <h2>掲示中のお知らせ一覧</h2>
         <!-- <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">個人ごとの「既読」状態に関わらず、現在掲示されている全てのお知らせを確認・削除できます。</p> -->
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
-          <label style="display:flex;align-items:center;gap:5px;font-size:12.5px;color:var(--text);">
-            <input type="checkbox" id="notices-select-all" style="width:auto;">全て選択
-          </label>
-          <button class="btn btn-danger" id="notices-bulk-delete-btn">選択したものを削除</button>
-        </div>
         <table>
-          <thead><tr><th style="width:30px;"></th><th style="width:110px;">投稿日時</th><th style="width:140px;">投稿者</th><th>タイトル</th><th style="width:90px;">既読数</th><th>操作</th></tr></thead>
+          <thead><tr>
+            <th style="width:30px;"><input type="checkbox" id="notices-select-all" style="width:auto;" title="全て選択" aria-label="全て選択"></th>
+            <th style="width:110px;">投稿日時</th>
+            <th style="width:140px;">投稿者</th>
+            <th>タイトル</th>
+            <th style="width:90px;">既読数</th>
+            <th style="text-align:right;"><button class="btn btn-danger" id="notices-bulk-delete-btn" style="font-size:11.5px;padding:5px 10px;">選択したものを削除</button></th>
+          </tr></thead>
           <tbody id="notices-admin-table-body"></tbody>
         </table>
       </div>
@@ -1669,6 +1685,8 @@ function resetEquipmentForm(){
 document.getElementById("eq-save-btn").addEventListener("click", async ()=>{
   const name = document.getElementById("eq-name").value.trim();
   if(!name){ toast("設備名を入力してください。"); return; }
+  const assetNo = document.getElementById("eq-asset-no").value.trim();
+  if(!assetNo){ toast("管理番号を入力してください。"); return; }
   const selectedCat = categoriesAll.find(c=>c.id===document.getElementById("eq-category").value);
   const isInventory = selectedCat && selectedCat.mode==="inventory";
   const payload = {
@@ -1740,6 +1758,7 @@ function parseEquipmentCsv(text){
     if(cols.length===0) continue;
     const [name, assetNo, categoryName, deptName, note, order, totalCount, unitPrice] = cols;
     if(!name || !name.trim()) continue;
+    if(!assetNo || !assetNo.trim()) continue; // 管理番号は必須項目
     rows.push({
       name: name.trim(),
       assetNo: (assetNo||"").trim(),
@@ -1811,8 +1830,8 @@ document.getElementById("eqimport-execute-btn")?.addEventListener("click", async
     }
     const cat = categoriesAll.find(c=>c.id===categoryId);
     const isInventory = cat && cat.mode==="inventory";
-    // 名前・管理番号が一致する既存の設備があれば、新規作成ではなくそちらを更新する（重複登録の防止）
-    const existing = knownEquipment.find(e => e.name===row.name && e.assetNo===row.assetNo);
+    // 管理番号が一致する既存の設備があれば、新規作成ではなくそちらを更新する（重複登録の防止）
+    const existing = knownEquipment.find(e => e.assetNo && e.assetNo===row.assetNo);
     try{
       if(existing){
         const updatePayload = {
@@ -4000,11 +4019,11 @@ document.getElementById("userimport-cancel-btn")?.addEventListener("click", ()=>
 function renderUserImportPreview(){
   const body = document.getElementById("userimport-preview-body");
   document.getElementById("userimport-count").textContent = userImportRows.length;
-  const totalCols = 13 + bizInfoItemsAll.length;
+  const totalCols = 14 + bizInfoItemsAll.length;
   // ヘッダー行を業務情報の項目数に合わせて組み直す（固定10列の直後、メールアドレス列の手前に挿入）
   const headRow = document.getElementById("userimport-preview-headrow");
   headRow.querySelectorAll(".userimport-bizinfo-col").forEach(th=>th.remove());
-  const emailTh = headRow.children[10]; // 安否確認発信(9)の次＝メールアドレス列
+  const emailTh = headRow.children[11]; // 登録区分(0)+社員番号〜安否確認発信(1-10)の次＝メールアドレス列
   bizInfoItemsAll.forEach(item=>{
     const th = document.createElement("th");
     th.className = "userimport-bizinfo-col";
@@ -4028,8 +4047,14 @@ function renderUserImportPreview(){
       const wouldExceed = !currentManagers.includes(row.email) && currentManagers.length>=3;
       return `<td>${wouldExceed ? "○（上限3人のため登録されません）" : "○"}</td>`;
     }).join("");
+    // 社員番号が既存社員と一致する場合は「更新」、一致しなければ「新規」として扱う
+    const existingEmp = findEmployeeByNo(row.employeeNo);
+    const kindLabel = existingEmp
+      ? `更新${existingEmp.email!==row.email ? "（既存："+escapeHtml(existingEmp.email)+"）" : ""}`
+      : "新規";
     const tr = document.createElement("tr");
     tr.innerHTML = `
+      <td style="white-space:nowrap;color:${existingEmp ? "var(--brand-dark)" : "var(--text)"};font-weight:${existingEmp ? "700" : "400"};">${kindLabel}</td>
       <td>${escapeHtml(row.employeeNo)}</td>
       <td>${escapeHtml(row.name || "（未入力）")}</td>
       <td>${deptCellHtml}</td>
@@ -4047,6 +4072,12 @@ function renderUserImportPreview(){
     `;
     body.appendChild(tr);
   });
+}
+// CSVの社員番号（空欄は対象外）が一致する既存社員を探す。更新/新規の判定に使う。
+function findEmployeeByNo(employeeNo){
+  const no = (employeeNo||"").trim();
+  if(!no) return null;
+  return employeesAll.find(e => (e.employeeNo||"").trim() === no) || null;
 }
 
 function updateUserImportBizInfoColumns(){
@@ -4196,9 +4227,9 @@ document.getElementById("single-emp-register-btn")?.addEventListener("click", as
 
 document.getElementById("userimport-execute-btn").addEventListener("click", async ()=>{
   if(userImportRows.length===0) return;
-  if(!confirm(`${userImportRows.length}件のアカウントを作成します。よろしいですか？`)) return;
+  if(!confirm(`${userImportRows.length}件を登録・更新します。よろしいですか？`)) return;
   const statusEl = document.getElementById("userimport-status");
-  let ok = 0, exists = 0, fail = 0;
+  let created = 0, updated = 0, fail = 0;
   const failDetails = [];
   const bizInfoCapDetails = [];
 
@@ -4208,74 +4239,86 @@ document.getElementById("userimport-execute-btn").addEventListener("click", asyn
   try{ await setPersistence(secondaryAuth, inMemoryPersistence); }catch(e){}
 
   for(const row of userImportRows){
-    if(!row.password){
-      fail++; failDetails.push(`${row.email}: パスワードが未入力`);
-      statusEl.textContent = `処理中… ${ok+exists+fail}/${userImportRows.length}（成功${ok}・既存${exists}・失敗${fail}）`;
-      continue;
-    }
-    try{
-      await createUserWithEmailAndPassword(secondaryAuth, row.email, row.password);
-      await signOut(secondaryAuth);
-      ok++;
-    }catch(e){
-      if(e.code === "auth/email-already-in-use"){
-        exists++;
-      } else {
-        fail++;
-        failDetails.push(`${row.email}: ${e.code || e.message}`);
+    // 社員番号が既存社員と一致する場合は「更新」として扱う（既存社員のメールアドレスを使う。
+    // CSV側のメールアドレスが異なっていても、ログインアカウントの変更は行わない）
+    const existingEmp = findEmployeeByNo(row.employeeNo);
+    const targetEmail = existingEmp ? existingEmp.email : row.email;
+    const isUpdate = !!existingEmp;
+
+    if(isUpdate){
+      updated++;
+    } else {
+      if(!row.password){
+        fail++; failDetails.push(`${row.email}: パスワードが未入力`);
+        statusEl.textContent = `処理中… ${created+updated+fail}/${userImportRows.length}（新規${created}・更新${updated}・失敗${fail}）`;
+        continue;
+      }
+      try{
+        await createUserWithEmailAndPassword(secondaryAuth, row.email, row.password);
+        await signOut(secondaryAuth);
+        created++;
+      }catch(e){
+        if(e.code === "auth/email-already-in-use"){
+          // 社員番号は一致しなかったが、メールアドレスは既存アカウントと一致した場合。
+          // ログインアカウントは作れないが、プロフィール（Firestore）の更新扱いにする。
+          updated++;
+        } else {
+          fail++;
+          failDetails.push(`${row.email}: ${e.code || e.message}`);
+        }
       }
     }
     // Authアカウントの有無によらず、Firestore側のプロフィールは作成/更新しておく
     try{
-      await setDoc(doc(db,"employees", row.email), {
+      await setDoc(doc(db,"employees", targetEmail), {
         employeeNo: row.employeeNo,
-        name: row.name || row.email.split("@")[0],
-        email: row.email,
+        name: row.name || targetEmail.split("@")[0],
+        email: targetEmail,
         departments: departmentIdsByNames(row.department),
         department: departmentIdsByNames(row.department)[0] || "", // 旧バージョン互換用
         phone: row.phone,
         memo: row.memo,
-        order: 0,
+        order: existingEmp ? (existingEmp.order ?? 0) : 0,
         createdBy: currentUser.email,
         importedAt: new Date().toISOString()
       }, { merge: true });
       if(row.isAdmin){
-        await setDoc(doc(db,"admins", row.email), { addedBy: currentUser.email, addedAt: new Date().toISOString() });
+        await setDoc(doc(db,"admins", targetEmail), { addedBy: currentUser.email, addedAt: new Date().toISOString() });
       }
       if(row.isPoster){
-        await setDoc(doc(db,"announcement_posters", row.email), { addedBy: currentUser.email, addedAt: new Date().toISOString() });
+        await setDoc(doc(db,"announcement_posters", targetEmail), { addedBy: currentUser.email, addedAt: new Date().toISOString() });
       }
       if(row.isWbEditor){
-        await setDoc(doc(db,"whereabouts_editors", row.email), { addedBy: currentUser.email, addedAt: new Date().toISOString() });
+        await setDoc(doc(db,"whereabouts_editors", targetEmail), { addedBy: currentUser.email, addedAt: new Date().toISOString() });
       }
       if(row.isEqManager){
-        await setDoc(doc(db,"equipment_managers", row.email), { addedBy: currentUser.email, addedAt: new Date().toISOString() });
+        await setDoc(doc(db,"equipment_managers", targetEmail), { addedBy: currentUser.email, addedAt: new Date().toISOString() });
       }
       if(row.isContractEditor){
-        await setDoc(doc(db,"contract_editors", row.email), { addedBy: currentUser.email, addedAt: new Date().toISOString() });
+        await setDoc(doc(db,"contract_editors", targetEmail), { addedBy: currentUser.email, addedAt: new Date().toISOString() });
       }
       if(row.isCalEditor){
-        await setDoc(doc(db,"calendar_editors", row.email), { addedBy: currentUser.email, addedAt: new Date().toISOString() });
+        await setDoc(doc(db,"calendar_editors", targetEmail), { addedBy: currentUser.email, addedAt: new Date().toISOString() });
       }
       if(row.isSafetySender){
-        await setDoc(doc(db,"safety_senders", row.email), { addedBy: currentUser.email, addedAt: new Date().toISOString() });
+        await setDoc(doc(db,"safety_senders", targetEmail), { addedBy: currentUser.email, addedAt: new Date().toISOString() });
       }
       for(const itemId of row.bizInfoItemIds){
         const item = bizInfoItemsAll.find(i=>i.id===itemId);
         const currentManagers = (item && Array.isArray(item.infoManagers)) ? item.infoManagers : [];
-        if(!currentManagers.includes(row.email) && currentManagers.length>=3){
-          bizInfoCapDetails.push(`${row.email}: 「${item?.name||itemId}」は情報管理者が既に3人のため追加できませんでした`);
+        if(!currentManagers.includes(targetEmail) && currentManagers.length>=3){
+          bizInfoCapDetails.push(`${targetEmail}: 「${item?.name||itemId}」は情報管理者が既に3人のため追加できませんでした`);
           continue; // 上限3人のためスキップ
         }
-        await updateDoc(doc(db,"business_info_items", itemId), { infoManagers: arrayUnion(row.email) });
+        await updateDoc(doc(db,"business_info_items", itemId), { infoManagers: arrayUnion(targetEmail) });
       }
     }catch(e){ /* 権限エラー等は無視して続行 */ }
 
-    statusEl.textContent = `処理中… ${ok+exists+fail}/${userImportRows.length}（成功${ok}・既存${exists}・失敗${fail}）`;
+    statusEl.textContent = `処理中… ${created+updated+fail}/${userImportRows.length}（新規${created}・更新${updated}・失敗${fail}）`;
     await new Promise(r=>setTimeout(r, 300));
   }
 
-  let summary = `完了：新規作成${ok}件・既存スキップ${exists}件・失敗${fail}件`;
+  let summary = `完了：新規作成${created}件・更新${updated}件・失敗${fail}件`;
   if(failDetails.length>0){
     summary += "\n\n【失敗の詳細】\n" + failDetails.join("\n");
   }
@@ -4287,6 +4330,7 @@ document.getElementById("userimport-execute-btn").addEventListener("click", asyn
 });
 
 document.getElementById("user-export-btn")?.addEventListener("click", ()=>{
+  document.getElementById("user-export-headers-only").checked = false;
   document.getElementById("user-export-modal").classList.add("show");
 });
 document.getElementById("user-export-cancel-btn")?.addEventListener("click", ()=>{
@@ -4296,7 +4340,9 @@ document.getElementById("user-export-download-btn")?.addEventListener("click", (
   const bizFlagLabels = bizInfoItemsAll.map(item => `${item.name || "（無題）"}情報管理者フラグ`);
   const header = ["社員番号","氏名","所属","システム管理者フラグ","お知らせ投稿フラグ","行き先編集権限フラグ","設備管理者フラグ","入札編集権限フラグ","カレンダー編集権限フラグ","安否確認発信権限フラグ",...bizFlagLabels,"メールアドレス","パスワード","電話番号","備考"];
   const rows = [header];
-  employeesAll.forEach(emp=>{
+  const headersOnly = document.getElementById("user-export-headers-only").checked;
+  if(!headersOnly){
+    employeesAll.forEach(emp=>{
     const bizFlags = bizInfoItemsAll.map(item=>
       (Array.isArray(item.infoManagers) && item.infoManagers.includes(emp.email)) ? "1" : ""
     );
@@ -4317,13 +4363,14 @@ document.getElementById("user-export-download-btn")?.addEventListener("click", (
       emp.phone || "",
       emp.memo || ""
     ]);
-  });
+    });
+  }
   const csvText = rows.map(r=> r.map(csvEscapeCell).join(",")).join("\r\n");
   const blob = new Blob(["\uFEFF" + csvText], { type: "text/csv;charset=utf-8;" }); // BOM付きでExcelでも文字化けしないようにする
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   const today = new Date().toISOString().slice(0,10);
-  a.download = `社員一覧_${today}.csv`;
+  a.download = headersOnly ? `社員一覧_見出しのみ_${today}.csv` : `社員一覧_${today}.csv`;
   document.body.appendChild(a);
   a.click();
   a.remove();
