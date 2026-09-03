@@ -998,6 +998,7 @@
       <div class="modal-overlay" id="employee-picker-modal">
         <div class="modal">
           <h3>社員を選択</h3>
+          <p id="emp-picker-restrict-hint" style="display:none;font-size:12px;color:var(--muted);margin:-6px 0 12px;"></p>
           <div class="field">
             <label>所属</label>
             <select id="emp-picker-dept-select"></select>
@@ -1371,7 +1372,7 @@
           <div id="notice-target-depts-checks" style="display:flex;flex-wrap:wrap;gap:6px 14px;border:1px solid var(--line);border-radius:8px;padding:10px;max-height:160px;overflow-y:auto;"></div>
         </div>
         <div style="margin-top:10px;">
-          <button type="button" class="btn-ghost" id="notice-exclude-open-btn" style="border:1px solid var(--line);font-size:12px;padding:6px 12px;">以下を除外する</button>
+          <button type="button" class="btn-ghost" id="notice-exclude-open-btn" style="border:1px solid var(--line);font-size:12px;padding:6px 12px;">除外する社員を選択</button>
           <div id="notice-excluded-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;"></div>
         </div>
         <div id="notice-send-email-row" style="display:flex;align-items:center;gap:6px;margin-top:8px;">
@@ -4281,7 +4282,10 @@ function renderNoticeExcludedChips(){
   });
 }
 document.getElementById("notice-exclude-open-btn")?.addEventListener("click", async ()=>{
-  const emps = await openEmployeePicker({ multi:true, preselectedEmails: noticeExcludedEmails });
+  // 現在選択中の発信先（全社チェックがONなら制限なし、部署が選ばれていればその部署だけに絞る）
+  const sendToAll = document.getElementById("notice-target-all").checked;
+  const currentTargetDepts = sendToAll ? [] : [...document.querySelectorAll(".notice-target-dept-check:checked")].map(cb=>cb.value);
+  const emps = await openEmployeePicker({ multi:true, preselectedEmails: noticeExcludedEmails, restrictToDeptIds: currentTargetDepts });
   if(emps===null) return; // キャンセル
   noticeExcludedEmails = emps.map(e=>e.email);
   renderNoticeExcludedChips();
@@ -4758,12 +4762,22 @@ let empPickerResolve = null;
 let empPickerSelectedEmail = null;
 let empPickerMulti = false;
 let empPickerSelectedEmails = new Set();
+let empPickerRestrictToDeptIds = null; // 指定した場合、この部署に所属する社員だけを候補にする（nullまたは空配列は制限なし＝全社）
 function openEmployeePicker(opts){
   return new Promise((resolve)=>{
     empPickerResolve = resolve;
     empPickerMulti = !!opts?.multi;
     empPickerSelectedEmail = null;
     empPickerSelectedEmails = new Set(opts?.preselectedEmails || []);
+    empPickerRestrictToDeptIds = (Array.isArray(opts?.restrictToDeptIds) && opts.restrictToDeptIds.length>0) ? opts.restrictToDeptIds : null;
+    const restrictHint = document.getElementById("emp-picker-restrict-hint");
+    if(empPickerRestrictToDeptIds){
+      const names = empPickerRestrictToDeptIds.map(id=>departmentName(id)).join("・");
+      restrictHint.textContent = `発信先（${names}）の社員のみ表示しています。`;
+      restrictHint.style.display = "block";
+    } else {
+      restrictHint.style.display = "none";
+    }
     document.getElementById("emp-picker-select-btn").textContent = empPickerMulti ? "決定" : "選択";
     document.getElementById("emp-picker-error").textContent = "";
     document.getElementById("emp-picker-search-input").value = "";
@@ -4786,7 +4800,12 @@ function renderEmpPickerDeptSelect(){
   const allOpt = document.createElement("option");
   allOpt.value = ""; allOpt.textContent = "すべて";
   sel.appendChild(allOpt);
-  departmentsAll.forEach(d=>{
+  // 発信先などで部署が絞られている場合は、プルダウン自体もその部署だけにする
+  // （関係ない部署を選んで「該当する社員がいません」になるのを防ぐため）
+  const deptsToShow = empPickerRestrictToDeptIds
+    ? departmentsAll.filter(d=> empPickerRestrictToDeptIds.includes(d.id))
+    : departmentsAll;
+  deptsToShow.forEach(d=>{
     const opt = document.createElement("option");
     opt.value = d.id; opt.textContent = d.name;
     sel.appendChild(opt);
@@ -4802,6 +4821,9 @@ function renderEmpPickerNameSelect(){
   const searchText = (searchInput?.value || "").trim();
   // 社員番号順（行き先の表示順とは独立した、アプリ共通の並び順）に統一する
   let list = sortEmployeesByNo(employeesAll.filter(e=>!e.hidden && !e.isSharedAccount)).filter(e=> !deptId || empDepartments(e).includes(deptId));
+  if(empPickerRestrictToDeptIds){
+    list = list.filter(e=> empDepartments(e).some(d=>empPickerRestrictToDeptIds.includes(d)));
+  }
   if(searchText){
     list = list.filter(e=> (e.name||"").startsWith(searchText));
   }
