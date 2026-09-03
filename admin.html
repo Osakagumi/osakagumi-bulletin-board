@@ -108,13 +108,17 @@
   .field textarea{min-height:50px;resize:vertical;}
   /* type="time"・type="date"は、スマホのネイティブ入力UI（内部の時刻ホイール等）の都合で、
      width:100%だけでは他の入力欄と揃わず、はみ出して広く見えることがあるため明示的に抑える。
-     max-width/box-sizingだけでは直らなかったため、iOS独自のネイティブ描画
-     （-webkit-appearance）自体を解除し、こちらのCSSで指定した幅を優先させる。 */
+     max-width/box-sizingだけでは直らず、-webkit-appearance:noneでほぼ解消したが、
+     ごく僅かな余白の差がまだ残っていたため、幅・余白・枠線をすべて!importantで明示する。 */
   .field input[type="time"], .field input[type="date"], .field input[type="datetime-local"]{
-    max-width:100%;
-    box-sizing:border-box;
+    max-width:100% !important;
+    width:100% !important;
+    box-sizing:border-box !important;
     -webkit-appearance:none;
     appearance:none;
+    margin:0 !important;
+    padding:8px 10px !important;
+    border:1px solid var(--line) !important;
   }
   .btn{border:none;border-radius:7px;padding:9px 16px;font-size:13px;font-weight:600;}
   .btn-primary{background:var(--brand);color:#fff;}
