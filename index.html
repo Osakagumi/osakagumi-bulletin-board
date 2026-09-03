@@ -1382,9 +1382,7 @@
       </div>
       <div class="field" id="notice-attach-field">
         <label>添付ファイル（任意）</label>
-        <p id="notice-dropzone-hint" style="font-size:11.5px;color:var(--muted);margin:0 0 8px;">
-          ドロップまたは選択したファイルをアップロードします。Googleへのログイン確認は行われません（社内共通のドライブに自動保存されます）。
-        </p>
+        <p id="notice-dropzone-hint" style="font-size:11.5px;color:var(--muted);margin:0 0 8px;"></p>
         <div id="notice-dropzone">
           <div id="notice-dropzone-idle">
             <div style="font-size:28px;margin-bottom:8px;">📎</div>
@@ -4309,7 +4307,7 @@ document.getElementById("notice-new-btn").addEventListener("click", ()=>{
   originalAttachmentFileName = null;
   removeExistingNoticeAttachment = false;
   attachmentUploadFailed = false;
-  document.getElementById("notice-dropzone-hint").textContent = "ドロップまたは選択したファイルをアップロードします。Googleへのログイン確認は行われません（社内共通のドライブに自動保存されます）。";
+  document.getElementById("notice-dropzone-hint").textContent = "";
   resetNoticeDropzone();
   document.getElementById("notice-existing-attachment-row").style.display = "none";
   document.getElementById("notice-error").textContent = "";
@@ -4336,7 +4334,7 @@ function openNoticeEditModal(n){
   renderNoticeTargetDeptChecks(targetDepts);
   noticeExcludedEmails = Array.isArray(n.excludedEmails) ? [...n.excludedEmails] : [];
   renderNoticeExcludedChips();
-  document.getElementById("notice-dropzone-hint").textContent = "ファイルを選び直すと、既存の添付ファイルを削除して置き換えます。未選択なら添付ファイルはそのままです。";
+  document.getElementById("notice-dropzone-hint").textContent = "";
   resetNoticeDropzone();
   const existingRow = document.getElementById("notice-existing-attachment-row");
   if(n.attachmentUrl){
