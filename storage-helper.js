@@ -75,3 +75,16 @@ export async function deleteFileFromStorage(path){
     console.error("[添付ファイル削除エラー]", e);
   }
 }
+
+// 保存先（osakagumi.sys@gmail.comのGoogleドライブ）の空き容量情報を取得する。
+// { limit, usage, usageInDrive } を返す（limitは無制限プラン等でnullになることがある）。
+// GAS側で「Drive」高度なサービスの追加が必要（claude_apps-script-storage.gsのコメント参照）。
+export async function fetchStorageInfo(){
+  if(!isStorageConfigured()){
+    throw new Error("添付ファイル機能が未設定です（firebase-config.jsのGAS_STORAGE_CONFIGを設定してください）。");
+  }
+  return await callGasEndpoint({
+    action: "storageInfo",
+    secret: GAS_STORAGE_CONFIG.secret
+  });
+}
