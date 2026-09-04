@@ -1805,61 +1805,6 @@ function toast(msg){
 }
 
 /* =========================================================
-   favicon点滅（チャット未読通知）
-   通常のfaviconと、右下に赤いバッジを描き足したfaviconを1秒おきに切り替えることで、
-   ブラウザのタブ・タスクバーのアイコンで新着メッセージに気づきやすくする。
-   バッジ付き画像は、元のfavicon（PNG）をCanvasで加工して都度作るのではなく、
-   初回だけ生成してキャッシュしておく。
-========================================================= */
-const ORIGINAL_FAVICON_HREF = document.getElementById("favicon-link")?.href || "";
-let badgedFaviconHref = null;
-let faviconBlinkTimer = null;
-let faviconBlinkOn = false;
-function buildBadgedFaviconHref(){
-  return new Promise((resolve)=>{
-    if(!ORIGINAL_FAVICON_HREF){ resolve(null); return; }
-    const img = new Image();
-    img.onload = ()=>{
-      const canvas = document.createElement("canvas");
-      canvas.width = img.width; canvas.height = img.height;
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      const r = canvas.width * 0.32;
-      const cx = canvas.width - r * 0.8;
-      const cy = canvas.height - r * 0.8;
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.fillStyle = "#E5484D";
-      ctx.fill();
-      ctx.lineWidth = canvas.width * 0.06;
-      ctx.strokeStyle = "#fff";
-      ctx.stroke();
-      resolve(canvas.toDataURL("image/png"));
-    };
-    img.onerror = ()=> resolve(null);
-    img.src = ORIGINAL_FAVICON_HREF;
-  });
-}
-function setFaviconHref(href){
-  const link = document.getElementById("favicon-link");
-  if(link && href) link.href = href;
-}
-async function startFaviconBlink(){
-  if(faviconBlinkTimer) return; // 既に点滅中なら何もしない
-  if(!badgedFaviconHref) badgedFaviconHref = await buildBadgedFaviconHref();
-  if(!badgedFaviconHref) return; // 生成に失敗した場合は何もしない（faviconはそのまま）
-  faviconBlinkOn = false;
-  faviconBlinkTimer = setInterval(()=>{
-    faviconBlinkOn = !faviconBlinkOn;
-    setFaviconHref(faviconBlinkOn ? badgedFaviconHref : ORIGINAL_FAVICON_HREF);
-  }, 800);
-}
-function stopFaviconBlink(){
-  if(faviconBlinkTimer){ clearInterval(faviconBlinkTimer); faviconBlinkTimer = null; }
-  setFaviconHref(ORIGINAL_FAVICON_HREF);
-}
-
-/* =========================================================
    在席状況（ポータルサイトを開いているかどうか）
    ログイン中は自分の presence/{email} ドキュメントを一定間隔で更新し続け（ハートビート）、
    他の画面（チャット・社員選択モーダル）では「最終更新が一定時間以内かどうか」でオンライン扱いにする。
@@ -1906,15 +1851,43 @@ function refreshOnlineMarksIfActive(){
 }
 setInterval(refreshOnlineMarksIfActive, 30000); // 30秒ごとに再チェック（新たな書き込みが無くても経過時間で変わるため）
 
-/* 未読チャットが残っている間、一定間隔でバルーン（toast）で知らせる。
-   タブの青丸・favicon点滅だけだと見落とすことがあるための追加の気づかせ策。 */
-const CHAT_UNREAD_REMINDER_INTERVAL_MS = 1 * 60 * 1000; // 1分ごと（動作確認用に短縮）
-setInterval(()=>{
-  const unreadCount = chatConversations.filter(c=>c.unread).length;
-  if(unreadCount>0){
-    toast(`チャットに未読のメッセージが${unreadCount}件あります。`);
+/* =========================================================
+   チャットのデスクトップ通知（Notification API）
+   ページが裏に隠れていたり最小化されていても気づけるよう、OS標準のデスクトップ通知を使う。
+   PC・Androidのブラウザでは動作するが、iPhoneは仕組み上（PWA化＋Push API等が別途必要なため）
+   通常のブラウザタブでは通知を出せない。
+========================================================= */
+let chatNotifiedMsgIds = new Set(); // 二重に通知しないよう、既に通知したメッセージIDを覚えておく
+function requestChatNotificationPermission(){
+  if(!("Notification" in window)) return; // iPhoneのSafari等、そもそも非対応のブラウザでは何もしない
+  if(Notification.permission === "default"){
+    Notification.requestPermission();
   }
-}, CHAT_UNREAD_REMINDER_INTERVAL_MS);
+}
+function maybeShowChatNotifications(){
+  if(!("Notification" in window) || Notification.permission !== "granted") return;
+  const newUnread = chatReceivedMsgs.filter(m=> !m.read && !chatNotifiedMsgIds.has(m.id));
+  newUnread.forEach(m=>{
+    chatNotifiedMsgIds.add(m.id);
+    // 今まさにその会話を開いて見ている最中（かつ画面も見えている）なら、通知は不要
+    const isViewingThisThread = chatCurrentConversationId===m.conversationId &&
+      document.getElementById("chat-thread-view")?.style.display !== "none" && !document.hidden;
+    if(isViewingThisThread) return;
+    try{
+      const n = new Notification(`${m.senderName || m.senderEmail} さんからメッセージ`, {
+        body: m.text || "",
+        icon: document.getElementById("favicon-link")?.href || undefined,
+        tag: "chat-" + m.conversationId // 同じ相手からの通知は積み重ねず、最新のものに差し替える
+      });
+      n.onclick = ()=>{
+        window.focus();
+        switchToTab("chat");
+        openChatThread(m.senderEmail, m.senderName || m.senderEmail);
+        n.close();
+      };
+    }catch(e){ /* 通知の生成に失敗しても、他の通知処理は続行する */ }
+  });
+}
 
 let categoriesAll = [];
 function catInfo(id){ return categoriesAll.find(c=>c.id===id) || {label:id, color:"#888"}; }
@@ -2117,6 +2090,7 @@ onAuthStateChanged(auth, async (user)=>{
     initBizInfoListener();
     initChatListeners();
     initPresence();
+    requestChatNotificationPermission();
     initContractSettingsListener();
     initUserPrefsListener();
     initSystemTabDefaultsListener();
@@ -8507,7 +8481,7 @@ function rebuildChatConversations(){
   const badge = document.getElementById("chat-tab-badge");
   const hasUnreadChat = chatConversations.some(c=>c.unread);
   if(badge) badge.style.display = hasUnreadChat ? "inline-block" : "none";
-  if(hasUnreadChat) startFaviconBlink(); else stopFaviconBlink();
+  maybeShowChatNotifications();
   if(document.getElementById("view-chat").style.display !== "none" && document.getElementById("chat-list-view").style.display !== "none"){
     renderChatConversationList();
   }
