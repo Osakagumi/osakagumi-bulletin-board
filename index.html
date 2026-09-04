@@ -1906,6 +1906,16 @@ function refreshOnlineMarksIfActive(){
 }
 setInterval(refreshOnlineMarksIfActive, 30000); // 30秒ごとに再チェック（新たな書き込みが無くても経過時間で変わるため）
 
+/* 未読チャットが残っている間、一定間隔でバルーン（toast）で知らせる。
+   タブの青丸・favicon点滅だけだと見落とすことがあるための追加の気づかせ策。 */
+const CHAT_UNREAD_REMINDER_INTERVAL_MS = 5 * 60 * 1000; // 5分ごと
+setInterval(()=>{
+  const unreadCount = chatConversations.filter(c=>c.unread).length;
+  if(unreadCount>0){
+    toast(`チャットに未読のメッセージが${unreadCount}件あります。`);
+  }
+}, CHAT_UNREAD_REMINDER_INTERVAL_MS);
+
 let categoriesAll = [];
 function catInfo(id){ return categoriesAll.find(c=>c.id===id) || {label:id, color:"#888"}; }
 function formatDateJP(dateStr){
