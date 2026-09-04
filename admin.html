@@ -702,6 +702,7 @@
           <input type="checkbox" id="wb-timeleave-self-set-disabled" style="width:auto;">
           <label style="margin:0;font-size:12.5px;">時間休（AM休・PM休・時間休）の自己設定を禁止する（行き先の編集権限を持つ人しか設定できなくなります）</label>
         </div>
+        <p style="font-size:11px;color:var(--muted);margin:4px 0 0;">切り替えると、その場で即座に保存されます（他の保存ボタンとは独立しています）。</p>
       </div>
 
       <div class="panel">
@@ -2416,8 +2417,7 @@ document.getElementById("cal-work-save-btn").addEventListener("click", async ()=
   const workBuffer = Number(document.getElementById("cal-work-buffer-input").value) || 0;
   if(workStart >= workEnd){ toast("終業時刻は始業時刻より後にしてください。"); return; }
   try{
-    const tlSelfSetDisabled = document.getElementById("wb-timeleave-self-set-disabled").checked;
-    await setDoc(doc(db,"app_settings","whereabouts"), { workStartTime: workStart, workEndTime: workEnd, offHoursBufferMin: workBuffer, timeLeaveSelfSetDisabled: tlSelfSetDisabled }, { merge:true });
+    await setDoc(doc(db,"app_settings","whereabouts"), { workStartTime: workStart, workEndTime: workEnd, offHoursBufferMin: workBuffer }, { merge:true });
     toast("定時を保存しました。");
   }catch(e){
     toast("保存に失敗しました。");
@@ -2594,6 +2594,17 @@ function openStatusModal(st){
   document.getElementById("status-edit-modal").classList.add("show");
 }
 document.getElementById("status-add-open-btn")?.addEventListener("click", ()=> openStatusModal(null));
+// 定時（就業時間）の保存ボタンとは離れた場所（行き先ステータスカード）にあるため、
+// このチェックボックスだけは変更したらその場で即時保存する
+document.getElementById("wb-timeleave-self-set-disabled")?.addEventListener("change", async (e)=>{
+  try{
+    await setDoc(doc(db,"app_settings","whereabouts"), { timeLeaveSelfSetDisabled: e.target.checked }, { merge:true });
+    toast(e.target.checked ? "時間休の自己設定を禁止にしました。" : "時間休の自己設定を許可にしました。");
+  }catch(err){
+    toast("保存に失敗しました。");
+    e.target.checked = !e.target.checked; // 失敗時はチェック状態を元に戻す
+  }
+});
 document.getElementById("status-cancel-edit").addEventListener("click", ()=>{
   document.getElementById("status-edit-modal").classList.remove("show");
 });
