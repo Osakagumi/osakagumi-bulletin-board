@@ -550,8 +550,9 @@
   .cal-day-cell.cal-sat-holiday-note .cal-day-num{color:var(--danger);}
   .cal-day-cell.cal-sat-holiday-note .cal-day-label{color:var(--danger);}
   .cal-day-cell .cal-day-label{
-    font-size:8.5px;color:var(--muted);line-height:1.15;display:block;overflow:hidden;
-    text-overflow:ellipsis;white-space:nowrap;padding:0 1px;flex:1 1 auto;
+    font-size:8.5px;color:var(--muted);line-height:1.15;padding:0 1px;flex:1 1 auto;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+    white-space:pre-line;
   }
   .cal-day-cell.cal-holiday .cal-day-label{color:var(--danger);}
 
@@ -755,6 +756,7 @@
   .modal textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:9px 10px;font-size:13.5px;font-family:inherit;resize:vertical;min-height:60px;}
   .modal .row-btns{display:flex;gap:8px;margin-top:6px;}
   .modal .row-btns button{flex:1;padding:10px;border-radius:8px;border:none;font-size:13.5px;font-weight:600;}
+  .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;}
   .modal-err{color:var(--danger);font-size:12px;margin-top:8px;min-height:16px;}
   #notice-dropzone{
     border:2px dashed var(--line);border-radius:10px;padding:28px 14px;text-align:center;color:var(--muted);
@@ -1214,6 +1216,29 @@
         </div>
         <div class="cal-grid-wrap" id="cal-grid-wrap"></div>
       </section>
+
+      <!-- ---- カレンダー：日付の名称・備考編集モーダル ---- -->
+      <div class="modal-overlay" id="cal-label-modal">
+        <div class="modal">
+          <h3 id="cal-label-modal-title">この日の名称・備考</h3>
+          <div class="field">
+            <label>名称・備考（Enterキーで改行できます）</label>
+            <textarea id="cal-label-input" style="width:100%;min-height:90px;border:1px solid var(--line);border-radius:8px;padding:9px 10px;font-size:13.5px;font-family:inherit;resize:vertical;"></textarea>
+          </div>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:8px;">
+            <input type="checkbox" id="cal-label-publish-now" style="width:auto;">
+            即時公開する
+          </label>
+          <p style="font-size:11px;color:var(--muted);margin:-4px 0 12px;">
+            チェックしない場合、この変更は「編集中」のまま保存され、通常通り「公開する」を押すまで社員には表示されません。チェックすると、この日の内容だけその場で公開されます。
+          </p>
+          <div class="modal-err" id="cal-label-error"></div>
+          <div class="modal-actions">
+            <button class="btn-ghost" id="cal-label-cancel-btn" style="border:1px solid var(--line);">キャンセル</button>
+            <button class="btn-primary" id="cal-label-save-btn">保存</button>
+          </div>
+        </div>
+      </div>
 
       <!-- ---- 契約（入札関係情報） ---- -->
       <section id="view-contracts" style="display:none;">
@@ -7088,21 +7113,42 @@ async function toggleCalHoliday(dateStr){
   }
 }
 
-async function editCalLabel(dateStr){
+let calLabelEditingDateStr = null;
+function editCalLabel(dateStr){
   if(!isCalendarEditor) return;
+  calLabelEditingDateStr = dateStr;
   const current = calDaysData[dateStr] || {};
-  const input = prompt("この日の名称・備考を入力してください（空欄で削除）", current.label || "");
-  if(input === null) return; // キャンセル
+  document.getElementById("cal-label-modal-title").textContent = `${formatDateJP(dateStr)}の名称・備考`;
+  document.getElementById("cal-label-input").value = current.label || "";
+  document.getElementById("cal-label-publish-now").checked = false;
+  document.getElementById("cal-label-error").textContent = "";
+  document.getElementById("cal-label-modal").classList.add("show");
+}
+document.getElementById("cal-label-cancel-btn").addEventListener("click", ()=>{
+  document.getElementById("cal-label-modal").classList.remove("show");
+});
+document.getElementById("cal-label-save-btn").addEventListener("click", async ()=>{
+  const dateStr = calLabelEditingDateStr;
+  if(!dateStr) return;
+  const current = calDaysData[dateStr] || {};
+  const input = document.getElementById("cal-label-input").value;
+  const publishNow = document.getElementById("cal-label-publish-now").checked;
   try{
-    await setDoc(doc(db,"calendar_days", dateStr), {
+    const dayData = {
       isHoliday: !!current.isHoliday,
       label: input.trim()
-    });
+    };
+    await setDoc(doc(db,"calendar_days", dateStr), dayData);
+    if(publishNow){
+      // この日だけ、通常の「公開する」を待たずにその場で公開スナップショットへ反映する
+      await setDoc(doc(db,"calendar_days_published", dateStr), dayData);
+    }
     await markCalYearAsDraft(dateStr);
+    document.getElementById("cal-label-modal").classList.remove("show");
   }catch(e){
-    toast("更新に失敗しました。権限をご確認ください。");
+    document.getElementById("cal-label-error").textContent = "更新に失敗しました。権限をご確認ください。";
   }
-}
+});
 
 /* ---------- 敷鉄板（貸出・返却管理／設備管理の「在庫数管理」カテゴリと統合） ---------- */
 let spEditingTypeId = null;
