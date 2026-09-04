@@ -1876,8 +1876,7 @@ function maybeShowChatNotifications(){
     try{
       const n = new Notification(`${m.senderName || m.senderEmail} さんからメッセージ`, {
         body: m.text || "",
-        icon: document.getElementById("favicon-link")?.href || undefined,
-        tag: "chat-" + m.conversationId // 同じ相手からの通知は積み重ねず、最新のものに差し替える
+        icon: document.getElementById("favicon-link")?.href || undefined
       });
       n.onclick = ()=>{
         window.focus();
