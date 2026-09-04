@@ -1908,7 +1908,7 @@ setInterval(refreshOnlineMarksIfActive, 30000); // 30秒ごとに再チェック
 
 /* 未読チャットが残っている間、一定間隔でバルーン（toast）で知らせる。
    タブの青丸・favicon点滅だけだと見落とすことがあるための追加の気づかせ策。 */
-const CHAT_UNREAD_REMINDER_INTERVAL_MS = 5 * 60 * 1000; // 5分ごと
+const CHAT_UNREAD_REMINDER_INTERVAL_MS = 1 * 60 * 1000; // 1分ごと（動作確認用に短縮）
 setInterval(()=>{
   const unreadCount = chatConversations.filter(c=>c.unread).length;
   if(unreadCount>0){
