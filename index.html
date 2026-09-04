@@ -1541,7 +1541,7 @@
         <label>備考（行き先・戻り時間など）</label>
         <textarea id="wb-note" placeholder="例）〇〇現場／〇〇時頃戻ります"></textarea>
       </div>
-      <div class="field" style="border-top:1px solid var(--line);padding-top:12px;">
+      <div class="field" id="wb-timeleave-section" style="border-top:1px solid var(--line);padding-top:12px;">
         <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text);margin-bottom:8px;">
           <input type="checkbox" id="wb-timeleave-check" style="width:auto;">
           本日、時間休を設定する
@@ -6055,6 +6055,7 @@ function openWbModal(email){
   wbOriginalTimeLeave = hasTimeLeaveToday
     ? { checked:true, start:effectiveTl.start, end:effectiveTl.end, type:effectiveTl.type||"custom" }
     : { checked:false, start:"", end:"", type:"" };
+  document.getElementById("wb-timeleave-section").style.display = tlSelfRestricted ? "none" : "block";
   tlCheck.disabled = tlSelfRestricted;
   tlCheck.title = tlSelfRestricted ? "時間休の自己設定は禁止されています。行き先の編集権限を持つ人にご依頼ください。" : "";
   document.getElementById("wb-timeleave-start").style.pointerEvents = tlSelfRestricted ? "none" : "";
