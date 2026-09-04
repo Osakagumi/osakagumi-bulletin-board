@@ -995,6 +995,10 @@
           <input type="checkbox" id="bizinfo-enabled-input" checked style="width:auto;">
           <label style="margin:0;font-size:12.5px;">有効にする（一般画面に表示する）</label>
         </div>
+        <div class="field" style="display:flex;align-items:center;gap:6px;">
+          <input type="checkbox" id="bizinfo-allow-download-input" style="width:auto;">
+          <label style="margin:0;font-size:12.5px;">ダウンロードを許可する（一般画面にダウンロードボタンを表示する）</label>
+        </div>
         <div id="bizinfo-edit-error" style="color:var(--danger);font-size:12.5px;margin-top:4px;"></div>
         <div class="row-btns">
           <button class="btn btn-ghost" id="bizinfo-edit-cancel-btn" style="border:1px solid var(--line);">キャンセル</button>
@@ -2960,6 +2964,7 @@ function openBizInfoEditModal(item){
   document.getElementById("bizinfo-edit-modal-title").textContent = item ? "業務情報を編集" : "業務情報を追加";
   document.getElementById("bizinfo-name-input").value = item ? (item.name||"") : "";
   document.getElementById("bizinfo-enabled-input").checked = item ? (item.enabled!==false) : true;
+  document.getElementById("bizinfo-allow-download-input").checked = item ? !!item.allowDownload : false;
   document.getElementById("bizinfo-edit-error").textContent = "";
   // ファイルの添付欄は追加・編集どちらでも表示する。編集時は未選択なら既存ファイルのまま。
   document.getElementById("bizinfo-modal-dropzone-hint").textContent = item
@@ -2976,10 +2981,11 @@ document.getElementById("bizinfo-edit-save-btn")?.addEventListener("click", asyn
   const errEl = document.getElementById("bizinfo-edit-error");
   const name = document.getElementById("bizinfo-name-input").value.trim();
   const enabled = document.getElementById("bizinfo-enabled-input").checked;
+  const allowDownload = document.getElementById("bizinfo-allow-download-input").checked;
   if(!name){ errEl.textContent = "業務情報名を入力してください。"; return; }
   try{
     if(editingBizInfoId){
-      const patch = { name, enabled };
+      const patch = { name, enabled, allowDownload };
       if(pendingBizInfoUpload){
         patch.driveUrl = pendingBizInfoUpload.driveUrl;
         patch.fileId = pendingBizInfoUpload.fileId;
@@ -2996,7 +3002,7 @@ document.getElementById("bizinfo-edit-save-btn")?.addEventListener("click", asyn
       const maxOrder = bizInfoItemsAll.reduce((m,i)=>Math.max(m,i.order??0),0);
       await addDoc(collection(db,"business_info_items"), {
         name, driveUrl: pendingBizInfoUpload.driveUrl, fileId: pendingBizInfoUpload.fileId,
-        lastFileName: pendingBizInfoUpload.fileName, enabled, infoManagers: [], order: maxOrder+10
+        lastFileName: pendingBizInfoUpload.fileName, enabled, allowDownload, infoManagers: [], order: maxOrder+10
       });
       toast("追加しました。");
     }
@@ -3481,7 +3487,7 @@ function renderPermMatrix(){
     getList: ()=> Array.isArray(item.infoManagers) ? item.infoManagers : []
   }));
   const allDefs = [...PERMISSION_DEFS, ...bizDefs];
-  const roster = employeesAll.filter(e=>!e.hidden);
+  const roster = employeesAll.filter(e=>!e.hidden && !e.isSharedAccount);
 
   const table = document.createElement("table");
   table.className = "perm-matrix-table";
@@ -3604,7 +3610,7 @@ function renderTabMatrix(){
   const wrap = document.getElementById("tab-matrix-wrap");
   if(!wrap) return;
   const tabDefs = getFullHideableList();
-  const roster = employeesAll.filter(e=>!e.hidden);
+  const roster = employeesAll.filter(e=>!e.hidden && !e.isSharedAccount);
 
   const table = document.createElement("table");
   table.className = "perm-matrix-table";
@@ -3676,7 +3682,7 @@ async function toggleTabMatrixCell(cb, emp, tabId){
 // 判定基準：現在、全員が表示中（＝どの社員の非表示リストにも含まれていない）なら、
 // 「全員表示済み」とみなして全員非表示に倒す。ひとりでも非表示の社員がいれば、逆に全員表示に揃える。
 async function toggleTabMatrixColumn(tabId){
-  const roster = employeesAll.filter(e=>!e.hidden);
+  const roster = employeesAll.filter(e=>!e.hidden && !e.isSharedAccount);
   if(roster.length===0) return;
   const allVisible = roster.every(emp=>{
     const hiddenTabs = Array.isArray(emp.hiddenTabs) ? emp.hiddenTabs : [];

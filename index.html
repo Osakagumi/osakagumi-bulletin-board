@@ -1256,7 +1256,10 @@
       <section id="view-bizinfo" style="display:none;">
         <div class="cat-row" id="bizinfo-pill-row"></div>
         <div id="bizinfo-empty" style="color:var(--muted);text-align:center;padding:24px;display:none;">表示できる業務情報がありません。</div>
-        <p id="bizinfo-note" style="font-size:12px;color:var(--muted);margin:0 0 12px;display:none;">タブまたは情報名ボタンを押すとファイルの再読み込みを行って最新情報を表示します。</p>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+          <p id="bizinfo-note" style="font-size:12px;color:var(--muted);margin:0 0 12px;display:none;">タブまたは情報名ボタンを押すとファイルの再読み込みを行って最新情報を表示します。</p>
+          <a id="bizinfo-download-btn" class="btn-ghost" style="display:none;border:1px solid var(--line);text-decoration:none;white-space:nowrap;margin-bottom:12px;" download>ダウンロード</a>
+        </div>
         <iframe id="bizinfo-iframe" style="width:100%;height:75vh;border:1px solid var(--line);border-radius:10px;background:#fff;display:none;" allow="autoplay"></iframe>
       </section>
 
@@ -1403,6 +1406,10 @@
         <div id="notice-send-email-row" style="display:flex;align-items:center;gap:6px;margin-top:8px;">
           <input type="checkbox" id="notice-send-email" checked style="width:auto;">
           <label id="notice-send-email-label" style="margin:0;font-size:12.5px;color:var(--text);">Eメールでも送信する（自分のメールソフトが起動します）</label>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:8px;">
+          <input type="checkbox" id="notice-never-auto-delete" style="width:auto;">
+          <label style="margin:0;font-size:12.5px;color:var(--text);">自動削除しない（明示的に削除するまで消えません）</label>
         </div>
       </div>
       <div class="field" id="notice-attach-field">
@@ -3923,9 +3930,10 @@ async function cleanupOldNotices(){
     // 複合インデックスを避けるため、日付だけで取得してから権限に応じてJS側で絞り込む
     const snap = await getDocs(query(collection(db,"announcements"), where("createdAt","<", cutoff)));
     if(snap.empty) return;
-    const targets = isAdmin
+    const targets = (isAdmin
       ? snap.docs
-      : snap.docs.filter(d => d.data().authorEmail === currentUser.email);
+      : snap.docs.filter(d => d.data().authorEmail === currentUser.email)
+    ).filter(d => !d.data().neverAutoDelete); // 「自動削除しない」が指定されたものは対象外にする
     if(targets.length===0) return;
     let count = 0;
     for(const d of targets){
@@ -4330,6 +4338,7 @@ document.getElementById("notice-new-btn").addEventListener("click", ()=>{
   renderNoticeTargetDeptChecks([]);
   noticeExcludedEmails = [];
   renderNoticeExcludedChips();
+  document.getElementById("notice-never-auto-delete").checked = false;
   originalAttachmentUrl = null;
   originalAttachmentFileName = null;
   removeExistingNoticeAttachment = false;
@@ -4361,6 +4370,7 @@ function openNoticeEditModal(n){
   renderNoticeTargetDeptChecks(targetDepts);
   noticeExcludedEmails = Array.isArray(n.excludedEmails) ? [...n.excludedEmails] : [];
   renderNoticeExcludedChips();
+  document.getElementById("notice-never-auto-delete").checked = !!n.neverAutoDelete;
   document.getElementById("notice-dropzone-hint").textContent = "";
   resetNoticeDropzone();
   const existingRow = document.getElementById("notice-existing-attachment-row");
@@ -4424,6 +4434,7 @@ document.getElementById("notice-submit").addEventListener("click", async ()=>{
   statusEl.textContent = "";
 
   const sendEmail = document.getElementById("notice-send-email").checked;
+  const neverAutoDelete = document.getElementById("notice-never-auto-delete").checked;
   let recipients = [];
   if(sendEmail){
     // 送信直前にFirestoreから最新の社員名簿を取得し直してから確認する
@@ -4431,7 +4442,7 @@ document.getElementById("notice-submit").addEventListener("click", async ()=>{
       const freshSnap = await getDocs(collection(db,"employees"));
       employeesAll = freshSnap.docs.map(d=>({email:d.id, ...d.data()}));
     }catch(e){ /* 取得失敗時はキャッシュのまま表示を続行 */ }
-    recipients = resolveMailRecipients(employeesAll);
+    recipients = resolveMailRecipients(employeesAll, currentUser.email);
     if(targetDepartments.length>0){
       // 発信先が部署指定の場合は、宛先もその部署の社員だけに絞り込む
       recipients = recipients.filter(r=>{
@@ -4456,6 +4467,7 @@ document.getElementById("notice-submit").addEventListener("click", async ()=>{
       await updateDoc(doc(db,"announcements", editingNoticeId), {
         title, body, attachmentUrl, attachmentStoragePath, attachmentFileName, targetDepartments,
         excludedEmails: noticeExcludedEmails,
+        neverAutoDelete,
         updatedAt: Timestamp.now()
       });
       // 添付が別のものに差し替わった／削除された場合は、以前のファイルをドライブから完全削除する
@@ -4478,6 +4490,7 @@ document.getElementById("notice-submit").addEventListener("click", async ()=>{
       title, body,
       attachmentUrl, attachmentStoragePath, attachmentFileName, targetDepartments,
       excludedEmails: noticeExcludedEmails,
+      neverAutoDelete,
       authorEmail: currentUser.email,
       authorName: myDisplayName(),
       createdAt: Timestamp.now()
@@ -6430,7 +6443,7 @@ async function launchSafetyCampaignFromGeneralScreen(){
     employeesAll = freshSnap.docs.map(d=>({email:d.id, ...d.data()}));
   }catch(e){ /* 取得失敗時はキャッシュのまま表示を続行 */ }
 
-  const recipients = resolveMailRecipients(employeesAll);
+  const recipients = resolveMailRecipients(employeesAll, currentUser.email);
   const overrideNotice = isMailOverrideActive()
     ? `\n\n※現在メール送信先が「${MAIL_SEND_TARGET}」に上書き設定されているため、上記の人数・宛先のみに送信されます（全社員には送信されません）。`
     : "";
@@ -8700,6 +8713,8 @@ function renderBizInfoTab(){
     emptyEl.style.display = "block";
     noteEl.style.display = "none";
     iframe.style.display = "none";
+    const downloadBtn = document.getElementById("bizinfo-download-btn");
+    if(downloadBtn) downloadBtn.style.display = "none";
     selectedBizInfoId = null;
     return;
   }
@@ -8723,9 +8738,19 @@ function renderBizInfoTab(){
 }
 function loadBizInfoIframe(){
   const iframe = document.getElementById("bizinfo-iframe");
+  const downloadBtn = document.getElementById("bizinfo-download-btn");
   const item = bizInfoItemsAll.find(i=>i.id===selectedBizInfoId);
   if(!iframe || !item || !item.fileId) return;
   iframe.src = `https://drive.google.com/file/d/${item.fileId}/preview?t=${Date.now()}`;
+  if(downloadBtn){
+    if(item.allowDownload){
+      downloadBtn.href = `https://drive.google.com/uc?export=download&id=${item.fileId}`;
+      downloadBtn.style.display = "inline-block";
+    } else {
+      downloadBtn.style.display = "none";
+      downloadBtn.removeAttribute("href");
+    }
+  }
 }
 
 
