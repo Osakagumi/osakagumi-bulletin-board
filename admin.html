@@ -778,9 +778,13 @@
         </div>
         <button class="btn btn-primary" id="status-save-btn">追加</button>
         <button class="btn btn-ghost" id="status-cancel-edit" style="display:none;">編集をやめる</button>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:10px;">
+          <input type="checkbox" id="status-self-set-disabled" style="width:auto;">
+          <label style="margin:0;font-size:12.5px;">自己設定を禁止する（行き先の編集権限を持つ人しか選べなくなります）</label>
+        </div>
         <!-- <p style="font-size:12px;color:var(--muted);margin:10px 0 0;">一覧の左端（⠿）をドラッグすると並び順を変更できます。</p> -->
         <table style="margin-top:10px;">
-          <thead><tr><th></th><th>ステータス名</th><th>色</th><th>操作</th></tr></thead>
+          <thead><tr><th></th><th>ステータス名</th><th>色</th><th></th><th>操作</th></tr></thead>
           <tbody id="status-table-body"></tbody>
         </table>
       </div>
@@ -2539,12 +2543,12 @@ function renderWbStatuses(){
   bindTableDragover("status-table-body");
   body.innerHTML = "";
   if(wbStatusesAll.length===0){
-    body.innerHTML = `<tr><td colspan="4" class="empty">まだステータスがありません。上のボタンで初期セットを作成するか、下から追加してください。</td></tr>`;
+    body.innerHTML = `<tr><td colspan="5" class="empty">まだステータスがありません。上のボタンで初期セットを作成するか、下から追加してください。</td></tr>`;
     return;
   }
   wbStatusesAll.forEach(st=>{
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td style="width:24px;color:var(--muted);">⠿</td><td>${escapeHtml(st.name)}</td><td><span class="color-dot" style="background:${st.color}"></span></td><td class="actions"></td>`;
+    tr.innerHTML = `<td style="width:24px;color:var(--muted);">⠿</td><td>${escapeHtml(st.name)}</td><td><span class="color-dot" style="background:${st.color}"></span></td><td style="font-size:12px;color:var(--muted);white-space:nowrap;">${st.selfSetDisabled ? "自己設定不可" : ""}</td><td class="actions"></td>`;
     makeRowDraggable(tr, st.id, ()=> saveTableOrder("status-table-body","wb_statuses"));
     const editBtn = document.createElement("button");
     editBtn.className = "btn btn-ghost"; editBtn.textContent = "編集";
@@ -2552,6 +2556,7 @@ function renderWbStatuses(){
       editingStatusId = st.id;
       document.getElementById("status-name").value = st.name;
       document.getElementById("status-color").value = st.color || "#4B5FA3";
+      document.getElementById("status-self-set-disabled").checked = !!st.selfSetDisabled;
       document.getElementById("status-save-btn").textContent = "変更を保存";
       document.getElementById("status-cancel-edit").style.display = "inline-block";
     });
@@ -2572,6 +2577,7 @@ function resetStatusForm(){
   editingStatusId = null;
   document.getElementById("status-name").value = "";
   document.getElementById("status-color").value = "#4B5FA3";
+  document.getElementById("status-self-set-disabled").checked = false;
   document.getElementById("status-save-btn").textContent = "追加";
   document.getElementById("status-cancel-edit").style.display = "none";
 }
@@ -2580,7 +2586,8 @@ document.getElementById("status-save-btn").addEventListener("click", async ()=>{
   if(!name){ toast("ステータス名を入力してください。"); return; }
   const payload = {
     name,
-    color: document.getElementById("status-color").value
+    color: document.getElementById("status-color").value,
+    selfSetDisabled: document.getElementById("status-self-set-disabled").checked
   };
   try{
     if(editingStatusId){

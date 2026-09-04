@@ -6008,12 +6008,18 @@ function openWbModal(email){
     email===currentUser.email ? "自分の行き先を入力" : `${emp?.name || email} さんの行き先を入力`;
   const sel = document.getElementById("wb-status-select");
   sel.innerHTML = "";
-  if(wbStatusesAll.length===0){
+  // 本人が行き先の編集権限（システム管理者／行き先編集権限）を持たず、かつ自分自身の行き先を
+  // 設定しようとしている場合は、「自己設定を禁止する」が指定されたステータスを選択肢から除く
+  const isSelfWithoutPermission = (email === currentUser.email) && !isAdmin && !isWhereaboutsEditor;
+  const selectableStatuses = isSelfWithoutPermission
+    ? wbStatusesAll.filter(s => !s.selfSetDisabled)
+    : wbStatusesAll;
+  if(selectableStatuses.length===0){
     const opt = document.createElement("option");
     opt.value = ""; opt.textContent = "（管理画面でステータス未登録）";
     sel.appendChild(opt);
   } else {
-    wbStatusesAll.forEach(s=>{
+    selectableStatuses.forEach(s=>{
       const opt = document.createElement("option");
       opt.value = s.id; opt.textContent = s.name;
       sel.appendChild(opt);
