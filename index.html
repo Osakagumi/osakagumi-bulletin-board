@@ -1851,43 +1851,6 @@ function refreshOnlineMarksIfActive(){
 }
 setInterval(refreshOnlineMarksIfActive, 30000); // 30秒ごとに再チェック（新たな書き込みが無くても経過時間で変わるため）
 
-/* =========================================================
-   チャットのデスクトップ通知（Notification API）
-   ページが裏に隠れていたり最小化されていても気づけるよう、OS標準のデスクトップ通知を使う。
-   PC・Androidのブラウザでは動作するが、iPhoneは仕組み上（PWA化＋Push API等が別途必要なため）
-   通常のブラウザタブでは通知を出せない。
-========================================================= */
-let chatNotifiedMsgIds = new Set(); // 二重に通知しないよう、既に通知したメッセージIDを覚えておく
-function requestChatNotificationPermission(){
-  if(!("Notification" in window)) return; // iPhoneのSafari等、そもそも非対応のブラウザでは何もしない
-  if(Notification.permission === "default"){
-    Notification.requestPermission();
-  }
-}
-function maybeShowChatNotifications(){
-  if(!("Notification" in window) || Notification.permission !== "granted") return;
-  const newUnread = chatReceivedMsgs.filter(m=> !m.read && !chatNotifiedMsgIds.has(m.id));
-  newUnread.forEach(m=>{
-    chatNotifiedMsgIds.add(m.id);
-    // 今まさにその会話を開いて見ている最中（かつ画面も見えている）なら、通知は不要
-    const isViewingThisThread = chatCurrentConversationId===m.conversationId &&
-      document.getElementById("chat-thread-view")?.style.display !== "none" && !document.hidden;
-    if(isViewingThisThread) return;
-    try{
-      const n = new Notification(`${m.senderName || m.senderEmail} さんからメッセージ`, {
-        body: m.text || "",
-        icon: document.getElementById("favicon-link")?.href || undefined
-      });
-      n.onclick = ()=>{
-        window.focus();
-        switchToTab("chat");
-        openChatThread(m.senderEmail, m.senderName || m.senderEmail);
-        n.close();
-      };
-    }catch(e){ /* 通知の生成に失敗しても、他の通知処理は続行する */ }
-  });
-}
-
 let categoriesAll = [];
 function catInfo(id){ return categoriesAll.find(c=>c.id===id) || {label:id, color:"#888"}; }
 function formatDateJP(dateStr){
@@ -2089,7 +2052,6 @@ onAuthStateChanged(auth, async (user)=>{
     initBizInfoListener();
     initChatListeners();
     initPresence();
-    requestChatNotificationPermission();
     initContractSettingsListener();
     initUserPrefsListener();
     initSystemTabDefaultsListener();
@@ -8480,7 +8442,6 @@ function rebuildChatConversations(){
   const badge = document.getElementById("chat-tab-badge");
   const hasUnreadChat = chatConversations.some(c=>c.unread);
   if(badge) badge.style.display = hasUnreadChat ? "inline-block" : "none";
-  maybeShowChatNotifications();
   if(document.getElementById("view-chat").style.display !== "none" && document.getElementById("chat-list-view").style.display !== "none"){
     renderChatConversationList();
   }
