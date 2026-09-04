@@ -705,7 +705,7 @@
   .notice-permanent-badge{display:inline-block;padding:2px 9px;border-radius:14px;font-size:11px;font-weight:700;color:#fff;background:#8A6D3B;white-space:nowrap;margin-left:6px;}
   .wb-note-cell{
     color:var(--muted);font-size:calc(var(--wb-font-size) * 0.962);line-height:1.35;
-    max-width:110px;overflow-wrap:break-word;
+    max-width:85px;overflow-wrap:break-word;
   }
   .wb-note-cell .wb-note-tl-line{color:var(--danger);font-weight:700;white-space:pre-line;}
   .wb-note-cell .wb-note-text-line{
@@ -4140,7 +4140,7 @@ document.getElementById("notice-readby-close").addEventListener("click", ()=>{
 });
 
 function renderNoticeDetailView(n){
-  document.getElementById("notice-detail-title-text").textContent = n.title || "";
+  document.getElementById("notice-detail-title-text").innerHTML = escapeHtml(n.title || "") + (n.neverAutoDelete ? `<span class="notice-permanent-badge">永続</span>` : "");
   const authorHtml = n.authorEmail
     ? `<a href="mailto:${escapeHtml(n.authorEmail)}" class="n-author-link">${escapeHtml(n.authorName||n.authorEmail)}</a>`
     : escapeHtml(n.authorName||"");
