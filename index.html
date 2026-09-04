@@ -702,6 +702,7 @@
   .wb-table tr:last-child td{border-bottom:none;}
   .wb-status-badge{display:inline-block;padding:4px 10px;border-radius:14px;font-size:calc(var(--wb-font-size) * 0.923);font-weight:700;color:#fff;white-space:nowrap;}
   .online-badge{display:inline-block;padding:2px 9px;border-radius:14px;font-size:11px;font-weight:700;color:#fff;background:#2FB344;white-space:nowrap;margin-left:6px;}
+  .notice-permanent-badge{display:inline-block;padding:2px 9px;border-radius:14px;font-size:11px;font-weight:700;color:#fff;background:#8A6D3B;white-space:nowrap;margin-left:6px;}
   .wb-note-cell{
     color:var(--muted);font-size:calc(var(--wb-font-size) * 0.962);line-height:1.35;
   }
@@ -1409,8 +1410,11 @@
         </div>
         <div style="display:flex;align-items:center;gap:6px;margin-top:8px;">
           <input type="checkbox" id="notice-never-auto-delete" style="width:auto;">
-          <label style="margin:0;font-size:12.5px;color:var(--text);">自動削除しない（明示的に削除するまで消えません）</label>
+          <label style="margin:0;font-size:12.5px;color:var(--text);">永続的なお知らせ</label>
         </div>
+        <p style="font-size:11px;color:var(--muted);margin:4px 0 0;">
+          チェックすると自動削除の対象外になり、明示的に削除するまで消えません。
+        </p>
       </div>
       <div class="field" id="notice-attach-field">
         <label>添付ファイル（任意）</label>
@@ -4087,7 +4091,7 @@ function renderNotices(){
     tr.innerHTML = `
       <td class="n-date-cell">${escapeHtml(tsToStr(n.createdAt))}</td>
       <td class="n-author-cell">${authorNameHtml}</td>
-      <td class="n-title-cell">${escapeHtml(n.title)}<div style="font-size:11px;color:var(--muted);margin-top:2px;">宛先：${escapeHtml(noticeTargetSummary(n, false))}</div></td>
+      <td class="n-title-cell">${escapeHtml(n.title)}${n.neverAutoDelete ? `<span class="notice-permanent-badge">永続</span>` : ""}<div style="font-size:11px;color:var(--muted);margin-top:2px;">宛先：${escapeHtml(noticeTargetSummary(n, false))}</div></td>
       <td class="n-read-count-cell">${readCount}/${totalCount}</td>
       <td class="n-status-cell n-status-${isRead ? (isKeptVisible?"read":"hidden") : "unread"}" style="${noticeShowAllMode ? "" : "display:none;"}">${statusLabel}</td>
       <td></td>
