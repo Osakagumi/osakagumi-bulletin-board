@@ -6047,13 +6047,24 @@ function openWbModal(email){
   setTimeFieldValue(document.getElementById("wb-timeleave-end"), hasTimeLeaveToday ? effectiveTl.end : "");
   selectTlType(hasTimeLeaveToday ? (effectiveTl.type || "custom") : "custom");
   // 時間休（AM休・PM休・時間休）の自己設定が禁止されている場合、本人による変更はできないようにする
-  // （行き先の編集権限を持つ人が代理で設定する分には制限しない）
+  // （行き先の編集権限を持つ人が代理で設定する分には制限しない）。
+  // チェックボックスだけでなく、時間帯・区分ボタンも操作できないようにし、
+  // 保存時は「開いた時点の元の値」をそのまま維持する（他の項目だけの更新をブロックしないため）。
   const tlSelfRestricted = isSelfWithoutPermission && wbTimeLeaveSelfSetDisabled;
+  wbTimeLeaveRestricted = tlSelfRestricted;
+  wbOriginalTimeLeave = hasTimeLeaveToday
+    ? { checked:true, start:effectiveTl.start, end:effectiveTl.end, type:effectiveTl.type||"custom" }
+    : { checked:false, start:"", end:"", type:"" };
   tlCheck.disabled = tlSelfRestricted;
   tlCheck.title = tlSelfRestricted ? "時間休の自己設定は禁止されています。行き先の編集権限を持つ人にご依頼ください。" : "";
+  document.getElementById("wb-timeleave-start").style.pointerEvents = tlSelfRestricted ? "none" : "";
+  document.getElementById("wb-timeleave-end").style.pointerEvents = tlSelfRestricted ? "none" : "";
+  document.querySelectorAll("#wb-timeleave-type-toggle .seg-btn").forEach(b=>{ b.disabled = tlSelfRestricted; });
 
   wbModal.classList.add("show");
 }
+let wbTimeLeaveRestricted = false;
+let wbOriginalTimeLeave = { checked:false, start:"", end:"", type:"" };
 
 function selectTlType(type){
   wbTimeLeaveType = type;
@@ -6102,10 +6113,12 @@ document.getElementById("wb-save").addEventListener("click", async ()=>{
   }
   const status = document.getElementById("wb-status-select").value;
   const note = document.getElementById("wb-note").value.trim();
-  const tlChecked = document.getElementById("wb-timeleave-check").checked;
-  const tlStart = document.getElementById("wb-timeleave-start").dataset.value || "";
-  const tlEnd = document.getElementById("wb-timeleave-end").dataset.value || "";
-  if(tlChecked){
+  // 自己設定が禁止されている場合は、UI上の状態に関わらず、モーダルを開いた時点の元の値を維持する
+  // （時間休以外の項目だけを更新したい場合に、保存全体がブロックされないようにするため）
+  const tlChecked = wbTimeLeaveRestricted ? wbOriginalTimeLeave.checked : document.getElementById("wb-timeleave-check").checked;
+  const tlStart = wbTimeLeaveRestricted ? wbOriginalTimeLeave.start : (document.getElementById("wb-timeleave-start").dataset.value || "");
+  const tlEnd = wbTimeLeaveRestricted ? wbOriginalTimeLeave.end : (document.getElementById("wb-timeleave-end").dataset.value || "");
+  if(tlChecked && !wbTimeLeaveRestricted){
     if(!tlStart || !tlEnd){
       errEl.textContent = "時間休の開始・終了時刻を選択してください。";
       return;
@@ -6122,7 +6135,7 @@ document.getElementById("wb-save").addEventListener("click", async ()=>{
     timeLeaveDate: tlChecked ? todayStr() : "",
     timeLeaveStart: tlChecked ? tlStart : "",
     timeLeaveEnd: tlChecked ? tlEnd : "",
-    timeLeaveType: tlChecked ? (wbTimeLeaveType || "custom") : ""
+    timeLeaveType: tlChecked ? ((wbTimeLeaveRestricted ? wbOriginalTimeLeave.type : wbTimeLeaveType) || "custom") : ""
   };
   try{
     await updateDoc(doc(db,"employees", wbEditingEmail), payload);
