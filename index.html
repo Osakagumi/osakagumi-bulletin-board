@@ -1412,9 +1412,6 @@
           <input type="checkbox" id="notice-never-auto-delete" style="width:auto;">
           <label style="margin:0;font-size:12.5px;color:var(--text);">永続的なお知らせ</label>
         </div>
-        <p style="font-size:11px;color:var(--muted);margin:4px 0 0;">
-          チェックすると自動削除の対象外になり、明示的に削除するまで消えません。
-        </p>
       </div>
       <div class="field" id="notice-attach-field">
         <label>添付ファイル（任意）</label>
@@ -4365,7 +4362,7 @@ function openNoticeEditModal(n){
   document.getElementById("notice-modal-title").textContent = "お知らせを編集";
   document.getElementById("notice-send-email-row").style.display = "flex";
   document.getElementById("notice-send-email").checked = false;
-  document.getElementById("notice-send-email-label").textContent = "更新内容をEメールでも送信する（自分のメールソフトが起動します）";
+  document.getElementById("notice-send-email-label").textContent = "Eメールでも送信する";
   document.getElementById("notice-title").value = n.title || "";
   document.getElementById("notice-body").value = n.body || "";
   const targetDepts = Array.isArray(n.targetDepartments) ? n.targetDepartments : [];
