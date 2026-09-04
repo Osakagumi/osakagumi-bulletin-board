@@ -707,6 +707,10 @@
             <select id="cal-work-buffer-input"></select>
           </div>
         </div>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:10px;margin-bottom:12px;">
+          <input type="checkbox" id="wb-timeleave-self-set-disabled" style="width:auto;">
+          <label style="margin:0;font-size:12.5px;">時間休（AM休・PM休・時間休）の自己設定を禁止する（行き先の編集権限を持つ人しか設定できなくなります）</label>
+        </div>
         <button class="btn btn-primary" id="cal-work-save-btn">保存</button>
       </div>
 
@@ -2379,6 +2383,8 @@ function initWbColumnsListener(){
     if(workEndInput && document.activeElement !== workEndInput){ workEndInput.value = workEnd; }
     const workBufferInput = document.getElementById("cal-work-buffer-input");
     if(workBufferInput && document.activeElement !== workBufferInput){ workBufferInput.value = workBuffer; }
+    const tlDisabledInput = document.getElementById("wb-timeleave-self-set-disabled");
+    if(tlDisabledInput && document.activeElement !== tlDisabledInput){ tlDisabledInput.checked = !!data.timeLeaveSelfSetDisabled; }
   });
 }
 // 時間外とする範囲：0:00～3:00を15分刻みで選択肢化
@@ -2399,7 +2405,8 @@ document.getElementById("cal-work-save-btn").addEventListener("click", async ()=
   const workBuffer = Number(document.getElementById("cal-work-buffer-input").value) || 0;
   if(workStart >= workEnd){ toast("終業時刻は始業時刻より後にしてください。"); return; }
   try{
-    await setDoc(doc(db,"app_settings","whereabouts"), { workStartTime: workStart, workEndTime: workEnd, offHoursBufferMin: workBuffer }, { merge:true });
+    const tlSelfSetDisabled = document.getElementById("wb-timeleave-self-set-disabled").checked;
+    await setDoc(doc(db,"app_settings","whereabouts"), { workStartTime: workStart, workEndTime: workEnd, offHoursBufferMin: workBuffer, timeLeaveSelfSetDisabled: tlSelfSetDisabled }, { merge:true });
     toast("定時を保存しました。");
   }catch(e){
     toast("保存に失敗しました。");

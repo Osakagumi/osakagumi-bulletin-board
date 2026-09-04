@@ -1989,6 +1989,7 @@ let wbPresetBulkStatus = null;
 let calWorkStartTime = "08:00";
 let calWorkEndTime = "17:00";
 let wbOffHoursBufferMin = 15;
+let wbTimeLeaveSelfSetDisabled = false;
 
 /* ---------- auth ---------- */
 document.getElementById("login-btn").addEventListener("click", doLogin);
@@ -2554,6 +2555,11 @@ function switchToTab(viewName){
     chatLastLeftAt = Date.now();
     chatLastConvEmail = chatCurrentOtherEmail;
     chatLastConvName = chatCurrentOtherName;
+    // スレッドの購読を止めないと、画面を離れた後も裏で監視が動き続け、
+    // 新着メッセージが届くたびに自動で既読が付いてしまうため、ここで確実に停止する。
+    stopChatThreadListeners();
+    chatCurrentConversationId = null;
+    chatCurrentOtherEmail = null;
   }
   document.querySelectorAll(".tab-btn").forEach(b=>{
     b.classList.toggle("active", b.dataset.view===viewName);
@@ -4726,6 +4732,7 @@ function initWbColumnsListener(){
     calWorkStartTime = data.workStartTime || "08:00";
     calWorkEndTime = data.workEndTime || "17:00";
     wbOffHoursBufferMin = data.offHoursBufferMin ?? 15;
+    wbTimeLeaveSelfSetDisabled = !!data.timeLeaveSelfSetDisabled;
 
     renderWhereabouts();
   }, (err)=>{ console.error("[行き先列数設定取得エラー]", err); });
@@ -6039,6 +6046,11 @@ function openWbModal(email){
   setTimeFieldValue(document.getElementById("wb-timeleave-start"), hasTimeLeaveToday ? effectiveTl.start : "");
   setTimeFieldValue(document.getElementById("wb-timeleave-end"), hasTimeLeaveToday ? effectiveTl.end : "");
   selectTlType(hasTimeLeaveToday ? (effectiveTl.type || "custom") : "custom");
+  // 時間休（AM休・PM休・時間休）の自己設定が禁止されている場合、本人による変更はできないようにする
+  // （行き先の編集権限を持つ人が代理で設定する分には制限しない）
+  const tlSelfRestricted = isSelfWithoutPermission && wbTimeLeaveSelfSetDisabled;
+  tlCheck.disabled = tlSelfRestricted;
+  tlCheck.title = tlSelfRestricted ? "時間休の自己設定は禁止されています。行き先の編集権限を持つ人にご依頼ください。" : "";
 
   wbModal.classList.add("show");
 }
