@@ -786,6 +786,16 @@
     .timeline{min-width:560px;}
   }
 </style>
+<!-- OneSignal（チャット新着通知用）。App IDは大坂組ポータル専用のOneSignalアプリのもの。 -->
+<script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+<script>
+  window.OneSignalDeferred = window.OneSignalDeferred || [];
+  OneSignalDeferred.push(async function(OneSignal) {
+    await OneSignal.init({
+      appId: "e73e93dd-f3ab-46b3-80d9-63e94e9dda4c",
+    });
+  });
+</script>
 </head>
 <body>
 
@@ -1816,6 +1826,32 @@ const PRESENCE_HEARTBEAT_MS = 60000; // 1分ごとに更新
 const PRESENCE_ONLINE_THRESHOLD_MS = 150000; // 最終更新から2分30秒以内ならオンライン扱い
 let presenceLastActiveAt = {}; // { email: 最終更新日時（ISO文字列） }
 let presenceHeartbeatTimer = null;
+
+/* =========================================================
+   OneSignal（チャット新着通知）
+   ログインしたら、OneSignalの購読情報と本人のメールアドレスを紐付けておく。
+   実際の送信は、Firebase Cloud Functions側からOneSignalのREST APIを呼ぶ形で行う（別途対応）。
+   Chromium系ブラウザ・Androidでは通常のタブのまま動作する。iPhoneのSafariで受け取るには、
+   別途「ホーム画面に追加」（PWA化）してもらう必要がある（Appleの制約によるもので、ここでは回避できない）。
+========================================================= */
+function initOneSignalForCurrentUser(){
+  if(!window.OneSignalDeferred || !currentUser) return;
+  OneSignalDeferred.push(async function(OneSignal){
+    try{
+      // このブラウザ・この端末の購読を、本人のメールアドレスに紐付ける
+      // （これにより、送信側は「このメールアドレス宛てに送って」と指定できるようになる）
+      await OneSignal.login(currentUser.email);
+      // 通知の許可がまだ確認されていなければ、ここでダイアログを出す
+      if(OneSignal.Notifications.permission !== true){
+        await OneSignal.Notifications.requestPermission();
+      }
+    }catch(e){
+      // OneSignal未対応のブラウザ（iPhoneの通常タブ等）や、許可が拒否された場合はここに来るが、
+      // アプリの他の機能には影響させないよう、静かに無視する
+    }
+  });
+}
+
 function initPresence(){
   const writeHeartbeat = async ()=>{
     try{ await setDoc(doc(db,"presence", currentUser.email), { lastActiveAt: new Date().toISOString() }, { merge:true }); }
@@ -2053,6 +2089,7 @@ onAuthStateChanged(auth, async (user)=>{
     initBizInfoListener();
     initChatListeners();
     initPresence();
+    initOneSignalForCurrentUser();
     initContractSettingsListener();
     initUserPrefsListener();
     initSystemTabDefaultsListener();
