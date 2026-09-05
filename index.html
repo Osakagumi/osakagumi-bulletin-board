@@ -8777,7 +8777,7 @@ async function sendChatMessage(){
 // 新着チャットのプッシュ通知を、Cloudflare Worker経由でOneSignalに依頼する。
 // 通知の送信に失敗しても、チャット自体の送信は既に完了しているので、ここでは静かに無視する
 // （通知はあくまで補助的な気づかせ機能であり、失敗してもチャット機能自体は支障なく動く）。
-const CHAT_NOTIFY_WORKER_URL = "https://osakagumi-chat-notify.YOUR-SUBDOMAIN.workers.dev";
+const CHAT_NOTIFY_WORKER_URL = "https://osakagumi-chat-notify.osakagumi-sys.workers.dev";
 const CHAT_NOTIFY_SHARED_SECRET = "452003d668f70b5d0534f9f6d053cd6572f796522b0b56cf";
 function notifyChatRecipient(recipientEmail, senderName, text){
   fetch(CHAT_NOTIFY_WORKER_URL, {
