@@ -793,6 +793,11 @@
   OneSignalDeferred.push(async function(OneSignal) {
     await OneSignal.init({
       appId: "e73e93dd-f3ab-46b3-80d9-63e94e9dda4c",
+      // GitHub Pagesがドメイン直下ではなく /osakagumi-bulletin-board/ というフォルダ配下で
+      // 公開されているため、OneSignalのデフォルト（ドメイン直下を探しに行く）のままだと
+      // Service Workerが見つからずエラーになる。ここで正しい場所を明示する。
+      serviceWorkerParam: { scope: "/osakagumi-bulletin-board/" },
+      serviceWorkerPath: "OneSignalSDKWorker.js",
     });
   });
 </script>
