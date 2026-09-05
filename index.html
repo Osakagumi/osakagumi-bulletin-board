@@ -254,7 +254,7 @@
   .dash-card h3{margin:0;font-size:14.5px;}
   .dash-card-head{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
   .dash-card-head .dash-card-link{margin-left:auto;}
-  .dash-drag-handle{cursor:grab;color:var(--muted);font-size:16px;line-height:1;user-select:none;margin-right:-4px;}
+  .dash-drag-handle{cursor:grab;color:var(--muted);font-size:16px;line-height:1;user-select:none;padding:8px;margin:-8px -8px -8px -4px;touch-action:none;}
   .dash-drag-handle:active{cursor:grabbing;}
   .dash-card-dragging{opacity:0.4;}
   .dash-col.dash-col-dragover{background:rgba(28,90,165,0.04);border-radius:12px;}
@@ -2220,6 +2220,46 @@ function initDashCardDragDrop(){
       document.querySelectorAll(".dash-col").forEach(c=>c.classList.remove("dash-col-dragover"));
       saveDashCardOrder();
     });
+  });
+
+  // iOS SafariはHTML標準のドラッグ&ドロップ（draggable属性）をタッチ操作に対応させていないため、
+  // タッチイベントで同じ並び替えロジックを別途動かす（Androidは上のdraggable属性だけで動作済み）。
+  let touchDraggingCard = null;
+  document.querySelectorAll(".dash-col .dash-card .dash-drag-handle").forEach(handle=>{
+    handle.addEventListener("touchstart", (e)=>{
+      const card = handle.closest(".dash-card");
+      if(!card) return;
+      touchDraggingCard = card;
+      card.classList.add("dash-card-dragging");
+      e.preventDefault();
+    }, { passive: false });
+  });
+  document.addEventListener("touchmove", (e)=>{
+    if(!touchDraggingCard) return;
+    e.preventDefault(); // ドラッグ中はページ全体のスクロールを止める
+    const touch = e.touches[0];
+    const targetCol = cols.find(col=>{
+      if(!col) return false;
+      const rect = col.getBoundingClientRect();
+      return touch.clientX >= rect.left && touch.clientX <= rect.right;
+    });
+    if(!targetCol) return;
+    cols.forEach(c=>{ if(c) c.classList.toggle("dash-col-dragover", c===targetCol); });
+    const afterEl = dashCardAfterElement(targetCol, touch.clientY);
+    if(afterEl==null){
+      const trailingNonCard = [...targetCol.children].find(ch => !ch.classList.contains("dash-card"));
+      if(trailingNonCard) targetCol.insertBefore(touchDraggingCard, trailingNonCard);
+      else targetCol.appendChild(touchDraggingCard);
+    } else {
+      targetCol.insertBefore(touchDraggingCard, afterEl);
+    }
+  }, { passive: false });
+  document.addEventListener("touchend", ()=>{
+    if(!touchDraggingCard) return;
+    touchDraggingCard.classList.remove("dash-card-dragging");
+    document.querySelectorAll(".dash-col").forEach(c=>c.classList.remove("dash-col-dragover"));
+    saveDashCardOrder();
+    touchDraggingCard = null;
   });
 }
 function dashCardAfterElement(container, y){
