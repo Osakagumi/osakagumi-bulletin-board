@@ -58,7 +58,7 @@
   nav.tabs.reordering .tab-btn{background:#F4F8FC;border-radius:7px 7px 0 0;cursor:grab;}
   nav.tabs.reordering .tab-btn.dragging{opacity:0.4;cursor:grabbing;}
   .reorder-handle{
-    display:inline-block;margin-right:4px;color:var(--muted);font-size:13px;
+    display:inline-block;margin-right:4px;color:var(--muted);font-size:13px;touch-action:none;
   }
   .emp-picker-listbox{width:100%;height:200px;overflow-y:auto;border:1.5px solid var(--line);border-radius:8px;padding:2px;font-size:14px;background:#fff;}
   .emp-picker-row{padding:9px 12px;border-radius:6px;cursor:pointer;font-size:14px;}
@@ -1162,6 +1162,23 @@ function makeRowDraggable(tr, id, onDrop){
   tr.style.cursor = "grab";
   tr.addEventListener("dragstart", ()=> tr.classList.add("dragging"));
   tr.addEventListener("dragend", ()=>{ tr.classList.remove("dragging"); onDrop(); });
+
+  // iOS SafariはHTML標準のドラッグ&ドロップをタッチ操作に対応させていないため、
+  // 行の先頭セル（⠿グリップ）を起点に、タッチイベントでも同じ並び替えができるようにする
+  // （Androidは上のdraggable属性だけで動作済み）。
+  const grip = tr.firstElementChild;
+  if(grip){
+    grip.style.touchAction = "none";
+    grip.addEventListener("touchstart", (e)=>{
+      tr.classList.add("dragging");
+      e.preventDefault();
+    }, { passive: false });
+    grip.addEventListener("touchend", ()=>{
+      if(!tr.classList.contains("dragging")) return;
+      tr.classList.remove("dragging");
+      onDrop();
+    });
+  }
 }
 function bindTableDragover(tbodyId){
   const key = "__dndBound_" + tbodyId;
@@ -1183,6 +1200,23 @@ function bindTableDragover(tbodyId){
     if(after==null) body.appendChild(dragging);
     else body.insertBefore(dragging, after);
   });
+  // iOS Safari向け：タッチ操作でのドラッグ中も、同じ並び替えロジックを動かす
+  document.addEventListener("touchmove", (e)=>{
+    const body = document.getElementById(tbodyId);
+    if(!body) return;
+    const dragging = body.querySelector(".dragging");
+    if(!dragging) return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    const after = [...body.querySelectorAll("tr:not(.dragging)")].reduce((closest, row)=>{
+      const box = row.getBoundingClientRect();
+      const offset = touch.clientY - box.top - box.height/2;
+      if(offset < 0 && offset > closest.offset) return { offset, element: row };
+      return closest;
+    }, { offset:-Infinity, element:null }).element;
+    if(after==null) body.appendChild(dragging);
+    else body.insertBefore(dragging, after);
+  }, { passive: false });
 }
 async function saveTableOrder(tbodyId, collectionName){
   const body = document.getElementById(tbodyId);
@@ -1619,6 +1653,39 @@ if(!window.__adminTabDndBound){
     }, { offset:-Infinity, element:null }).element;
     if(after==null) nav.insertBefore(dragging, reorderBtn);
     else nav.insertBefore(dragging, after);
+  });
+
+  // iOS Safari向け：タッチ操作でも同じ並び替えロジックを動かす（Androidはdraggable属性で動作済み）
+  let touchDraggingTab = null;
+  nav.addEventListener("touchstart", (e)=>{
+    if(!nav.classList.contains("reordering")) return;
+    const handle = e.target.closest(".reorder-handle");
+    if(!handle) return;
+    const btn = handle.closest(".tab-btn");
+    if(!btn) return;
+    touchDraggingTab = btn;
+    btn.classList.add("dragging");
+    e.preventDefault();
+  }, { passive: false });
+  nav.addEventListener("touchmove", (e)=>{
+    if(!touchDraggingTab) return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    const reorderBtn = document.getElementById("tab-reorder-toggle");
+    const after = [...nav.querySelectorAll(".tab-btn:not(.dragging)")].reduce((closest, el)=>{
+      const box = el.getBoundingClientRect();
+      const offset = touch.clientX - box.left - box.width/2;
+      if(offset < 0 && offset > closest.offset) return { offset, element: el };
+      return closest;
+    }, { offset:-Infinity, element:null }).element;
+    if(after==null) nav.insertBefore(touchDraggingTab, reorderBtn);
+    else nav.insertBefore(touchDraggingTab, after);
+  }, { passive: false });
+  nav.addEventListener("touchend", ()=>{
+    if(!touchDraggingTab) return;
+    touchDraggingTab.classList.remove("dragging");
+    saveAdminTabOrder();
+    touchDraggingTab = null;
   });
 }
 document.getElementById("tab-reorder-toggle").addEventListener("click", ()=>{
@@ -2756,6 +2823,15 @@ function buildDragOrderList(containerId, defs, order){
     row.innerHTML = `<span class="settings-drag-handle">⠿</span><span>${escapeHtml(defMap.get(id) || id)}</span>`;
     row.addEventListener("dragstart", ()=> row.classList.add("dragging"));
     row.addEventListener("dragend", ()=> row.classList.remove("dragging"));
+    const handle = row.querySelector(".settings-drag-handle");
+    if(handle){
+      handle.style.touchAction = "none";
+      handle.addEventListener("touchstart", (e)=>{
+        row.classList.add("dragging");
+        e.preventDefault();
+      }, { passive: false });
+      handle.addEventListener("touchend", ()=> row.classList.remove("dragging"));
+    }
     container.appendChild(row);
   });
   if(!container.dataset.dndBound){
@@ -2773,6 +2849,21 @@ function buildDragOrderList(containerId, defs, order){
       if(after==null) container.appendChild(dragging);
       else container.insertBefore(dragging, after);
     });
+    // iOS Safari向け：タッチ操作でも同じ並び替えロジックを動かす
+    container.addEventListener("touchmove", (e)=>{
+      const dragging = container.querySelector(".dragging");
+      if(!dragging) return;
+      e.preventDefault();
+      const touch = e.touches[0];
+      const after = [...container.querySelectorAll(".settings-drag-row:not(.dragging)")].reduce((closest, child)=>{
+        const box = child.getBoundingClientRect();
+        const offset = touch.clientY - box.top - box.height/2;
+        if(offset < 0 && offset > closest.offset) return { offset, element: child };
+        return closest;
+      }, { offset:-Infinity, element:null }).element;
+      if(after==null) container.appendChild(dragging);
+      else container.insertBefore(dragging, after);
+    }, { passive: false });
   }
 }
 function readDragOrderList(containerId){
@@ -2902,6 +2993,20 @@ function renderBizInfoTable(){
         tr.classList.remove("dragging");
         saveBizInfoOrder();
       });
+      // iOS Safari向け：タッチ操作でも動くよう、先頭セル（⠿グリップ）を起点にする
+      const grip = tr.firstElementChild;
+      if(grip){
+        grip.style.touchAction = "none";
+        grip.addEventListener("touchstart", (e)=>{
+          tr.classList.add("dragging");
+          e.preventDefault();
+        }, { passive: false });
+        grip.addEventListener("touchend", ()=>{
+          if(!tr.classList.contains("dragging")) return;
+          tr.classList.remove("dragging");
+          saveBizInfoOrder();
+        });
+      }
     }
     const actionsTd = tr.querySelector(".actions");
     const shortcutBtn = document.createElement("button");
@@ -2951,6 +3056,23 @@ if(!window.__bizInfoDndBound){
     if(after==null) body.appendChild(dragging);
     else body.insertBefore(dragging, after);
   });
+  // iOS Safari向け：タッチ操作でのドラッグ中も、同じ並び替えロジックを動かす
+  document.addEventListener("touchmove", (e)=>{
+    const body = document.getElementById("bizinfo-table-body");
+    if(!body) return;
+    const dragging = body.querySelector(".dragging");
+    if(!dragging) return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    const after = [...body.querySelectorAll("tr:not(.dragging)")].reduce((closest, row)=>{
+      const box = row.getBoundingClientRect();
+      const offset = touch.clientY - box.top - box.height/2;
+      if(offset < 0 && offset > closest.offset) return { offset, element: row };
+      return closest;
+    }, { offset:-Infinity, element:null }).element;
+    if(after==null) body.appendChild(dragging);
+    else body.insertBefore(dragging, after);
+  }, { passive: false });
 }
 async function saveBizInfoOrder(){
   const body = document.getElementById("bizinfo-table-body");

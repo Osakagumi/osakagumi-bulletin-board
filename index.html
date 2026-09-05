@@ -236,7 +236,7 @@
   nav.tabs.reordering .tab-btn{background:#F4F8FC;border-radius:7px 7px 0 0;cursor:grab;}
   nav.tabs.reordering .tab-btn.dragging{opacity:0.4;cursor:grabbing;}
   .reorder-handle{
-    display:inline-block;margin-right:4px;color:var(--muted);font-size:13px;
+    display:inline-block;margin-right:4px;color:var(--muted);font-size:13px;touch-action:none;
   }
   .section-divider{
     font-size:13px;font-weight:700;color:var(--brand-dark);margin:26px 0 12px;padding-top:16px;border-top:1.5px solid var(--line);
@@ -713,7 +713,7 @@
   }
   .wb-editable{cursor:pointer;}
   .wb-editable:hover{text-decoration:underline;}
-  .wb-table .drag-grip-cell{display:none;color:var(--muted);cursor:grab;text-align:center;width:28px;padding:var(--wb-row-pad-v, 9px) 4px;}
+  .wb-table .drag-grip-cell{display:none;color:var(--muted);cursor:grab;text-align:center;width:28px;padding:var(--wb-row-pad-v, 9px) 4px;touch-action:none;}
   #wb-preset-columns.wb-reorder-mode .wb-table .drag-grip-cell{display:table-cell;}
   #wb-preset-columns .wb-table tr.wb-order-dragging{opacity:0.4;}
   .wb-board{display:grid;grid-template-columns:repeat(var(--wb-board-cols, 5), minmax(150px, 1fr));gap:10px;overflow-x:auto;padding-bottom:4px;}
@@ -2665,6 +2665,39 @@ if(!window.__tabDndBound){
     }, { offset:-Infinity, element:null }).element;
     if(after==null) nav.insertBefore(dragging, reorderBtn);
     else nav.insertBefore(dragging, after);
+  });
+
+  // iOS Safari向け：タッチ操作でも同じ並び替えロジックを動かす（Androidはdraggable属性で動作済み）
+  let touchDraggingTab = null;
+  nav.addEventListener("touchstart", (e)=>{
+    if(!nav.classList.contains("reordering")) return;
+    const handle = e.target.closest(".reorder-handle");
+    if(!handle) return;
+    const btn = handle.closest(".tab-btn");
+    if(!btn) return;
+    touchDraggingTab = btn;
+    btn.classList.add("dragging");
+    e.preventDefault();
+  }, { passive: false });
+  nav.addEventListener("touchmove", (e)=>{
+    if(!touchDraggingTab) return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    const reorderBtn = document.getElementById("tab-reorder-toggle");
+    const after = [...nav.querySelectorAll(".tab-btn:not(.dragging)")].reduce((closest, el)=>{
+      const box = el.getBoundingClientRect();
+      const offset = touch.clientX - box.left - box.width/2;
+      if(offset < 0 && offset > closest.offset) return { offset, element: el };
+      return closest;
+    }, { offset:-Infinity, element:null }).element;
+    if(after==null) nav.insertBefore(touchDraggingTab, reorderBtn);
+    else nav.insertBefore(touchDraggingTab, after);
+  }, { passive: false });
+  nav.addEventListener("touchend", ()=>{
+    if(!touchDraggingTab) return;
+    touchDraggingTab.classList.remove("dragging");
+    saveTabOrder();
+    touchDraggingTab = null;
   });
 }
 document.getElementById("tab-reorder-toggle").addEventListener("click", ()=>{
@@ -5904,6 +5937,39 @@ async function saveWbOrder(){
     }, { offset:-Infinity, element:null }).element;
     if(after==null) tbody.appendChild(dragging);
     else tbody.insertBefore(dragging, after);
+  });
+
+  // iOS Safari向け：タッチ操作でも同じ並び替えロジックを動かす（Androidはdraggable属性で動作済み）
+  let touchDraggingRow = null;
+  columnsWrap?.addEventListener("touchstart", (e)=>{
+    if(!e.target.classList.contains("drag-grip-cell")) return;
+    const row = e.target.closest("tr[data-email]");
+    if(!row) return;
+    touchDraggingRow = row;
+    row.classList.add("wb-order-dragging");
+    e.preventDefault();
+  }, { passive: false });
+  columnsWrap?.addEventListener("touchmove", (e)=>{
+    if(!touchDraggingRow) return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    const elAtPoint = document.elementFromPoint(touch.clientX, touch.clientY);
+    const tbody = elAtPoint?.closest("tbody");
+    if(!tbody || !columnsWrap.contains(tbody)) return;
+    const after = [...tbody.querySelectorAll("tr[data-email]:not(.wb-order-dragging)")].reduce((closest, el)=>{
+      const box = el.getBoundingClientRect();
+      const offset = touch.clientY - box.top - box.height/2;
+      if(offset < 0 && offset > closest.offset) return { offset, element: el };
+      return closest;
+    }, { offset:-Infinity, element:null }).element;
+    if(after==null) tbody.appendChild(touchDraggingRow);
+    else tbody.insertBefore(touchDraggingRow, after);
+  }, { passive: false });
+  columnsWrap?.addEventListener("touchend", ()=>{
+    if(!touchDraggingRow) return;
+    touchDraggingRow.classList.remove("wb-order-dragging");
+    saveWbOrder();
+    touchDraggingRow = null;
   });
 }
 
