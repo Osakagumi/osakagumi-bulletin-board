@@ -563,7 +563,7 @@
 
   .timeline-wrap{overflow-x:auto;}
   #tl-panels{min-width:640px;}
-  .tl-ruler{display:flex;border-bottom:1px solid var(--line);padding-left:92px;min-width:640px;position:sticky;top:0;background:var(--surface);z-index:2;box-sizing:border-box;}
+  .tl-ruler{display:flex;border-bottom:1px solid var(--line);padding-left:92px;min-width:640px;position:sticky;top:0;background:var(--surface);z-index:15;box-sizing:border-box;}
   .tl-ruler .tick{flex:1;font-family:var(--mono);font-size:13.5px;color:var(--muted);border-left:1px solid var(--line);padding:2px 0 4px 3px;overflow:visible;white-space:nowrap;position:relative;z-index:1;}
   .tl-slots{display:flex;background:
       repeating-linear-gradient(90deg, transparent, transparent calc(100%/1 - 1px));
@@ -572,6 +572,10 @@
     flex:1;height:38px;border-left:1px solid #EDF1F6;position:relative;background:#fff;
   }
   .slot.hour-start{border-left:1px solid var(--line);}
+  .slot.biz-start{border-left:2px solid var(--text);}
+  .slot.biz-end{border-right:2px solid var(--text);}
+  .tl-ruler .tick.biz-start{border-left:2px solid var(--text);}
+  .tl-ruler .tick.biz-end{border-right:2px solid var(--text);}
   .slot.free:hover{background:#EFF5FC;cursor:pointer;}
   .slot.pending{background:rgba(28,90,165,0.18);box-shadow:inset 0 0 0 1.5px var(--brand);cursor:pointer;}
   .slot.booked{background:var(--slot-color,#ccc);cursor:default;}
@@ -1716,11 +1720,14 @@ if(!initEmailJsIfAvailable()){
 function indexPageUrl(){
   return location.href.split(/[?#]/)[0];
 }
-// タブ行(nav.tabs)をヘッダーの直下に固定表示するため、ヘッダーの実際の高さを都度反映する
+// タブ行(nav.tabs)と、予約タイムラインの時刻ヘッダー(tl-ruler)を
+// ヘッダーの直下に固定表示するため、ヘッダー・タブ行の実際の高さを都度反映する
 function updateStickyNavOffset(){
   const header = document.querySelector("header");
   const nav = document.getElementById("main-tabs");
   if(header && nav) nav.style.top = `${header.offsetHeight}px`;
+  const ruler = document.getElementById("tl-ruler");
+  if(header && nav && ruler) ruler.style.top = `${header.offsetHeight + nav.offsetHeight}px`;
 }
 updateStickyNavOffset();
 window.addEventListener("resize", updateStickyNavOffset);
@@ -1812,6 +1819,15 @@ function buildSlots(){
 }
 const SLOTS = buildSlots();
 const SLOT_MIN = BUSINESS_HOURS.slotMinutes;
+// 定時（就業時間）の開始・終了にあたるスロットかどうかを判定し、境界線を太くするためのクラス名を返す。
+// 「行き先」タブの定時設定（calWorkStartTime/calWorkEndTime、admin.htmlで変更可）を流用している。
+function slotBizBoundaryClass(slotStart){
+  const win = getWorkWindow();
+  let cls = "";
+  if(slotStart <= win.workStartMin && slotStart + SLOT_MIN > win.workStartMin) cls += " biz-start";
+  if(slotStart < win.workEndMin && slotStart + SLOT_MIN >= win.workEndMin) cls += " biz-end";
+  return cls;
+}
 function minutesToHHMM(mins){ return `${pad2(Math.floor(mins/60))}:${pad2(mins%60)}`; }
 function toast(msg){
   const t = document.getElementById("toast");
@@ -3513,6 +3529,7 @@ function showTimelinePanel(){
   updateMonthLabel();
   renderRuler();
   loadReservationsForMonth();
+  updateStickyNavOffset();
 }
 
 function renderRuler(){
@@ -3521,7 +3538,7 @@ function renderRuler(){
   SLOTS.forEach(s=>{
     const isHour = s.start % 60 === 0;
     const tick = document.createElement("div");
-    tick.className = "tick";
+    tick.className = "tick" + slotBizBoundaryClass(s.start);
     tick.textContent = isHour ? s.label : "";
     ruler.appendChild(tick);
   });
@@ -3561,7 +3578,7 @@ function buildTickRulerEl(){
   SLOTS.forEach(s=>{
     const isHour = s.start % 60 === 0;
     const tick = document.createElement("div");
-    tick.className = "tick";
+    tick.className = "tick" + slotBizBoundaryClass(s.start);
     tick.textContent = isHour ? s.label : "";
     ruler.appendChild(tick);
   });
@@ -3656,7 +3673,7 @@ function buildDaySlots(wrap, dateStr, dayReservations){
 
   SLOTS.forEach(s=>{
     const div = document.createElement("div");
-    div.className = "slot" + (s.start%60===0 ? " hour-start":"");
+    div.className = "slot" + (s.start%60===0 ? " hour-start":"") + slotBizBoundaryClass(s.start);
     const isPast = isPastDate || (isToday && s.start < nowMins);
 
     const booking = dayReservations.find(r=>{
