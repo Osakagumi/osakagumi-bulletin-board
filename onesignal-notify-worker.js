@@ -55,9 +55,9 @@ export default {
 
     const recipientEmail = (body.recipientEmail || "").trim();
     const senderName = (body.senderName || "").trim();
-    const text = (body.text || "").trim();
-    if (!recipientEmail || !text) {
-      return new Response(JSON.stringify({ error: "recipientEmail and text are required" }), {
+    const chatUrl = (body.chatUrl || "").trim();
+    if (!recipientEmail || !chatUrl) {
+      return new Response(JSON.stringify({ error: "recipientEmail and chatUrl are required" }), {
         status: 400,
         headers: { "Content-Type": "application/json", ...corsHeaders },
       });
@@ -74,8 +74,11 @@ export default {
           app_id: env.ONESIGNAL_APP_ID,
           include_aliases: { external_id: [recipientEmail] },
           target_channel: "push",
+          // プライバシー上の理由から、メッセージ本文は通知に含めない（誰からか、だけを伝える）
           headings: { en: `${senderName || "誰か"}さんからメッセージ` },
-          contents: { en: text.slice(0, 120) },
+          contents: { en: "タップしてチャットを開く" },
+          // 通知をタップした際に、該当のチャット画面へ直接遷移させる
+          url: chatUrl,
         }),
       });
 

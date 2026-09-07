@@ -1741,7 +1741,8 @@ const urlParams = new URLSearchParams(location.search);
 const urlPreselect = {
   campaign: urlParams.get("campaign"),
   status: urlParams.get("status"),
-  email: urlParams.get("email")
+  email: urlParams.get("email"),
+  chat: urlParams.get("chat") // チャット通知のクリックから来た場合：送信者のメールアドレス
 };
 if(urlPreselect.email){
   const emailInput = document.getElementById("login-email");
@@ -4804,7 +4805,22 @@ function initEmployeesListener(){
     updateHeaderUserLabel();
     refreshDashboardIfActive();
     applyMyHiddenTabs();
+    openChatFromUrlIfNeeded();
   }, (err)=>{ console.error("[社員名簿取得エラー]", err); });
+}
+
+// チャットのプッシュ通知をタップして開いた場合（?chat=送信者のメールアドレス）、
+// そのままログイン後に該当のチャット画面を自動的に開く。
+// 社員名簿（employeesAll）が読み込まれるまで名前が引けないため、initEmployeesListener()側から呼ぶ。
+function openChatFromUrlIfNeeded(){
+  if(!urlPreselect.chat || !currentUser) return;
+  const otherEmail = urlPreselect.chat;
+  urlPreselect.chat = null; // 社員名簿が更新されるたびに再実行されないよう、1回だけ実行する
+  history.replaceState(null, "", location.pathname);
+  const otherEmp = employeesAll.find(e=>(e.email||"").toLowerCase()===otherEmail.toLowerCase());
+  const otherName = otherEmp?.name || otherEmail;
+  switchToTab("chat");
+  openChatThread(otherEmail, otherName);
 }
 
 function myDisplayName(){
@@ -8771,7 +8787,7 @@ async function sendChatMessage(){
       read: false,
       createdAt: new Date().toISOString()
     });
-    notifyChatRecipient(chatCurrentOtherEmail, myDisplayName(), text);
+    notifyChatRecipient(chatCurrentOtherEmail, myDisplayName(), currentUser.email);
   }catch(e){
     toast("送信に失敗しました。");
     input.value = text;
@@ -8780,9 +8796,13 @@ async function sendChatMessage(){
 // 新着チャットのプッシュ通知を、Cloudflare Worker経由でOneSignalに依頼する。
 // 通知の送信に失敗しても、チャット自体の送信は既に完了しているので、ここでは静かに無視する
 // （通知はあくまで補助的な気づかせ機能であり、失敗してもチャット機能自体は支障なく動く）。
+// プライバシー上の理由から、メッセージ本文は通知に含めない（OneSignal側にも送らない）。
+// 通知をタップした際に該当のチャット画面へ直接遷移できるよう、
+// 「?chat=送信者のメールアドレス」付きのURLをWorker経由でOneSignalに渡している。
 const CHAT_NOTIFY_WORKER_URL = "https://osakagumi-chat-notify.osakagumi-sys.workers.dev";
 const CHAT_NOTIFY_SHARED_SECRET = "452003d668f70b5d0534f9f6d053cd6572f796522b0b56cf";
-function notifyChatRecipient(recipientEmail, senderName, text){
+function notifyChatRecipient(recipientEmail, senderName, senderEmail){
+  const chatUrl = `${location.origin}${location.pathname}?chat=${encodeURIComponent(senderEmail)}`;
   fetch(CHAT_NOTIFY_WORKER_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -8790,7 +8810,7 @@ function notifyChatRecipient(recipientEmail, senderName, text){
       secret: CHAT_NOTIFY_SHARED_SECRET,
       recipientEmail,
       senderName,
-      text
+      chatUrl
     })
   })
     .catch(()=>{});
