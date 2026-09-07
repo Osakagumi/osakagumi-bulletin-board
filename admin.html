@@ -990,7 +990,7 @@
         <div class="field" id="bizinfo-modal-dropzone-field">
           <label>ファイル</label>
           <p id="bizinfo-modal-dropzone-hint" style="font-size:11.5px;color:var(--muted);margin:0 0 8px;">
-            ドロップまたは選択したファイルをアップロードします。Googleへのログイン確認は行われません（社内共通のドライブに自動保存されます）。
+            ドロップまたは選択したファイルをアップロードします。
           </p>
           <div id="bizinfo-dropzone">
             <div id="bizinfo-dropzone-idle">
@@ -1014,11 +1014,11 @@
         </div>
         <div class="field" style="display:flex;align-items:center;gap:6px;">
           <input type="checkbox" id="bizinfo-enabled-input" checked style="width:auto;">
-          <label style="margin:0;font-size:12.5px;">有効にする（一般画面に表示する）</label>
+          <label style="margin:0;font-size:12.5px;">有効にする</label>
         </div>
         <div class="field" style="display:flex;align-items:center;gap:6px;">
           <input type="checkbox" id="bizinfo-allow-download-input" style="width:auto;">
-          <label style="margin:0;font-size:12.5px;">ダウンロードを許可する（一般画面にダウンロードボタンを表示する）</label>
+          <label style="margin:0;font-size:12.5px;">ダウンロードを許可する</label>
         </div>
         <div id="bizinfo-edit-error" style="color:var(--danger);font-size:12.5px;margin-top:4px;"></div>
         <div class="row-btns">
@@ -3111,8 +3111,8 @@ function openBizInfoEditModal(item){
   document.getElementById("bizinfo-edit-error").textContent = "";
   // ファイルの添付欄は追加・編集どちらでも表示する。編集時は未選択なら既存ファイルのまま。
   document.getElementById("bizinfo-modal-dropzone-hint").textContent = item
-    ? "ファイルを選び直すと、既存のGoogleドライブ上のファイルを削除して置き換えます。未選択なら中身はそのままです。"
-    : "ドロップまたは選択したファイルをアップロードします。Googleへのログイン確認は行われません（社内共通のドライブに自動保存されます）。";
+    ? "ファイルを選び直すと、既存のファイルを削除して置き換えます。未選択なら中身はそのままです。"
+    : "ドロップまたは選択したファイルをアップロードします。";
   resetBizInfoDropzone();
   updateBizInfoModalEditFileBtn();
   document.getElementById("bizinfo-edit-modal").classList.add("show");
