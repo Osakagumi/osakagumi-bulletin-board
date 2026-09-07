@@ -1009,6 +1009,7 @@
             </div>
           </div>
           <button type="button" class="btn btn-primary" id="bizinfo-upload-confirm-btn" style="display:none;width:100%;margin-top:12px;">このファイルをアップロードする</button>
+          <button type="button" class="btn btn-ghost" id="bizinfo-modal-edit-file-btn" style="display:none;border:1px solid var(--line);width:100%;margin-top:8px;">ファイル修正</button>
           <div id="bizinfo-attach-error" style="color:var(--danger);font-size:12.5px;margin-top:8px;min-height:16px;"></div>
         </div>
         <div class="field" style="display:flex;align-items:center;gap:6px;">
@@ -3097,9 +3098,11 @@ function openBizInfoEditScreen(item){
   window.open(editUrl, "_blank", "noopener");
 }
 let editingBizInfoId = null;
+let editingBizInfoOriginalFileId = null; // 編集モーダルを開いた時点の、差し替え前の元ファイルID（「ファイル修正」ボタン用）
 let pendingBizInfoUpload = null; // {driveUrl, fileId, fileName} 追加時にアップロードしたファイルの一時保存
 function openBizInfoEditModal(item){
   editingBizInfoId = item ? item.id : null;
+  editingBizInfoOriginalFileId = item ? (item.fileId || null) : null;
   pendingBizInfoUpload = null;
   document.getElementById("bizinfo-edit-modal-title").textContent = item ? "業務情報を編集" : "業務情報を追加";
   document.getElementById("bizinfo-name-input").value = item ? (item.name||"") : "";
@@ -3111,6 +3114,7 @@ function openBizInfoEditModal(item){
     ? "ファイルを選び直すと、既存のGoogleドライブ上のファイルを削除して置き換えます。未選択なら中身はそのままです。"
     : "ドロップまたは選択したファイルをアップロードします。Googleへのログイン確認は行われません（社内共通のドライブに自動保存されます）。";
   resetBizInfoDropzone();
+  updateBizInfoModalEditFileBtn();
   document.getElementById("bizinfo-edit-modal").classList.add("show");
 }
 document.getElementById("bizinfo-add-btn")?.addEventListener("click", ()=> openBizInfoEditModal(null));
@@ -3159,6 +3163,19 @@ document.getElementById("bizinfo-edit-save-btn")?.addEventListener("click", asyn
    アップロードが完了しても、このモーダル自体は閉じない（名前入力・有効チェックと合わせて
    「保存」を押すまでは pendingBizInfoUpload に保持しておくだけ）。
 ========================================================= */
+// 「ファイル修正」ボタン（追加・編集モーダル内）：アップロード済み、または編集時の元ファイルが
+// あれば表示する。新しいファイルに差し替えた場合は、差し替え後の新しいファイルを開く。
+function updateBizInfoModalEditFileBtn(){
+  const btn = document.getElementById("bizinfo-modal-edit-file-btn");
+  if(!btn) return;
+  const fileId = pendingBizInfoUpload?.fileId || editingBizInfoOriginalFileId;
+  btn.style.display = fileId ? "block" : "none";
+}
+document.getElementById("bizinfo-modal-edit-file-btn")?.addEventListener("click", ()=>{
+  const fileId = pendingBizInfoUpload?.fileId || editingBizInfoOriginalFileId;
+  if(!fileId) return;
+  window.open(`https://docs.google.com/spreadsheets/d/${fileId}/edit`, "_blank", "noopener");
+});
 let bizInfoPendingUploadFile = null;
 function resetBizInfoDropzone(){
   bizInfoPendingUploadFile = null;
@@ -3186,10 +3203,11 @@ async function uploadFileForBizInfo(file){
   document.getElementById("bizinfo-upload-confirm-btn").style.display = "none";
   busyEl.style.display = "block";
   try{
-    const { path: fileId, webViewLink } = await uploadFileToStorage(file, (msg)=>{ statusEl.textContent = msg; });
+    const { path: fileId, webViewLink } = await uploadFileToStorage(file, (msg)=>{ statusEl.textContent = msg; }, true);
     pendingBizInfoUpload = { driveUrl: webViewLink, fileId, fileName: file.name };
     document.getElementById("bizinfo-selected-filename").textContent = `アップロード済み：${file.name}`;
     document.getElementById("bizinfo-dropzone-selected").style.display = "block";
+    updateBizInfoModalEditFileBtn();
     toast("ファイルをアップロードしました。「保存」を押すと追加されます。");
     bizInfoPendingUploadFile = null;
   }catch(e){

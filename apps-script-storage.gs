@@ -25,10 +25,30 @@
  * ■ コードを後から書き換えた場合
  * 「デプロイ」→「デプロイを管理」→ 該当のデプロイの鉛筆アイコン→
  * バージョンで「新バージョン」を選んで「デプロイ」しないと、変更が反映されない点に注意。
+ *
+ * ■ 空き容量表示機能を使う場合の追加設定（システム管理画面の「保存先の空き容量」用）
+ * 1. Apps Scriptエディタ左側の「サービス」の「＋」をクリック
+ * 2. 「Drive API」を選んで「追加」（これで DriveApp とは別の「Drive」という
+ *    高度なサービスが使えるようになる。標準の DriveApp だけでは容量の情報が取得できないため）
+ * 3. 追加後、上記の手順5と同様に「新しいデプロイ」（またはバージョンを上げて再デプロイ）が必要
+ *
+ * ■ 2026年9月：業務情報の「ファイル修正」機能について（重要）
+ * 業務情報の管理者向け「ファイル修正」ボタンから直接Googleスプレッドシートとして
+ * 編集できるようにするため、アップロード時にリクエストで body.editable === true が
+ * 指定された場合のみ、そのファイルを「リンクを知っている全員が編集可」で共有する。
+ * お知らせ添付など、それ以外の用途は従来通り「閲覧のみ」のまま変更していない。
+ *
+ * ただし、この社内システムは社員が実在のGoogleアカウントでログインする仕組みではないため、
+ * Googleドライブ側で「特定の個人だけに編集権限を付与する」という、より安全な方法が取れない。
+ * そのため「編集可」にした業務情報ファイルは、実質的に「そのファイルの共有リンク（fileId）を
+ * 知っている人なら誰でも編集できる」状態になる。業務情報ファイルのfileIdは一般画面の
+ * プレビュー表示（iframe）のURLとしてブラウザの開発者ツールから閲覧できてしまうため、
+ * admin.html側の画面上のボタン表示制限（システム管理者・情報管理者のみ）は、
+ * 技術的に知識のある人には回避され得る「性善説」の防御である点を理解した上で運用すること。
  */
 
-var SECRET = "ここに長いランダムな文字列を設定してください";
-var FOLDER_ID = "ここにGoogleドライブの保存先フォルダIDを設定してください";
+var SECRET = "pIJHkljhwfeohdskksdglkj9887sgdlksssss";
+var FOLDER_ID = "17CbbKVmhGDCohqg88VRmFcSEvDoq68Ju";
 
 function doPost(e) {
   try {
@@ -42,6 +62,8 @@ function doPost(e) {
       return handleUpload(body);
     } else if (body.action === "delete") {
       return handleDelete(body);
+    } else if (body.action === "storageInfo") {
+      return handleStorageInfo();
     } else {
       return jsonResponse({ error: "unknown action" });
     }
@@ -55,8 +77,11 @@ function handleUpload(body) {
   var bytes = Utilities.base64Decode(body.base64Data);
   var blob = Utilities.newBlob(bytes, body.mimeType || "application/octet-stream", body.fileName || "file");
   var file = folder.createFile(blob);
-  // リンクを知っている全員が閲覧できるようにする
-  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  // リンクを知っている全員が、閲覧または編集できるようにする。
+  // 業務情報（body.editable === true）のときだけ「編集可」にし、
+  // それ以外（お知らせ添付など）は従来通り「閲覧のみ」のまま。
+  var permission = body.editable ? DriveApp.Permission.EDIT : DriveApp.Permission.VIEW;
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, permission);
   // 「uc?id=」形式に変更していたが、ファイルの種類によっては開けなくなることが
   // あったため、確実に動く標準の共有リンク形式に戻す。
   return jsonResponse({ fileId: file.getId(), webViewLink: file.getUrl() });
@@ -67,6 +92,18 @@ function handleDelete(body) {
   // ゴミ箱に移動する（Googleドライブの仕様上、30日後に自動で完全削除される）
   file.setTrashed(true);
   return jsonResponse({ success: true });
+}
+
+function handleStorageInfo() {
+  // 容量情報の取得には、標準のDriveAppではなく「Drive」高度なサービスが必要
+  // （ファイル冒頭のコメント「■ 空き容量表示機能を使う場合の追加設定」を参照）
+  var about = Drive.About.get({ fields: "storageQuota" });
+  var quota = (about && about.storageQuota) || {};
+  return jsonResponse({
+    limit: quota.limit ? Number(quota.limit) : null, // Google Workspaceの無制限プラン等ではlimitが無い場合がある
+    usage: quota.usage ? Number(quota.usage) : 0,
+    usageInDrive: quota.usageInDrive ? Number(quota.usageInDrive) : 0
+  });
 }
 
 function jsonResponse(obj) {

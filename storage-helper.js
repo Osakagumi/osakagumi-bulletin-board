@@ -45,7 +45,9 @@ async function callGasEndpoint(payload){
 
 // ファイルをアップロードし、{path, webViewLink} を返す
 // path には（削除時に使う）GoogleドライブのファイルIDを入れている
-export async function uploadFileToStorage(file, onStatus){
+// editable: true を指定すると、そのファイルは「リンクを知っている全員が編集可」で共有される
+// （業務情報の「ファイル修正」用。それ以外は従来通り閲覧のみで共有される）
+export async function uploadFileToStorage(file, onStatus, editable){
   if(!isStorageConfigured()){
     throw new Error("添付ファイル機能が未設定です（firebase-config.jsのGAS_STORAGE_CONFIGを設定してください）。");
   }
@@ -56,7 +58,8 @@ export async function uploadFileToStorage(file, onStatus){
     secret: GAS_STORAGE_CONFIG.secret,
     fileName: file.name,
     mimeType: file.type || "application/octet-stream",
-    base64Data
+    base64Data,
+    editable: !!editable
   });
   return { path: json.fileId, webViewLink: json.webViewLink };
 }
