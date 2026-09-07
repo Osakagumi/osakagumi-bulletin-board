@@ -563,7 +563,8 @@
 
   .timeline-wrap{overflow-x:auto;}
   #tl-panels{min-width:640px;}
-  .tl-ruler{display:flex;border-bottom:1px solid var(--line);padding-left:92px;min-width:640px;position:sticky;top:0;background:var(--surface);z-index:15;box-sizing:border-box;}
+  .tl-ruler-outer{overflow-x:hidden;position:sticky;top:0;background:var(--surface);z-index:15;border-bottom:1px solid var(--line);box-sizing:border-box;}
+  .tl-ruler{display:flex;padding-left:92px;min-width:640px;box-sizing:border-box;}
   .tl-ruler .tick{flex:1;font-family:var(--mono);font-size:13.5px;color:var(--muted);border-left:1px solid var(--line);padding:2px 0 4px 3px;overflow:visible;white-space:nowrap;position:relative;z-index:1;}
   .tl-slots{display:flex;background:
       repeating-linear-gradient(90deg, transparent, transparent calc(100%/1 - 1px));
@@ -907,8 +908,8 @@
             <span><i style="background:var(--muted);"></i>予約済み</span>
             <span><i style="background:#F6F7F9;"></i>予約不可（過去）</span>
           </div>
+          <div class="tl-ruler-outer" id="tl-ruler-outer"><div class="tl-ruler" id="tl-ruler"></div></div>
           <div class="timeline-wrap">
-            <div class="tl-ruler" id="tl-ruler"></div>
             <div id="tl-panels"></div>
           </div>
         </div>
@@ -1726,11 +1727,17 @@ function updateStickyNavOffset(){
   const header = document.querySelector("header");
   const nav = document.getElementById("main-tabs");
   if(header && nav) nav.style.top = `${header.offsetHeight}px`;
-  const ruler = document.getElementById("tl-ruler");
+  const ruler = document.getElementById("tl-ruler-outer");
   if(header && nav && ruler) ruler.style.top = `${header.offsetHeight + nav.offsetHeight}px`;
 }
 updateStickyNavOffset();
 window.addEventListener("resize", updateStickyNavOffset);
+// 予約タイムラインを横スクロールしたとき、上部に固定表示している時刻ヘッダー（tl-ruler-outer）も
+// 同じ位置まで追従させる（tl-ruler-outerはtimeline-wrapの外に出しているため自動では動かない）
+document.querySelector(".timeline-wrap")?.addEventListener("scroll", (e)=>{
+  const rulerOuter = document.getElementById("tl-ruler-outer");
+  if(rulerOuter) rulerOuter.scrollLeft = e.target.scrollLeft;
+});
 const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(indexPageUrl())}`;
 const qrUrlSmall = `https://api.qrserver.com/v1/create-qr-code/?size=88x88&data=${encodeURIComponent(indexPageUrl())}`;
 document.getElementById("kiosk-qr-img").src = qrUrlSmall;
@@ -3630,7 +3637,7 @@ function renderMonthPanels(){
 
   // サイネージの月表示は、縦に長くなりすぎないよう左右2列に分けて表示する
   const useTwoColumns = reserveSignageEquipmentId && !signageTodayOnly;
-  const mainRuler = document.getElementById("tl-ruler");
+  const mainRuler = document.getElementById("tl-ruler-outer");
 
   if(useTwoColumns){
     mainRuler.style.display = "none";
