@@ -5024,6 +5024,13 @@ function isNowInWorkWindow(){
   return nowMin >= win.windowStartMin && nowMin <= win.windowEndMin;
 }
 
+// 今日がカレンダー上で休日に設定されているか（calDaysDataはinitCalendarTab()で
+// 現在の年度分が読み込まれるため、通常は同期的に判定できる。未読み込み時はfalse扱い）
+function isTodayHoliday(){
+  const info = calDaysData[todayStr()];
+  return !!(info && info.isHoliday);
+}
+
 // 本人が今日その場で編集済みならその内容（時間休なしも含む）を最優先、
 // 編集していなければ今日分の事前設定の時間休を返す
 function getEffectiveTimeLeave(emp){
@@ -5084,6 +5091,13 @@ function getEffectiveWbStatus(emp){
   if(!isNowInWorkWindow()){
     return "OFFHOURS";
   }
+  // 休日は事前設定ができない仕様のため、本人がその場で入力していない限り
+  // 初期状態へフォールバックさせず「時間外」表示にする
+  // （休日に何も入力がないのに初期状態の内容がそのまま出るのは実態と合わないため）
+  const updatedToday = emp.statusUpdatedAt && toLocalDateStr(emp.statusUpdatedAt) === todayStr();
+  if(isTodayHoliday() && !(updatedToday && emp.status)){
+    return "OFFHOURS";
+  }
   if(isTimeLeaveActiveNow(emp)){
     const restStatus = wbStatusesAll.find(s=>s.name==="休み");
     if(restStatus) return restStatus.id;
@@ -5108,6 +5122,10 @@ function renderWbNoteCell(tdNote, tlText, baseNote){
 }
 function getWbNoteLines(emp){
   if(!isNowInWorkWindow()){
+    return { tlText: "", baseNote: "" };
+  }
+  const updatedToday = emp.statusUpdatedAt && toLocalDateStr(emp.statusUpdatedAt) === todayStr();
+  if(isTodayHoliday() && !(updatedToday && emp.status)){
     return { tlText: "", baseNote: "" };
   }
   const baseNote = getBaseWbNote(emp);
