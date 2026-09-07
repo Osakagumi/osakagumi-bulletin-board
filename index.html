@@ -8792,7 +8792,9 @@ function notifyChatRecipient(recipientEmail, senderName, text){
       senderName,
       text
     })
-  }).catch(()=>{ /* 通知が届かなくても、チャット自体には影響させない */ });
+  })
+    .then(res => res.text().then(t => console.log("[通知診断] ステータス:", res.status, "本文:", t)))
+    .catch(err => console.error("[通知診断] fetch自体が失敗:", err));
 }
 document.getElementById("chat-send-btn")?.addEventListener("click", sendChatMessage);
 document.getElementById("chat-input")?.addEventListener("keydown", (e)=>{
