@@ -189,6 +189,13 @@
     table:not(.perm-matrix-table) td.actions{
       min-width:0;
     }
+    /* お知らせ一覧：チェックボックス列は一律min-width:90pxの対象外にし、
+       その分だけタイトル列に幅を回す（狭い画面でタイトルが読みにくいとの指摘への対応） */
+    #notices-table th:first-child,
+    #notices-table td:first-child{
+      min-width:32px;
+      width:32px;
+    }
     /* 「始業時刻」「終業時刻」など、横並びの入力欄が2列だとスマホでは窮屈になり、
        特にtype="time"のようなOS標準の入力コントロールで縦位置がずれて見えることがあるため、
        狭い画面では1列に積んで、各項目をフル幅で表示する。 */
@@ -672,7 +679,7 @@
       <div class="panel">
         <h2>掲示中のお知らせ一覧</h2>
         <!-- <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">個人ごとの「既読」状態に関わらず、現在掲示されている全てのお知らせを確認・削除できます。</p> -->
-        <table>
+        <table id="notices-table">
           <thead><tr>
             <th style="width:30px;"><input type="checkbox" id="notices-select-all" style="width:auto;" title="全て選択" aria-label="全て選択"></th>
             <th style="width:110px;">投稿日時</th>
