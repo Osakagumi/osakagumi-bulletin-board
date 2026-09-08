@@ -5388,16 +5388,16 @@ function setNameCellText(td, text){
   td.style.fontSize = "";
 }
 
-// 状態バッジ：セル幅は全角5文字分（バッジ自体の丸み・左右padding込みで、状態名2〜4文字程度が
-// 余裕をもって収まる幅）で固定。状態名が4文字を超える場合のみ、最大4.5文字分の幅に収まるよう
+// 状態バッジ：セル幅は全角5文字分（バッジ自体の丸み・左右padding込みで、状態名2〜3文字程度が
+// 余裕をもって収まる幅）で固定。状態名が3文字を超える場合のみ、最大3.5文字分の幅に収まるよう
 // バッジ内の文字サイズを自動的に下げる（氏名・所属セルと同じ考え方）。
 const STATUS_CELL_MIN_FONT_PX = 8;
 const STATUS_BADGE_H_PADDING = 20; // バッジ自体の左右padding合計（.wb-status-badgeのpadding指定と合わせる）
 function setStatusBadgeText(badge, text){
   badge.textContent = text;
   const baseFontPx = (wbFontSizePx || 13) * 0.923; // .wb-status-badgeの基準フォントサイズ（calc(var(--wb-font-size) * 0.923)と合わせる）
-  if([...text].length > 4){
-    const targetWidth = (baseFontPx * 4.5) - STATUS_BADGE_H_PADDING - 2;
+  if([...text].length > 3){
+    const targetWidth = (baseFontPx * 3.5) - STATUS_BADGE_H_PADDING - 2;
     deptMeasureCtx.font = `${baseFontPx}px sans-serif`;
     const naturalWidth = deptMeasureCtx.measureText(text).width;
     if(naturalWidth > targetWidth){
