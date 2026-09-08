@@ -526,6 +526,8 @@
   }
   .cal-month-block{background:var(--surface);border:1.5px solid var(--line);border-radius:10px;padding:10px;transition:background-color .3s ease, box-shadow .3s ease;}
   .cal-month-block.cal-flash{background-color:#FFF3CD;box-shadow:0 0 0 2px var(--brand);}
+  .jump-flash{background-color:#FFF3CD !important;transition:background-color .3s ease;}
+  .tl-day-panel.jump-flash{box-shadow:0 0 0 2px var(--brand) inset;}
   .cal-month-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px;padding:0 2px;}
   .cal-month-head .cal-month-name{font-size:14px;font-weight:700;color:var(--brand-dark);}
   .cal-month-head .cal-month-count{font-size:11px;color:var(--muted);font-family:var(--mono);}
@@ -2485,7 +2487,7 @@ function renderDashboard(){
       const row = document.createElement("div");
       row.className = "dash-row";
       row.innerHTML = `<span>${escapeHtml(r.equipmentName)} <span style="color:${cat.color};font-size:11px;">[${escapeHtml(cat.label)}]</span></span><span class="dash-row-sub">${formatDateJP(r.date)} ${escapeHtml(r.startTime)}</span>`;
-      row.addEventListener("click", ()=> switchToTab("reserve"));
+      row.addEventListener("click", ()=> jumpToReservationForView(r));
       resBody.appendChild(row);
     });
   }
@@ -2531,14 +2533,14 @@ function renderDashboard(){
       const row = document.createElement("div");
       row.className = "dash-row";
       row.innerHTML = `<span>${escapeHtml(eq.name||"")}</span><span class="dash-row-sub" style="color:${st.color};">${escapeHtml(st.label)}</span>`;
-      row.addEventListener("click", ()=> switchToTab("checkout"));
+      row.addEventListener("click", ()=> jumpToCheckoutItem({ equipmentId: eq.id, category: eq.category }));
       checkoutBody.appendChild(row);
     });
     mySteel.forEach(({t, outstanding})=>{
       const row = document.createElement("div");
       row.className = "dash-row";
       row.innerHTML = `<span>敷鉄板（${escapeHtml(t.name)}）</span><span class="dash-row-sub">${outstanding} 枚</span>`;
-      row.addEventListener("click", ()=> switchToTab("checkout"));
+      row.addEventListener("click", ()=> jumpToCheckoutItem({ steelTypeId: t.id, category: t.category }));
       checkoutBody.appendChild(row);
     });
   }
@@ -2997,7 +2999,8 @@ function renderMyResourcesSummary(){
       catLabel: cat.label, catColor: cat.color,
       assetNo: eq.assetNo || "",
       name: eq.name || "",
-      statusHtml: `<span class="sp-type-badge" style="background:${st.color};">${escapeHtml(st.label)}</span>`
+      statusHtml: `<span class="sp-type-badge" style="background:${st.color};">${escapeHtml(st.label)}</span>`,
+      equipmentId: eq.id
     });
   });
 
@@ -3014,7 +3017,8 @@ function renderMyResourcesSummary(){
       catLabel: cat.label, catColor: cat.color,
       assetNo: t.assetNo || "",
       name: t.name || "",
-      statusHtml: `${outstanding} 枚`
+      statusHtml: `${outstanding} 枚`,
+      steelTypeId: t.id
     });
   });
 
@@ -3024,6 +3028,8 @@ function renderMyResourcesSummary(){
   }
   rows.forEach(r=>{
     const tr = document.createElement("tr");
+    if(r.equipmentId) tr.dataset.equipmentId = r.equipmentId;
+    if(r.steelTypeId) tr.dataset.steelTypeId = r.steelTypeId;
     tr.innerHTML = `
       <td class="sp-nowrap">${escapeHtml(r.dateLabel)}</td>
       <td class="sp-nowrap"><span class="sp-type-badge" style="background:${r.catColor};">${escapeHtml(r.catLabel)}</span></td>
@@ -3033,6 +3039,24 @@ function renderMyResourcesSummary(){
     `;
     body.appendChild(tr);
   });
+  if(pendingCheckoutHighlight){
+    const { equipmentId, steelTypeId } = pendingCheckoutHighlight;
+    pendingCheckoutHighlight = null;
+    const sel = equipmentId ? `tr[data-equipment-id="${equipmentId}"]` : `tr[data-steel-type-id="${steelTypeId}"]`;
+    const targetRow = body.querySelector(sel);
+    if(targetRow) requestAnimationFrame(()=> flashHighlight(targetRow));
+  }
+}
+
+// ダッシュボードの「借用中の機材」から、該当カテゴリを選択した上で機材タブへ移動し、
+// 画面下部の「自分が持っている機材」一覧の該当行を一瞬ハイライトする
+let pendingCheckoutHighlight = null;
+function jumpToCheckoutItem({ equipmentId, steelTypeId, category }){
+  selectedCheckoutCategory = category;
+  pendingCheckoutHighlight = equipmentId ? { equipmentId } : { steelTypeId };
+  switchToTab("checkout");
+  renderCheckoutCategoryRow();
+  renderCheckoutTab();
 }
 
 /* ---------- 貸出管理（checkoutモード：測量機器・ドローンなど） ---------- */
@@ -3568,12 +3592,30 @@ function loadReservationsForMonth(){
   monthReservationsUnsub = onSnapshot(q, snap=>{
     monthReservations = snap.docs.map(d=>({id:d.id, ...d.data()}));
     renderMonthPanels();
+    if(pendingReserveScrollDate){
+      const targetDate = pendingReserveScrollDate;
+      pendingReserveScrollDate = null;
+      requestAnimationFrame(()=>{
+        const panelEl = document.querySelector(`.tl-day-panel[data-date="${targetDate}"]`);
+        if(panelEl) flashHighlight(panelEl);
+      });
+    }
   });
 }
 
 function timeToMinutes(hhmm){
   const [h,m] = hhmm.split(":").map(Number);
   return h*60+m;
+}
+
+// ダッシュボードからのジャンプ先を、画面中央までスクロールしつつ一瞬ハイライトする共通処理
+function flashHighlight(el){
+  if(!el) return;
+  el.scrollIntoView({ behavior: "smooth", block: "center" });
+  el.classList.remove("jump-flash");
+  void el.offsetWidth; // アニメーションを再トリガーするための強制リフロー
+  el.classList.add("jump-flash");
+  setTimeout(()=> el.classList.remove("jump-flash"), 1200);
 }
 
 function buildTickRulerEl(){
@@ -3957,6 +3999,21 @@ function jumpToReservationForEdit(r){
   selectedEquipment = eq;
   selectedMonth = r.date.slice(0,7);
   tlPendingByDate = { [r.date]: { start: timeToMinutes(r.startTime), end: timeToMinutes(r.endTime) } };
+  switchToTab("reserve");
+  renderCategoryRow();
+  renderEquipmentGrid();
+  showTimelinePanel();
+}
+
+// ダッシュボードの「予約済の設備」から、該当日付・カテゴリ・設備を表示するだけのジャンプ（編集モードにはしない）
+let pendingReserveScrollDate = null;
+function jumpToReservationForView(r){
+  const eq = equipmentAll.find(e=>e.id===r.equipmentId);
+  if(!eq){ toast("対象の設備が見つかりませんでした。"); return; }
+  selectedCategory = r.category;
+  selectedEquipment = eq;
+  selectedMonth = r.date.slice(0,7);
+  pendingReserveScrollDate = r.date;
   switchToTab("reserve");
   renderCategoryRow();
   renderEquipmentGrid();
