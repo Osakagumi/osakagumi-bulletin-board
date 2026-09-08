@@ -709,6 +709,10 @@
     width:calc(var(--wb-font-size) * 7); max-width:calc(var(--wb-font-size) * 7);
     white-space:nowrap; overflow:hidden;
   }
+  .wb-table th.status-cell, .wb-table td.status-cell{
+    width:calc(var(--wb-font-size) * 3); max-width:calc(var(--wb-font-size) * 3);
+    white-space:nowrap; overflow:hidden;
+  }
   .wb-table tr.dept-row td{background:#FAFBFC;font-size:calc(var(--wb-font-size) * 0.846);font-weight:700;color:var(--brand-dark);letter-spacing:.03em;padding:6px 10px;}
   .wb-table tr:last-child td{border-bottom:none;}
   .wb-status-badge{display:inline-block;padding:4px 10px;border-radius:14px;font-size:calc(var(--wb-font-size) * 0.923);font-weight:700;color:#fff;white-space:nowrap;}
@@ -5384,6 +5388,26 @@ function setNameCellText(td, text){
   td.style.fontSize = "";
 }
 
+// 状態バッジ：セル幅は全角3文字分（状態2文字＋余白）で固定。状態名が2文字を超える場合のみ、
+// 最大2.5文字分の幅に収まるようバッジ内の文字サイズを自動的に下げる（氏名・所属セルと同じ考え方）。
+const STATUS_CELL_MIN_FONT_PX = 8;
+const STATUS_BADGE_H_PADDING = 20; // バッジ自体の左右padding合計（.wb-status-badgeのpadding指定と合わせる）
+function setStatusBadgeText(badge, text){
+  badge.textContent = text;
+  const baseFontPx = (wbFontSizePx || 13) * 0.923; // .wb-status-badgeの基準フォントサイズ（calc(var(--wb-font-size) * 0.923)と合わせる）
+  if([...text].length > 2){
+    const targetWidth = (baseFontPx * 2.5) - STATUS_BADGE_H_PADDING - 2;
+    deptMeasureCtx.font = `${baseFontPx}px sans-serif`;
+    const naturalWidth = deptMeasureCtx.measureText(text).width;
+    if(naturalWidth > targetWidth){
+      const scaledPx = Math.max(STATUS_CELL_MIN_FONT_PX, baseFontPx * (targetWidth / naturalWidth));
+      badge.style.fontSize = `${scaledPx}px`;
+      return;
+    }
+  }
+  badge.style.fontSize = "";
+}
+
 function renderWbList(){
   const container = document.getElementById("wb-list-columns");
   if(!container) return;
@@ -5400,10 +5424,11 @@ function renderWbList(){
     const tdName = document.createElement("td");
     setNameCellText(tdName, emp.name || emp.email);
     const tdStatus = document.createElement("td");
+    tdStatus.className = "status-cell";
     const badge = document.createElement("span");
     badge.className = "wb-status-badge" + (canEdit ? " wb-editable" : "");
     badge.style.background = st ? st.color : "#9CA3AF";
-    badge.textContent = st ? st.name : "未設定";
+    setStatusBadgeText(badge, st ? st.name : "未設定");
     if(canEdit) badge.addEventListener("click", ()=> openWbModal(emp.email));
     tdStatus.appendChild(badge);
     const tdNote = document.createElement("td");
@@ -5439,7 +5464,7 @@ function renderWbList(){
     const table = document.createElement("table");
     table.className = "wb-table";
     const thead = document.createElement("thead");
-    thead.innerHTML = `<tr><th class="dept-cell">所属</th><th class="name-cell">氏名</th><th>状態</th><th>備考</th></tr>`;
+    thead.innerHTML = `<tr><th class="dept-cell">所属</th><th class="name-cell">氏名</th><th class="status-cell">状態</th><th>備考</th></tr>`;
     const tbody = document.createElement("tbody");
     chunk.forEach(emp=> tbody.appendChild(buildRow(emp)));
     table.appendChild(thead); table.appendChild(tbody);
@@ -5816,7 +5841,7 @@ function renderWbPresetTable(){
     const table = document.createElement("table");
     table.className = "wb-table";
     const thead = document.createElement("thead");
-    thead.innerHTML = `<tr><th class="drag-grip-cell"></th><th class="dept-cell">所属</th><th class="name-cell">氏名</th><th>状態</th><th>備考</th></tr>`;
+    thead.innerHTML = `<tr><th class="drag-grip-cell"></th><th class="dept-cell">所属</th><th class="name-cell">氏名</th><th class="status-cell">状態</th><th>備考</th></tr>`;
     const tbody = document.createElement("tbody");
     chunk.forEach(emp=>{
       const preset = editingDefaults ? (wbPresetDefaults[emp.email] || null) : (dayPresets[emp.email] || null);
@@ -5834,10 +5859,11 @@ function renderWbPresetTable(){
       const tdName = document.createElement("td");
       setNameCellText(tdName, emp.name || emp.email);
       const tdStatus = document.createElement("td");
+      tdStatus.className = "status-cell";
       const badge = document.createElement("span");
       badge.className = "wb-status-badge wb-editable";
       badge.style.background = st ? st.color : "#9CA3AF";
-      badge.textContent = st ? st.name : "未設定";
+      setStatusBadgeText(badge, st ? st.name : "未設定");
       badge.addEventListener("click", ()=>{
         if(wbPresetBulkStatus){
           applyWbPresetBulkStatus(emp.email);
