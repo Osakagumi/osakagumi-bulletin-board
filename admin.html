@@ -190,11 +190,28 @@
       min-width:0;
     }
     /* お知らせ一覧：チェックボックス列は一律min-width:90pxの対象外にし、
-       その分だけタイトル列に幅を回す（狭い画面でタイトルが読みにくいとの指摘への対応） */
+       投稿日時・投稿者・既読数の各列（th側にインラインでwidth指定があるため!importantで上書き）も
+       スマホでは詰めて、その分だけタイトル列に幅を回す */
     #notices-table th:first-child,
     #notices-table td:first-child{
       min-width:32px;
       width:32px;
+    }
+    #notices-table th:nth-child(2),
+    #notices-table td:nth-child(2){
+      width:82px !important;
+      min-width:82px;
+      white-space:normal !important;
+    }
+    #notices-table th:nth-child(3),
+    #notices-table td:nth-child(3){
+      width:64px !important;
+      min-width:64px;
+    }
+    #notices-table th:nth-child(5),
+    #notices-table td:nth-child(5){
+      width:52px !important;
+      min-width:52px;
     }
     /* 「始業時刻」「終業時刻」など、横並びの入力欄が2列だとスマホでは窮屈になり、
        特にtype="time"のようなOS標準の入力コントロールで縦位置がずれて見えることがあるため、
