@@ -710,7 +710,7 @@
     white-space:nowrap; overflow:hidden;
   }
   .wb-table th.status-cell, .wb-table td.status-cell{
-    width:calc(var(--wb-font-size) * 3); max-width:calc(var(--wb-font-size) * 3);
+    width:calc(var(--wb-font-size) * 5); max-width:calc(var(--wb-font-size) * 5);
     white-space:nowrap; overflow:hidden;
   }
   .wb-table tr.dept-row td{background:#FAFBFC;font-size:calc(var(--wb-font-size) * 0.846);font-weight:700;color:var(--brand-dark);letter-spacing:.03em;padding:6px 10px;}
@@ -5388,15 +5388,16 @@ function setNameCellText(td, text){
   td.style.fontSize = "";
 }
 
-// 状態バッジ：セル幅は全角3文字分（状態2文字＋余白）で固定。状態名が2文字を超える場合のみ、
-// 最大2.5文字分の幅に収まるようバッジ内の文字サイズを自動的に下げる（氏名・所属セルと同じ考え方）。
+// 状態バッジ：セル幅は全角5文字分（バッジ自体の丸み・左右padding込みで、状態名2〜4文字程度が
+// 余裕をもって収まる幅）で固定。状態名が4文字を超える場合のみ、最大4.5文字分の幅に収まるよう
+// バッジ内の文字サイズを自動的に下げる（氏名・所属セルと同じ考え方）。
 const STATUS_CELL_MIN_FONT_PX = 8;
 const STATUS_BADGE_H_PADDING = 20; // バッジ自体の左右padding合計（.wb-status-badgeのpadding指定と合わせる）
 function setStatusBadgeText(badge, text){
   badge.textContent = text;
   const baseFontPx = (wbFontSizePx || 13) * 0.923; // .wb-status-badgeの基準フォントサイズ（calc(var(--wb-font-size) * 0.923)と合わせる）
-  if([...text].length > 2){
-    const targetWidth = (baseFontPx * 2.5) - STATUS_BADGE_H_PADDING - 2;
+  if([...text].length > 4){
+    const targetWidth = (baseFontPx * 4.5) - STATUS_BADGE_H_PADDING - 2;
     deptMeasureCtx.font = `${baseFontPx}px sans-serif`;
     const naturalWidth = deptMeasureCtx.measureText(text).width;
     if(naturalWidth > targetWidth){
