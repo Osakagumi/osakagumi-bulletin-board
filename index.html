@@ -795,6 +795,16 @@
   @media (max-width:720px){
     header .header-clock{ display:none; }
     #cal-export-btn{ display:none; }
+    /* チャットのスレッド画面：中央絶対配置だと「← 一覧に戻る」ボタンとタイトルが
+       狭い画面で重なってしまうため、横並びのフレックスレイアウトに変更する */
+    #chat-thread-view .section-toolbar{ display:flex; align-items:center; gap:8px; }
+    #chat-back-btn{ flex-shrink:0; }
+    #chat-thread-title{
+      position:static; left:auto; top:auto; transform:none;
+      flex:1; min-width:0; justify-content:flex-start;
+    }
+    #chat-thread-title-text{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+    #chat-thread-online-label{ flex-shrink:0; }
   }
   @media (max-width:520px){
     main{padding:12px;}
