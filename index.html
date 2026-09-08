@@ -705,6 +705,10 @@
     width:calc(var(--wb-font-size) * 4); max-width:calc(var(--wb-font-size) * 4);
     white-space:nowrap; overflow:hidden;
   }
+  .wb-table th.name-cell, .wb-table td.name-cell{
+    width:calc(var(--wb-font-size) * 7); max-width:calc(var(--wb-font-size) * 7);
+    white-space:nowrap; overflow:hidden;
+  }
   .wb-table tr.dept-row td{background:#FAFBFC;font-size:calc(var(--wb-font-size) * 0.846);font-weight:700;color:var(--brand-dark);letter-spacing:.03em;padding:6px 10px;}
   .wb-table tr:last-child td{border-bottom:none;}
   .wb-status-badge{display:inline-block;padding:4px 10px;border-radius:14px;font-size:calc(var(--wb-font-size) * 0.923);font-weight:700;color:#fff;white-space:nowrap;}
@@ -5359,6 +5363,27 @@ function setDeptCellText(td, text){
   }
 }
 
+// 氏名セル：幅は全角7文字分（氏名6文字＋余白）で固定。氏名が6文字を超える場合のみ、
+// 最大6.5文字分の幅に収まるようフォントサイズを自動的に下げる（所属セルと同じ考え方）。
+const NAME_CELL_MIN_FONT_PX = 8;
+const NAME_CELL_H_PADDING = 20; // 左右パディング合計（.wb-table tdのpadding指定と合わせる）
+function setNameCellText(td, text){
+  td.className = "name-cell";
+  td.textContent = text;
+  const fontPx = wbFontSizePx || 13;
+  if([...text].length > 6){
+    const targetWidth = (fontPx * 6.5) - NAME_CELL_H_PADDING - 2;
+    deptMeasureCtx.font = `${fontPx}px sans-serif`;
+    const naturalWidth = deptMeasureCtx.measureText(text).width;
+    if(naturalWidth > targetWidth){
+      const scaledPx = Math.max(NAME_CELL_MIN_FONT_PX, fontPx * (targetWidth / naturalWidth));
+      td.style.fontSize = `${scaledPx}px`;
+      return;
+    }
+  }
+  td.style.fontSize = "";
+}
+
 function renderWbList(){
   const container = document.getElementById("wb-list-columns");
   if(!container) return;
@@ -5373,7 +5398,7 @@ function renderWbList(){
     const tdDept = document.createElement("td");
     setDeptCellText(tdDept, primaryDepartmentName(emp));
     const tdName = document.createElement("td");
-    tdName.textContent = emp.name || emp.email;
+    setNameCellText(tdName, emp.name || emp.email);
     const tdStatus = document.createElement("td");
     const badge = document.createElement("span");
     badge.className = "wb-status-badge" + (canEdit ? " wb-editable" : "");
@@ -5414,7 +5439,7 @@ function renderWbList(){
     const table = document.createElement("table");
     table.className = "wb-table";
     const thead = document.createElement("thead");
-    thead.innerHTML = `<tr><th class="dept-cell">所属</th><th>氏名</th><th>状態</th><th>備考</th></tr>`;
+    thead.innerHTML = `<tr><th class="dept-cell">所属</th><th class="name-cell">氏名</th><th>状態</th><th>備考</th></tr>`;
     const tbody = document.createElement("tbody");
     chunk.forEach(emp=> tbody.appendChild(buildRow(emp)));
     table.appendChild(thead); table.appendChild(tbody);
@@ -5791,7 +5816,7 @@ function renderWbPresetTable(){
     const table = document.createElement("table");
     table.className = "wb-table";
     const thead = document.createElement("thead");
-    thead.innerHTML = `<tr><th class="drag-grip-cell"></th><th class="dept-cell">所属</th><th>氏名</th><th>状態</th><th>備考</th></tr>`;
+    thead.innerHTML = `<tr><th class="drag-grip-cell"></th><th class="dept-cell">所属</th><th class="name-cell">氏名</th><th>状態</th><th>備考</th></tr>`;
     const tbody = document.createElement("tbody");
     chunk.forEach(emp=>{
       const preset = editingDefaults ? (wbPresetDefaults[emp.email] || null) : (dayPresets[emp.email] || null);
@@ -5807,7 +5832,7 @@ function renderWbPresetTable(){
       const tdDept = document.createElement("td");
       setDeptCellText(tdDept, primaryDepartmentName(emp));
       const tdName = document.createElement("td");
-      tdName.textContent = emp.name || emp.email;
+      setNameCellText(tdName, emp.name || emp.email);
       const tdStatus = document.createElement("td");
       const badge = document.createElement("span");
       badge.className = "wb-status-badge wb-editable";
