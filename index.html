@@ -566,7 +566,9 @@
   .timeline-wrap{overflow-x:auto;}
   #tl-panels{min-width:640px;}
   .tl-ruler-outer{overflow-x:hidden;position:sticky;top:0;background:var(--surface);z-index:15;border-bottom:1px solid var(--line);box-sizing:border-box;}
-  .tl-ruler{display:flex;padding-left:92px;min-width:640px;box-sizing:border-box;}
+  .tl-ruler{display:flex;min-width:640px;box-sizing:border-box;}
+  .tl-ruler-head{flex:0 0 92px;}
+  .tl-ruler-ticks{display:flex;flex:1;min-width:0;}
   .tl-ruler .tick{flex:1;font-family:var(--mono);font-size:13.5px;color:var(--muted);border-left:1px solid var(--line);padding:2px 0 4px 3px;overflow:visible;white-space:nowrap;position:relative;z-index:1;}
   .tl-slots{display:flex;background:
       repeating-linear-gradient(90deg, transparent, transparent calc(100%/1 - 1px));
@@ -805,6 +807,9 @@
     }
     #chat-thread-title-text{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
     #chat-thread-online-label{ flex-shrink:0; }
+    /* 予約タイムライン：日付見出し列（9/1（火）等）が92pxだと狭い画面では広すぎるため、
+       スマホでは60pxに縮め、その分を時刻マスの表示に回す */
+    .tl-day-panel-head, .tl-ruler-head{ flex:0 0 60px !important; }
   }
   @media (max-width:520px){
     main{padding:12px;}
@@ -1748,7 +1753,10 @@ function updateStickyNavOffset(){
   if(header && nav && ruler) ruler.style.top = `${header.offsetHeight + nav.offsetHeight}px`;
 }
 updateStickyNavOffset();
-window.addEventListener("resize", updateStickyNavOffset);
+window.addEventListener("resize", ()=>{
+  updateStickyNavOffset();
+  syncTimelineRulerWidth();
+});
 // 予約タイムラインを横スクロールしたとき、上部に固定表示している時刻ヘッダー（tl-ruler-outer）も
 // 同じ位置まで追従させる（tl-ruler-outerはtimeline-wrapの外に出しているため自動では動かない）
 document.querySelector(".timeline-wrap")?.addEventListener("scroll", (e)=>{
@@ -3581,13 +3589,32 @@ function showTimelinePanel(){
 function renderRuler(){
   const ruler = document.getElementById("tl-ruler");
   ruler.innerHTML = "";
+  const head = document.createElement("div");
+  head.className = "tl-ruler-head";
+  const ticksWrap = document.createElement("div");
+  ticksWrap.className = "tl-ruler-ticks";
+  ticksWrap.id = "tl-ruler-ticks";
   SLOTS.forEach(s=>{
     const isHour = s.start % 60 === 0;
     const tick = document.createElement("div");
     tick.className = "tick" + slotBizBoundaryClass(s.start);
     tick.textContent = isHour ? s.label : "";
-    ruler.appendChild(tick);
+    ticksWrap.appendChild(tick);
   });
+  ruler.appendChild(head);
+  ruler.appendChild(ticksWrap);
+}
+
+// 時刻ヘッダー（tl-ruler-outer）と日別行（timeline-wrap）は、縦方向の固定表示を正しく効かせるために
+// 別々のスクロール領域に分かれている。そのため、それぞれの横幅をブラウザが独立に計算し、
+// 端数（小数点以下）の丸め方がわずかにズレて、時刻マスの位置が徐々にズレて見えることがある。
+// 実際に描画された日別行の時刻マス部分の幅を測り、ヘッダー側に強制的に一致させることで解消する。
+function syncTimelineRulerWidth(){
+  const refBody = document.querySelector(".tl-day-panel-body");
+  const ticksWrap = document.getElementById("tl-ruler-ticks");
+  if(!refBody || !ticksWrap) return;
+  const w = refBody.getBoundingClientRect().width;
+  if(w > 0) ticksWrap.style.width = `${w}px`;
 }
 
 function daysInSelectedMonth(){
@@ -3610,6 +3637,7 @@ function loadReservationsForMonth(){
   monthReservationsUnsub = onSnapshot(q, snap=>{
     monthReservations = snap.docs.map(d=>({id:d.id, ...d.data()}));
     renderMonthPanels();
+    syncTimelineRulerWidth();
     if(pendingReserveScrollDate){
       const targetDate = pendingReserveScrollDate;
       pendingReserveScrollDate = null;
