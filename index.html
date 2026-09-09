@@ -290,6 +290,7 @@
   }
   .cat-pill .dot{width:8px;height:8px;border-radius:50%;}
   .cat-pill.active{border-color:currentColor;background:rgba(0,0,0,0.02);}
+  .bizinfo-pill{font-weight:700;}
 
   /* 事前設定：保存済み日付一覧 */
   .wb-preset-date-pill{
@@ -1301,6 +1302,7 @@
 
       <!-- ---- 入札情報（Googleドライブ上のExcelファイルを埋め込み表示） ---- -->
       <section id="view-bizinfo" style="display:none;">
+        <div class="cat-row" id="bizinfo-cat-tab-row" style="margin-bottom:10px;"></div>
         <div class="cat-row" id="bizinfo-pill-row"></div>
         <div id="bizinfo-empty" style="color:var(--muted);text-align:center;padding:24px;display:none;">表示できる業務情報がありません。</div>
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
@@ -1980,6 +1982,8 @@ let contractDefaultDepartmentId = null;
 let contractHighlightDays = 7;
 let contractsAll = [];
 let bizInfoItemsAll = [];
+let bizInfoCategoriesAll = [];
+let selectedBizInfoCategoryId = null;
 let selectedBizInfoId = null;
 let editingContractId = null;
 let equipmentAll = [];
@@ -2141,6 +2145,7 @@ onAuthStateChanged(auth, async (user)=>{
     initSteelPlateTxListener();
     initContractsListener();
     initBizInfoListener();
+    initBizInfoCategoriesListener();
     initChatListeners();
     initPresence();
     initOneSignalForCurrentUser();
@@ -9025,6 +9030,14 @@ async function cleanupOldChatMessages(){
 /* =========================================================
    業務情報（Googleドライブ上のファイルをピル切り替えで表示）
 ========================================================= */
+function bizInfoCatInfo(id){ return bizInfoCategoriesAll.find(c=>c.id===id) || { id:"uncategorized", label:"未分類", color:"#9CA3AF" }; }
+function initBizInfoCategoriesListener(){
+  onSnapshot(collection(db,"business_info_categories"), snap=>{
+    bizInfoCategoriesAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    bizInfoCategoriesAll.sort((a,b)=> (a.order??0)-(b.order??0));
+    renderBizInfoTab();
+  }, (err)=>{ console.error("[業務情報カテゴリ取得エラー]", err); });
+}
 function initBizInfoListener(){
   onSnapshot(collection(db,"business_info_items"), snap=>{
     bizInfoItemsAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
@@ -9041,22 +9054,56 @@ function visibleBizInfoItems(){
   return bizInfoItemsAll.filter(item=> item.enabled!==false && !hidden.includes("bizinfo:"+item.id));
 }
 function renderBizInfoTab(){
+  const catRow = document.getElementById("bizinfo-cat-tab-row");
   const row = document.getElementById("bizinfo-pill-row");
   const emptyEl = document.getElementById("bizinfo-empty");
   const noteEl = document.getElementById("bizinfo-note");
   const iframe = document.getElementById("bizinfo-iframe");
-  const items = visibleBizInfoItems();
+  const downloadBtn = document.getElementById("bizinfo-download-btn");
+  const allItems = visibleBizInfoItems();
+  catRow.innerHTML = "";
   row.innerHTML = "";
-  if(items.length===0){
+  if(allItems.length===0){
     emptyEl.style.display = "block";
     noteEl.style.display = "none";
     iframe.style.display = "none";
-    const downloadBtn = document.getElementById("bizinfo-download-btn");
     if(downloadBtn) downloadBtn.style.display = "none";
     selectedBizInfoId = null;
     return;
   }
   emptyEl.style.display = "none";
+
+  // 実際に表示できる項目が1件以上あるカテゴリだけをタブとして出す（カテゴリ未設定の項目は「未分類」にまとめる）
+  const categoryIdsInUse = [...new Set(allItems.map(i=> i.category || "uncategorized"))];
+  const catTabs = bizInfoCategoriesAll.filter(c=> categoryIdsInUse.includes(c.id));
+  if(categoryIdsInUse.includes("uncategorized")){
+    catTabs.push({ id:"uncategorized", label:"未分類", color:"#9CA3AF" });
+  }
+  if(!catTabs.some(c=>c.id===selectedBizInfoCategoryId)){
+    selectedBizInfoCategoryId = catTabs[0]?.id || null;
+  }
+  catTabs.forEach(c=>{
+    const tab = document.createElement("button");
+    tab.className = "cat-pill" + (c.id===selectedBizInfoCategoryId ? " active" : "");
+    tab.style.color = c.color;
+    tab.innerHTML = `<span class="dot" style="background:${c.color};"></span>${escapeHtml(c.label)}`;
+    tab.addEventListener("click", ()=>{
+      if(selectedBizInfoCategoryId === c.id) return;
+      selectedBizInfoCategoryId = c.id;
+      selectedBizInfoId = null; // カテゴリを切り替えたら、そのカテゴリの先頭を選び直す
+      renderBizInfoTab();
+    });
+    catRow.appendChild(tab);
+  });
+
+  const items = allItems.filter(i=> (i.category || "uncategorized") === selectedBizInfoCategoryId);
+  if(items.length===0){
+    noteEl.style.display = "none";
+    iframe.style.display = "none";
+    if(downloadBtn) downloadBtn.style.display = "none";
+    selectedBizInfoId = null;
+    return;
+  }
   noteEl.style.display = "block";
   iframe.style.display = "block";
   if(!items.some(i=>i.id===selectedBizInfoId)){
@@ -9064,7 +9111,7 @@ function renderBizInfoTab(){
   }
   items.forEach(item=>{
     const pill = document.createElement("button");
-    pill.className = "cat-pill" + (item.id===selectedBizInfoId ? " active" : "");
+    pill.className = "cat-pill bizinfo-pill" + (item.id===selectedBizInfoId ? " active" : "");
     pill.textContent = item.name || "";
     pill.addEventListener("click", ()=>{
       selectedBizInfoId = item.id;

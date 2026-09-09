@@ -197,6 +197,12 @@ service cloud.firestore {
         (isSignedIn() && resource.data.infoManagers is list && request.auth.token.email in resource.data.infoManagers);
     }
 
+    // 業務情報のカテゴリ: 全員が読める。追加・編集・削除はシステム管理者のみ。
+    match /business_info_categories/{categoryId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
     // ダイレクトメッセージ（1対1）: 送信者・受信者本人のみ読み書き可能。1日経過後に自動削除される。
     match /direct_messages/{messageId} {
       allow read: if isSignedIn() &&
