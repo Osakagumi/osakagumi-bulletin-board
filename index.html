@@ -5149,6 +5149,26 @@ function isTodayHoliday(){
   return !!(info && info.isHoliday);
 }
 
+// 指定日がカレンダー上で休日に設定されているか（同期版。isTodayHolidayと同じ考え方）
+function isDateHolidaySync(dateStr){
+  const info = calDaysData[dateStr];
+  return !!(info && info.isHoliday);
+}
+
+// 「次の稼働日」＝今日を含まない、土日・カレンダー休日を除いた最も近い未来の日付
+// （事前設定タブの初期表示日として使う。当日は事前設定の対象外のため今日は含めない）
+function nextWorkingDayStr(){
+  const d = new Date(todayStr() + "T00:00:00");
+  for(let i=0;i<14;i++){ // 万一のため最大2週間先まで探す
+    d.setDate(d.getDate()+1);
+    const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,"0"), dd = String(d.getDate()).padStart(2,"0");
+    const ds = `${y}-${m}-${dd}`;
+    const dow = d.getDay(); // 0=日, 6=土
+    if(dow!==0 && dow!==6 && !isDateHolidaySync(ds)) return ds;
+  }
+  return todayStr(); // 見つからない場合の保険（実運用ではまず起きない）
+}
+
 // 本人が今日その場で編集済みならその内容（時間休なしも含む）を最優先、
 // 編集していなければ今日分の事前設定の時間休を返す
 function getEffectiveTimeLeave(emp){
@@ -5683,7 +5703,7 @@ function initWbPresetsListener(){
     wbPresetsLoaded = true;
 
     if(!wbPresetSelectedDate){
-      wbPresetSelectedDate = todayStr();
+      wbPresetSelectedDate = nextWorkingDayStr();
     }
     if((isAdmin || isWhereaboutsEditor) && !wbPresetCleanupDone){
       wbPresetCleanupDone = true;
@@ -5695,12 +5715,14 @@ function initWbPresetsListener(){
 }
 
 function wbPresetStoredDates(){
-  return Object.keys(wbPresetsByDate).sort();
+  return Object.keys(wbPresetsByDate).filter(d=> d > todayStr()).sort();
 }
 
 async function cleanupPastWbPresets(){
   const todayStrVal = todayStr();
-  const pastDates = wbPresetStoredDates().filter(d=> d < todayStrVal);
+  // wbPresetStoredDates()は表示用に「今日より後」だけに絞っているため、
+  // ここでの過去日クリーンアップには生のキー一覧を使う
+  const pastDates = Object.keys(wbPresetsByDate).filter(d=> d < todayStrVal);
   for(const d of pastDates){
     await deleteWbPresetsForDate(d);
   }
@@ -5829,7 +5851,7 @@ function renderWbPresetTable(){
   const dateLabel = document.getElementById("wb-preset-date-label");
   const pickerLabel = document.getElementById("wb-preset-date-picker");
   if(!columnsWrap || !dateLabel) return;
-  if(!wbPresetSelectedDate) wbPresetSelectedDate = todayStr();
+  if(!wbPresetSelectedDate) wbPresetSelectedDate = nextWorkingDayStr();
   const editingDefaults = isEditingWbDefaults();
   pickerLabel.textContent = formatDateJP(wbPresetSelectedDate);
 
@@ -5923,8 +5945,8 @@ function renderWbPresetTable(){
 
 async function selectWbPresetDate(dateStr){
   if(!dateStr) return;
-  if(dateStr < todayStr()){
-    toast("過去の日付は選択できません。");
+  if(dateStr <= todayStr()){
+    toast("当日・過去の日付は事前設定できません。当日分を修正したい場合は、一覧画面から直接編集してください。");
     return;
   }
   const isHoliday = await isDateHoliday(dateStr);
