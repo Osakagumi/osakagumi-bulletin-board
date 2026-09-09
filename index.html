@@ -1303,12 +1303,12 @@
       <!-- ---- 入札情報（Googleドライブ上のExcelファイルを埋め込み表示） ---- -->
       <section id="view-bizinfo" style="display:none;">
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+          <span id="bizinfo-cat-dot" style="display:inline-block;width:12px;height:12px;border-radius:50%;flex-shrink:0;"></span>
           <select id="bizinfo-cat-select" style="width:auto;flex-shrink:0;font-weight:700;"></select>
           <div class="cat-row" id="bizinfo-pill-row" style="margin:0;"></div>
         </div>
         <div id="bizinfo-empty" style="color:var(--muted);text-align:center;padding:24px;display:none;">表示できる業務情報がありません。</div>
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
-          <p id="bizinfo-note" style="font-size:12px;color:var(--muted);margin:0 0 12px;display:none;">タブまたは情報名ボタンを押すとファイルの再読み込みを行って最新情報を表示します。</p>
+        <div style="display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap;">
           <a id="bizinfo-download-btn" class="btn-ghost" style="display:none;border:1px solid var(--line);text-decoration:none;white-space:nowrap;margin-bottom:12px;" download>ダウンロード</a>
         </div>
         <iframe id="bizinfo-iframe" style="width:100%;height:75vh;border:1px solid var(--line);border-radius:10px;background:#fff;display:none;" allow="autoplay"></iframe>
@@ -9056,10 +9056,10 @@ function visibleBizInfoItems(){
   return bizInfoItemsAll.filter(item=> item.enabled!==false && !hidden.includes("bizinfo:"+item.id));
 }
 function renderBizInfoTab(){
+  const catDot = document.getElementById("bizinfo-cat-dot");
   const catSelect = document.getElementById("bizinfo-cat-select");
   const row = document.getElementById("bizinfo-pill-row");
   const emptyEl = document.getElementById("bizinfo-empty");
-  const noteEl = document.getElementById("bizinfo-note");
   const iframe = document.getElementById("bizinfo-iframe");
   const downloadBtn = document.getElementById("bizinfo-download-btn");
   const allItems = visibleBizInfoItems();
@@ -9067,7 +9067,6 @@ function renderBizInfoTab(){
   row.innerHTML = "";
   if(allItems.length===0){
     emptyEl.style.display = "block";
-    noteEl.style.display = "none";
     iframe.style.display = "none";
     if(downloadBtn) downloadBtn.style.display = "none";
     selectedBizInfoId = null;
@@ -9091,6 +9090,11 @@ function renderBizInfoTab(){
     catSelect.appendChild(opt);
   });
   catSelect.value = selectedBizInfoCategoryId;
+  // 選択中カテゴリの色を、ドット・プルダウンの枠線に反映する
+  const selectedCat = bizInfoCatInfo(selectedBizInfoCategoryId);
+  if(catDot) catDot.style.background = selectedCat.color;
+  catSelect.style.borderColor = selectedCat.color;
+  catSelect.style.color = selectedCat.color;
   catSelect.onchange = ()=>{
     selectedBizInfoCategoryId = catSelect.value;
     selectedBizInfoId = null; // カテゴリを切り替えたら、そのカテゴリの先頭を選び直す
@@ -9099,20 +9103,24 @@ function renderBizInfoTab(){
 
   const items = allItems.filter(i=> (i.category || "uncategorized") === selectedBizInfoCategoryId);
   if(items.length===0){
-    noteEl.style.display = "none";
     iframe.style.display = "none";
     if(downloadBtn) downloadBtn.style.display = "none";
     selectedBizInfoId = null;
     return;
   }
-  noteEl.style.display = "block";
   iframe.style.display = "block";
   if(!items.some(i=>i.id===selectedBizInfoId)){
     selectedBizInfoId = items[0].id;
   }
   items.forEach(item=>{
     const pill = document.createElement("button");
-    pill.className = "cat-pill bizinfo-pill" + (item.id===selectedBizInfoId ? " active" : "");
+    const isActive = item.id===selectedBizInfoId;
+    pill.className = "cat-pill bizinfo-pill" + (isActive ? " active" : "");
+    // 選択中の業務情報名ピルは、カテゴリの色で縁取りする
+    if(isActive){
+      pill.style.borderColor = selectedCat.color;
+      pill.style.color = selectedCat.color;
+    }
     pill.textContent = item.name || "";
     pill.addEventListener("click", ()=>{
       selectedBizInfoId = item.id;
