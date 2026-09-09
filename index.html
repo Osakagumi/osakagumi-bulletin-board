@@ -3606,18 +3606,15 @@ function renderRuler(){
 }
 
 // 時刻ヘッダー（tl-ruler-outer）と日別行（timeline-wrap）は、縦方向の固定表示を正しく効かせるために
-// 別々のスクロール領域に分かれている。そのため、双方とも「flex:1で自動計算」のままだと、
-// ブラウザがそれぞれ独立に端数（小数点以下）を処理し、時刻マスの位置がわずかにズレることがある。
-// これを完全になくすため、実際に描画された1マス分のピクセル幅を測定し、
-// ヘッダー側・日別行側の全てのマスに同じ幅を直接指定して固定する。
+// 別々のスクロール領域に分かれている。そのため、それぞれの横幅をブラウザが独立に計算し、
+// 端数（小数点以下）の丸め方がわずかにズレて、時刻マスの位置が徐々にズレて見えることがある。
+// 実際に描画された日別行の時刻マス部分の幅を測り、ヘッダー側に強制的に一致させることで解消する。
 function syncTimelineRulerWidth(){
-  const refSlot = document.querySelector(".tl-day-panel-body .slot");
-  if(!refSlot) return;
-  const slotWidth = refSlot.getBoundingClientRect().width;
-  if(slotWidth <= 0) return;
-  const fixedFlex = `0 0 ${slotWidth}px`;
-  document.querySelectorAll("#tl-ruler-ticks .tick").forEach(el=>{ el.style.flex = fixedFlex; });
-  document.querySelectorAll(".tl-day-panel-body .slot").forEach(el=>{ el.style.flex = fixedFlex; });
+  const refBody = document.querySelector(".tl-day-panel-body");
+  const ticksWrap = document.getElementById("tl-ruler-ticks");
+  if(!refBody || !ticksWrap) return;
+  const w = refBody.getBoundingClientRect().width;
+  if(w > 0) ticksWrap.style.width = `${w}px`;
 }
 
 function daysInSelectedMonth(){
