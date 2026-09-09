@@ -1302,8 +1302,10 @@
 
       <!-- ---- 入札情報（Googleドライブ上のExcelファイルを埋め込み表示） ---- -->
       <section id="view-bizinfo" style="display:none;">
-        <div class="cat-row" id="bizinfo-cat-tab-row" style="margin-bottom:10px;"></div>
-        <div class="cat-row" id="bizinfo-pill-row"></div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+          <select id="bizinfo-cat-select" style="width:auto;flex-shrink:0;font-weight:700;"></select>
+          <div class="cat-row" id="bizinfo-pill-row" style="margin:0;"></div>
+        </div>
         <div id="bizinfo-empty" style="color:var(--muted);text-align:center;padding:24px;display:none;">表示できる業務情報がありません。</div>
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
           <p id="bizinfo-note" style="font-size:12px;color:var(--muted);margin:0 0 12px;display:none;">タブまたは情報名ボタンを押すとファイルの再読み込みを行って最新情報を表示します。</p>
@@ -9054,14 +9056,14 @@ function visibleBizInfoItems(){
   return bizInfoItemsAll.filter(item=> item.enabled!==false && !hidden.includes("bizinfo:"+item.id));
 }
 function renderBizInfoTab(){
-  const catRow = document.getElementById("bizinfo-cat-tab-row");
+  const catSelect = document.getElementById("bizinfo-cat-select");
   const row = document.getElementById("bizinfo-pill-row");
   const emptyEl = document.getElementById("bizinfo-empty");
   const noteEl = document.getElementById("bizinfo-note");
   const iframe = document.getElementById("bizinfo-iframe");
   const downloadBtn = document.getElementById("bizinfo-download-btn");
   const allItems = visibleBizInfoItems();
-  catRow.innerHTML = "";
+  catSelect.innerHTML = "";
   row.innerHTML = "";
   if(allItems.length===0){
     emptyEl.style.display = "block";
@@ -9073,28 +9075,27 @@ function renderBizInfoTab(){
   }
   emptyEl.style.display = "none";
 
-  // 実際に表示できる項目が1件以上あるカテゴリだけをタブとして出す（カテゴリ未設定の項目は「未分類」にまとめる）
+  // 実際に表示できる項目が1件以上あるカテゴリだけをプルダウンに出す（カテゴリ未設定の項目は「未分類」にまとめる）
   const categoryIdsInUse = [...new Set(allItems.map(i=> i.category || "uncategorized"))];
-  const catTabs = bizInfoCategoriesAll.filter(c=> categoryIdsInUse.includes(c.id));
+  const catOptions = bizInfoCategoriesAll.filter(c=> categoryIdsInUse.includes(c.id));
   if(categoryIdsInUse.includes("uncategorized")){
-    catTabs.push({ id:"uncategorized", label:"未分類", color:"#9CA3AF" });
+    catOptions.push({ id:"uncategorized", label:"未分類", color:"#9CA3AF" });
   }
-  if(!catTabs.some(c=>c.id===selectedBizInfoCategoryId)){
-    selectedBizInfoCategoryId = catTabs[0]?.id || null;
+  if(!catOptions.some(c=>c.id===selectedBizInfoCategoryId)){
+    selectedBizInfoCategoryId = catOptions[0]?.id || null;
   }
-  catTabs.forEach(c=>{
-    const tab = document.createElement("button");
-    tab.className = "cat-pill" + (c.id===selectedBizInfoCategoryId ? " active" : "");
-    tab.style.color = c.color;
-    tab.innerHTML = `<span class="dot" style="background:${c.color};"></span>${escapeHtml(c.label)}`;
-    tab.addEventListener("click", ()=>{
-      if(selectedBizInfoCategoryId === c.id) return;
-      selectedBizInfoCategoryId = c.id;
-      selectedBizInfoId = null; // カテゴリを切り替えたら、そのカテゴリの先頭を選び直す
-      renderBizInfoTab();
-    });
-    catRow.appendChild(tab);
+  catOptions.forEach(c=>{
+    const opt = document.createElement("option");
+    opt.value = c.id;
+    opt.textContent = c.label;
+    catSelect.appendChild(opt);
   });
+  catSelect.value = selectedBizInfoCategoryId;
+  catSelect.onchange = ()=>{
+    selectedBizInfoCategoryId = catSelect.value;
+    selectedBizInfoId = null; // カテゴリを切り替えたら、そのカテゴリの先頭を選び直す
+    renderBizInfoTab();
+  };
 
   const items = allItems.filter(i=> (i.category || "uncategorized") === selectedBizInfoCategoryId);
   if(items.length===0){
