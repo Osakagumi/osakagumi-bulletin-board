@@ -213,6 +213,12 @@
       width:52px !important;
       min-width:52px;
     }
+    /* 業務情報一覧：ドラッグハンドル列（⠿）も同様に最小限の幅にし、業務情報名列に幅を回す */
+    #bizinfo-table th:first-child,
+    #bizinfo-table td:first-child{
+      min-width:24px;
+      width:24px;
+    }
     /* 「始業時刻」「終業時刻」など、横並びの入力欄が2列だとスマホでは窮屈になり、
        特にtype="time"のようなOS標準の入力コントロールで縦位置がずれて見えることがあるため、
        狭い画面では1列に積んで、各項目をフル幅で表示する。 */
@@ -910,7 +916,7 @@
       <div class="panel">
         <h2>業務情報一覧</h2>
         <button class="btn btn-primary" id="bizinfo-add-btn">追加</button>
-        <table style="margin-top:14px;">
+        <table id="bizinfo-table" style="margin-top:14px;">
           <thead><tr><th></th><th>業務情報名</th><th>カテゴリ</th><th>有効</th><th>DL</th><th>操作</th></tr></thead>
           <tbody id="bizinfo-table-body"></tbody>
         </table>
