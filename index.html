@@ -426,7 +426,7 @@
     white-space:pre-wrap;overflow-wrap:break-word;word-break:normal;
   }
   .chat-bubble-row.chat-mine .chat-bubble{background:var(--brand);color:#fff;border-bottom-right-radius:4px;}
-  .chat-bubble-row:not(.chat-mine) .chat-bubble{background:#fff;border:1px solid var(--line);color:var(--text);border-bottom-left-radius:4px;}
+  .chat-bubble-row:not(.chat-mine) .chat-bubble{background:#1E6B4F;border:1px solid #1E6B4F;color:#fff;border-bottom-left-radius:4px;}
   .chat-bubble-time{font-size:10px;color:var(--muted);margin-top:3px;text-align:right;}
   .chat-bubble-row:not(.chat-mine) .chat-bubble-time{text-align:left;}
   .chat-bubble-read{display:inline-block;font-size:10px;color:var(--brand);margin-left:5px;font-weight:600;}
@@ -9340,10 +9340,13 @@ document.getElementById("chat-new-btn")?.addEventListener("click", async ()=>{
 });
 // メッセージは24時間経過すると自動的に削除される（自分が送った分・受け取った分の両方を、
 // 開いた本人が削除できる権限で処理する。お知らせなどと同じ「誰かが開いたときに実行」方式）
-let chatCleanupChecked = false;
+let chatCleanupLastRun = 0;
 async function cleanupOldChatMessages(){
-  if(chatCleanupChecked) return;
-  chatCleanupChecked = true;
+  const now0 = Date.now();
+  // 5分以内に実行済みなら再実行しない（Firestoreへの読み取りが頻繁になりすぎるのを防ぐため）。
+  // これにより、チャット画面を開きっぱなしにしていても、5分おきに削除対象がないか再確認される。
+  if(now0 - chatCleanupLastRun < 5*60*1000) return;
+  chatCleanupLastRun = now0;
   try{
     const now = Date.now();
     const attachmentCutoff = new Date(now - chatCleanupSettings.imageHours*60*60*1000).toISOString();
@@ -9374,6 +9377,10 @@ async function cleanupOldChatMessages(){
     }
   }catch(e){ console.error("[チャット自動削除エラー]", e); }
 }
+// タブ切り替え時だけでなく、チャット画面を開きっぱなしにしていても削除対象を取りこぼさないよう、
+// 5分ごとに自動チェックする（cleanupOldChatMessages自体が5分間隔でスロットルされているため、
+// この間隔で呼んでも問題ない）
+setInterval(()=>{ if(currentUser) cleanupOldChatMessages(); }, 5*60*1000);
 /* =========================================================
    業務情報（Googleドライブ上のファイルをピル切り替えで表示）
 ========================================================= */
