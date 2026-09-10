@@ -1322,7 +1322,7 @@
           <div class="section-toolbar">
             <button class="btn-primary" id="chat-new-btn">新しいメッセージ</button>
           </div>
-          <p id="chat-cleanup-note" style="font-size:12px;color:var(--muted);margin:-6px 0 12px;">メッセージ（テキスト）は24時間、画像は1時間経過すると自動的に削除されます。</p>
+          <p id="chat-cleanup-note" style="font-size:12px;color:var(--muted);margin:-6px 0 12px;">メッセージ（テキスト）は24時間、画像・ファイルは1時間経過すると自動的に削除されます。</p>
           <div id="chat-conversation-list"></div>
         </div>
         <div id="chat-thread-view" style="display:none;">
@@ -1334,17 +1334,23 @@
             </div>
           </div>
           <div id="chat-messages" class="chat-messages"></div>
-          <div id="chat-pending-image" style="display:none;padding:0 0 8px;">
+          <div id="chat-pending-attachment" style="display:none;padding:0 0 8px;">
             <div style="position:relative;display:inline-block;">
-              <img id="chat-pending-image-thumb" style="max-width:120px;max-height:120px;border-radius:10px;display:block;border:1px solid var(--line);">
-              <button type="button" id="chat-pending-image-remove" title="取り消す" style="position:absolute;top:-8px;right:-8px;width:22px;height:22px;border-radius:50%;background:var(--danger);color:#fff;border:none;cursor:pointer;font-size:13px;line-height:1;">×</button>
+              <img id="chat-pending-attachment-thumb" style="max-width:120px;max-height:120px;border-radius:10px;display:none;border:1px solid var(--line);">
+              <div id="chat-pending-attachment-file" style="display:none;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:#F4F6F9;max-width:260px;">
+                <span style="font-size:22px;">📄</span>
+                <span id="chat-pending-attachment-filename" style="font-size:12.5px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+              </div>
+              <button type="button" id="chat-pending-attachment-remove" title="取り消す" style="position:absolute;top:-8px;right:-8px;width:22px;height:22px;border-radius:50%;background:var(--danger);color:#fff;border:none;cursor:pointer;font-size:13px;line-height:1;">×</button>
             </div>
           </div>
           <div class="chat-input-row">
+            <button type="button" class="btn-ghost" id="chat-attach-btn" title="ファイルを添付" style="border:1px solid var(--line);border-radius:50%;width:38px;height:38px;padding:0;flex-shrink:0;font-size:18px;line-height:1;">＋</button>
+            <input type="file" id="chat-file-input" style="display:none;">
             <textarea id="chat-input" placeholder="メッセージを入力…" maxlength="1000" rows="1"></textarea>
             <button class="btn-primary" id="chat-send-btn">送信</button>
           </div>
-          <p id="chat-cleanup-note-2" style="font-size:11.5px;color:var(--muted);margin:6px 0 0;">メッセージ（テキスト）は24時間、画像は1時間経過すると自動的に削除されます。</p>
+          <p id="chat-cleanup-note-2" style="font-size:11.5px;color:var(--muted);margin:6px 0 0;">メッセージ（テキスト）は24時間、画像・ファイルは1時間経過すると自動的に削除されます。</p>
         </div>
       </section>
     </main>
@@ -1990,6 +1996,7 @@ let chatCurrentConversationId = null;
 let chatCurrentOtherEmail = null;
 let chatCleanupSettings = { imageHours: 1, textHours: 24 }; // app_settings/chat_cleanupから読み込む（未読み込み時はこのデフォルト値）
 let chatCompressSettings = { enabled: true, thresholdKB: 500, maxDim: 1280 }; // 同じドキュメントの圧縮設定
+let chatFileSizeLimitSettings = { enabled: false, limitMB: 10 }; // 同じドキュメントの送信ファイルサイズ上限設定
 function initChatCleanupSettingsListener(){
   onSnapshot(doc(db,"app_settings","chat_cleanup"), snap=>{
     if(snap.exists()){
@@ -2003,12 +2010,16 @@ function initChatCleanupSettingsListener(){
         thresholdKB: data.compressThresholdKB || 500,
         maxDim: data.compressMaxDim || 1280
       };
+      chatFileSizeLimitSettings = {
+        enabled: !!data.fileSizeLimitEnabled, // 未設定時は既定で無効（上限なし）
+        limitMB: data.fileSizeLimitMB || 10
+      };
     }
     updateChatCleanupNote();
   }, (err)=>{ console.error("[チャット削除設定取得エラー]", err); });
 }
 function updateChatCleanupNote(){
-  const text = `メッセージ（テキスト）は${chatCleanupSettings.textHours}時間、画像は${chatCleanupSettings.imageHours}時間経過すると自動的に削除されます。`;
+  const text = `メッセージ（テキスト）は${chatCleanupSettings.textHours}時間、画像・ファイルは${chatCleanupSettings.imageHours}時間経過すると自動的に削除されます。`;
   const noteEl = document.getElementById("chat-cleanup-note");
   const noteEl2 = document.getElementById("chat-cleanup-note-2");
   if(noteEl) noteEl.textContent = text;
@@ -8990,24 +9001,29 @@ function renderChatMessages(msgs){
     row.className = "chat-bubble-row" + (isMine ? " chat-mine" : "");
     const timeLabel = formatChatTime(m.createdAt);
     const readLabel = (isMine && m.read) ? `<div class="chat-bubble-read">既読</div>` : "";
-    const hasImage = !!m.imageUrl;
-    const hasDeletedImage = !hasImage && !!m.imageDeleted;
+    const isAttachmentDeleted = !!m.attachmentDeleted;
+    const hasPreview = !isAttachmentDeleted && !!m.attachmentUrl; // 画像・PDF（Driveのサムネイルで表示できる）
+    const hasGenericFile = !isAttachmentDeleted && !hasPreview && !!m.attachmentFileName; // プレビューできない通常ファイル
     const hasText = !!m.text;
     let bubbleInner = "";
-    if(hasImage){
-      bubbleInner += `<img src="${escapeHtml(m.imageUrl)}" alt="画像" style="max-width:220px;max-height:220px;border-radius:12px;display:block;cursor:pointer;${hasText ? "margin-bottom:6px;" : ""}" onclick="window.open('${escapeHtml(m.imageUrl)}','_blank')">`;
-    } else if(hasDeletedImage){
-      // 画像削除後は、文章ではなくアイコン（画像アイコン風のSVG）で「ここに画像があった」ことを示す
+    if(hasPreview){
+      bubbleInner += `<img src="${escapeHtml(m.attachmentUrl)}" alt="添付" style="max-width:220px;max-height:220px;border-radius:12px;display:block;cursor:pointer;${hasText ? "margin-bottom:6px;" : ""}" onclick="window.open('${escapeHtml(m.attachmentUrl)}','_blank')">`;
+    } else if(hasGenericFile){
+      bubbleInner += `<a href="https://drive.google.com/file/d/${escapeHtml(m.attachmentFileId)}/view" target="_blank" rel="noopener noreferrer" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:10px;background:rgba(0,0,0,0.06);color:inherit;text-decoration:none;max-width:220px;${hasText ? "margin-bottom:6px;" : ""}">
+        <span style="font-size:22px;">📄</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;">${escapeHtml(m.attachmentFileName||"")}</span>
+      </a>`;
+    } else if(isAttachmentDeleted){
+      // 添付削除後は、文章ではなくアイコン（画像アイコン風のSVG）で「ここに添付があった」ことを示す
       bubbleInner += `<div style="width:56px;height:56px;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.06);border-radius:10px;${hasText ? "margin-bottom:6px;" : ""}">
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.5;"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
       </div>`;
     }
     if(hasText){
       bubbleInner += linkifyText(m.text);
-    } else if(!hasImage && !hasDeletedImage){
+    } else if(!hasPreview && !hasGenericFile && !isAttachmentDeleted){
       bubbleInner = linkifyText(m.text||"");
     }
-    const bubbleStyle = ((hasImage || hasDeletedImage) && !hasText) ? ' style="padding:4px;background:transparent;border:none;"' : '';
+    const bubbleStyle = ((hasPreview || hasGenericFile || isAttachmentDeleted) && !hasText) ? ' style="padding:4px;background:transparent;border:none;"' : '';
     row.innerHTML = `
       <div class="chat-bubble-wrap">
         <div class="chat-bubble"${bubbleStyle}>${bubbleInner}</div>
@@ -9049,22 +9065,30 @@ function appendOptimisticChatBubble(text){
   body.appendChild(row);
   body.scrollTop = body.scrollHeight;
 }
-// 画像貼り付け時、アップロード完了（Firestoreへの反映）を待たず、その場で自分の画像を表示する。
-// object URLはブラウザ内だけの一時的なプレビュー用で、実際のメッセージが届き次第
-// renderChatMessages()がGoogleドライブ上の本物の画像に描画し直すので、そのまま残り続けることはない。
-// text（一緒に入力されたメッセージ）があれば、画像の下に添えて表示する。
-function appendOptimisticChatImageBubble(blob, text){
+// 添付（画像・PDF・通常ファイル）貼り付け／選択時、アップロード完了（Firestoreへの反映）を
+// 待たず、その場で自分の吹き出しを表示する。画像はobject URLでプレビューし、
+// PDF・通常ファイルはファイル名のチップで表示する（アップロード完了後、
+// renderChatMessages()が本物のURLに描画し直すので、そのまま残り続けることはない）。
+// text（一緒に入力されたメッセージ）があれば、添付の下に添えて表示する。
+function appendOptimisticChatAttachmentBubble(file, kind, text){
   const body = document.getElementById("chat-messages");
-  const objectUrl = URL.createObjectURL(blob);
   const row = document.createElement("div");
   row.className = "chat-bubble-row chat-mine";
   const timeLabel = formatChatTime(new Date().toISOString());
   const textHtml = text ? `<div style="margin-top:6px;">${escapeHtml(text)}</div>` : "";
+  let attachmentHtml;
+  if(kind === "image"){
+    attachmentHtml = `<img src="${URL.createObjectURL(file)}" alt="画像" style="max-width:220px;max-height:220px;border-radius:12px;display:block;opacity:0.7;">`;
+  } else {
+    attachmentHtml = `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:10px;background:rgba(0,0,0,0.06);max-width:220px;opacity:0.7;">
+      <span style="font-size:22px;">📄</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;">${escapeHtml(file.name)}</span>
+    </div>`;
+  }
   const bubbleStyle = text ? "" : ' style="padding:4px;background:transparent;border:none;"';
   row.innerHTML = `
     <div class="chat-bubble-wrap">
       <div class="chat-bubble"${bubbleStyle}>
-        <img src="${objectUrl}" alt="画像" style="max-width:220px;max-height:220px;border-radius:12px;display:block;opacity:0.7;">
+        ${attachmentHtml}
         ${textHtml}
       </div>
       <div class="chat-bubble-time">${escapeHtml(timeLabel)}（送信中…）</div>
@@ -9074,10 +9098,10 @@ function appendOptimisticChatImageBubble(blob, text){
   body.scrollTop = body.scrollHeight;
   return row; // 失敗時に呼び出し元で取り除けるよう、行の要素を返す
 }
-// チャットに貼り付けられた画像を、送信前に自動でリサイズ・圧縮する
+// チャットに貼り付け・選択された画像を、送信前に自動でリサイズ・圧縮する
 // （スクリーンショットは容量が大きくなりがちで、Googleドライブの空き容量を圧迫しやすいため）。
-// 長辺1280pxを超える場合は縮小し、JPEGとして再エンコードする（画質0.82）。
-// 元がPNGで透過を含む場合、この処理で透過は失われ白背景になる点に注意。
+// 長辺1280pxを超える場合は縮小し、JPEGとして再エンコードする（画質0.82）。画像以外（PDF・
+// 通常ファイル）は圧縮の対象外。元がPNGで透過を含む場合、透過は失われ白背景になる点に注意。
 function compressImageForChat(file){
   return new Promise((resolve)=>{
     const QUALITY = 0.82;
@@ -9119,49 +9143,93 @@ function withTimeout(promise, ms, message){
     new Promise((_, reject)=> setTimeout(()=> reject(new Error(message)), ms))
   ]);
 }
-// 貼り付けられた画像は、その場では送信せず、送信待ちとして入力欄の上にプレビュー表示しておく。
-// 実際に送信されるのは、送信ボタン（またはEnter）を押したタイミングで、その時点の
-// テキスト入力欄の内容と一緒に1つのメッセージとして送られる。
-let pendingChatImageFile = null;
-function setPendingChatImage(file){
-  pendingChatImageFile = file;
-  const wrap = document.getElementById("chat-pending-image");
-  const thumb = document.getElementById("chat-pending-image-thumb");
-  thumb.src = URL.createObjectURL(file);
+// ファイルの種類を判定する（"image" | "pdf" | "file"）
+function chatAttachmentKind(file){
+  if(file.type && file.type.startsWith("image/")) return "image";
+  if(file.type === "application/pdf" || /\.pdf$/i.test(file.name||"")) return "pdf";
+  return "file";
+}
+// 管理画面で設定された上限を超えていないか確認する。超えていればエラーを表示してfalseを返す。
+function checkChatFileSizeLimit(file){
+  if(!chatFileSizeLimitSettings.enabled) return true;
+  const limitBytes = chatFileSizeLimitSettings.limitMB * 1024 * 1024;
+  if(file.size > limitBytes){
+    toast(`ファイルサイズが上限（${chatFileSizeLimitSettings.limitMB}MB）を超えています。`);
+    return false;
+  }
+  return true;
+}
+// 貼り付け・選択された添付（画像・PDF・通常ファイル）は、その場では送信せず、
+// 送信待ちとして入力欄の上にプレビュー表示しておく。実際に送信されるのは、
+// 送信ボタン（またはEnter）を押したタイミングで、その時点のテキスト入力欄の内容と
+// 一緒に1つのメッセージとして送られる。
+let pendingChatAttachment = null; // {file, kind}
+function setPendingChatAttachment(file, kind){
+  pendingChatAttachment = { file, kind };
+  const wrap = document.getElementById("chat-pending-attachment");
+  const thumbEl = document.getElementById("chat-pending-attachment-thumb");
+  const fileEl = document.getElementById("chat-pending-attachment-file");
+  if(kind === "image"){
+    thumbEl.src = URL.createObjectURL(file);
+    thumbEl.style.display = "block";
+    fileEl.style.display = "none";
+  } else {
+    document.getElementById("chat-pending-attachment-filename").textContent = file.name;
+    thumbEl.style.display = "none";
+    fileEl.style.display = "flex";
+  }
   wrap.style.display = "block";
   document.getElementById("chat-input")?.focus();
 }
-function clearPendingChatImage(){
-  pendingChatImageFile = null;
-  document.getElementById("chat-pending-image").style.display = "none";
+function clearPendingChatAttachment(){
+  pendingChatAttachment = null;
+  document.getElementById("chat-pending-attachment").style.display = "none";
 }
-document.getElementById("chat-pending-image-remove")?.addEventListener("click", clearPendingChatImage);
+document.getElementById("chat-pending-attachment-remove")?.addEventListener("click", clearPendingChatAttachment);
+document.getElementById("chat-attach-btn")?.addEventListener("click", ()=>{
+  document.getElementById("chat-file-input").click();
+});
+document.getElementById("chat-file-input")?.addEventListener("change", (e)=>{
+  const file = e.target.files?.[0];
+  e.target.value = ""; // 同じファイルを続けて選び直せるようにする
+  if(!file) return;
+  if(!checkChatFileSizeLimit(file)) return;
+  setPendingChatAttachment(file, chatAttachmentKind(file));
+});
 async function sendChatMessage(){
   const input = document.getElementById("chat-input");
   const text = input.value.trim();
   if(!chatCurrentOtherEmail) return;
-  const imageFile = pendingChatImageFile;
-  if(!text && !imageFile) return; // 何も入力・添付されていなければ送信しない
+  const pending = pendingChatAttachment;
+  if(!text && !pending) return; // 何も入力・添付されていなければ送信しない
   input.value = "";
   input.style.height = "auto";
-  clearPendingChatImage();
+  clearPendingChatAttachment();
 
-  if(imageFile){
-    console.log("[チャット画像送信] 圧縮前サイズ：", imageFile.size, "bytes");
-    const file = await compressImageForChat(imageFile);
-    console.log("[チャット画像送信] 圧縮後サイズ：", file.size, "bytes");
+  if(pending){
+    let file = pending.file;
+    const kind = pending.kind;
+    if(kind === "image"){
+      console.log("[チャット添付送信] 圧縮前サイズ：", file.size, "bytes");
+      file = await compressImageForChat(file);
+      console.log("[チャット添付送信] 圧縮後サイズ：", file.size, "bytes");
+    }
     // Firestoreからの反映を待たず、その場で自分の吹き出しを表示する
-    const optimisticRow = appendOptimisticChatImageBubble(file, text);
+    const optimisticRow = appendOptimisticChatAttachmentBubble(file, kind, text);
     const otherEmp = employeesAll.find(e=>(e.email||"").toLowerCase()===chatCurrentOtherEmail.toLowerCase());
     try{
-      console.log("[チャット画像送信] アップロード開始");
+      console.log("[チャット添付送信] アップロード開始");
       const { path: fileId } = await withTimeout(
         uploadFileToStorage(file, ()=>{}),
         20000,
         "アップロードが20秒以内に完了しませんでした（タイムアウト）"
       );
-      console.log("[チャット画像送信] アップロード完了：", fileId);
-      const imageUrl = `https://drive.google.com/thumbnail?id=${fileId}&sz=w1600`;
+      console.log("[チャット添付送信] アップロード完了：", fileId);
+      // 画像・PDFはGoogleドライブのサムネイル機能でプレビュー画像を表示できる。
+      // それ以外の通常ファイルはプレビューできないため、ファイル名リンクとして表示する。
+      const attachmentUrl = (kind === "image" || kind === "pdf")
+        ? `https://drive.google.com/thumbnail?id=${fileId}&sz=w1600`
+        : "";
       await addDoc(collection(db,"direct_messages"), {
         conversationId: chatCurrentConversationId,
         senderEmail: currentUser.email,
@@ -9169,18 +9237,20 @@ async function sendChatMessage(){
         recipientEmail: chatCurrentOtherEmail,
         recipientName: otherEmp?.name || chatCurrentOtherEmail,
         text,
-        imageUrl,
-        imageFileId: fileId,
+        attachmentUrl,
+        attachmentFileId: fileId,
+        attachmentFileName: file.name,
+        attachmentKind: kind,
         read: false,
         createdAt: new Date().toISOString()
       });
       notifyChatRecipient(chatCurrentOtherEmail, myDisplayName(), currentUser.email);
     }catch(e){
-      console.error("[チャット画像送信エラー]", e);
-      toast(`画像の送信に失敗しました：${e.message || e}`);
+      console.error("[チャット添付送信エラー]", e);
+      toast(`添付ファイルの送信に失敗しました：${e.message || e}`);
       // 「送信中…」のまま残ってしまわないよう、失敗した仮表示を消す
       optimisticRow?.remove();
-      input.value = text; // テキストは入力欄に戻す（画像は失われるため、再度貼り付けが必要）
+      input.value = text; // テキストは入力欄に戻す（添付は失われるため、再度添付し直しが必要）
     }
   } else {
     // 従来通り、テキストのみの送信
@@ -9214,7 +9284,8 @@ document.getElementById("chat-input")?.addEventListener("paste", (e)=>{
       if(!blob) continue;
       const ext = (item.type.split("/")[1]||"png").split("+")[0];
       const file = new File([blob], `chat-image-${Date.now()}.${ext}`, { type: item.type });
-      setPendingChatImage(file);
+      if(!checkChatFileSizeLimit(file)) return;
+      setPendingChatAttachment(file, "image");
       return;
     }
   }
@@ -9267,11 +9338,11 @@ async function cleanupOldChatMessages(){
   chatCleanupChecked = true;
   try{
     const now = Date.now();
-    const imageCutoff = new Date(now - chatCleanupSettings.imageHours*60*60*1000).toISOString();
+    const attachmentCutoff = new Date(now - chatCleanupSettings.imageHours*60*60*1000).toISOString();
     const textCutoff = new Date(now - chatCleanupSettings.textHours*60*60*1000).toISOString();
-    // 「1時間」「24時間」のうち短い方（多くの場合は画像側）より前のものを広めに候補として取得し、
-    // 画像付きかどうかで実際の削除基準（画像だけ消すか、メッセージごと消すか）を分ける
-    const earliestCutoff = imageCutoff < textCutoff ? imageCutoff : textCutoff;
+    // 「1時間」「24時間」のうち短い方（多くの場合は添付側）より前のものを広めに候補として取得し、
+    // 添付付きかどうかで実際の削除基準（添付だけ消すか、メッセージごと消すか）を分ける
+    const earliestCutoff = attachmentCutoff < textCutoff ? attachmentCutoff : textCutoff;
     const myEmail = currentUser.email;
     const [sentOld, receivedOld] = await Promise.all([
       getDocs(query(collection(db,"direct_messages"), where("senderEmail","==",myEmail), where("createdAt","<",earliestCutoff))),
@@ -9280,15 +9351,15 @@ async function cleanupOldChatMessages(){
     const docsById = new Map([...sentOld.docs, ...receivedOld.docs].map(d=>[d.id, d]));
     for(const [id, docSnap] of docsById){
       const data = docSnap.data();
-      if(data.imageFileId && data.createdAt < imageCutoff){
-        // 画像を削除し、メッセージ本文自体は残す（「画像は削除されました」と表示させる）
-        try{ await deleteFileFromStorage(data.imageFileId); }catch(e){ /* 画像削除に失敗しても続行 */ }
+      if(data.attachmentFileId && data.createdAt < attachmentCutoff){
+        // 添付を削除し、メッセージ本文自体は残す（アイコン表示に切り替わる）
+        try{ await deleteFileFromStorage(data.attachmentFileId); }catch(e){ /* 添付削除に失敗しても続行 */ }
         try{
-          await updateDoc(doc(db,"direct_messages", id), { imageUrl: "", imageFileId: "", imageDeleted: true });
+          await updateDoc(doc(db,"direct_messages", id), { attachmentUrl: "", attachmentFileId: "", attachmentFileName: "", attachmentDeleted: true });
         }catch(e){ /* 更新に失敗しても次回また試行される */ }
         continue;
       }
-      // 画像を含まない（または既に画像削除済みの）メッセージは、テキストの削除時間が経過していればメッセージごと削除
+      // 添付を含まない（または既に添付削除済みの）メッセージは、テキストの削除時間が経過していればメッセージごと削除
       if(data.createdAt < textCutoff){
         try{ await deleteDoc(doc(db,"direct_messages", id)); }catch(e){ /* 1件失敗しても続行 */ }
       }

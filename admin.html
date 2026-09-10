@@ -939,11 +939,11 @@
       <div class="panel">
         <h2>チャットの自動削除設定</h2>
         <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-          チャットの画像・メッセージが自動的に削除されるまでの時間を設定します。画像付きメッセージは、指定した時間が経過すると画像だけが削除され（メッセージ本文は残ります）。
+          チャットの画像・ファイル・メッセージが自動的に削除されるまでの時間を設定します。画像・ファイル付きメッセージは、指定した時間が経過すると添付だけが削除され（メッセージ本文は残ります）。
         </p>
         <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px;">
           <div class="field" style="margin:0;">
-            <label>画像を削除するまでの時間（時間）</label>
+            <label>画像・ファイルを削除するまでの時間（時間）</label>
             <input type="number" id="chat-cleanup-image-hours" min="1" style="width:100px;">
           </div>
           <div class="field" style="margin:0;">
@@ -957,7 +957,7 @@
       <div class="panel">
         <h2>チャット画像の自動圧縮設定</h2>
         <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-          チェックを入れると、貼り付けられた画像の容量が指定した値以上の場合に、指定した長辺の大きさまで自動的に縮小・圧縮してから送信します。
+          チェックを入れると、貼り付けられた画像の容量が指定した値以上の場合に、指定した長辺の大きさまで自動的に縮小・圧縮してから送信します。画像以外のファイルは圧縮の対象外です。
         </p>
         <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
           <label style="display:flex;align-items:center;gap:6px;font-size:13px;">
@@ -988,6 +988,31 @@
           <button class="btn btn-primary" id="chat-compress-save-btn">保存</button>
         </div>
         <div id="chat-compress-save-msg" style="font-size:12.5px;color:var(--muted);"></div>
+      </div>
+      <div class="panel">
+        <h2>送信ファイルサイズの上限設定</h2>
+        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
+          チェックを入れると、チャットに添付できる画像・ファイルの容量に上限を設けます。上限を超えるファイルは、エラーメッセージを表示して送信を受け付けません。
+        </p>
+        <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;">
+            <input type="checkbox" id="chat-filesize-limit-enabled" style="width:auto;">
+            上限を設定する
+          </label>
+          <div class="field" style="margin:0;">
+            <label>上限の容量</label>
+            <select id="chat-filesize-limit-mb" style="width:140px;">
+              <option value="1">1MB</option>
+              <option value="2">2MB</option>
+              <option value="5">5MB</option>
+              <option value="10">10MB</option>
+              <option value="20">20MB</option>
+              <option value="50">50MB</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" id="chat-filesize-limit-save-btn">保存</button>
+        </div>
+        <div id="chat-filesize-limit-save-msg" style="font-size:12.5px;color:var(--muted);"></div>
       </div>
     </section>
 
@@ -3189,6 +3214,11 @@ function initChatCleanupSettingsListener(){
     if(compressThresholdInput) compressThresholdInput.value = data.compressThresholdKB ?? 500;
     if(compressMaxDimInput) compressMaxDimInput.value = data.compressMaxDim ?? 1280;
     updateChatCompressFieldsDisabled();
+    const fileSizeLimitEnabledInput = document.getElementById("chat-filesize-limit-enabled");
+    const fileSizeLimitMbInput = document.getElementById("chat-filesize-limit-mb");
+    if(fileSizeLimitEnabledInput) fileSizeLimitEnabledInput.checked = !!data.fileSizeLimitEnabled; // 未設定時は既定で無効（上限なし）
+    if(fileSizeLimitMbInput) fileSizeLimitMbInput.value = data.fileSizeLimitMB ?? 10;
+    updateChatFileSizeLimitFieldDisabled();
   }, (err)=>{ console.error("[チャット削除設定取得エラー]", err); });
 }
 // 圧縮が無効のときは、閾値・圧縮後サイズのプルダウンをグレーアウトする
@@ -3230,6 +3260,26 @@ document.getElementById("chat-compress-save-btn")?.addEventListener("click", asy
   const compressMaxDim = Number(document.getElementById("chat-compress-maxdim").value);
   try{
     await setDoc(doc(db,"app_settings","chat_cleanup"), { compressEnabled, compressThresholdKB, compressMaxDim }, { merge:true });
+    msgEl.textContent = "保存しました。";
+    msgEl.style.color = "var(--muted)";
+  }catch(e){
+    msgEl.textContent = "保存に失敗しました。権限をご確認ください。";
+    msgEl.style.color = "var(--danger)";
+  }
+});
+// 上限が無効のときは、容量のプルダウンをグレーアウトする
+function updateChatFileSizeLimitFieldDisabled(){
+  const enabled = document.getElementById("chat-filesize-limit-enabled")?.checked;
+  const mbInput = document.getElementById("chat-filesize-limit-mb");
+  if(mbInput) mbInput.disabled = !enabled;
+}
+document.getElementById("chat-filesize-limit-enabled")?.addEventListener("change", updateChatFileSizeLimitFieldDisabled);
+document.getElementById("chat-filesize-limit-save-btn")?.addEventListener("click", async ()=>{
+  const msgEl = document.getElementById("chat-filesize-limit-save-msg");
+  const fileSizeLimitEnabled = document.getElementById("chat-filesize-limit-enabled").checked;
+  const fileSizeLimitMB = Number(document.getElementById("chat-filesize-limit-mb").value);
+  try{
+    await setDoc(doc(db,"app_settings","chat_cleanup"), { fileSizeLimitEnabled, fileSizeLimitMB }, { merge:true });
     msgEl.textContent = "保存しました。";
     msgEl.style.color = "var(--muted)";
   }catch(e){
