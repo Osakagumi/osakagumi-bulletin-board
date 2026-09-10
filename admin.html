@@ -954,6 +954,41 @@
         </div>
         <div id="chat-cleanup-save-msg" style="font-size:12.5px;color:var(--muted);"></div>
       </div>
+      <div class="panel">
+        <h2>チャット画像の自動圧縮設定</h2>
+        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
+          チェックを入れると、貼り付けられた画像の容量が指定した値以上の場合に、指定した長辺の大きさまで自動的に縮小・圧縮してから送信します（Googleドライブの容量節約のため）。チェックを外すと、圧縮せずそのまま送信します。
+        </p>
+        <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;">
+            <input type="checkbox" id="chat-compress-enabled" style="width:auto;">
+            圧縮を有効にする
+          </label>
+          <div class="field" style="margin:0;">
+            <label>容量がこの値以上の場合に圧縮する</label>
+            <select id="chat-compress-threshold" style="width:140px;">
+              <option value="200">200KB</option>
+              <option value="500">500KB</option>
+              <option value="1024">1MB</option>
+              <option value="2048">2MB</option>
+              <option value="5120">5MB</option>
+            </select>
+          </div>
+          <div class="field" style="margin:0;">
+            <label>圧縮後の長辺の大きさ</label>
+            <select id="chat-compress-maxdim" style="width:140px;">
+              <option value="800">800px</option>
+              <option value="1024">1024px</option>
+              <option value="1280">1280px</option>
+              <option value="1600">1600px</option>
+              <option value="1920">1920px</option>
+              <option value="2560">2560px</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" id="chat-compress-save-btn">保存</button>
+        </div>
+        <div id="chat-compress-save-msg" style="font-size:12.5px;color:var(--muted);"></div>
+      </div>
     </section>
 
     <!-- ============ システム管理 ============ -->
@@ -3146,6 +3181,12 @@ function initChatCleanupSettingsListener(){
     const textHoursInput = document.getElementById("chat-cleanup-text-hours");
     if(imageHoursInput) imageHoursInput.value = data.imageHours ?? 1;
     if(textHoursInput) textHoursInput.value = data.textHours ?? 24;
+    const compressEnabledInput = document.getElementById("chat-compress-enabled");
+    const compressThresholdInput = document.getElementById("chat-compress-threshold");
+    const compressMaxDimInput = document.getElementById("chat-compress-maxdim");
+    if(compressEnabledInput) compressEnabledInput.checked = data.compressEnabled !== false; // 未設定時は既定で有効
+    if(compressThresholdInput) compressThresholdInput.value = data.compressThresholdKB ?? 500;
+    if(compressMaxDimInput) compressMaxDimInput.value = data.compressMaxDim ?? 1280;
   }, (err)=>{ console.error("[チャット削除設定取得エラー]", err); });
 }
 document.getElementById("chat-cleanup-save-btn")?.addEventListener("click", async ()=>{
@@ -3164,6 +3205,20 @@ document.getElementById("chat-cleanup-save-btn")?.addEventListener("click", asyn
   }
   try{
     await setDoc(doc(db,"app_settings","chat_cleanup"), { imageHours, textHours }, { merge:true });
+    msgEl.textContent = "保存しました。";
+    msgEl.style.color = "var(--muted)";
+  }catch(e){
+    msgEl.textContent = "保存に失敗しました。権限をご確認ください。";
+    msgEl.style.color = "var(--danger)";
+  }
+});
+document.getElementById("chat-compress-save-btn")?.addEventListener("click", async ()=>{
+  const msgEl = document.getElementById("chat-compress-save-msg");
+  const compressEnabled = document.getElementById("chat-compress-enabled").checked;
+  const compressThresholdKB = Number(document.getElementById("chat-compress-threshold").value);
+  const compressMaxDim = Number(document.getElementById("chat-compress-maxdim").value);
+  try{
+    await setDoc(doc(db,"app_settings","chat_cleanup"), { compressEnabled, compressThresholdKB, compressMaxDim }, { merge:true });
     msgEl.textContent = "保存しました。";
     msgEl.style.color = "var(--muted)";
   }catch(e){

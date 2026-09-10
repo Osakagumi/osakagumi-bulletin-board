@@ -430,8 +430,12 @@
   .chat-bubble-time{font-size:10px;color:var(--muted);margin-top:3px;text-align:right;}
   .chat-bubble-row:not(.chat-mine) .chat-bubble-time{text-align:left;}
   .chat-bubble-read{display:inline-block;font-size:10px;color:var(--brand);margin-left:5px;font-weight:600;}
-  .chat-input-row{display:flex;gap:8px;margin-top:10px;}
+  .chat-input-row{display:flex;gap:8px;margin-top:10px;align-items:flex-end;}
   .chat-input-row input{flex:1;padding:10px 14px;border:1px solid var(--line);border-radius:20px;font-size:13.5px;}
+  .chat-input-row textarea{
+    flex:1;padding:10px 14px;border:1px solid var(--line);border-radius:18px;font-size:13.5px;
+    font-family:inherit;resize:none;max-height:120px;overflow-y:auto;line-height:1.4;
+  }
   .chat-input-row button{border-radius:20px;padding:10px 20px;}
   .contract-period{display:inline-flex;align-items:center;flex-wrap:wrap;gap:2px;}
   .contract-inline-field{cursor:pointer;padding:1px 4px;border-radius:4px;}
@@ -1331,7 +1335,7 @@
           </div>
           <div id="chat-messages" class="chat-messages"></div>
           <div class="chat-input-row">
-            <input type="text" id="chat-input" placeholder="メッセージを入力…" maxlength="1000">
+            <textarea id="chat-input" placeholder="メッセージを入力…" maxlength="1000" rows="1"></textarea>
             <button class="btn-primary" id="chat-send-btn">送信</button>
           </div>
         </div>
@@ -1974,6 +1978,7 @@ let chatConversations = []; // [{conversationId, otherEmail, otherName, lastText
 let chatCurrentConversationId = null;
 let chatCurrentOtherEmail = null;
 let chatCleanupSettings = { imageHours: 1, textHours: 24 }; // app_settings/chat_cleanupから読み込む（未読み込み時はこのデフォルト値）
+let chatCompressSettings = { enabled: true, thresholdKB: 500, maxDim: 1280 }; // 同じドキュメントの圧縮設定
 function initChatCleanupSettingsListener(){
   onSnapshot(doc(db,"app_settings","chat_cleanup"), snap=>{
     if(snap.exists()){
@@ -1981,6 +1986,11 @@ function initChatCleanupSettingsListener(){
       chatCleanupSettings = {
         imageHours: data.imageHours || 1,
         textHours: data.textHours || 24
+      };
+      chatCompressSettings = {
+        enabled: data.compressEnabled !== false, // 未設定時は既定で有効
+        thresholdKB: data.compressThresholdKB || 500,
+        maxDim: data.compressMaxDim || 1280
       };
     }
     updateChatCleanupNote();
@@ -9035,8 +9045,13 @@ function appendOptimisticChatImageBubble(blob){
 // 元がPNGで透過を含む場合、この処理で透過は失われ白背景になる点に注意。
 function compressImageForChat(file){
   return new Promise((resolve)=>{
-    const MAX_DIM = 1280;
     const QUALITY = 0.82;
+    // 圧縮が無効、または容量が設定した閾値未満なら、圧縮せずそのまま送る
+    if(!chatCompressSettings.enabled || file.size < chatCompressSettings.thresholdKB*1024){
+      resolve(file);
+      return;
+    }
+    const MAX_DIM = chatCompressSettings.maxDim;
     const objectUrl = URL.createObjectURL(file);
     const img = new Image();
     img.onload = ()=>{
@@ -9066,6 +9081,7 @@ async function sendChatMessage(){
   const text = input.value.trim();
   if(!text || !chatCurrentOtherEmail) return;
   input.value = "";
+  input.style.height = "auto";
   // Firestoreからの反映を待たず、その場で自分の吹き出しを表示する
   // （実際のデータが届き次第、renderChatMessages() が正しい内容で描画し直すので二重表示にはならない）
   appendOptimisticChatBubble(text);
@@ -9112,6 +9128,7 @@ async function sendChatImage(rawFile){
     });
     notifyChatRecipient(chatCurrentOtherEmail, myDisplayName(), currentUser.email);
   }catch(e){
+    console.error("[チャット画像送信エラー]", e);
     toast("画像の送信に失敗しました。");
   }
 }
@@ -9155,6 +9172,12 @@ function notifyChatRecipient(recipientEmail, senderName, senderEmail){
 document.getElementById("chat-send-btn")?.addEventListener("click", sendChatMessage);
 document.getElementById("chat-input")?.addEventListener("keydown", (e)=>{
   if(e.key==="Enter" && !e.shiftKey){ e.preventDefault(); sendChatMessage(); }
+});
+// 入力内容に応じて、textareaの高さを自動的に伸縮させる（最大高さはCSSのmax-heightで制限）
+document.getElementById("chat-input")?.addEventListener("input", (e)=>{
+  const el = e.target;
+  el.style.height = "auto";
+  el.style.height = `${el.scrollHeight}px`;
 });
 document.getElementById("chat-new-btn")?.addEventListener("click", async ()=>{
   const emp = await openEmployeePicker();
