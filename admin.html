@@ -939,7 +939,7 @@
       <div class="panel">
         <h2>チャットの自動削除設定</h2>
         <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-          チャットの画像・メッセージが自動的に削除されるまでの時間を設定します。画像付きメッセージは、指定した時間が経過すると画像だけが削除され（メッセージ本文は残ります）、テキストのみのメッセージ（画像が削除された後のものを含む）は、指定した時間が経過すると本文ごと削除されます。
+          チャットの画像・メッセージが自動的に削除されるまでの時間を設定します。画像付きメッセージは、指定した時間が経過すると画像だけが削除され（メッセージ本文は残ります）。
         </p>
         <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px;">
           <div class="field" style="margin:0;">
@@ -957,7 +957,7 @@
       <div class="panel">
         <h2>チャット画像の自動圧縮設定</h2>
         <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-          チェックを入れると、貼り付けられた画像の容量が指定した値以上の場合に、指定した長辺の大きさまで自動的に縮小・圧縮してから送信します（Googleドライブの容量節約のため）。チェックを外すと、圧縮せずそのまま送信します。
+          チェックを入れると、貼り付けられた画像の容量が指定した値以上の場合に、指定した長辺の大きさまで自動的に縮小・圧縮してから送信します。
         </p>
         <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
           <label style="display:flex;align-items:center;gap:6px;font-size:13px;">
@@ -3188,8 +3188,18 @@ function initChatCleanupSettingsListener(){
     if(compressEnabledInput) compressEnabledInput.checked = data.compressEnabled !== false; // 未設定時は既定で有効
     if(compressThresholdInput) compressThresholdInput.value = data.compressThresholdKB ?? 500;
     if(compressMaxDimInput) compressMaxDimInput.value = data.compressMaxDim ?? 1280;
+    updateChatCompressFieldsDisabled();
   }, (err)=>{ console.error("[チャット削除設定取得エラー]", err); });
 }
+// 圧縮が無効のときは、閾値・圧縮後サイズのプルダウンをグレーアウトする
+function updateChatCompressFieldsDisabled(){
+  const enabled = document.getElementById("chat-compress-enabled")?.checked;
+  const thresholdInput = document.getElementById("chat-compress-threshold");
+  const maxDimInput = document.getElementById("chat-compress-maxdim");
+  if(thresholdInput) thresholdInput.disabled = !enabled;
+  if(maxDimInput) maxDimInput.disabled = !enabled;
+}
+document.getElementById("chat-compress-enabled")?.addEventListener("change", updateChatCompressFieldsDisabled);
 document.getElementById("chat-cleanup-save-btn")?.addEventListener("click", async ()=>{
   const msgEl = document.getElementById("chat-cleanup-save-msg");
   const imageHours = Number(document.getElementById("chat-cleanup-image-hours").value);

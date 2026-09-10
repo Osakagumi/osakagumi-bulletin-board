@@ -1344,6 +1344,7 @@
             <textarea id="chat-input" placeholder="メッセージを入力…" maxlength="1000" rows="1"></textarea>
             <button class="btn-primary" id="chat-send-btn">送信</button>
           </div>
+          <p id="chat-cleanup-note-2" style="font-size:11.5px;color:var(--muted);margin:6px 0 0;">メッセージ（テキスト）は24時間、画像は1時間経過すると自動的に削除されます。</p>
         </div>
       </section>
     </main>
@@ -2003,8 +2004,11 @@ function initChatCleanupSettingsListener(){
   }, (err)=>{ console.error("[チャット削除設定取得エラー]", err); });
 }
 function updateChatCleanupNote(){
+  const text = `メッセージ（テキスト）は${chatCleanupSettings.textHours}時間、画像は${chatCleanupSettings.imageHours}時間経過すると自動的に削除されます。`;
   const noteEl = document.getElementById("chat-cleanup-note");
-  if(noteEl) noteEl.textContent = `メッセージ（テキスト）は${chatCleanupSettings.textHours}時間、画像は${chatCleanupSettings.imageHours}時間経過すると自動的に削除されます。`;
+  const noteEl2 = document.getElementById("chat-cleanup-note-2");
+  if(noteEl) noteEl.textContent = text;
+  if(noteEl2) noteEl2.textContent = text;
 }
 let chatCurrentOtherName = null;
 let chatLastLeftAt = 0;
@@ -4700,6 +4704,7 @@ document.getElementById("notice-submit").addEventListener("click", async ()=>{
         title, body, attachmentUrl, attachmentStoragePath, attachmentFileName, targetDepartments,
         excludedEmails: noticeExcludedEmails,
         neverAutoDelete,
+        createdAt: Timestamp.now(), // 編集（添付差し替え含む）のたびに投稿日時を更新し、一覧の表示順にも反映させる
         updatedAt: Timestamp.now()
       });
       // 添付が別のものに差し替わった／削除された場合は、以前のファイルをドライブから完全削除する
