@@ -9038,6 +9038,7 @@ function appendOptimisticChatImageBubble(blob){
   `;
   body.appendChild(row);
   body.scrollTop = body.scrollHeight;
+  return row; // 失敗時に呼び出し元で取り除けるよう、行の要素を返す
 }
 // チャットに貼り付けられた画像を、送信前に自動でリサイズ・圧縮する
 // （スクリーンショットは容量が大きくなりがちで、Googleドライブの空き容量を圧迫しやすいため）。
@@ -9106,12 +9107,28 @@ async function sendChatMessage(){
 // クリップボードから貼り付けられた画像（スクリーンショット等）を、圧縮した上でGoogleドライブへ
 // アップロードし、通常のメッセージと同じ会話に画像付きメッセージとして送信する。
 // お知らせ添付・業務情報と同じ「閲覧のみ」の共有設定を使う（storage-helper.jsのeditable省略時のデフォルト）。
+// 指定時間内にpromiseが完了しなければ、タイムアウトエラーとして扱う
+// （通信が無反応のまま固まり続けるのを防ぎ、必ず何らかの結果が出るようにするため）
+function withTimeout(promise, ms, message){
+  return Promise.race([
+    promise,
+    new Promise((_, reject)=> setTimeout(()=> reject(new Error(message)), ms))
+  ]);
+}
 async function sendChatImage(rawFile){
   if(!chatCurrentOtherEmail) return;
+  console.log("[チャット画像送信] 圧縮前サイズ：", rawFile.size, "bytes");
   const file = await compressImageForChat(rawFile);
-  appendOptimisticChatImageBubble(file);
+  console.log("[チャット画像送信] 圧縮後サイズ：", file.size, "bytes");
+  const optimisticRow = appendOptimisticChatImageBubble(file);
   try{
-    const { path: fileId, webViewLink } = await uploadFileToStorage(file, ()=>{});
+    console.log("[チャット画像送信] アップロード開始");
+    const { path: fileId, webViewLink } = await withTimeout(
+      uploadFileToStorage(file, ()=>{}),
+      20000,
+      "アップロードが20秒以内に完了しませんでした（タイムアウト）"
+    );
+    console.log("[チャット画像送信] アップロード完了：", fileId);
     const imageUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
     const otherEmp = employeesAll.find(e=>(e.email||"").toLowerCase()===chatCurrentOtherEmail.toLowerCase());
     await addDoc(collection(db,"direct_messages"), {
@@ -9129,7 +9146,9 @@ async function sendChatImage(rawFile){
     notifyChatRecipient(chatCurrentOtherEmail, myDisplayName(), currentUser.email);
   }catch(e){
     console.error("[チャット画像送信エラー]", e);
-    toast("画像の送信に失敗しました。");
+    toast(`画像の送信に失敗しました：${e.message || e}`);
+    // 「送信中…」のまま残ってしまわないよう、失敗した仮表示を消す
+    optimisticRow?.remove();
   }
 }
 document.getElementById("chat-input")?.addEventListener("paste", (e)=>{

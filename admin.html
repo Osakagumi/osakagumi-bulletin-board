@@ -1660,7 +1660,7 @@ onAuthStateChanged(auth, async (user)=>{
 });
 
 /* ---------- tabs ---------- */
-const ADMIN_VIEWS = ["equipment","reservations","userimport","notices","whereabouts","calendar","contracts","bizinfo","systemsettings"];
+const ADMIN_VIEWS = ["equipment","reservations","userimport","notices","whereabouts","calendar","contracts","bizinfo","chatsettings","systemsettings"];
 /* ---------- 保存先の空き容量 ---------- */
 function formatBytesGB(bytes){
   return (bytes / (1024*1024*1024)).toFixed(2);
@@ -2929,6 +2929,7 @@ const ADMIN_TAB_ORDER_DEFS = [
   { id:"calendar", label:"カレンダー管理" },
   { id:"contracts", label:"入札管理" },
   { id:"bizinfo", label:"業務情報管理" },
+  { id:"chatsettings", label:"チャット管理" },
   { id:"systemsettings", label:"システム管理" }
 ];
 
