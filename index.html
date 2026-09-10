@@ -2704,6 +2704,16 @@ function switchToTab(viewName){
     if(el) el.style.display = (name===viewName) ? "block":"none";
   });
   applyMainWidthForCurrentTab();
+  // 業務情報タブでは、スマホでのピンチイン・ピンチアウトによる拡大縮小を使えるようにする
+  // （それ以外のタブでは、誤操作での拡大を防ぐため従来通り無効のまま）
+  const viewportMeta = document.querySelector('meta[name="viewport"]');
+  if(viewportMeta){
+    viewportMeta.setAttribute("content",
+      viewName==="bizinfo"
+        ? "width=device-width, initial-scale=1.0, maximum-scale=5.0"
+        : "width=device-width, initial-scale=1.0, maximum-scale=1.0"
+    );
+  }
   if(viewName==="whereabouts"){
     try{ renderWhereabouts(); }catch(e){ console.error("[行き先の表示エラー]", e); }
   }
