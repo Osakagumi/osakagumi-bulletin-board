@@ -4659,7 +4659,7 @@ document.getElementById("notice-remove-attachment-btn")?.addEventListener("click
 });
 document.getElementById("notice-cancel").addEventListener("click", ()=> noticeModal.classList.remove("show"));
 document.getElementById("notice-submit").addEventListener("click", async ()=>{
-  const title = document.getElementById("notice-title").value.trim();
+  let title = document.getElementById("notice-title").value.trim();
   const body = document.getElementById("notice-body").value.trim();
   let attachmentUrl, attachmentStoragePath, attachmentFileName;
   if(pendingNoticeUpload){
@@ -4682,6 +4682,11 @@ document.getElementById("notice-submit").addEventListener("click", async ()=>{
   const errEl = document.getElementById("notice-error");
   const statusEl = document.getElementById("notice-send-status");
   if(!title){ errEl.textContent = "タイトルを入力してください。"; return; }
+  // 編集して保存したことが一覧でひと目で分かるよう、タイトル先頭に「[更新] 」を付ける。
+  // 何度も編集して保存し直しても、二重に付かないようにする。
+  if(editingNoticeId && !title.startsWith("[更新] ")){
+    title = "[更新] " + title;
+  }
   if(attachmentUploadFailed){
     errEl.textContent = "添付ファイルのアップロードに失敗した状態です。もう一度アップロードするか、ファイルを外した状態で投稿してください。";
     return;
