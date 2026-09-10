@@ -9015,15 +9015,15 @@ function renderChatMessages(msgs){
     const hasText = !!m.text;
     let bubbleInner = "";
     if(hasPreview){
-      bubbleInner += `<img src="${escapeHtml(m.attachmentUrl)}" alt="添付" style="max-width:220px;max-height:220px;border-radius:12px;display:block;cursor:pointer;${hasText ? "margin-bottom:6px;" : ""}" onclick="window.open('${escapeHtml(m.attachmentUrl)}','_blank')">`;
+      bubbleInner += `<img src="${escapeHtml(m.attachmentUrl)}" alt="添付" style="max-width:200px;max-height:200px;border-radius:8px;display:block;cursor:pointer;${hasText ? "margin-bottom:6px;" : ""}" onclick="window.open('${escapeHtml(m.attachmentUrl)}','_blank')">`;
     } else if(hasGenericFile){
-      bubbleInner += `<a href="https://drive.google.com/uc?export=download&id=${escapeHtml(m.attachmentFileId)}" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:10px;background:rgba(0,0,0,0.06);color:inherit;text-decoration:none;max-width:220px;${hasText ? "margin-bottom:6px;" : ""}">
-        <span style="font-size:22px;">📄</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;">${escapeHtml(m.attachmentFileName||"")}</span>
+      bubbleInner += `<a href="https://drive.google.com/uc?export=download&id=${escapeHtml(m.attachmentFileId)}" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;background:rgba(0,0,0,0.08);color:inherit;text-decoration:none;max-width:200px;${hasText ? "margin-bottom:6px;" : ""}">
+        <span style="font-size:20px;flex-shrink:0;">📄</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;">${escapeHtml(m.attachmentFileName||"")}</span>
       </a>`;
     } else if(isAttachmentDeleted){
       // 添付削除後は、文章ではなくアイコン（画像アイコン風のSVG）で「ここに添付があった」ことを示す
-      bubbleInner += `<div style="width:56px;height:56px;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.06);border-radius:10px;${hasText ? "margin-bottom:6px;" : ""}">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.5;"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+      bubbleInner += `<div style="width:48px;height:48px;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.08);border-radius:8px;${hasText ? "margin-bottom:6px;" : ""}">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.5;"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
       </div>`;
     }
     if(hasText){
@@ -9031,10 +9031,11 @@ function renderChatMessages(msgs){
     } else if(!hasPreview && !hasGenericFile && !isAttachmentDeleted){
       bubbleInner = linkifyText(m.text||"");
     }
-    const bubbleStyle = ((hasPreview || hasGenericFile || isAttachmentDeleted) && !hasText) ? ' style="padding:4px;background:transparent;border:none;"' : '';
+    // 添付があってもテキストが無くても、常に通常の吹き出しスタイル（背景・枠線）を使う。
+    // サムネイル・アイコン側の最大サイズを吹き出しの内側に収まる大きさにして、枠がきちんと見えるようにする。
     row.innerHTML = `
       <div class="chat-bubble-wrap">
-        <div class="chat-bubble"${bubbleStyle}>${bubbleInner}</div>
+        <div class="chat-bubble">${bubbleInner}</div>
         <div class="chat-bubble-time">${escapeHtml(timeLabel)}${readLabel}</div>
       </div>
     `;
@@ -9086,16 +9087,15 @@ function appendOptimisticChatAttachmentBubble(file, kind, text){
   const textHtml = text ? `<div style="margin-top:6px;">${escapeHtml(text)}</div>` : "";
   let attachmentHtml;
   if(kind === "image"){
-    attachmentHtml = `<img src="${URL.createObjectURL(file)}" alt="画像" style="max-width:220px;max-height:220px;border-radius:12px;display:block;opacity:0.7;">`;
+    attachmentHtml = `<img src="${URL.createObjectURL(file)}" alt="画像" style="max-width:200px;max-height:200px;border-radius:8px;display:block;opacity:0.7;">`;
   } else {
-    attachmentHtml = `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:10px;background:rgba(0,0,0,0.06);max-width:220px;opacity:0.7;">
-      <span style="font-size:22px;">📄</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;">${escapeHtml(file.name)}</span>
+    attachmentHtml = `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;background:rgba(0,0,0,0.08);max-width:200px;opacity:0.7;">
+      <span style="font-size:20px;flex-shrink:0;">📄</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;">${escapeHtml(file.name)}</span>
     </div>`;
   }
-  const bubbleStyle = text ? "" : ' style="padding:4px;background:transparent;border:none;"';
   row.innerHTML = `
     <div class="chat-bubble-wrap">
-      <div class="chat-bubble"${bubbleStyle}>
+      <div class="chat-bubble">
         ${attachmentHtml}
         ${textHtml}
       </div>
