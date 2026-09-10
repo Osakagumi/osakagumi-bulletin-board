@@ -746,7 +746,7 @@
     overflow-x:auto; overflow-y:hidden;
   }
   .wb-board.wb-board-fit .wb-board-col{ flex:0 0 auto; display:flex; flex-direction:column; }
-  .wb-board.wb-board-fit .col-body{ overflow:hidden; }
+  .wb-board.wb-board-fit .col-body{ overflow-x:auto; overflow-y:hidden; }
   .wb-board.wb-board-fit .col-head{ white-space:nowrap; overflow:hidden; }
   .wb-board-col{background:var(--surface);border:1.5px solid var(--line);border-radius:10px;overflow:hidden;}
   .wb-board-col .col-head{padding:9px 8px;font-size:var(--wb-font-size);font-weight:700;color:#fff;text-align:center;overflow-wrap:break-word;}
@@ -5646,10 +5646,6 @@ function renderWbBoard(){
   if(!board) return;
   board.innerHTML = "";
   const list = getSortedEmployees();
-  // ▼一時的な診断ログ（運輸部が行き先別に出てこない件の調査用。原因判明後に削除すること）
-  console.log("[行き先別デバッグ] 全社員の部署・実効ステータス一覧：",
-    list.map(e=>({ 氏名:e.name, 部署:empDepartments(e).join("・"), 実効ステータス:getEffectiveWbStatus(e), 生status:e.status, hidden:!!e.hidden }))
-  );
   const columns = wbStatusesAll.slice();
   columns.push({ id: "__unset__", name: "未設定", color: "#9CA3AF" });
 
