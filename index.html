@@ -3337,6 +3337,19 @@ function escapeHtml(s){
   return String(s??"").replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+// テキスト中のURL（http/https）を、クリックできるリンクに変換する。
+// 先にescapeHtmlしてからURL部分だけ<a>タグに置き換えるため、URL以外の部分はそのまま安全に表示される。
+function linkifyText(s){
+  const escaped = escapeHtml(s);
+  return escaped.replace(/(https?:\/\/[^\s<]+)/g, (url)=>{
+    // 文末の句読点・括弧などがURLに巻き込まれるのを防ぐ
+    const trailingMatch = url.match(/[)\.,、。」』]+$/);
+    const trailing = trailingMatch ? trailingMatch[0] : "";
+    const core = trailing ? url.slice(0, -trailing.length) : url;
+    return `<a href="${core}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:underline;">${core}</a>${trailing}`;
+  });
+}
+
 /* ---------- 共通カレンダーポップアップ ---------- */
 let calendarPopupEl = null;
 function closeCalendarPopup(){
@@ -8930,7 +8943,7 @@ function renderChatMessages(msgs){
     const readLabel = (isMine && m.read) ? `<div class="chat-bubble-read">既読</div>` : "";
     row.innerHTML = `
       <div class="chat-bubble-wrap">
-        <div class="chat-bubble">${escapeHtml(m.text||"")}</div>
+        <div class="chat-bubble">${linkifyText(m.text||"")}</div>
         <div class="chat-bubble-time">${escapeHtml(timeLabel)}${readLabel}</div>
       </div>
     `;
