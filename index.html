@@ -1471,6 +1471,10 @@
           <input type="checkbox" id="notice-never-auto-delete" style="width:auto;">
           <label style="margin:0;font-size:12.5px;color:var(--text);">永続的なお知らせ</label>
         </div>
+        <div id="notice-reset-read-row" style="display:flex;align-items:center;gap:6px;margin-top:8px;">
+          <input type="checkbox" id="notice-reset-read" checked style="width:auto;">
+          <label style="margin:0;font-size:12.5px;color:var(--text);">全て未読に戻す</label>
+        </div>
       </div>
       <div class="field" id="notice-attach-field">
         <label>添付ファイル（任意）</label>
@@ -4575,6 +4579,8 @@ document.getElementById("notice-new-btn").addEventListener("click", ()=>{
   noticeExcludedEmails = [];
   renderNoticeExcludedChips();
   document.getElementById("notice-never-auto-delete").checked = false;
+  document.getElementById("notice-reset-read").checked = false;
+  document.getElementById("notice-reset-read").disabled = true; // 新規投稿には「既読」の概念がまだ無いため無効化
   originalAttachmentUrl = null;
   originalAttachmentFileName = null;
   removeExistingNoticeAttachment = false;
@@ -4607,6 +4613,8 @@ function openNoticeEditModal(n){
   noticeExcludedEmails = Array.isArray(n.excludedEmails) ? [...n.excludedEmails] : [];
   renderNoticeExcludedChips();
   document.getElementById("notice-never-auto-delete").checked = !!n.neverAutoDelete;
+  document.getElementById("notice-reset-read").disabled = false;
+  document.getElementById("notice-reset-read").checked = true; // 編集時はデフォルトON
   document.getElementById("notice-dropzone-hint").textContent = "";
   resetNoticeDropzone();
   const existingRow = document.getElementById("notice-existing-attachment-row");
@@ -4700,12 +4708,14 @@ document.getElementById("notice-submit").addEventListener("click", async ()=>{
 
   if(editingNoticeId){
     try{
+      const resetRead = document.getElementById("notice-reset-read").checked;
       await updateDoc(doc(db,"announcements", editingNoticeId), {
         title, body, attachmentUrl, attachmentStoragePath, attachmentFileName, targetDepartments,
         excludedEmails: noticeExcludedEmails,
         neverAutoDelete,
         createdAt: Timestamp.now(), // 編集（添付差し替え含む）のたびに投稿日時を更新し、一覧の表示順にも反映させる
-        updatedAt: Timestamp.now()
+        updatedAt: Timestamp.now(),
+        ...(resetRead ? { readByAt: {} } : {}) // チェックがONなら、既読情報を全てクリアして未読に戻す
       });
       // 添付が別のものに差し替わった／削除された場合は、以前のファイルをドライブから完全削除する
       if(originalAttachmentStoragePath && originalAttachmentStoragePath !== attachmentStoragePath){
