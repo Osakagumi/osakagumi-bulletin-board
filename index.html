@@ -1318,7 +1318,7 @@
           <div class="section-toolbar">
             <button class="btn-primary" id="chat-new-btn">新しいメッセージ</button>
           </div>
-          <p style="font-size:12px;color:var(--muted);margin:-6px 0 12px;">メッセージは24時間経過すると自動的に削除されます。</p>
+          <p id="chat-cleanup-note" style="font-size:12px;color:var(--muted);margin:-6px 0 12px;">メッセージ（テキスト）は24時間、画像は1時間経過すると自動的に削除されます。</p>
           <div id="chat-conversation-list"></div>
         </div>
         <div id="chat-thread-view" style="display:none;">
@@ -1973,6 +1973,23 @@ let isSharedAccount = false; // ログイン中の自分自身が「共用アカ
 let chatConversations = []; // [{conversationId, otherEmail, otherName, lastText, lastAt, lastSenderEmail, unread}]
 let chatCurrentConversationId = null;
 let chatCurrentOtherEmail = null;
+let chatCleanupSettings = { imageHours: 1, textHours: 24 }; // app_settings/chat_cleanupから読み込む（未読み込み時はこのデフォルト値）
+function initChatCleanupSettingsListener(){
+  onSnapshot(doc(db,"app_settings","chat_cleanup"), snap=>{
+    if(snap.exists()){
+      const data = snap.data();
+      chatCleanupSettings = {
+        imageHours: data.imageHours || 1,
+        textHours: data.textHours || 24
+      };
+    }
+    updateChatCleanupNote();
+  }, (err)=>{ console.error("[チャット削除設定取得エラー]", err); });
+}
+function updateChatCleanupNote(){
+  const noteEl = document.getElementById("chat-cleanup-note");
+  if(noteEl) noteEl.textContent = `メッセージ（テキスト）は${chatCleanupSettings.textHours}時間、画像は${chatCleanupSettings.imageHours}時間経過すると自動的に削除されます。`;
+}
 let chatCurrentOtherName = null;
 let chatLastLeftAt = 0;
 let chatLastConvEmail = null;
@@ -2146,6 +2163,7 @@ onAuthStateChanged(auth, async (user)=>{
     initContractsListener();
     initBizInfoListener();
     initBizInfoCategoriesListener();
+    initChatCleanupSettingsListener();
     initChatListeners();
     initPresence();
     initOneSignalForCurrentUser();
@@ -8941,9 +8959,18 @@ function renderChatMessages(msgs){
     row.className = "chat-bubble-row" + (isMine ? " chat-mine" : "");
     const timeLabel = formatChatTime(m.createdAt);
     const readLabel = (isMine && m.read) ? `<div class="chat-bubble-read">既読</div>` : "";
+    let bubbleInner, bubbleStyle = '';
+    if(m.imageUrl){
+      bubbleInner = `<img src="${escapeHtml(m.imageUrl)}" alt="画像" style="max-width:220px;max-height:220px;border-radius:12px;display:block;cursor:pointer;" onclick="window.open('${escapeHtml(m.imageUrl)}','_blank')">`;
+      bubbleStyle = ' style="padding:4px;background:transparent;border:none;"';
+    } else if(m.imageDeleted){
+      bubbleInner = `<span style="color:var(--muted);font-style:italic;">画像は削除されました</span>`;
+    } else {
+      bubbleInner = linkifyText(m.text||"");
+    }
     row.innerHTML = `
       <div class="chat-bubble-wrap">
-        <div class="chat-bubble">${linkifyText(m.text||"")}</div>
+        <div class="chat-bubble"${bubbleStyle}>${bubbleInner}</div>
         <div class="chat-bubble-time">${escapeHtml(timeLabel)}${readLabel}</div>
       </div>
     `;
@@ -8982,6 +9009,58 @@ function appendOptimisticChatBubble(text){
   body.appendChild(row);
   body.scrollTop = body.scrollHeight;
 }
+// 画像貼り付け時、アップロード完了（Firestoreへの反映）を待たず、その場で自分の画像を表示する。
+// object URLはブラウザ内だけの一時的なプレビュー用で、実際のメッセージが届き次第
+// renderChatMessages()がGoogleドライブ上の本物の画像に描画し直すので、そのまま残り続けることはない。
+function appendOptimisticChatImageBubble(blob){
+  const body = document.getElementById("chat-messages");
+  const objectUrl = URL.createObjectURL(blob);
+  const row = document.createElement("div");
+  row.className = "chat-bubble-row chat-mine";
+  const timeLabel = formatChatTime(new Date().toISOString());
+  row.innerHTML = `
+    <div class="chat-bubble-wrap">
+      <div class="chat-bubble" style="padding:4px;background:transparent;border:none;">
+        <img src="${objectUrl}" alt="画像" style="max-width:220px;max-height:220px;border-radius:12px;display:block;opacity:0.7;">
+      </div>
+      <div class="chat-bubble-time">${escapeHtml(timeLabel)}（送信中…）</div>
+    </div>
+  `;
+  body.appendChild(row);
+  body.scrollTop = body.scrollHeight;
+}
+// チャットに貼り付けられた画像を、送信前に自動でリサイズ・圧縮する
+// （スクリーンショットは容量が大きくなりがちで、Googleドライブの空き容量を圧迫しやすいため）。
+// 長辺1280pxを超える場合は縮小し、JPEGとして再エンコードする（画質0.82）。
+// 元がPNGで透過を含む場合、この処理で透過は失われ白背景になる点に注意。
+function compressImageForChat(file){
+  return new Promise((resolve)=>{
+    const MAX_DIM = 1280;
+    const QUALITY = 0.82;
+    const objectUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = ()=>{
+      let { width, height } = img;
+      if(width > MAX_DIM || height > MAX_DIM){
+        if(width >= height){ height = Math.round(height * (MAX_DIM/width)); width = MAX_DIM; }
+        else { width = Math.round(width * (MAX_DIM/height)); height = MAX_DIM; }
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width; canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#fff"; // 透過部分は白で塗りつぶす（JPEGは透過非対応のため）
+      ctx.fillRect(0,0,width,height);
+      ctx.drawImage(img, 0, 0, width, height);
+      URL.revokeObjectURL(objectUrl);
+      canvas.toBlob((blob)=>{
+        if(!blob){ resolve(file); return; } // 万一失敗したら元のファイルのまま送る
+        resolve(new File([blob], file.name.replace(/\.\w+$/, "") + ".jpg", { type: "image/jpeg" }));
+      }, "image/jpeg", QUALITY);
+    };
+    img.onerror = ()=>{ URL.revokeObjectURL(objectUrl); resolve(file); }; // 読み込み失敗時は元のファイルのまま送る
+    img.src = objectUrl;
+  });
+}
 async function sendChatMessage(){
   const input = document.getElementById("chat-input");
   const text = input.value.trim();
@@ -9008,6 +9087,49 @@ async function sendChatMessage(){
     input.value = text;
   }
 }
+// クリップボードから貼り付けられた画像（スクリーンショット等）を、圧縮した上でGoogleドライブへ
+// アップロードし、通常のメッセージと同じ会話に画像付きメッセージとして送信する。
+// お知らせ添付・業務情報と同じ「閲覧のみ」の共有設定を使う（storage-helper.jsのeditable省略時のデフォルト）。
+async function sendChatImage(rawFile){
+  if(!chatCurrentOtherEmail) return;
+  const file = await compressImageForChat(rawFile);
+  appendOptimisticChatImageBubble(file);
+  try{
+    const { path: fileId, webViewLink } = await uploadFileToStorage(file, ()=>{});
+    const imageUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
+    const otherEmp = employeesAll.find(e=>(e.email||"").toLowerCase()===chatCurrentOtherEmail.toLowerCase());
+    await addDoc(collection(db,"direct_messages"), {
+      conversationId: chatCurrentConversationId,
+      senderEmail: currentUser.email,
+      senderName: myDisplayName(),
+      recipientEmail: chatCurrentOtherEmail,
+      recipientName: otherEmp?.name || chatCurrentOtherEmail,
+      text: "",
+      imageUrl,
+      imageFileId: fileId,
+      read: false,
+      createdAt: new Date().toISOString()
+    });
+    notifyChatRecipient(chatCurrentOtherEmail, myDisplayName(), currentUser.email);
+  }catch(e){
+    toast("画像の送信に失敗しました。");
+  }
+}
+document.getElementById("chat-input")?.addEventListener("paste", (e)=>{
+  const items = e.clipboardData?.items;
+  if(!items) return;
+  for(const item of items){
+    if(item.type && item.type.startsWith("image/")){
+      e.preventDefault();
+      const blob = item.getAsFile();
+      if(!blob) continue;
+      const ext = (item.type.split("/")[1]||"png").split("+")[0];
+      const file = new File([blob], `chat-image-${Date.now()}.${ext}`, { type: item.type });
+      sendChatImage(file);
+      return;
+    }
+  }
+});
 // 新着チャットのプッシュ通知を、Cloudflare Worker経由でOneSignalに依頼する。
 // 通知の送信に失敗しても、チャット自体の送信は既に完了しているので、ここでは静かに無視する
 // （通知はあくまで補助的な気づかせ機能であり、失敗してもチャット機能自体は支障なく動く）。
@@ -9049,19 +9171,35 @@ async function cleanupOldChatMessages(){
   if(chatCleanupChecked) return;
   chatCleanupChecked = true;
   try{
-    const cutoff = new Date(Date.now() - 24*60*60*1000).toISOString();
+    const now = Date.now();
+    const imageCutoff = new Date(now - chatCleanupSettings.imageHours*60*60*1000).toISOString();
+    const textCutoff = new Date(now - chatCleanupSettings.textHours*60*60*1000).toISOString();
+    // 「1時間」「24時間」のうち短い方（多くの場合は画像側）より前のものを広めに候補として取得し、
+    // 画像付きかどうかで実際の削除基準（画像だけ消すか、メッセージごと消すか）を分ける
+    const earliestCutoff = imageCutoff < textCutoff ? imageCutoff : textCutoff;
     const myEmail = currentUser.email;
     const [sentOld, receivedOld] = await Promise.all([
-      getDocs(query(collection(db,"direct_messages"), where("senderEmail","==",myEmail), where("createdAt","<",cutoff))),
-      getDocs(query(collection(db,"direct_messages"), where("recipientEmail","==",myEmail), where("createdAt","<",cutoff)))
+      getDocs(query(collection(db,"direct_messages"), where("senderEmail","==",myEmail), where("createdAt","<",earliestCutoff))),
+      getDocs(query(collection(db,"direct_messages"), where("recipientEmail","==",myEmail), where("createdAt","<",earliestCutoff)))
     ]);
-    const ids = new Set([...sentOld.docs, ...receivedOld.docs].map(d=>d.id));
-    for(const id of ids){
-      try{ await deleteDoc(doc(db,"direct_messages", id)); }catch(e){ /* 1件失敗しても続行 */ }
+    const docsById = new Map([...sentOld.docs, ...receivedOld.docs].map(d=>[d.id, d]));
+    for(const [id, docSnap] of docsById){
+      const data = docSnap.data();
+      if(data.imageFileId && data.createdAt < imageCutoff){
+        // 画像を削除し、メッセージ本文自体は残す（「画像は削除されました」と表示させる）
+        try{ await deleteFileFromStorage(data.imageFileId); }catch(e){ /* 画像削除に失敗しても続行 */ }
+        try{
+          await updateDoc(doc(db,"direct_messages", id), { imageUrl: "", imageFileId: "", imageDeleted: true });
+        }catch(e){ /* 更新に失敗しても次回また試行される */ }
+        continue;
+      }
+      // 画像を含まない（または既に画像削除済みの）メッセージは、テキストの削除時間が経過していればメッセージごと削除
+      if(data.createdAt < textCutoff){
+        try{ await deleteDoc(doc(db,"direct_messages", id)); }catch(e){ /* 1件失敗しても続行 */ }
+      }
     }
   }catch(e){ console.error("[チャット自動削除エラー]", e); }
 }
-
 /* =========================================================
    業務情報（Googleドライブ上のファイルをピル切り替えで表示）
 ========================================================= */

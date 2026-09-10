@@ -294,6 +294,7 @@
     <button class="tab-btn" data-view="whereabouts">行き先管理</button>
     <button class="tab-btn" data-view="contracts">入札管理</button>
     <button class="tab-btn" data-view="bizinfo">業務情報管理</button>
+    <button class="tab-btn" data-view="chatsettings">チャット管理</button>
     <button class="tab-btn" data-view="systemsettings">システム管理</button>
     <button class="tab-btn" data-view="calendar">カレンダー管理</button>
     <button class="tab-reorder-btn" id="tab-reorder-toggle" title="タブの並び替え">並び替え</button>
@@ -933,6 +934,28 @@
       </div>
     </section>
 
+    <!-- ============ チャット管理 ============ -->
+    <section id="view-chatsettings" style="display:none;">
+      <div class="panel">
+        <h2>チャットの自動削除設定</h2>
+        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
+          チャットの画像・メッセージが自動的に削除されるまでの時間を設定します。画像付きメッセージは、指定した時間が経過すると画像だけが削除され（メッセージ本文は残ります）、テキストのみのメッセージ（画像が削除された後のものを含む）は、指定した時間が経過すると本文ごと削除されます。
+        </p>
+        <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px;">
+          <div class="field" style="margin:0;">
+            <label>画像を削除するまでの時間（時間）</label>
+            <input type="number" id="chat-cleanup-image-hours" min="1" style="width:100px;">
+          </div>
+          <div class="field" style="margin:0;">
+            <label>メッセージ本文を削除するまでの時間（時間）</label>
+            <input type="number" id="chat-cleanup-text-hours" min="1" style="width:100px;">
+          </div>
+          <button class="btn btn-primary" id="chat-cleanup-save-btn">保存</button>
+        </div>
+        <div id="chat-cleanup-save-msg" style="font-size:12.5px;color:var(--muted);"></div>
+      </div>
+    </section>
+
     <!-- ============ システム管理 ============ -->
     <section id="view-systemsettings" style="display:none;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
@@ -1491,6 +1514,7 @@ const ADMIN_SECTION_PERMISSIONS = {
   calendar:      { permission: "isCalendarEditor", generalTab: "calendar" },
   contracts:     { permission: "isContractEditor", generalTab: "contracts" },
   bizinfo:       { permission: null, generalTab: "bizinfo" },
+  chatsettings:  { permission: null, generalTab: "chat" },
   systemsettings:{ permission: null, generalTab: null }
 };
 let myAdminPermissions = {};
@@ -1591,6 +1615,7 @@ onAuthStateChanged(auth, async (user)=>{
   populateSingleEmpPermissionsChecks();
   initBizInfoListener();
   initBizInfoCategoriesListener();
+  initChatCleanupSettingsListener();
   initGeneralTabDefaultsListener();
   initAdminTabDefaultsListener();
   initContractSettingsListener();
@@ -3110,6 +3135,42 @@ function populateBizInfoCategorySelect(){
   });
   if(bizInfoCategoriesAll.some(c=>c.id===prevSel)) sel.value = prevSel;
 }
+
+/* =========================================================
+   チャット管理：自動削除までの時間設定
+========================================================= */
+function initChatCleanupSettingsListener(){
+  onSnapshot(doc(db,"app_settings","chat_cleanup"), snap=>{
+    const data = snap.exists() ? snap.data() : {};
+    const imageHoursInput = document.getElementById("chat-cleanup-image-hours");
+    const textHoursInput = document.getElementById("chat-cleanup-text-hours");
+    if(imageHoursInput) imageHoursInput.value = data.imageHours ?? 1;
+    if(textHoursInput) textHoursInput.value = data.textHours ?? 24;
+  }, (err)=>{ console.error("[チャット削除設定取得エラー]", err); });
+}
+document.getElementById("chat-cleanup-save-btn")?.addEventListener("click", async ()=>{
+  const msgEl = document.getElementById("chat-cleanup-save-msg");
+  const imageHours = Number(document.getElementById("chat-cleanup-image-hours").value);
+  const textHours = Number(document.getElementById("chat-cleanup-text-hours").value);
+  if(!(imageHours > 0) || !(textHours > 0)){
+    msgEl.textContent = "1以上の数値を入力してください。";
+    msgEl.style.color = "var(--danger)";
+    return;
+  }
+  if(imageHours > textHours){
+    msgEl.textContent = "画像の削除時間は、メッセージ本文の削除時間以下にしてください。";
+    msgEl.style.color = "var(--danger)";
+    return;
+  }
+  try{
+    await setDoc(doc(db,"app_settings","chat_cleanup"), { imageHours, textHours }, { merge:true });
+    msgEl.textContent = "保存しました。";
+    msgEl.style.color = "var(--muted)";
+  }catch(e){
+    msgEl.textContent = "保存に失敗しました。権限をご確認ください。";
+    msgEl.style.color = "var(--danger)";
+  }
+});
 
 function initBizInfoListener(){
   onSnapshot(collection(db,"business_info_items"), snap=>{
