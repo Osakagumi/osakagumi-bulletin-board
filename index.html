@@ -1334,6 +1334,12 @@
             </div>
           </div>
           <div id="chat-messages" class="chat-messages"></div>
+          <div id="chat-pending-image" style="display:none;padding:0 0 8px;">
+            <div style="position:relative;display:inline-block;">
+              <img id="chat-pending-image-thumb" style="max-width:120px;max-height:120px;border-radius:10px;display:block;border:1px solid var(--line);">
+              <button type="button" id="chat-pending-image-remove" title="取り消す" style="position:absolute;top:-8px;right:-8px;width:22px;height:22px;border-radius:50%;background:var(--danger);color:#fff;border:none;cursor:pointer;font-size:13px;line-height:1;">×</button>
+            </div>
+          </div>
           <div class="chat-input-row">
             <textarea id="chat-input" placeholder="メッセージを入力…" maxlength="1000" rows="1"></textarea>
             <button class="btn-primary" id="chat-send-btn">送信</button>
@@ -8969,15 +8975,24 @@ function renderChatMessages(msgs){
     row.className = "chat-bubble-row" + (isMine ? " chat-mine" : "");
     const timeLabel = formatChatTime(m.createdAt);
     const readLabel = (isMine && m.read) ? `<div class="chat-bubble-read">既読</div>` : "";
-    let bubbleInner, bubbleStyle = '';
-    if(m.imageUrl){
-      bubbleInner = `<img src="${escapeHtml(m.imageUrl)}" alt="画像" style="max-width:220px;max-height:220px;border-radius:12px;display:block;cursor:pointer;" onclick="window.open('${escapeHtml(m.imageUrl)}','_blank')">`;
-      bubbleStyle = ' style="padding:4px;background:transparent;border:none;"';
-    } else if(m.imageDeleted){
-      bubbleInner = `<span style="color:var(--muted);font-style:italic;">画像は削除されました</span>`;
-    } else {
+    const hasImage = !!m.imageUrl;
+    const hasDeletedImage = !hasImage && !!m.imageDeleted;
+    const hasText = !!m.text;
+    let bubbleInner = "";
+    if(hasImage){
+      bubbleInner += `<img src="${escapeHtml(m.imageUrl)}" alt="画像" style="max-width:220px;max-height:220px;border-radius:12px;display:block;cursor:pointer;${hasText ? "margin-bottom:6px;" : ""}" onclick="window.open('${escapeHtml(m.imageUrl)}','_blank')">`;
+    } else if(hasDeletedImage){
+      // 画像削除後は、文章ではなくアイコン（画像アイコン風のSVG）で「ここに画像があった」ことを示す
+      bubbleInner += `<div style="width:56px;height:56px;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.06);border-radius:10px;${hasText ? "margin-bottom:6px;" : ""}">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.5;"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+      </div>`;
+    }
+    if(hasText){
+      bubbleInner += linkifyText(m.text);
+    } else if(!hasImage && !hasDeletedImage){
       bubbleInner = linkifyText(m.text||"");
     }
+    const bubbleStyle = ((hasImage || hasDeletedImage) && !hasText) ? ' style="padding:4px;background:transparent;border:none;"' : '';
     row.innerHTML = `
       <div class="chat-bubble-wrap">
         <div class="chat-bubble"${bubbleStyle}>${bubbleInner}</div>
@@ -9022,16 +9037,20 @@ function appendOptimisticChatBubble(text){
 // 画像貼り付け時、アップロード完了（Firestoreへの反映）を待たず、その場で自分の画像を表示する。
 // object URLはブラウザ内だけの一時的なプレビュー用で、実際のメッセージが届き次第
 // renderChatMessages()がGoogleドライブ上の本物の画像に描画し直すので、そのまま残り続けることはない。
-function appendOptimisticChatImageBubble(blob){
+// text（一緒に入力されたメッセージ）があれば、画像の下に添えて表示する。
+function appendOptimisticChatImageBubble(blob, text){
   const body = document.getElementById("chat-messages");
   const objectUrl = URL.createObjectURL(blob);
   const row = document.createElement("div");
   row.className = "chat-bubble-row chat-mine";
   const timeLabel = formatChatTime(new Date().toISOString());
+  const textHtml = text ? `<div style="margin-top:6px;">${escapeHtml(text)}</div>` : "";
+  const bubbleStyle = text ? "" : ' style="padding:4px;background:transparent;border:none;"';
   row.innerHTML = `
     <div class="chat-bubble-wrap">
-      <div class="chat-bubble" style="padding:4px;background:transparent;border:none;">
+      <div class="chat-bubble"${bubbleStyle}>
         <img src="${objectUrl}" alt="画像" style="max-width:220px;max-height:220px;border-radius:12px;display:block;opacity:0.7;">
+        ${textHtml}
       </div>
       <div class="chat-bubble-time">${escapeHtml(timeLabel)}（送信中…）</div>
     </div>
@@ -9077,36 +9096,6 @@ function compressImageForChat(file){
     img.src = objectUrl;
   });
 }
-async function sendChatMessage(){
-  const input = document.getElementById("chat-input");
-  const text = input.value.trim();
-  if(!text || !chatCurrentOtherEmail) return;
-  input.value = "";
-  input.style.height = "auto";
-  // Firestoreからの反映を待たず、その場で自分の吹き出しを表示する
-  // （実際のデータが届き次第、renderChatMessages() が正しい内容で描画し直すので二重表示にはならない）
-  appendOptimisticChatBubble(text);
-  const otherEmp = employeesAll.find(e=>(e.email||"").toLowerCase()===chatCurrentOtherEmail.toLowerCase());
-  try{
-    await addDoc(collection(db,"direct_messages"), {
-      conversationId: chatCurrentConversationId,
-      senderEmail: currentUser.email,
-      senderName: myDisplayName(),
-      recipientEmail: chatCurrentOtherEmail,
-      recipientName: otherEmp?.name || chatCurrentOtherEmail,
-      text,
-      read: false,
-      createdAt: new Date().toISOString()
-    });
-    notifyChatRecipient(chatCurrentOtherEmail, myDisplayName(), currentUser.email);
-  }catch(e){
-    toast("送信に失敗しました。");
-    input.value = text;
-  }
-}
-// クリップボードから貼り付けられた画像（スクリーンショット等）を、圧縮した上でGoogleドライブへ
-// アップロードし、通常のメッセージと同じ会話に画像付きメッセージとして送信する。
-// お知らせ添付・業務情報と同じ「閲覧のみ」の共有設定を使う（storage-helper.jsのeditable省略時のデフォルト）。
 // 指定時間内にpromiseが完了しなければ、タイムアウトエラーとして扱う
 // （通信が無反応のまま固まり続けるのを防ぎ、必ず何らかの結果が出るようにするため）
 function withTimeout(promise, ms, message){
@@ -9115,40 +9104,89 @@ function withTimeout(promise, ms, message){
     new Promise((_, reject)=> setTimeout(()=> reject(new Error(message)), ms))
   ]);
 }
-async function sendChatImage(rawFile){
+// 貼り付けられた画像は、その場では送信せず、送信待ちとして入力欄の上にプレビュー表示しておく。
+// 実際に送信されるのは、送信ボタン（またはEnter）を押したタイミングで、その時点の
+// テキスト入力欄の内容と一緒に1つのメッセージとして送られる。
+let pendingChatImageFile = null;
+function setPendingChatImage(file){
+  pendingChatImageFile = file;
+  const wrap = document.getElementById("chat-pending-image");
+  const thumb = document.getElementById("chat-pending-image-thumb");
+  thumb.src = URL.createObjectURL(file);
+  wrap.style.display = "block";
+  document.getElementById("chat-input")?.focus();
+}
+function clearPendingChatImage(){
+  pendingChatImageFile = null;
+  document.getElementById("chat-pending-image").style.display = "none";
+}
+document.getElementById("chat-pending-image-remove")?.addEventListener("click", clearPendingChatImage);
+async function sendChatMessage(){
+  const input = document.getElementById("chat-input");
+  const text = input.value.trim();
   if(!chatCurrentOtherEmail) return;
-  console.log("[チャット画像送信] 圧縮前サイズ：", rawFile.size, "bytes");
-  const file = await compressImageForChat(rawFile);
-  console.log("[チャット画像送信] 圧縮後サイズ：", file.size, "bytes");
-  const optimisticRow = appendOptimisticChatImageBubble(file);
-  try{
-    console.log("[チャット画像送信] アップロード開始");
-    const { path: fileId, webViewLink } = await withTimeout(
-      uploadFileToStorage(file, ()=>{}),
-      20000,
-      "アップロードが20秒以内に完了しませんでした（タイムアウト）"
-    );
-    console.log("[チャット画像送信] アップロード完了：", fileId);
-    const imageUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
+  const imageFile = pendingChatImageFile;
+  if(!text && !imageFile) return; // 何も入力・添付されていなければ送信しない
+  input.value = "";
+  input.style.height = "auto";
+  clearPendingChatImage();
+
+  if(imageFile){
+    console.log("[チャット画像送信] 圧縮前サイズ：", imageFile.size, "bytes");
+    const file = await compressImageForChat(imageFile);
+    console.log("[チャット画像送信] 圧縮後サイズ：", file.size, "bytes");
+    // Firestoreからの反映を待たず、その場で自分の吹き出しを表示する
+    const optimisticRow = appendOptimisticChatImageBubble(file, text);
     const otherEmp = employeesAll.find(e=>(e.email||"").toLowerCase()===chatCurrentOtherEmail.toLowerCase());
-    await addDoc(collection(db,"direct_messages"), {
-      conversationId: chatCurrentConversationId,
-      senderEmail: currentUser.email,
-      senderName: myDisplayName(),
-      recipientEmail: chatCurrentOtherEmail,
-      recipientName: otherEmp?.name || chatCurrentOtherEmail,
-      text: "",
-      imageUrl,
-      imageFileId: fileId,
-      read: false,
-      createdAt: new Date().toISOString()
-    });
-    notifyChatRecipient(chatCurrentOtherEmail, myDisplayName(), currentUser.email);
-  }catch(e){
-    console.error("[チャット画像送信エラー]", e);
-    toast(`画像の送信に失敗しました：${e.message || e}`);
-    // 「送信中…」のまま残ってしまわないよう、失敗した仮表示を消す
-    optimisticRow?.remove();
+    try{
+      console.log("[チャット画像送信] アップロード開始");
+      const { path: fileId } = await withTimeout(
+        uploadFileToStorage(file, ()=>{}),
+        20000,
+        "アップロードが20秒以内に完了しませんでした（タイムアウト）"
+      );
+      console.log("[チャット画像送信] アップロード完了：", fileId);
+      const imageUrl = `https://drive.google.com/thumbnail?id=${fileId}&sz=w1600`;
+      await addDoc(collection(db,"direct_messages"), {
+        conversationId: chatCurrentConversationId,
+        senderEmail: currentUser.email,
+        senderName: myDisplayName(),
+        recipientEmail: chatCurrentOtherEmail,
+        recipientName: otherEmp?.name || chatCurrentOtherEmail,
+        text,
+        imageUrl,
+        imageFileId: fileId,
+        read: false,
+        createdAt: new Date().toISOString()
+      });
+      notifyChatRecipient(chatCurrentOtherEmail, myDisplayName(), currentUser.email);
+    }catch(e){
+      console.error("[チャット画像送信エラー]", e);
+      toast(`画像の送信に失敗しました：${e.message || e}`);
+      // 「送信中…」のまま残ってしまわないよう、失敗した仮表示を消す
+      optimisticRow?.remove();
+      input.value = text; // テキストは入力欄に戻す（画像は失われるため、再度貼り付けが必要）
+    }
+  } else {
+    // 従来通り、テキストのみの送信
+    appendOptimisticChatBubble(text);
+    const otherEmp = employeesAll.find(e=>(e.email||"").toLowerCase()===chatCurrentOtherEmail.toLowerCase());
+    try{
+      await addDoc(collection(db,"direct_messages"), {
+        conversationId: chatCurrentConversationId,
+        senderEmail: currentUser.email,
+        senderName: myDisplayName(),
+        recipientEmail: chatCurrentOtherEmail,
+        recipientName: otherEmp?.name || chatCurrentOtherEmail,
+        text,
+        read: false,
+        createdAt: new Date().toISOString()
+      });
+      notifyChatRecipient(chatCurrentOtherEmail, myDisplayName(), currentUser.email);
+    }catch(e){
+      toast("送信に失敗しました。");
+      input.value = text;
+    }
   }
 }
 document.getElementById("chat-input")?.addEventListener("paste", (e)=>{
@@ -9161,7 +9199,7 @@ document.getElementById("chat-input")?.addEventListener("paste", (e)=>{
       if(!blob) continue;
       const ext = (item.type.split("/")[1]||"png").split("+")[0];
       const file = new File([blob], `chat-image-${Date.now()}.${ext}`, { type: item.type });
-      sendChatImage(file);
+      setPendingChatImage(file);
       return;
     }
   }
