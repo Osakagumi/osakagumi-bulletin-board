@@ -9345,12 +9345,16 @@ async function cleanupOldChatMessages(){
   const now0 = Date.now();
   // 5分以内に実行済みなら再実行しない（Firestoreへの読み取りが頻繁になりすぎるのを防ぐため）。
   // これにより、チャット画面を開きっぱなしにしていても、5分おきに削除対象がないか再確認される。
-  if(now0 - chatCleanupLastRun < 5*60*1000) return;
+  if(now0 - chatCleanupLastRun < 5*60*1000){
+    console.log("[チャット自動削除] スキップ（前回実行から5分未満）。前回実行からの経過分：", ((now0 - chatCleanupLastRun)/60000).toFixed(1));
+    return;
+  }
   chatCleanupLastRun = now0;
   try{
     const now = Date.now();
     const attachmentCutoff = new Date(now - chatCleanupSettings.imageHours*60*60*1000).toISOString();
     const textCutoff = new Date(now - chatCleanupSettings.textHours*60*60*1000).toISOString();
+    console.log("[チャット自動削除] 実行開始。設定：", chatCleanupSettings, "添付の削除基準時刻：", attachmentCutoff, "本文の削除基準時刻：", textCutoff);
     // 「1時間」「24時間」のうち短い方（多くの場合は添付側）より前のものを広めに候補として取得し、
     // 添付付きかどうかで実際の削除基準（添付だけ消すか、メッセージごと消すか）を分ける
     const earliestCutoff = attachmentCutoff < textCutoff ? attachmentCutoff : textCutoff;
@@ -9360,21 +9364,27 @@ async function cleanupOldChatMessages(){
       getDocs(query(collection(db,"direct_messages"), where("recipientEmail","==",myEmail), where("createdAt","<",earliestCutoff)))
     ]);
     const docsById = new Map([...sentOld.docs, ...receivedOld.docs].map(d=>[d.id, d]));
+    console.log("[チャット自動削除] 候補件数：", docsById.size);
     for(const [id, docSnap] of docsById){
       const data = docSnap.data();
       if(data.attachmentFileId && data.createdAt < attachmentCutoff){
         // 添付を削除し、メッセージ本文自体は残す（アイコン表示に切り替わる）
-        try{ await deleteFileFromStorage(data.attachmentFileId); }catch(e){ /* 添付削除に失敗しても続行 */ }
+        console.log("[チャット自動削除] 添付を削除します：", id, data.createdAt, data.attachmentFileId);
+        try{ await deleteFileFromStorage(data.attachmentFileId); }catch(e){ console.error("[チャット自動削除] 添付ファイル自体の削除に失敗：", e); }
         try{
           await updateDoc(doc(db,"direct_messages", id), { attachmentUrl: "", attachmentFileId: "", attachmentFileName: "", attachmentDeleted: true });
-        }catch(e){ /* 更新に失敗しても次回また試行される */ }
+        }catch(e){ console.error("[チャット自動削除] メッセージの更新（添付削除フラグ）に失敗：", e); }
         continue;
       }
       // 添付を含まない（または既に添付削除済みの）メッセージは、テキストの削除時間が経過していればメッセージごと削除
       if(data.createdAt < textCutoff){
-        try{ await deleteDoc(doc(db,"direct_messages", id)); }catch(e){ /* 1件失敗しても続行 */ }
+        console.log("[チャット自動削除] メッセージごと削除します：", id, data.createdAt);
+        try{ await deleteDoc(doc(db,"direct_messages", id)); }catch(e){ console.error("[チャット自動削除] メッセージ削除に失敗：", e); }
+      } else {
+        console.log("[チャット自動削除] まだ削除条件を満たさないためスキップ：", id, data.createdAt, "attachmentFileId:", data.attachmentFileId||"(なし)");
       }
     }
+    console.log("[チャット自動削除] 実行完了");
   }catch(e){ console.error("[チャット自動削除エラー]", e); }
 }
 // タブ切り替え時だけでなく、チャット画面を開きっぱなしにしていても削除対象を取りこぼさないよう、
