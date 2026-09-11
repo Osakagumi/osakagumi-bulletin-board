@@ -5644,13 +5644,16 @@ function renderWbBoard(){
   const board = document.getElementById("wb-board");
   if(!board) return;
   board.innerHTML = "";
-  board.style.height = ""; // 高さを画面内に収めようとする指定はやめ、必要な分だけ伸びるようにする
   const list = getSortedEmployees();
   const columns = wbStatusesAll.slice();
   columns.push({ id: "__unset__", name: "未設定", color: "#9CA3AF" });
 
-  // スマホ幅は今まで通りの均等グリッド表示。PC・サイネージ幅は、各ステータスを
-  // シンプルな1列の縦並びで表示する（はみ出す場合は枠単位ではなく、ページ全体の縦スクロールで見る）。
+  // スマホ幅は今まで通りの均等グリッド表示。PC・サイネージ幅では、なるべく1画面に収まるよう
+  // 人数の多いステータスは複数列に分けて敷き詰める（画面の高さを目安に列数・行の高さを調整する）。
+  // ただし、この「目安の高さ」はあくまで敷き詰め方の参考値であり、実際に必要な高さより
+  // 小さく描画してしまう（＝人が見えなくなる）ことは絶対にないようにする。調整してもなお
+  // 1画面に収まりきらない場合は、枠単位の横スクロールではなく、ページ全体の縦スクロールで
+  // 溢れた分を見られるようにする。
   const isPcFit = (isDisplayMode ? window.innerWidth : board.clientWidth || window.innerWidth) > 900;
   board.classList.toggle("wb-board-fit", isPcFit);
 
@@ -5664,16 +5667,66 @@ function renderWbBoard(){
     return { col, members };
   });
 
+  let targetHeight = 0, availableWidth = 0;
+  if(isPcFit){
+    const rect = board.getBoundingClientRect();
+    targetHeight = Math.max(220, window.innerHeight - rect.top - 16);
+    availableWidth = (isDisplayMode ? window.innerWidth : board.clientWidth || window.innerWidth) - 16;
+  }
+  board.style.height = ""; // ボード自体には高さの上限を設けない（内容に応じて自然に伸びる）
+
   const fontPx = wbFontSizePx || 13;
-  const ROW_HEIGHT = Math.round(fontPx * 1.9) + 6; // 行き先管理で設定した文字サイズから決まる、1人分の行の高さ
+  const HEAD_HEIGHT = Math.round(fontPx * 1.4) + 20;
+  // 行き先管理で設定した文字サイズから決まる「理想の」1人分の高さ。まずはこれで収まるか試す。
+  const COMFORT_ROW_HEIGHT = Math.round(fontPx * 1.9) + 6;
+  // これ未満に詰めると読みにくくなる下限（1画面に収まらない場合の最終ライン）
+  const MIN_ROW_HEIGHT = Math.round(fontPx * 1.15) + 3;
+  const CHIP_COL_WIDTH = Math.round(64 * (fontPx/13)) + 34;
   const measureCanvas = document.createElement("canvas");
   const measureCtx = measureCanvas.getContext("2d");
   function headerTextWidth(text){
     measureCtx.font = `700 ${fontPx}px sans-serif`;
     return measureCtx.measureText(text).width; // 見出しは折り返さず1行で収める前提の幅
   }
+  const headerMinWidths = colData.map(({col}) => isPcFit ? Math.ceil(headerTextWidth(col.name)) + 32 : 0);
 
-  colData.forEach(({col, members})=>{
+  // 与えられた「1人分の高さ」で計算したとき、ボード全体が横に何pxになるかを求める。
+  // ここで求めるcontentHeightは、あくまで「そのrowHeight・列数で実際に必要な高さ」そのものであり、
+  // targetHeightで頭打ちにする（切り捨てる）ことはしない＝どれだけ計算がズレても人が消えない。
+  function computeLayout(rowHeight){
+    let totalWidth = 0, maxContentHeight = 0;
+    const layouts = colData.map(({members}, idx)=>{
+      const headerMinWidth = headerMinWidths[idx];
+      if(members.length===0){
+        const w = Math.max(56, headerMinWidth);
+        totalWidth += w + 10;
+        return { width: w, contentHeight: 0 };
+      }
+      const targetRowsPerSubCol = Math.max(1, Math.floor(Math.max(60, targetHeight - HEAD_HEIGHT - 20) / rowHeight));
+      const subCols = Math.max(1, Math.ceil(members.length / targetRowsPerSubCol));
+      const rowsNeeded = Math.ceil(members.length / subCols);
+      const contentHeight = rowsNeeded * rowHeight; // 頭打ちにしない実際の高さ
+      const width = Math.max(subCols*CHIP_COL_WIDTH + (subCols-1)*10 + 18, headerMinWidth);
+      totalWidth += width + 10;
+      if(contentHeight > maxContentHeight) maxContentHeight = contentHeight;
+      return { width, contentHeight };
+    });
+    return { totalWidth, maxContentHeight, layouts };
+  }
+
+  // 「理想の高さ」から始め、ボード全体の横幅が画面に収まらない場合は、下限に達するまで
+  // 1人分の枠の高さを少しずつ詰めて再計算する（それでも収まらない場合は、諦めてページ全体の
+  // 縦スクロールに任せる＝横方向に無理やり収めようとして情報を消したりはしない）
+  let rowHeight = COMFORT_ROW_HEIGHT;
+  let { totalWidth, maxContentHeight, layouts } = isPcFit ? computeLayout(rowHeight) : { totalWidth:0, maxContentHeight:0, layouts:[] };
+  if(isPcFit && availableWidth>0){
+    while(totalWidth > availableWidth && rowHeight > MIN_ROW_HEIGHT){
+      rowHeight -= 1;
+      ({ totalWidth, maxContentHeight, layouts } = computeLayout(rowHeight));
+    }
+  }
+
+  colData.forEach(({col, members}, idx)=>{
     const colEl = document.createElement("div");
     colEl.className = "wb-board-col";
     const head = document.createElement("div");
@@ -5689,19 +5742,29 @@ function renderWbBoard(){
       e.className = "empty-col";
       e.textContent = "-";
       bodyEl.appendChild(e);
+      if(isPcFit) colEl.style.flex = `0 0 ${layouts[idx].width}px`;
     } else {
       members.forEach(emp=>{
         const chip = document.createElement("div");
         chip.className = "name-chip";
         chip.textContent = emp.name || emp.email;
-        if(isPcFit) chip.style.lineHeight = `${ROW_HEIGHT}px`;
+        // 1人分の表示枠の高さ：line-heightで調整することで、長い名前が2行に折り返しても
+        // 表示が欠けることなく、詰めた分だけ行間が狭くなる（ハードな高さ指定はしない）
+        if(isPcFit) chip.style.lineHeight = `${rowHeight}px`;
         bodyEl.appendChild(chip);
       });
-    }
-    if(isPcFit){
-      // 見出しの文字数から決まる最小幅は確保しつつ、それ以上には広げすぎない
-      const headerMinWidth = Math.ceil(headerTextWidth(col.name)) + 32;
-      colEl.style.flex = `0 0 ${Math.max(96, headerMinWidth)}px`;
+      if(isPcFit){
+        const layout = layouts[idx];
+        bodyEl.style.display = "block";
+        bodyEl.style.columnWidth = `${CHIP_COL_WIDTH}px`;
+        bodyEl.style.columnGap = "10px";
+        bodyEl.style.columnFill = "auto"; // 上から詰めて表示し、あふれた分だけ次の列へ
+        // 全ての列の高さを、その中で一番高いもの（maxContentHeight）に揃える。
+        // これにより、ある列だけ計算上わずかに足りない場合でも、他の列に合わせて
+        // 高さに余裕ができ、実質的に取りこぼしが起きにくくなる。
+        bodyEl.style.height = `${Math.max(layout.contentHeight, maxContentHeight)}px`;
+        colEl.style.flex = `0 0 ${layout.width}px`; // 必要最小限の幅のみ確保し、他の枠のために広げすぎない
+      }
     }
     colEl.appendChild(head); colEl.appendChild(bodyEl);
     board.appendChild(colEl);
