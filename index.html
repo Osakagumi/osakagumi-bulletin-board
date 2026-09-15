@@ -849,7 +849,17 @@
       // （origin）に変更し、既に開いているタブがあればそれを再利用（該当のチャット画面へ遷移）
       // させ、無ければ新しいタブを開く、という動作にする。
       notificationClickHandlerMatch: "origin",
-      notificationClickHandlerAction: "navigate"
+      notificationClickHandlerAction: "navigate",
+      // OneSignalダッシュボードの「Custom Code」設定画面が推奨しているコード例に合わせて追加。
+      // safari_web_id：Safari向けのWeb Push証明書の識別子（ダッシュボードが自動発行したもの）。
+      // notifyButton：サイトの隅に購読を促す鈴アイコンを表示する。Custom Codeモードでは
+      // 「典型的な敷地」と違い、購読を促す仕組みが自動では付かないため、ダッシュボードの
+      // 案内に沿って明示的に有効化しておく（PCで通知が届かなかった件との関連は未確定だが、
+      // 念のため設定しておく）。
+      safari_web_id: "web.onesignal.auto.05605657-a1ec-46ab-8d61-441038586900",
+      notifyButton: {
+        enable: true
+      }
     });
   });
 </script>
