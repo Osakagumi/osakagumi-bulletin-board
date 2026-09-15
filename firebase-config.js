@@ -77,8 +77,8 @@ export const GAS_STORAGE_CONFIG = {
 // 共用アカウントには「お知らせの閲覧」以外の権限を持たせないこと
 // （このファイルの値はページのソースから誰でも読み取れるため）。
 export const NOTICE_BOARD_AUTO_LOGIN = {
-  email: "ここに共用アカウントのメールアドレスを入力",
-  password: "ここに共用アカウントのパスワードを入力"
+  email: "kiosk@osakagumi.co.jp",
+  password: "osakagumi"
 };
 
 // MAIL_SEND_TARGET の設定内容に応じて、実際の送信先リストを返すヘルパー関数。
