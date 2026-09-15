@@ -836,30 +836,17 @@
   OneSignalDeferred.push(async function(OneSignal) {
     await OneSignal.init({
       appId: "e73e93dd-f3ab-46b3-80d9-63e94e9dda4c",
-      // 2026年9月：OneSignalダッシュボード側の連携タイプを「典型的な敷地（Typical Site）」から
-      // 「カスタムコード（Custom Code）」に切り替え済み。「典型的な敷地」のままだと、下の
-      // notificationClickHandlerMatch/Actionを含む初期化パラメータの多くが無視されてしまい、
-      // 通知クリック時に常に新しいタブが開いてしまう不具合の原因になっていた。
-      // サービスワーカー（OneSignalSDKWorker.js）はサイトのルート直下という既定の場所に
-      // 置いているため、切り替えに伴うパス関連の追加設定は不要。
+      // 2026年9月：「通知クリック時に新しいタブが開いてしまう」問題の解決のため、OneSignal
+      // ダッシュボードの連携タイプを「典型的な敷地」から「カスタムコード」に切り替え、
+      // notificationClickHandlerMatch/Action・safari_web_id・notifyButton等を試したが、
+      // 切り替えた途端にPC（Chrome・Edge）への通知だけが一切届かなくなる不具合が発生した
+      // （スマホへの通知は届いていた）。Permission Prompt（購読を促す仕組み）を追加する等
+      // 一通り試したが解消しなかったため、「典型的な敷地」に戻すことを最終結論とした。
+      // 「通知クリックで新しいタブが開く」問題は、実害の小さい既知の制限として受け入れる。
       //
-      // 通知クリック時の挙動：チャット通知はメッセージごとに「?chat=送信者のメールアドレス」が
-      // 付いたURLになるため、既定の「URL完全一致」判定（exact）だと、既に開いているタブと
-      // 一致せず、常に新しいタブが開いてしまう。「同じサイト（オリジン）であれば一致とみなす」
-      // （origin）に変更し、既に開いているタブがあればそれを再利用（該当のチャット画面へ遷移）
-      // させ、無ければ新しいタブを開く、という動作にする。
-      notificationClickHandlerMatch: "origin",
-      notificationClickHandlerAction: "navigate",
-      // OneSignalダッシュボードの「Custom Code」設定画面が推奨しているコード例に合わせて追加。
-      // safari_web_id：Safari向けのWeb Push証明書の識別子（ダッシュボードが自動発行したもの）。
-      // notifyButton：サイトの隅に購読を促す鈴アイコンを表示する。Custom Codeモードでは
-      // 「典型的な敷地」と違い、購読を促す仕組みが自動では付かないため、ダッシュボードの
-      // 案内に沿って明示的に有効化しておく（PCで通知が届かなかった件との関連は未確定だが、
-      // 念のため設定しておく）。
-      safari_web_id: "web.onesignal.auto.05605657-a1ec-46ab-8d61-441038586900",
-      notifyButton: {
-        enable: true
-      }
+      // ※パス設定はダッシュボード側（「典型的な敷地」タイプ）で行う。
+      // OneSignalの仕様上、ダッシュボード設定とコード側のserviceWorkerPath/serviceWorkerParamは併用できず、
+      // 「典型的な敷地」タイプの場合はコード側の指定が無視されるため、ここでは何も指定しない。
     });
   });
 </script>
