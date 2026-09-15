@@ -9290,7 +9290,7 @@ async function sendChatMessage(){
       const attachmentUrl = (kind === "image" || kind === "pdf")
         ? `https://drive.google.com/thumbnail?id=${fileId}&sz=w1600`
         : "";
-      await addDoc(collection(db,"direct_messages"), {
+      const msgRef = await addDoc(collection(db,"direct_messages"), {
         conversationId: chatCurrentConversationId,
         senderEmail: currentUser.email,
         senderName: myDisplayName(),
@@ -9304,7 +9304,7 @@ async function sendChatMessage(){
         read: false,
         createdAt: new Date().toISOString()
       });
-      notifyChatRecipient(chatCurrentOtherEmail, myDisplayName(), currentUser.email);
+      notifyChatRecipient(chatCurrentOtherEmail, myDisplayName(), currentUser.email, msgRef.id);
     }catch(e){
       console.error("[チャット添付送信エラー]", e);
       toast(`添付ファイルの送信に失敗しました：${e.message || e}`);
@@ -9317,7 +9317,7 @@ async function sendChatMessage(){
     appendOptimisticChatBubble(text);
     const otherEmp = employeesAll.find(e=>(e.email||"").toLowerCase()===chatCurrentOtherEmail.toLowerCase());
     try{
-      await addDoc(collection(db,"direct_messages"), {
+      const msgRef = await addDoc(collection(db,"direct_messages"), {
         conversationId: chatCurrentConversationId,
         senderEmail: currentUser.email,
         senderName: myDisplayName(),
@@ -9327,7 +9327,7 @@ async function sendChatMessage(){
         read: false,
         createdAt: new Date().toISOString()
       });
-      notifyChatRecipient(chatCurrentOtherEmail, myDisplayName(), currentUser.email);
+      notifyChatRecipient(chatCurrentOtherEmail, myDisplayName(), currentUser.email, msgRef.id);
     }catch(e){
       toast("送信に失敗しました。");
       input.value = text;
@@ -9358,7 +9358,20 @@ document.getElementById("chat-input")?.addEventListener("paste", (e)=>{
 // 「?chat=送信者のメールアドレス」付きのURLをWorker経由でOneSignalに渡している。
 const CHAT_NOTIFY_WORKER_URL = "https://osakagumi-chat-notify.osakagumi-sys.workers.dev";
 const CHAT_NOTIFY_SHARED_SECRET = "452003d668f70b5d0534f9f6d053cd6572f796522b0b56cf";
-function notifyChatRecipient(recipientEmail, senderName, senderEmail){
+// 新着チャットのプッシュ通知を、Cloudflare Worker経由でOneSignalに依頼する。
+// messageIdが渡された場合、数秒待ってからそのメッセージが既読になっていないか確認し、
+// 既に既読（＝相手がチャット画面を見ていた）であれば、通知を送らずに済ませる
+// （わざわざ画面を見ている人に通知を出す必要はないため）。
+async function notifyChatRecipient(recipientEmail, senderName, senderEmail, messageId){
+  if(messageId){
+    await new Promise(resolve=> setTimeout(resolve, 4000));
+    try{
+      const snap = await getDoc(doc(db,"direct_messages", messageId));
+      if(snap.exists() && snap.data().read){
+        return; // 既に既読なら、通知を送らない
+      }
+    }catch(e){ /* 既読確認に失敗した場合は、念のため通常通り通知する */ }
+  }
   const chatUrl = `${location.origin}${location.pathname}?chat=${encodeURIComponent(senderEmail)}`;
   fetch(CHAT_NOTIFY_WORKER_URL, {
     method: "POST",
