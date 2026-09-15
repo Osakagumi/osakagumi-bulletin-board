@@ -113,11 +113,6 @@
     font-size:26px; font-weight:700; color:var(--brand-dark);
     padding-bottom:16px; border-bottom:3px solid var(--brand); margin-bottom:24px; flex:0 0 auto;
   }
-  /* タッチパネルでも押しやすいよう、十分な大きさのタップ領域を確保する */
-  #notice-board-logout-btn{
-    font-size:16px; padding:12px 22px; border-radius:10px; border:1px solid var(--line);
-    background:#fff; color:var(--muted); cursor:pointer;
-  }
   #notice-board-cards{
     flex:1 1 auto; overflow-y:auto; display:grid;
     grid-template-columns:repeat(auto-fill, minmax(320px,1fr)); gap:20px; align-content:start;
@@ -887,7 +882,6 @@
           <img id="notice-board-qr-img" alt="スマホで見るためのQRコード">
           <div class="kiosk-qr-label">スマホで見る</div>
         </div>
-        <button type="button" id="notice-board-logout-btn">ログアウト</button>
       </div>
       <div id="notice-board-cards"></div>
       <div id="notice-board-detail-overlay">
@@ -2015,6 +2009,30 @@ let isContractEditor = false;
 let isSafetySender = false;
 let isBizInfoManager = false;
 let isSharedAccount = false; // ログイン中の自分自身が「共用アカウント」かどうか
+// お知らせ掲示板モード（共用アカウント）のキオスク画面で、ログアウトボタンの代わりに
+// 使う「秘密のショートカットキー」の設定。管理画面（システム管理）から変更できる。
+let kioskLogoutShortcut = { ctrl:true, alt:true, shift:true, key:"L" }; // 未設定時の既定値：Ctrl+Alt+Shift+L
+function initKioskLogoutShortcutListener(){
+  onSnapshot(doc(db,"app_settings","kiosk_logout_shortcut"), snap=>{
+    if(snap.exists()){
+      const data = snap.data();
+      kioskLogoutShortcut = {
+        ctrl: !!data.ctrl, alt: !!data.alt, shift: !!data.shift,
+        key: (data.key || "L").toUpperCase()
+      };
+    }
+  }, (err)=>{ console.error("[キオスクショートカット設定取得エラー]", err); });
+}
+document.addEventListener("keydown", (e)=>{
+  // お知らせ掲示板モード（共用アカウント）のときだけ働く、ログアウト専用の秘密のショートカット。
+  // 画面上にはボタンを一切出さないことで、誰でも自由にログアウトできてしまう状態を防ぐ。
+  if(!document.body.classList.contains("notice-board-mode")) return;
+  const s = kioskLogoutShortcut;
+  if(!!e.ctrlKey===!!s.ctrl && !!e.altKey===!!s.alt && !!e.shiftKey===!!s.shift && e.key.toUpperCase()===s.key){
+    e.preventDefault();
+    signOut(auth);
+  }
+});
 let chatConversations = []; // [{conversationId, otherEmail, otherName, lastText, lastAt, lastSenderEmail, unread}]
 let chatCurrentConversationId = null;
 let chatCurrentOtherEmail = null;
@@ -2223,6 +2241,7 @@ onAuthStateChanged(auth, async (user)=>{
     initBizInfoListener();
     initBizInfoCategoriesListener();
     initChatCleanupSettingsListener();
+    initKioskLogoutShortcutListener();
     initChatListeners();
     initPresence();
     initOneSignalForCurrentUser();
@@ -2256,10 +2275,6 @@ onAuthStateChanged(auth, async (user)=>{
         const noticeBoardUrl = `${indexPageUrl()}?nboard=1`;
         noticeBoardQrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=64x64&data=${encodeURIComponent(noticeBoardUrl)}`;
       }
-      // QRコード経由（個人のスマホでの自動ログイン）の場合は、共用アカウントのログアウトボタンを
-      // 誤って操作されないよう表示しない（休憩所の共用PC側でのみログアウト操作をさせる）
-      const logoutBtn = document.getElementById("notice-board-logout-btn");
-      if(logoutBtn) logoutBtn.style.display = isNoticeBoardAutoLogin ? "none" : "";
     }
   }else{
     currentUser = null;
@@ -4359,7 +4374,6 @@ document.getElementById("notice-board-detail-close")?.addEventListener("click", 
 document.getElementById("notice-board-detail-overlay")?.addEventListener("click", (e)=>{
   if(e.target.id === "notice-board-detail-overlay") closeNoticeBoardDetail();
 });
-document.getElementById("notice-board-logout-btn")?.addEventListener("click", ()=> signOut(auth));
 
 function renderNotices(){
   const el = document.getElementById("notice-list");

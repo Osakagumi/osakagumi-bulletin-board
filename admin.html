@@ -1066,6 +1066,30 @@
             <div id="admin-tab-order-list" class="settings-draglist"></div>
           </div>
         </div>
+        <!-- キオスク（共用アカウント・お知らせ掲示板）のログアウト用ショートカットキー -->
+        <div class="panel" style="margin:0;">
+          <h2>お知らせ掲示板（共用アカウント）のログアウト方法</h2>
+          <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
+            休憩所等の共用アカウントでログインした画面には、誰でも押せるログアウトボタンを表示しません。代わりに、ここで設定したキーの組み合わせを押すとログアウトし、ログイン画面に戻ります。
+          </p>
+          <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;">
+              <input type="checkbox" id="kiosk-shortcut-ctrl" style="width:auto;">Ctrl
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;">
+              <input type="checkbox" id="kiosk-shortcut-alt" style="width:auto;">Alt
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;">
+              <input type="checkbox" id="kiosk-shortcut-shift" style="width:auto;">Shift
+            </label>
+            <div class="field" style="margin:0;">
+              <label>＋キー（1文字）</label>
+              <input type="text" id="kiosk-shortcut-key" maxlength="1" style="width:60px;text-align:center;text-transform:uppercase;">
+            </div>
+            <button class="btn btn-primary" id="kiosk-shortcut-save-btn">保存</button>
+          </div>
+          <div id="kiosk-shortcut-save-msg" style="font-size:12.5px;color:var(--muted);"></div>
+        </div>
       </div>
     </section>
 
@@ -1676,6 +1700,7 @@ onAuthStateChanged(auth, async (user)=>{
   initBizInfoListener();
   initBizInfoCategoriesListener();
   initChatCleanupSettingsListener();
+  initKioskLogoutShortcutListener();
   initGeneralTabDefaultsListener();
   initAdminTabDefaultsListener();
   initContractSettingsListener();
@@ -3200,6 +3225,48 @@ function populateBizInfoCategorySelect(){
 /* =========================================================
    チャット管理：自動削除までの時間設定
 ========================================================= */
+/* =========================================================
+   キオスク（共用アカウント）のログアウト用ショートカットキー
+========================================================= */
+function initKioskLogoutShortcutListener(){
+  onSnapshot(doc(db,"app_settings","kiosk_logout_shortcut"), snap=>{
+    const data = snap.exists() ? snap.data() : {};
+    const ctrlInput = document.getElementById("kiosk-shortcut-ctrl");
+    const altInput = document.getElementById("kiosk-shortcut-alt");
+    const shiftInput = document.getElementById("kiosk-shortcut-shift");
+    const keyInput = document.getElementById("kiosk-shortcut-key");
+    if(ctrlInput) ctrlInput.checked = data.ctrl !== false; // 未設定時は既定でON（Ctrl+Alt+Shift+L）
+    if(altInput) altInput.checked = data.alt !== false;
+    if(shiftInput) shiftInput.checked = data.shift !== false;
+    if(keyInput) keyInput.value = (data.key || "L").toUpperCase();
+  }, (err)=>{ console.error("[キオスクショートカット設定取得エラー]", err); });
+}
+document.getElementById("kiosk-shortcut-save-btn")?.addEventListener("click", async ()=>{
+  const msgEl = document.getElementById("kiosk-shortcut-save-msg");
+  const ctrl = document.getElementById("kiosk-shortcut-ctrl").checked;
+  const alt = document.getElementById("kiosk-shortcut-alt").checked;
+  const shift = document.getElementById("kiosk-shortcut-shift").checked;
+  const key = document.getElementById("kiosk-shortcut-key").value.trim().toUpperCase();
+  if(!key){
+    msgEl.textContent = "キーを1文字入力してください。";
+    msgEl.style.color = "var(--danger)";
+    return;
+  }
+  if(!ctrl && !alt && !shift){
+    msgEl.textContent = "誤操作で押してしまわないよう、Ctrl・Alt・Shiftのうち最低1つは入れてください。";
+    msgEl.style.color = "var(--danger)";
+    return;
+  }
+  try{
+    await setDoc(doc(db,"app_settings","kiosk_logout_shortcut"), { ctrl, alt, shift, key }, { merge:true });
+    msgEl.textContent = "保存しました。";
+    msgEl.style.color = "var(--muted)";
+  }catch(e){
+    msgEl.textContent = "保存に失敗しました。権限をご確認ください。";
+    msgEl.style.color = "var(--danger)";
+  }
+});
+
 function initChatCleanupSettingsListener(){
   onSnapshot(doc(db,"app_settings","chat_cleanup"), snap=>{
     const data = snap.exists() ? snap.data() : {};
