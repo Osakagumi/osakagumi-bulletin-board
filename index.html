@@ -2248,6 +2248,10 @@ onAuthStateChanged(auth, async (user)=>{
         const noticeBoardUrl = `${indexPageUrl()}?nboard=1`;
         noticeBoardQrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=64x64&data=${encodeURIComponent(noticeBoardUrl)}`;
       }
+      // QRコード経由（個人のスマホでの自動ログイン）の場合は、共用アカウントのログアウトボタンを
+      // 誤って操作されないよう表示しない（休憩所の共用PC側でのみログアウト操作をさせる）
+      const logoutBtn = document.getElementById("notice-board-logout-btn");
+      if(logoutBtn) logoutBtn.style.display = isNoticeBoardAutoLogin ? "none" : "";
     }
   }else{
     currentUser = null;
