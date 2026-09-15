@@ -208,6 +208,11 @@
   }
   #kiosk-qr-badge img{ display:block; width:88px; height:88px; }
   #kiosk-qr-badge .kiosk-qr-label{ font-size:10.5px; color:var(--muted); margin-top:3px; }
+  #notice-board-qr-badge{
+    display:flex; flex-direction:column; align-items:center; margin-right:14px;
+  }
+  #notice-board-qr-badge img{ display:block; width:64px; height:64px; }
+  #notice-board-qr-badge .kiosk-qr-label{ font-size:10px; color:var(--muted); margin-top:2px; }
 
   header{
     background:var(--surface);border-bottom:1px solid var(--line);
@@ -870,6 +875,10 @@
     <div id="notice-board-view">
       <div id="notice-board-header">
         <span>📌 お知らせ</span>
+        <div id="notice-board-qr-badge">
+          <img id="notice-board-qr-img" alt="スマホで見るためのQRコード">
+          <div class="kiosk-qr-label">スマホで見る</div>
+        </div>
         <button type="button" id="notice-board-logout-btn">ログアウト</button>
       </div>
       <div id="notice-board-cards"></div>
@@ -1741,7 +1750,7 @@ import {
   getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, addDoc, deleteDoc, query, where,
   onSnapshot, orderBy, limit, documentId, arrayUnion, arrayRemove, Timestamp, FieldPath
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig, BUSINESS_HOURS, EQUIPMENT_STATUSES, SAFETY_STATUSES, EMAILJS_CONFIG, resolveMailRecipients, isMailOverrideActive, MAIL_SEND_TARGET } from "./firebase-config.js";
+import { firebaseConfig, BUSINESS_HOURS, EQUIPMENT_STATUSES, SAFETY_STATUSES, EMAILJS_CONFIG, resolveMailRecipients, isMailOverrideActive, MAIL_SEND_TARGET, NOTICE_BOARD_AUTO_LOGIN } from "./firebase-config.js";
 import { initStorageHelper, uploadFileToStorage, deleteFileFromStorage } from "./storage-helper.js";
 
 const app = initializeApp(firebaseConfig);
@@ -1816,6 +1825,15 @@ const isDisplayMode = urlParams.get("display") === "1";
 if(isDisplayMode){
   document.body.classList.add("kiosk-mode");
 }
+
+/* ---------- お知らせ掲示板モード：QRコード経由のスマホからの自動ログイン ----------
+   休憩所の共用PC（notice-board-mode）に表示されるQRコードを、社給スマホを持たない
+   作業員が個人のスマホで読み取った場合に、いちいちログイン情報を入力させることなく
+   同じ「お知らせのみ」画面をすぐ見られるようにする。共用アカウントは閲覧権限（お知らせ）
+   以外を持たせない前提で運用すること（ひねさんと合意済み・2026年9月）。
+   認証情報はfirebase-config.jsのNOTICE_BOARD_AUTO_LOGINに設定する。 --------- */
+const isNoticeBoardAutoLogin = urlParams.get("nboard") === "1";
+let noticeBoardAutoLoginAttempted = false;
 
 /* ---------- サイネージ表示モード（時間枠予約：設備を1つ指定） ---------- */
 const reserveSignageEquipmentId = urlParams.get("reserveSignage");
@@ -2223,12 +2241,29 @@ onAuthStateChanged(auth, async (user)=>{
     if(isSharedAccount){
       closeNoticeBoardDetail(); // 前回セッションで詳細を開いたままだった場合に備えて閉じておく
       renderNoticeBoardCards();
+      // スマホでこのお知らせ掲示板をそのまま見られるよう、nboard=1付きのURLをQRコードにする
+      // （このパラメータが付いていると、下の自動ログイン処理が働く）
+      const noticeBoardQrImg = document.getElementById("notice-board-qr-img");
+      if(noticeBoardQrImg){
+        const noticeBoardUrl = `${indexPageUrl()}?nboard=1`;
+        noticeBoardQrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=64x64&data=${encodeURIComponent(noticeBoardUrl)}`;
+      }
     }
   }else{
     currentUser = null;
     document.getElementById("login-screen").style.display = "flex";
     document.getElementById("app").style.display = "none";
     document.body.classList.remove("notice-board-mode"); // 前回、共用アカウントでログインしていた場合の残留防止
+    if(isNoticeBoardAutoLogin && !noticeBoardAutoLoginAttempted){
+      noticeBoardAutoLoginAttempted = true;
+      try{
+        await signInWithEmailAndPassword(auth, NOTICE_BOARD_AUTO_LOGIN.email, NOTICE_BOARD_AUTO_LOGIN.password);
+        // 成功した場合、onAuthStateChangedが再度呼ばれ、通常のログイン処理が続く
+      }catch(e){
+        console.error("[お知らせ掲示板 自動ログインエラー]", e);
+        document.getElementById("login-error").textContent = "自動ログインに失敗しました。手動でログインしてください。";
+      }
+    }
   }
 });
 

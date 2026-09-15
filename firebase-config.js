@@ -72,6 +72,15 @@ export const GAS_STORAGE_CONFIG = {
   secret: "pIJHkljhwfeohdskksdglkj9887sgdlksssss"                  // apps-script-storage.gs の SECRET と同じ値にする
 };
 
+// お知らせ掲示板モード（休憩所の共用PC・isSharedAccount）のQRコードから、
+// 社給スマホを持たない作業員が個人のスマホで自動ログインするための認証情報。
+// 共用アカウントには「お知らせの閲覧」以外の権限を持たせないこと
+// （このファイルの値はページのソースから誰でも読み取れるため）。
+export const NOTICE_BOARD_AUTO_LOGIN = {
+  email: "ここに共用アカウントのメールアドレスを入力",
+  password: "ここに共用アカウントのパスワードを入力"
+};
+
 // MAIL_SEND_TARGET の設定内容に応じて、実際の送信先リストを返すヘルパー関数。
 // admin.html・index.html の両方から共通で呼び出します。
 // posterEmail：MAIL_SEND_TARGETが"#"（投稿者本人にのみ送信・テスト用）の場合に使う、
