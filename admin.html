@@ -546,16 +546,16 @@
         <h2>CSVで一括登録</h2>
         <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
           1行目はヘッダー行として無視されます。2行目以降を1人ずつ登録します。<br>
-          列の順番：<b id="userimport-column-order-text">社員番号, 氏名, 所属, システム管理者フラグ, お知らせ投稿フラグ, 行き先編集権限フラグ, 設備管理者フラグ, 入札編集権限フラグ, カレンダー編集権限フラグ, 安否確認発信権限フラグ, メールアドレス, パスワード, 電話番号, 備考</b><br>
+          列の順番：<b id="userimport-column-order-text">社員番号, 氏名, 所属, システム管理者フラグ, お知らせ投稿フラグ, お知らせ管理権限フラグ, 行き先編集権限フラグ, 設備管理者フラグ, 入札編集権限フラグ, カレンダー編集権限フラグ, 安否確認発信権限フラグ, メールアドレス, パスワード, 電話番号, 備考</b><br>
           必須は「メールアドレス」「パスワード」のみで、他は省略可です。<br>
           各権限フラグは <code>1</code> / <code>TRUE</code> / <code>○</code> / <code>はい</code> のいずれかを入れると有効になります（空欄は無効）。業務情報の情報管理者フラグは、各項目とも最大3人までです（超過分は登録されません）。<br>
           所属欄には「ユーザー管理」タブで登録済みの部署名をそのまま入力してください（一致しない場合は未所属として登録されます）。複数の部署に所属させたい場合は「、」または「/」区切りで入力してください（例：役員、営業部）。
         </p>
         <div class="field full" style="margin-bottom:12px;">
           <label>サンプル</label>
-          <pre id="userimport-sample-text" style="background:#F7F8FA;border:1px solid var(--line);border-radius:7px;padding:10px 12px;font-size:12px;overflow-x:auto;">社員番号,氏名,所属,システム管理者フラグ,お知らせ投稿フラグ,行き先編集権限フラグ,設備管理者フラグ,入札編集権限フラグ,カレンダー編集権限フラグ,安否確認発信権限フラグ,メールアドレス,パスワード,電話番号,備考
-1001,山田太郎,工務部,,1,,,,,,yamada@osakagumi.co.jp,Osaka2026!,090-1234-5678,現場責任者
-1002,佐藤花子,総務経理部,1,1,1,,,,1,sato@osakagumi.co.jp,Osaka2026!,090-2345-6789,</pre>
+          <pre id="userimport-sample-text" style="background:#F7F8FA;border:1px solid var(--line);border-radius:7px;padding:10px 12px;font-size:12px;overflow-x:auto;">社員番号,氏名,所属,システム管理者フラグ,お知らせ投稿フラグ,お知らせ管理権限フラグ,行き先編集権限フラグ,設備管理者フラグ,入札編集権限フラグ,カレンダー編集権限フラグ,安否確認発信権限フラグ,メールアドレス,パスワード,電話番号,備考
+1001,山田太郎,工務部,,1,,,,,,,yamada@osakagumi.co.jp,Osaka2026!,090-1234-5678,現場責任者
+1002,佐藤花子,総務経理部,1,1,,,,,,1,sato@osakagumi.co.jp,Osaka2026!,090-2345-6789,</pre>
         </div>
       </div>
       -->
@@ -584,7 +584,7 @@
         <h3>登録内容の確認（<span id="userimport-count">0</span>件）</h3>
         <div style="max-height:50vh;overflow:auto;">
           <table>
-            <thead><tr id="userimport-preview-headrow"><th>登録区分</th><th>社員番号</th><th>氏名</th><th>所属</th><th>システム管理者</th><th>お知らせ投稿</th><th>行き先編集</th><th>測量機器管理</th><th>入札編集</th><th>カレンダー編集</th><th>安否確認発信</th><th>メールアドレス</th><th>電話番号</th><th>備考</th></tr></thead>
+            <thead><tr id="userimport-preview-headrow"><th>登録区分</th><th>社員番号</th><th>氏名</th><th>所属</th><th>システム管理者</th><th>お知らせ投稿</th><th>お知らせ管理</th><th>行き先編集</th><th>測量機器管理</th><th>入札編集</th><th>カレンダー編集</th><th>安否確認発信</th><th>メールアドレス</th><th>電話番号</th><th>備考</th></tr></thead>
             <tbody id="userimport-preview-body"></tbody>
           </table>
         </div>
@@ -4714,11 +4714,11 @@ function parseCsv(text){
   text = text.replace(/^\uFEFF/, "");
   const lines = text.split(/\r\n|\n|\r/).filter(l=>l.trim().length>0);
   const rows = [];
-  const fixedColCount = 10; // 社員番号〜安否確認発信権限フラグまでの固定列数
+  const fixedColCount = 11; // 社員番号〜安否確認発信権限フラグまでの固定列数
   for(let i=1;i<lines.length;i++){ // 1行目はヘッダーとして無視
     const cols = parseCsvLine(lines[i]);
     if(cols.length===0) continue;
-    const [employeeNo, name, department, adminFlag, posterFlag, wbEditorFlag, eqManagerFlag, contractEditorFlag, calEditorFlag, safetySenderFlag] = cols;
+    const [employeeNo, name, department, adminFlag, posterFlag, noticeManagerFlag, wbEditorFlag, eqManagerFlag, contractEditorFlag, calEditorFlag, safetySenderFlag] = cols;
     const bizInfoFlags = bizInfoItemsAll.map((item, idx)=> cols[fixedColCount + idx]);
     const [email, password, phone, memo] = cols.slice(fixedColCount + bizInfoItemsAll.length);
     if(!email || !email.trim()) continue;
@@ -4728,6 +4728,7 @@ function parseCsv(text){
       department: (department||"").trim(),
       isAdmin: isTruthyFlag(adminFlag),
       isPoster: isTruthyFlag(posterFlag),
+      isNoticeManager: isTruthyFlag(noticeManagerFlag),
       isWbEditor: isTruthyFlag(wbEditorFlag),
       isEqManager: isTruthyFlag(eqManagerFlag),
       isContractEditor: isTruthyFlag(contractEditorFlag),
@@ -4842,6 +4843,7 @@ function renderUserImportPreview(){
       <td>${deptCellHtml}</td>
       <td>${row.isAdmin ? "○" : ""}</td>
       <td>${row.isPoster ? "○" : ""}</td>
+      <td>${row.isNoticeManager ? "○" : ""}</td>
       <td>${row.isWbEditor ? "○" : ""}</td>
       <td>${row.isEqManager ? "○" : ""}</td>
       <td>${row.isContractEditor ? "○" : ""}</td>
@@ -4868,12 +4870,12 @@ function updateUserImportBizInfoColumns(){
   if(!orderEl || !sampleEl) return;
   const bizFlagLabels = bizInfoItemsAll.map(item => `${item.name || "（無題）"}情報管理者フラグ`);
   orderEl.textContent =
-    ["社員番号", "氏名", "所属", "システム管理者フラグ", "お知らせ投稿フラグ", "行き先編集権限フラグ", "設備管理者フラグ", "入札編集権限フラグ", "カレンダー編集権限フラグ", "安否確認発信権限フラグ", ...bizFlagLabels, "メールアドレス", "パスワード", "電話番号", "備考"].join(", ");
+    ["社員番号", "氏名", "所属", "システム管理者フラグ", "お知らせ投稿フラグ", "お知らせ管理権限フラグ", "行き先編集権限フラグ", "設備管理者フラグ", "入札編集権限フラグ", "カレンダー編集権限フラグ", "安否確認発信権限フラグ", ...bizFlagLabels, "メールアドレス", "パスワード", "電話番号", "備考"].join(", ");
   const bizHeaderCols = bizInfoItemsAll.map(item => `${item.name || "（無題）"}情報管理者フラグ`).join(",");
   const bizBlankCols = bizInfoItemsAll.map(()=> "").join(",");
-  const headerLine = `社員番号,氏名,所属,システム管理者フラグ,お知らせ投稿フラグ,行き先編集権限フラグ,設備管理者フラグ,入札編集権限フラグ,カレンダー編集権限フラグ,安否確認発信権限フラグ${bizHeaderCols ? ","+bizHeaderCols : ""},メールアドレス,パスワード,電話番号,備考`;
-  const row1 = `1001,山田太郎,工務部,,1,,,,,,${bizBlankCols ? bizBlankCols+"," : ""}yamada@osakagumi.co.jp,Osaka2026!,090-1234-5678,現場責任者`;
-  const row2 = `1002,佐藤花子,総務経理部,1,1,1,,,,1${bizBlankCols ? ","+bizBlankCols : ""},sato@osakagumi.co.jp,Osaka2026!,090-2345-6789,`;
+  const headerLine = `社員番号,氏名,所属,システム管理者フラグ,お知らせ投稿フラグ,お知らせ管理権限フラグ,行き先編集権限フラグ,設備管理者フラグ,入札編集権限フラグ,カレンダー編集権限フラグ,安否確認発信権限フラグ${bizHeaderCols ? ","+bizHeaderCols : ""},メールアドレス,パスワード,電話番号,備考`;
+  const row1 = `1001,山田太郎,工務部,,1,,,,,,,${bizBlankCols ? bizBlankCols+"," : ""}yamada@osakagumi.co.jp,Osaka2026!,090-1234-5678,現場責任者`;
+  const row2 = `1002,佐藤花子,総務経理部,1,1,,,,,,1${bizBlankCols ? ","+bizBlankCols : ""},sato@osakagumi.co.jp,Osaka2026!,090-2345-6789,`;
   sampleEl.textContent = `${headerLine}\n${row1}\n${row2}`;
 }
 function populateSingleEmpDeptSelect(){
@@ -5070,6 +5072,9 @@ document.getElementById("userimport-execute-btn").addEventListener("click", asyn
       if(row.isPoster){
         await setDoc(doc(db,"announcement_posters", targetEmail), { addedBy: currentUser.email, addedAt: new Date().toISOString() });
       }
+      if(row.isNoticeManager){
+        await setDoc(doc(db,"notice_managers", targetEmail), { addedBy: currentUser.email, addedAt: new Date().toISOString() });
+      }
       if(row.isWbEditor){
         await setDoc(doc(db,"whereabouts_editors", targetEmail), { addedBy: currentUser.email, addedAt: new Date().toISOString() });
       }
@@ -5120,7 +5125,7 @@ document.getElementById("user-export-cancel-btn")?.addEventListener("click", ()=
 });
 document.getElementById("user-export-download-btn")?.addEventListener("click", ()=>{
   const bizFlagLabels = bizInfoItemsAll.map(item => `${item.name || "（無題）"}情報管理者フラグ`);
-  const header = ["社員番号","氏名","所属","システム管理者フラグ","お知らせ投稿フラグ","行き先編集権限フラグ","設備管理者フラグ","入札編集権限フラグ","カレンダー編集権限フラグ","安否確認発信権限フラグ",...bizFlagLabels,"メールアドレス","パスワード","電話番号","備考"];
+  const header = ["社員番号","氏名","所属","システム管理者フラグ","お知らせ投稿フラグ","お知らせ管理権限フラグ","行き先編集権限フラグ","設備管理者フラグ","入札編集権限フラグ","カレンダー編集権限フラグ","安否確認発信権限フラグ",...bizFlagLabels,"メールアドレス","パスワード","電話番号","備考"];
   const rows = [header];
   const headersOnly = document.getElementById("user-export-headers-only").checked;
   if(!headersOnly){
@@ -5134,6 +5139,7 @@ document.getElementById("user-export-download-btn")?.addEventListener("click", (
       empDepartmentsAdmin(emp).map(id=>departmentNameById(id)).join("、"),
       lastAdminEmails.includes(emp.email) ? "1" : "",
       lastPosterEmails.includes(emp.email) ? "1" : "",
+      lastNoticeManagerEmails.includes(emp.email) ? "1" : "",
       lastWbEditorEmails.includes(emp.email) ? "1" : "",
       lastEqManagerEmails.includes(emp.email) ? "1" : "",
       lastContractEditorEmails.includes(emp.email) ? "1" : "",
