@@ -2284,9 +2284,13 @@ onAuthStateChanged(auth, async (user)=>{
       closeNoticeBoardDetail(); // 前回セッションで詳細を開いたままだった場合に備えて閉じておく
       renderNoticeBoardCards();
       // スマホでこのお知らせ掲示板をそのまま見られるよう、nboard=1付きのURLをQRコードにする
-      // （このパラメータが付いていると、下の自動ログイン処理が働く）
+      // （このパラメータが付いていると、下の自動ログイン処理が働く）。
+      // ただし、既にQRコード経由（nboard=1）でこの画面を開いている場合は、
+      // 自分自身を読み込ませても意味が無いため、QRコード自体を表示しない。
+      const noticeBoardQrBadge = document.getElementById("notice-board-qr-badge");
+      if(noticeBoardQrBadge) noticeBoardQrBadge.style.display = isNoticeBoardAutoLogin ? "none" : "";
       const noticeBoardQrImg = document.getElementById("notice-board-qr-img");
-      if(noticeBoardQrImg){
+      if(noticeBoardQrImg && !isNoticeBoardAutoLogin){
         const noticeBoardUrl = `${indexPageUrl()}?nboard=1`;
         noticeBoardQrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=64x64&data=${encodeURIComponent(noticeBoardUrl)}`;
       }
