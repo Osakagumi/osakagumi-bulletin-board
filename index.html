@@ -1836,6 +1836,14 @@ if(isDisplayMode){
    認証情報はfirebase-config.jsのNOTICE_BOARD_AUTO_LOGINに設定する。 --------- */
 const isNoticeBoardAutoLogin = urlParams.get("nboard") === "1";
 let noticeBoardAutoLoginAttempted = false;
+if(isNoticeBoardAutoLogin){
+  // 自動ログインが何らかの理由で失敗し、通常のログイン画面が表示されてしまった場合に備えて、
+  // 共用アカウントのメールアドレスをあらかじめ入力しておき、他のアカウントと間違えないようにする
+  const emailInput = document.getElementById("login-email");
+  if(emailInput) emailInput.value = NOTICE_BOARD_AUTO_LOGIN.email;
+  const loginSub = document.querySelector("#login-screen .sub");
+  if(loginSub) loginSub.textContent = "お知らせ掲示板 専用ログイン";
+}
 
 /* ---------- サイネージ表示モード（時間枠予約：設備を1つ指定） ---------- */
 const reserveSignageEquipmentId = urlParams.get("reserveSignage");
@@ -2161,6 +2169,13 @@ async function doLogin(){
   errEl.style.color = "";
   errEl.textContent = "";
   if(!email || !pw){ errEl.textContent = "メールアドレスとパスワードを入力してください。"; return; }
+  // QRコード経由（休憩所の共用アカウント専用ルート）でアクセスしている間は、
+  // 共用アカウント以外でのログインを拒否する（このルートを、通常のポータルへの
+  // 入口として使われないようにするため）。
+  if(isNoticeBoardAutoLogin && email.toLowerCase() !== NOTICE_BOARD_AUTO_LOGIN.email.toLowerCase()){
+    errEl.textContent = "このページからは、お知らせ掲示板専用のアカウントのみログインできます。";
+    return;
+  }
   try{
     await signInWithEmailAndPassword(auth, email, pw);
   }catch(e){
