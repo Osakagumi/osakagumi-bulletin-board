@@ -1014,6 +1014,45 @@
         </div>
         <div id="chat-filesize-limit-save-msg" style="font-size:12.5px;color:var(--muted);"></div>
       </div>
+      <div class="panel">
+        <h2>吹き出しの色設定</h2>
+        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
+          自分・相手それぞれの吹き出しの背景色・文字色を設定します。空欄のままにすると既定の色（自分：青、相手：緑）が使われます。
+        </p>
+        <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:14px;">
+          <div>
+            <div style="font-weight:700;font-size:13px;margin-bottom:8px;">自分の吹き出し</div>
+            <div style="display:flex;gap:16px;align-items:center;">
+              <div class="field" style="margin:0;">
+                <label>背景色</label>
+                <input type="color" id="chat-color-my-bg" style="width:60px;padding:2px;">
+              </div>
+              <div class="field" style="margin:0;">
+                <label>文字色</label>
+                <input type="color" id="chat-color-my-text" style="width:60px;padding:2px;">
+              </div>
+            </div>
+          </div>
+          <div>
+            <div style="font-weight:700;font-size:13px;margin-bottom:8px;">相手の吹き出し</div>
+            <div style="display:flex;gap:16px;align-items:center;">
+              <div class="field" style="margin:0;">
+                <label>背景色</label>
+                <input type="color" id="chat-color-other-bg" style="width:60px;padding:2px;">
+              </div>
+              <div class="field" style="margin:0;">
+                <label>文字色</label>
+                <input type="color" id="chat-color-other-text" style="width:60px;padding:2px;">
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;">
+          <button class="btn btn-primary" id="chat-color-save-btn">保存</button>
+          <button class="btn btn-ghost" id="chat-color-reset-btn" style="border:1px solid var(--line);">既定の色に戻す</button>
+        </div>
+        <div id="chat-color-save-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px;"></div>
+      </div>
     </section>
 
     <!-- ============ システム管理 ============ -->
@@ -1271,7 +1310,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/fireba
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signOut, inMemoryPersistence, setPersistence } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, setDoc,
-  query, where, onSnapshot, orderBy, limit, Timestamp, arrayUnion, arrayRemove
+  query, where, onSnapshot, orderBy, limit, Timestamp, arrayUnion, arrayRemove, deleteField
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig, CATEGORIES as SEED_CATEGORIES, EQUIPMENT_STATUSES } from "./firebase-config.js";
 import { initStorageHelper, uploadFileToStorage, deleteFileFromStorage, fetchStorageInfo } from "./storage-helper.js";
@@ -3286,8 +3325,51 @@ function initChatCleanupSettingsListener(){
     if(fileSizeLimitEnabledInput) fileSizeLimitEnabledInput.checked = !!data.fileSizeLimitEnabled; // 未設定時は既定で無効（上限なし）
     if(fileSizeLimitMbInput) fileSizeLimitMbInput.value = data.fileSizeLimitMB ?? 10;
     updateChatFileSizeLimitFieldDisabled();
+    // 吹き出しの色設定（未設定時は、既定の色をそのまま表示する）
+    const myBgInput = document.getElementById("chat-color-my-bg");
+    const myTextInput = document.getElementById("chat-color-my-text");
+    const otherBgInput = document.getElementById("chat-color-other-bg");
+    const otherTextInput = document.getElementById("chat-color-other-text");
+    if(myBgInput) myBgInput.value = data.chatMyBg || "#1C5AA5";
+    if(myTextInput) myTextInput.value = data.chatMyText || "#FFFFFF";
+    if(otherBgInput) otherBgInput.value = data.chatOtherBg || "#1E6B4F";
+    if(otherTextInput) otherTextInput.value = data.chatOtherText || "#FFFFFF";
   }, (err)=>{ console.error("[チャット削除設定取得エラー]", err); });
 }
+document.getElementById("chat-color-save-btn")?.addEventListener("click", async ()=>{
+  const msgEl = document.getElementById("chat-color-save-msg");
+  const chatMyBg = document.getElementById("chat-color-my-bg").value;
+  const chatMyText = document.getElementById("chat-color-my-text").value;
+  const chatOtherBg = document.getElementById("chat-color-other-bg").value;
+  const chatOtherText = document.getElementById("chat-color-other-text").value;
+  try{
+    await setDoc(doc(db,"app_settings","chat_cleanup"), { chatMyBg, chatMyText, chatOtherBg, chatOtherText }, { merge:true });
+    msgEl.textContent = "保存しました。";
+    msgEl.style.color = "var(--muted)";
+  }catch(e){
+    msgEl.textContent = "保存に失敗しました。権限をご確認ください。";
+    msgEl.style.color = "var(--danger)";
+  }
+});
+document.getElementById("chat-color-reset-btn")?.addEventListener("click", async ()=>{
+  const msgEl = document.getElementById("chat-color-save-msg");
+  document.getElementById("chat-color-my-bg").value = "#1C5AA5";
+  document.getElementById("chat-color-my-text").value = "#FFFFFF";
+  document.getElementById("chat-color-other-bg").value = "#1E6B4F";
+  document.getElementById("chat-color-other-text").value = "#FFFFFF";
+  try{
+    // deleteField()で該当フィールドを削除し、index.html側のCSS既定値（var()のフォールバック）に戻す
+    await updateDoc(doc(db,"app_settings","chat_cleanup"), {
+      chatMyBg: deleteField(), chatMyText: deleteField(),
+      chatOtherBg: deleteField(), chatOtherText: deleteField()
+    });
+    msgEl.textContent = "既定の色に戻しました。";
+    msgEl.style.color = "var(--muted)";
+  }catch(e){
+    msgEl.textContent = "リセットに失敗しました。権限をご確認ください。";
+    msgEl.style.color = "var(--danger)";
+  }
+});
 // 圧縮が無効のときは、閾値・圧縮後サイズのプルダウンをグレーアウトする
 function updateChatCompressFieldsDisabled(){
   const enabled = document.getElementById("chat-compress-enabled")?.checked;
