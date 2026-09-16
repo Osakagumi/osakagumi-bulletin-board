@@ -1651,6 +1651,7 @@ function computeSectionAccess(){
     // 権限判定：システム管理者は常に権限ありとみなす。個別権限を持つ人もOK（対応する個別権限が無いセクションは管理者専用）。
     let hasPermission = myAdminPermissions.isAdmin || (!!def.permission && !!myAdminPermissions[def.permission]);
     if(section==="bizinfo" && isBizInfoManager) hasPermission = true; // 業務情報だけは「情報管理者」指定でも入室可能
+    if(section==="notices" && myAdminPermissions.isNoticeManager) hasPermission = true; // お知らせ管理権限があれば、投稿権限が無くても入室可能
     // タブ表示判定：対応する一般画面タブが「無効」に設定されている場合は、システム管理者であってもこのセクションは表示しない。
     // ただし「情報管理者」に指定されている場合は、この人向けの個人設定・システム設定に関わらず優先して表示する
     // （情報管理者の指定は、特定の項目を任せるための個別・明示的な操作のため）。
@@ -1677,9 +1678,10 @@ onAuthStateChanged(auth, async (user)=>{
   }
   currentUser = user;
 
-  const [adminDoc, posterDoc, wbEditorDoc, eqManagerDoc, calEditorDoc, contractEditorDoc, myEmpDoc, generalDefaultsDoc, bizInfoManagerSnap] = await Promise.all([
+  const [adminDoc, posterDoc, noticeManagerDoc, wbEditorDoc, eqManagerDoc, calEditorDoc, contractEditorDoc, myEmpDoc, generalDefaultsDoc, bizInfoManagerSnap] = await Promise.all([
     getDoc(doc(db, "admins", user.email)).catch(()=>null),
     getDoc(doc(db, "announcement_posters", user.email)).catch(()=>null),
+    getDoc(doc(db, "notice_managers", user.email)).catch(()=>null),
     getDoc(doc(db, "whereabouts_editors", user.email)).catch(()=>null),
     getDoc(doc(db, "equipment_managers", user.email)).catch(()=>null),
     getDoc(doc(db, "calendar_editors", user.email)).catch(()=>null),
@@ -1691,6 +1693,7 @@ onAuthStateChanged(auth, async (user)=>{
   myAdminPermissions = {
     isAdmin: !!(adminDoc && adminDoc.exists()),
     isPoster: !!(posterDoc && posterDoc.exists()),
+    isNoticeManager: !!(noticeManagerDoc && noticeManagerDoc.exists()),
     isWhereaboutsEditor: !!(wbEditorDoc && wbEditorDoc.exists()),
     isEquipmentManager: !!(eqManagerDoc && eqManagerDoc.exists()),
     isCalendarEditor: !!(calEditorDoc && calEditorDoc.exists()),
@@ -1726,6 +1729,7 @@ onAuthStateChanged(auth, async (user)=>{
   initReservationsListener();
   initAdminsListener();
   initPostersListener();
+  initNoticeManagersListener();
   initNoticeCleanupSettingsListener();
   initNoticesAdminListener();
   initDepartmentsListener();
@@ -2435,6 +2439,13 @@ function initPostersListener(){
     renderPosters(lastPosterEmails);
   });
 }
+// お知らせ管理権限：投稿ができるほか、他人のお知らせも含めて編集・削除・既読確認ができる
+let lastNoticeManagerEmails = [];
+function initNoticeManagersListener(){
+  onSnapshot(collection(db,"notice_managers"), snap=>{
+    lastNoticeManagerEmails = sortEmailsByEmployeeNo(snap.docs.map(d=>d.id));
+  });
+}
 
 function initNoticesAdminListener(){
   const q = query(collection(db,"announcements"), orderBy("createdAt","desc"));
@@ -2453,6 +2464,12 @@ async function deleteOneNotice(n){
   }
 }
 function renderNoticesAdminTable(notices){
+  // システム管理者・お知らせ管理権限者は全件、それ以外（お知らせ投稿権限のみの人）は
+  // 自分が投稿したお知らせだけを表示する（一般画面と同じ制限に揃える）。
+  const canSeeAll = myAdminPermissions.isAdmin || myAdminPermissions.isNoticeManager;
+  if(!canSeeAll){
+    notices = notices.filter(n => n.authorEmail === currentUser.email);
+  }
   noticesAllAdmin = notices;
   selectedNoticeIds = new Set([...selectedNoticeIds].filter(id => notices.some(n=>n.id===id)));
   const body = document.getElementById("notices-admin-table-body");
@@ -4129,6 +4146,7 @@ function sortEmailsByEmployeeNo(emails){
 const PERMISSION_DEFS = [
   { collection: "admins", label: "システム管理者", getList: ()=> lastAdminEmails },
   { collection: "announcement_posters", label: "お知らせ投稿権限", getList: ()=> lastPosterEmails },
+  { collection: "notice_managers", label: "お知らせ管理権限", getList: ()=> lastNoticeManagerEmails },
   { collection: "whereabouts_editors", label: "行き先の他者設定権限", getList: ()=> lastWbEditorEmails },
   { collection: "equipment_managers", label: "設備管理者", getList: ()=> lastEqManagerEmails },
   { collection: "contract_editors", label: "入札編集権限", getList: ()=> lastContractEditorEmails },

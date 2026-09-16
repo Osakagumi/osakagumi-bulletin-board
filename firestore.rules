@@ -27,6 +27,13 @@ service cloud.firestore {
           exists(/databases/$(database)/documents/announcement_posters/$(request.auth.token.email)));
     }
 
+    // お知らせ管理権限：投稿ができるほか、他人のお知らせも含めて編集・削除・既読確認ができる（システム管理者に準じる）
+    function isNoticeManager() {
+      return isAdmin() ||
+        (isSignedIn() &&
+          exists(/databases/$(database)/documents/notice_managers/$(request.auth.token.email)));
+    }
+
     function isWhereaboutsEditor() {
       return isAdmin() ||
         (isSignedIn() &&
@@ -241,13 +248,18 @@ service cloud.firestore {
     // お知らせ: 全員が読める。投稿は投稿権限者のみ。削除・編集は本人 or システム管理者。
     match /announcements/{postId} {
       allow read: if isSignedIn();
-      allow create: if isPoster() &&
+      allow create: if (isPoster() || isNoticeManager()) &&
         request.resource.data.authorEmail == request.auth.token.email;
       allow update: if isSignedIn() &&
-        (resource.data.authorEmail == request.auth.token.email || isAdmin() ||
+        (resource.data.authorEmail == request.auth.token.email || isAdmin() || isNoticeManager() ||
          request.resource.data.diff(resource.data).affectedKeys().hasOnly(["readByAt"]));
       allow delete: if isSignedIn() &&
-        (resource.data.authorEmail == request.auth.token.email || isAdmin());
+        (resource.data.authorEmail == request.auth.token.email || isAdmin() || isNoticeManager());
+    }
+
+    match /notice_managers/{email} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
     }
 
     // 安否確認キャンペーン: 全員が読める。作成・編集・終了はシステム管理者、または安否確認発信権限者のみ。

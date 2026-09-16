@@ -2016,6 +2016,7 @@ let wbFontSizePx = 13;
 let kioskDefaultViewApplied = false;
 let isAdmin = false;
 let isPoster = false;
+let isNoticeManager = false; // 他人のお知らせも含めて編集・削除・既読確認ができる権限
 let isWhereaboutsEditor = false;
 let isEquipmentManager = false;
 let isCalendarEditor = false;
@@ -2218,9 +2219,10 @@ onAuthStateChanged(auth, async (user)=>{
     updateHeaderUserLabel();
     // 権限チェックは直列でawaitすると往復通信が5回分積み重なり、
     // 回線が遅いと数秒〜十数秒のロスになる。並列で一度に取得する。
-    const [adminDoc, posterDoc, wbEditorDoc, eqManagerDoc, calEditorDoc, contractEditorDoc, safetySenderDoc, bizInfoManagerSnap, meDoc] = await Promise.all([
+    const [adminDoc, posterDoc, noticeManagerDoc, wbEditorDoc, eqManagerDoc, calEditorDoc, contractEditorDoc, safetySenderDoc, bizInfoManagerSnap, meDoc] = await Promise.all([
       getDoc(doc(db, "admins", user.email)).catch(()=>null),
       getDoc(doc(db, "announcement_posters", user.email)).catch(()=>null),
+      getDoc(doc(db, "notice_managers", user.email)).catch(()=>null),
       getDoc(doc(db, "whereabouts_editors", user.email)).catch(()=>null),
       getDoc(doc(db, "equipment_managers", user.email)).catch(()=>null),
       getDoc(doc(db, "calendar_editors", user.email)).catch(()=>null),
@@ -2230,7 +2232,8 @@ onAuthStateChanged(auth, async (user)=>{
       getDoc(doc(db, "employees", user.email)).catch(()=>null)
     ]);
     isAdmin = !!(adminDoc && adminDoc.exists());
-    isPoster = isAdmin || !!(posterDoc && posterDoc.exists());
+    isNoticeManager = isAdmin || !!(noticeManagerDoc && noticeManagerDoc.exists());
+    isPoster = isNoticeManager || !!(posterDoc && posterDoc.exists());
     isWhereaboutsEditor = isAdmin || !!(wbEditorDoc && wbEditorDoc.exists());
     isEquipmentManager = isAdmin || !!(eqManagerDoc && eqManagerDoc.exists());
     isCalendarEditor = isAdmin || !!(calEditorDoc && calEditorDoc.exists());
@@ -4551,7 +4554,7 @@ function renderNoticeDetailView(n){
   attEl.innerHTML = n.attachmentUrl
     ? `<a href="${escapeHtml(n.attachmentUrl)}" target="_blank" rel="noopener noreferrer">📎 添付ファイル</a>`
     : "";
-  const canManage = isAdmin || n.authorEmail===currentUser.email;
+  const canManage = isAdmin || isNoticeManager || n.authorEmail===currentUser.email;
   document.getElementById("notice-detail-edit-btn").style.display = canManage ? "inline-block" : "none";
   document.getElementById("notice-detail-delete-btn").style.display = canManage ? "inline-block" : "none";
   document.getElementById("notice-detail-readby-btn").style.display = canManage ? "inline-block" : "none";
