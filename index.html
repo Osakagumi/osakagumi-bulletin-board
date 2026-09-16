@@ -418,8 +418,14 @@
   .chat-conv-time{font-size:11px;color:var(--muted);white-space:nowrap;flex-shrink:0;}
   .chat-conv-dot{width:9px;height:9px;border-radius:50%;background:var(--brand);flex-shrink:0;}
   .chat-messages{display:flex;flex-direction:column;gap:8px;padding:10px 4px;min-height:300px;max-height:55vh;overflow-y:auto;}
-  .chat-bubble-row{display:flex;}
+  .chat-bubble-row{display:flex;align-items:flex-end;gap:8px;}
   .chat-bubble-row.chat-mine{justify-content:flex-end;}
+  .chat-avatar{
+    width:28px;height:28px;border-radius:50%;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;
+    background:var(--chat-other-bg, #1E6B4F);color:var(--chat-other-text, #fff);
+    font-size:13px;font-weight:700;
+  }
   .chat-bubble-wrap{max-width:72%;min-width:0;flex-shrink:0;}
   .chat-bubble{
     display:inline-block;max-width:100%;padding:9px 13px;border-radius:14px;font-size:13.5px;line-height:1.5;
@@ -9132,7 +9138,10 @@ function renderChatMessages(msgs){
     }
     // 添付があってもテキストが無くても、常に通常の吹き出しスタイル（背景・枠線）を使う。
     // サムネイル・アイコン側の最大サイズを吹き出しの内側に収まる大きさにして、枠がきちんと見えるようにする。
+    // 相手からのメッセージだけ、名前の1文字目を丸いアイコンとして吹き出しの左側に添える
+    const avatarHtml = isMine ? "" : `<div class="chat-avatar">${escapeHtml((m.senderName||"").charAt(0))}</div>`;
     row.innerHTML = `
+      ${avatarHtml}
       <div class="chat-bubble-wrap">
         <div class="chat-bubble">${bubbleInner}</div>
         <div class="chat-bubble-time">${escapeHtml(timeLabel)}${readLabel}</div>
