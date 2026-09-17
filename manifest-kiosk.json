@@ -1,7 +1,7 @@
 {
-  "name": "お知らせ掲示板",
-  "short_name": "お知らせ",
-  "start_url": "./index.html?nboard=1",
+  "name": "全社お知らせ",
+  "short_name": "全社お知らせ",
+  "start_url": "./?nboard=1",
   "scope": "./",
   "display": "standalone",
   "background_color": "#F4F6F9",
