@@ -1849,27 +1849,13 @@ if(isNoticeBoardAutoLoginParam){
   try{ localStorage.setItem("nboardDevice", "1"); }catch(e){ /* プライベートモード等で失敗しても致命的ではない */ }
   // 「ホーム画面に追加」は、通常このページのURLではなく manifest.json の start_url を
   // 起動先として使ってしまう（PWAの標準的な仕様）。そのため、このページを表示している間だけ、
-  // start_urlに?nboard=1を含めた専用のマニフェストに動的差し替えておく
-  // （iOSではホーム画面アプリとSafari本体でlocalStorageの保存領域が分かれる場合があり、
-  // 上記の目印だけでは対処しきれないための、より確実な対策）。
-  try{
-    const kioskManifest = {
-      name: "お知らせ掲示板",
-      short_name: "お知らせ",
-      start_url: "./index.html?nboard=1",
-      scope: "./",
-      display: "standalone",
-      background_color: "#F4F6F9",
-      theme_color: "#1C5AA5",
-      icons: [
-        { src: "icon-192.png", sizes: "192x192", type: "image/png" },
-        { src: "icon-512.png", sizes: "512x512", type: "image/png" }
-      ]
-    };
-    const blob = new Blob([JSON.stringify(kioskManifest)], { type: "application/json" });
-    const manifestLink = document.getElementById("app-manifest-link");
-    if(manifestLink) manifestLink.setAttribute("href", URL.createObjectURL(blob));
-  }catch(e){ console.error("[キオスク用マニフェスト差し替えエラー]", e); }
+  // start_urlに?nboard=1を含めた専用のマニフェストファイル（manifest-kiosk.json）に
+  // 差し替えておく（iOSではホーム画面アプリとSafari本体でlocalStorageの保存領域が
+  // 分かれる場合があり、上記の目印だけでは対処しきれないための、より確実な対策。
+  // その場で生成するBlob形式は、iPhoneの共有シートでスクリプトエラーになったため、
+  // 実ファイルとして用意したものに差し替える方式にしている）。
+  const manifestLink = document.getElementById("app-manifest-link");
+  if(manifestLink) manifestLink.setAttribute("href", "manifest-kiosk.json");
 }
 let isNoticeBoardAutoLoginStored = false;
 try{ isNoticeBoardAutoLoginStored = localStorage.getItem("nboardDevice") === "1"; }catch(e){ /* 読み取り失敗時は無視 */ }
