@@ -856,7 +856,7 @@
       <p class="sub">OSAKAGUMI INTRANET PORTAL</p>
       <div class="field">
         <label>メールアドレス</label>
-        <input type="email" id="login-email" autocomplete="off" placeholder="you@osakagumi.co.jp">
+        <input type="email" id="login-email" autocomplete="username" placeholder="you@osakagumi.co.jp">
       </div>
       <div class="field">
         <label>パスワード</label>
@@ -1837,10 +1837,9 @@ if(isDisplayMode){
 const isNoticeBoardAutoLogin = urlParams.get("nboard") === "1";
 let noticeBoardAutoLoginAttempted = false;
 if(isNoticeBoardAutoLogin){
-  // 自動ログインが何らかの理由で失敗し、通常のログイン画面が表示されてしまった場合に備えて、
-  // 共用アカウントのメールアドレスをあらかじめ入力しておき、他のアカウントと間違えないようにする
-  const emailInput = document.getElementById("login-email");
-  if(emailInput) emailInput.value = NOTICE_BOARD_AUTO_LOGIN.email;
+  // 自動ログイン成功時は、この画面自体がすぐに消えるため、ここでメールアドレスまで
+  // 入力してしまうと、その一瞬だけ「共用アカウントのメールアドレス」が見えてしまい紛らわしい。
+  // 案内文の変更のみ行い、メールアドレスの自動入力は「実際に自動ログインが失敗した場合」に限る（下記参照）。
   const loginSub = document.querySelector("#login-screen .sub");
   if(loginSub) loginSub.textContent = "お知らせ掲示板 専用ログイン";
 }
@@ -2317,6 +2316,10 @@ onAuthStateChanged(auth, async (user)=>{
       }catch(e){
         console.error("[お知らせ掲示板 自動ログインエラー]", e);
         document.getElementById("login-error").textContent = "自動ログインに失敗しました。手動でログインしてください。";
+        // 失敗した場合に限り、共用アカウントのメールアドレスを入力しておき、
+        // 他のアカウントと間違えて手動ログインしてしまわないようにする
+        const emailInput = document.getElementById("login-email");
+        if(emailInput) emailInput.value = NOTICE_BOARD_AUTO_LOGIN.email;
       }
     }
   }
