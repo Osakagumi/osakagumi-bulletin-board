@@ -1854,8 +1854,14 @@ if(isNoticeBoardAutoLoginParam){
   // 分かれる場合があり、上記の目印だけでは対処しきれないための、より確実な対策。
   // その場で生成するBlob形式は、iPhoneの共有シートでスクリプトエラーになったため、
   // 実ファイルとして用意したものに差し替える方式にしている）。
+  // 「ホーム画面に追加」は、マニフェストが存在する（＝インストール可能なアプリとして認識される）
+  // ページの場合、見ていたURLではなく manifest.json の start_url を起動先として使ってしまう
+  // （PWAの標準的な仕様）。ファイルを差し替える方式では直らなかったため、この画面を
+  // 表示している間はマニフェストのリンク自体を削除し、iOS側に「これは普通のページの
+  // ブックマークだ」と認識させることで、見ていたURL（?nboard=1付き）がそのまま
+  // ホーム画面アイコンの起動先になるようにする。
   const manifestLink = document.getElementById("app-manifest-link");
-  if(manifestLink) manifestLink.setAttribute("href", "manifest-kiosk.json");
+  if(manifestLink) manifestLink.remove();
 }
 let isNoticeBoardAutoLoginStored = false;
 try{ isNoticeBoardAutoLoginStored = localStorage.getItem("nboardDevice") === "1"; }catch(e){ /* 読み取り失敗時は無視 */ }
