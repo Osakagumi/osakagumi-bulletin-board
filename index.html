@@ -120,7 +120,7 @@
   .nb-card{
     background:#fff; border:1px solid var(--line); border-radius:14px; padding:22px 24px;
     cursor:pointer; text-align:left; display:flex; flex-direction:column; gap:10px;
-    min-height:150px; box-shadow:0 1px 3px rgba(0,0,0,0.05);
+    min-height:90px; box-shadow:0 1px 3px rgba(0,0,0,0.05);
   }
   .nb-card:active{ background:#F0F3F8; }
   .nb-card .nb-card-meta{ font-size:15px; color:var(--muted); }
@@ -141,13 +141,17 @@
   #notice-board-detail-overlay.show{ display:flex; }
   #notice-board-detail-panel{
     background:#fff; border-radius:16px; max-width:900px; width:100%; max-height:100%;
-    overflow-y:auto; padding:36px 44px; box-sizing:border-box; position:relative;
+    overflow-y:auto; padding:14px 44px 36px; box-sizing:border-box; position:relative;
+  }
+  #notice-board-detail-header{
+    position:sticky; top:0; background:#fff; display:flex; align-items:center;
+    justify-content:space-between; gap:12px; padding-top:8px; margin-bottom:16px;
   }
   #notice-board-detail-close{
-    position:sticky; top:0; float:right; font-size:13px; padding:9px 15px; border-radius:10px;
-    border:1px solid var(--line); background:#fff; color:var(--muted); cursor:pointer; margin-bottom:10px;
+    font-size:13px; padding:9px 15px; border-radius:10px; flex-shrink:0;
+    border:1px solid var(--line); background:#fff; color:var(--muted); cursor:pointer;
   }
-  .nb-meta{ font-size:12px; color:var(--muted); margin-bottom:10px; clear:both; }
+  .nb-meta{ font-size:12px; color:var(--muted); }
   .nb-title{ font-size:16px; font-weight:700; color:var(--text); margin-bottom:12px; line-height:1.3; }
   .nb-body{ font-size:13.5px; line-height:1.7; white-space:pre-wrap; color:var(--text); }
   .nb-attachment{ font-size:13px; margin-top:14px; }
@@ -886,7 +890,10 @@
       <div id="notice-board-cards"></div>
       <div id="notice-board-detail-overlay">
         <div id="notice-board-detail-panel">
-          <button type="button" id="notice-board-detail-close">✕ 閉じる</button>
+          <div id="notice-board-detail-header">
+            <span id="notice-board-detail-meta"></span>
+            <button type="button" id="notice-board-detail-close">✕ 閉じる</button>
+          </div>
           <div id="notice-board-detail-content"></div>
         </div>
       </div>
@@ -1834,7 +1841,16 @@ if(isDisplayMode){
    同じ「お知らせのみ」画面をすぐ見られるようにする。共用アカウントは閲覧権限（お知らせ）
    以外を持たせない前提で運用すること（ひねさんと合意済み・2026年9月）。
    認証情報はfirebase-config.jsのNOTICE_BOARD_AUTO_LOGINに設定する。 --------- */
-const isNoticeBoardAutoLogin = urlParams.get("nboard") === "1";
+const isNoticeBoardAutoLoginParam = urlParams.get("nboard") === "1";
+if(isNoticeBoardAutoLoginParam){
+  // 一度でもこのURL（QRコード経由）でアクセスした端末には、目印を残しておく。
+  // スマホの「ホーム画面に追加」機能で作られたアイコンは、URLのパラメータ（?nboard=1）を
+  // 保持してくれない場合があり、その場合でも通常のログインに戻ってしまわないようにするため。
+  try{ localStorage.setItem("nboardDevice", "1"); }catch(e){ /* プライベートモード等で失敗しても致命的ではない */ }
+}
+let isNoticeBoardAutoLoginStored = false;
+try{ isNoticeBoardAutoLoginStored = localStorage.getItem("nboardDevice") === "1"; }catch(e){ /* 読み取り失敗時は無視 */ }
+const isNoticeBoardAutoLogin = isNoticeBoardAutoLoginParam || isNoticeBoardAutoLoginStored;
 let noticeBoardAutoLoginAttempted = false;
 if(isNoticeBoardAutoLogin){
   // 自動ログイン成功時は、この画面自体がすぐに消えるため、ここでメールアドレスまで
@@ -4375,7 +4391,6 @@ function renderNoticeBoardCards(){
     card.innerHTML = `
       <div class="nb-card-meta">${escapeHtml(tsToStr(n.createdAt))}　${escapeHtml(authorName)}</div>
       <div class="nb-card-title">${escapeHtml(n.title||"")}</div>
-      <div class="nb-card-preview">${escapeHtml(n.body||"")}</div>
       ${attachmentHtml}
     `;
     card.addEventListener("click", ()=> openNoticeBoardDetail(n));
@@ -4389,8 +4404,8 @@ function openNoticeBoardDetail(n){
   const attachmentHtml = n.attachmentUrl
     ? `<div class="nb-attachment"><a href="${escapeHtml(n.attachmentUrl)}" target="_blank" rel="noopener noreferrer">📎 ${escapeHtml(n.attachmentFileName || "添付ファイルを開く")}</a></div>`
     : "";
+  document.getElementById("notice-board-detail-meta").textContent = `${tsToStr(n.createdAt)}　${authorName}`;
   contentEl.innerHTML = `
-    <div class="nb-meta">${escapeHtml(tsToStr(n.createdAt))}　${escapeHtml(authorName)}</div>
     <div class="nb-title">${escapeHtml(n.title||"")}</div>
     <div class="nb-body">${escapeHtml(n.body||"")}</div>
     ${attachmentHtml}
