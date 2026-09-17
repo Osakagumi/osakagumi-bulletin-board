@@ -5117,6 +5117,9 @@ function initEmployeesListener(){
     refreshDashboardIfActive();
     applyMyHiddenTabs();
     openChatFromUrlIfNeeded();
+    // お知らせ（掲示板モード）の対象者判定には自分自身の社員レコードが必要なため、
+    // こちらが後から届いた場合に備えて再描画する（掲示板モード中でなければ内部で何もしない）
+    renderNoticeBoardCards();
   }, (err)=>{ console.error("[社員名簿取得エラー]", err); });
 }
 
