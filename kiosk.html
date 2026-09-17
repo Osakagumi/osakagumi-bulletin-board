@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>お知らせ掲示板</title>
+<!--
+  このページには意図的に <link rel="manifest"> を一切含めていません。
+
+  index.html?nboard=1 に直接マニフェストを紐付けると、iOSの「ホーム画面に追加」機能が
+  実際に見ていたURL（?nboard=1付き）ではなく、manifest.jsonのstart_url（index.htmlの
+  素のURL）をアイコンの起動先として使ってしまう（PWAの標準的な仕様で、JavaScriptで
+  後からマニフェストのリンクを消しても、ブラウザが解析の初期段階で既に読み込んで
+  しまっているらしく効果が無かった）。
+
+  このページ自体にはマニフェストの参照が最初から存在しないため、「ホーム画面に追加」は
+  単純なブックマークとして扱われ、このページ自体の固定URL（kiosk.html）がそのまま
+  アイコンの起動先になる。あとは、このページを開いた瞬間に本来のお知らせ画面
+  （index.html?nboard=1）へ転送するだけでよい。
+-->
+<script>
+  location.replace("./index.html?nboard=1");
+</script>
+</head>
+<body>
+  <p>お知らせ掲示板を読み込んでいます…</p>
+</body>
+</html>
