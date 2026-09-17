@@ -698,19 +698,6 @@
     <!-- ============ お知らせ管理 ============ -->
     <section id="view-notices" style="display:none;">
       <div class="panel">
-        <h2>お知らせの自動削除設定</h2>
-        <!-- <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-          投稿から指定した日数が経過したお知らせは、いずれかのシステム管理者・お知らせ投稿権限者がログインした際に自動的に削除されます。
-        </p> -->
-        <div class="form-grid">
-          <div class="field">
-            <label>自動削除までの日数</label>
-            <input type="number" id="notice-cleanup-days-input" min="1" value="30">
-          </div>
-        </div>
-        <button class="btn btn-primary" id="notice-cleanup-save-btn">保存</button>
-      </div>
-      <div class="panel">
         <h2>掲示中のお知らせ一覧</h2>
         <!-- <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">個人ごとの「既読」状態に関わらず、現在掲示されている全てのお知らせを確認・削除できます。</p> -->
         <table id="notices-table">
@@ -724,6 +711,19 @@
           </tr></thead>
           <tbody id="notices-admin-table-body"></tbody>
         </table>
+      </div>
+      <div class="panel">
+        <h2>お知らせの自動削除設定</h2>
+        <!-- <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
+          投稿から指定した日数が経過したお知らせは、いずれかのシステム管理者・お知らせ投稿権限者がログインした際に自動的に削除されます。
+        </p> -->
+        <div class="form-grid">
+          <div class="field">
+            <label>自動削除までの日数</label>
+            <input type="number" id="notice-cleanup-days-input" min="1" value="30">
+          </div>
+        </div>
+        <button class="btn btn-primary" id="notice-cleanup-save-btn">保存</button>
       </div>
     </section>
 
@@ -1109,7 +1109,7 @@
         </div>
         <!-- キオスク（共用アカウント・お知らせ掲示板）のログアウト用ショートカットキー -->
         <div class="panel" style="margin:0;">
-          <h2>お知らせ掲示板（共用アカウント）のログアウト方法</h2>
+          <h2>共用アカウントログアウト用ショートカットキー</h2>
           <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
             休憩所等の共用アカウントでログインした画面には、誰でも押せるログアウトボタンを表示しません。代わりに、ここで設定したキーの組み合わせを押すとログアウトし、ログイン画面に戻ります。
           </p>
@@ -1220,7 +1220,7 @@
             </div>
           </div>
           <button type="button" class="btn btn-primary" id="bizinfo-upload-confirm-btn" style="display:none;width:100%;margin-top:12px;">このファイルをアップロードする</button>
-          <button type="button" class="btn btn-ghost" id="bizinfo-modal-edit-file-btn" style="display:none;border:1px solid var(--line);width:100%;margin-top:8px;">ファイル修正</button>
+          <button type="button" class="btn btn-ghost" id="bizinfo-modal-edit-file-btn" style="display:none;border:1px solid var(--line);width:100%;margin-top:8px;">直接修正</button>
           <div id="bizinfo-attach-error" style="color:var(--danger);font-size:12.5px;margin-top:8px;min-height:16px;"></div>
         </div>
         <div class="field" style="display:flex;align-items:center;gap:6px;">
@@ -3536,7 +3536,7 @@ function renderBizInfoTable(){
     }
     const actionsTd = tr.querySelector(".actions");
     const shortcutBtn = document.createElement("button");
-    shortcutBtn.className = "btn btn-ghost"; shortcutBtn.textContent = "ファイル修正";
+    shortcutBtn.className = "btn btn-ghost"; shortcutBtn.textContent = "直接修正";
     shortcutBtn.style.border = "1px solid var(--line)";
     shortcutBtn.disabled = !canManage;
     shortcutBtn.addEventListener("click", ()=> openBizInfoEditScreen(item));
