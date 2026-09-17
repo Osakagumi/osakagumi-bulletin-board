@@ -1873,6 +1873,13 @@ if(isNoticeBoardAutoLogin){
   // 案内文の変更のみ行い、メールアドレスの自動入力は「実際に自動ログインが失敗した場合」に限る（下記参照）。
   const loginSub = document.querySelector("#login-screen .sub");
   if(loginSub) loginSub.textContent = "お知らせ掲示板 専用ログイン";
+  // このルートでは、iOSのFace ID/パスワード自動入力機能が、個人アカウントの
+  // 保存済み認証情報を提案してしまうと紛らわしいため、その提案自体を抑制する
+  // （通常のログイン画面では、パスワード管理の補完は便利な機能なのでそのまま残す）。
+  const emailInputForAutofill = document.getElementById("login-email");
+  const passwordInputForAutofill = document.getElementById("login-password");
+  if(emailInputForAutofill) emailInputForAutofill.setAttribute("autocomplete", "off");
+  if(passwordInputForAutofill) passwordInputForAutofill.setAttribute("autocomplete", "off");
 }
 
 /* ---------- サイネージ表示モード（時間枠予約：設備を1つ指定） ---------- */
