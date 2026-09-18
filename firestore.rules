@@ -94,9 +94,17 @@ service cloud.firestore {
     }
 
     // アプリ全体の設定（行き先ビューの列数など）: 全員が読める。書き込みはシステム管理者のみ。
+    // ただしnotice_cleanup（お知らせ自動削除の日数設定）は下の専用ルールで別途制限するため、ここでは対象外にする。
     match /app_settings/{settingId} {
       allow read: if isSignedIn();
-      allow write: if isSignedIn() && (isAdmin() || isContractEditor() || isPoster() || isSafetySender());
+      allow write: if isSignedIn() && settingId != 'notice_cleanup' &&
+        (isAdmin() || isContractEditor() || isPoster() || isSafetySender());
+    }
+
+    // お知らせ自動削除の日数設定：システム管理者・お知らせ管理権限者のみ変更可能。
+    match /app_settings/notice_cleanup {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && (isAdmin() || isNoticeManager());
     }
 
     // タブの並び順・初期表示タブ・一般画面での既定の表示タブなど、システム全体の既定値。

@@ -712,7 +712,7 @@
           <tbody id="notices-admin-table-body"></tbody>
         </table>
       </div>
-      <div class="panel">
+      <div class="panel" id="notice-cleanup-panel">
         <h2>お知らせの自動削除設定</h2>
         <!-- <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
           投稿から指定した日数が経過したお知らせは、いずれかのシステム管理者・お知らせ投稿権限者がログインした際に自動的に削除されます。
@@ -2418,6 +2418,13 @@ function renderAdminsTable(list){
 ============================================================ */
 let lastPosterEmails = [];
 function initNoticeCleanupSettingsListener(){
+  // システム管理者・お知らせ管理権限者のみ、この設定を見える・変更できるようにする
+  // （Firestoreルール側でも同様に制限済みだが、権限が無い人に編集不可の入力欄を
+  //   見せて「保存に失敗しました」と混乱させないよう、UI側でもパネルごと隠す）。
+  const panel = document.getElementById("notice-cleanup-panel");
+  if(panel){
+    panel.style.display = (myAdminPermissions.isAdmin || myAdminPermissions.isNoticeManager) ? "" : "none";
+  }
   onSnapshot(doc(db,"app_settings","notice_cleanup"), snap=>{
     const days = (snap.exists() && snap.data().days) || 30;
     const input = document.getElementById("notice-cleanup-days-input");
