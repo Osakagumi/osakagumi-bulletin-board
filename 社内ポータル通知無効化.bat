@@ -1,39 +1,39 @@
 @echo off
-:: このバッチは、社内ポータルサイト（GitHub Pages上）からの通知の、
-:: Chrome・Edgeでの自動許可設定（NotificationsAllowedForUrls）を
-:: 取り消すための管理者向けツールです。「社内ポータル通知有効化.bat」の対になるものです。
+:: ���̃o�b�`�́A�Г��|�[�^���T�C�g�iGitHub Pages��j����̒ʒm�́A
+:: Chrome�EEdge�ł̎������ݒ�iNotificationsAllowedForUrls�j��
+:: ���������߂̊Ǘ��Ҍ����c�[���ł��B�u�Г��|�[�^���ʒm�L����.bat�v�̑΂ɂȂ���̂ł��B
 ::
-:: 動作：NotificationsAllowedForUrls というポリシーから、対象URLが
-:: 登録されていれば、その値だけを探して削除します。他のURLが登録されている
-:: 値には一切触れません（登録されていない場合は何もしません）。
+:: ����FNotificationsAllowedForUrls �Ƃ����|���V�[����A�Ώ�URL��
+:: �o�^����Ă���΁A���̒l������T���č폜���܂��B����URL���o�^����Ă���
+:: �l�ɂ͈�ؐG��܂���i�o�^����Ă��Ȃ��ꍇ�͉������܂���j�B
 
-:: 管理者権限チェック（net sessionは管理者でないと失敗する、という性質を利用している）
+:: �Ǘ��Ҍ����`�F�b�N�inet session�͊Ǘ��҂łȂ��Ǝ��s����A�Ƃ��������𗘗p���Ă���j
 net session >nul 2>&1
 if %errorlevel% neq 0 (
-    echo 管理者権限で実行してください。
+    echo �Ǘ��Ҍ����Ŏ��s���Ă��������B
     pause
     exit /b
 )
 
-:: 取り消したいサイトのURL（有効化バッチと同じ値にしてください）
+:: �����������T�C�g��URL�i�L�����o�b�`�Ɠ����l�ɂ��Ă��������j
 set TARGET_URL=https://osakagumi.github.io
 
 call :RemoveUrlIfPresent "HKLM\SOFTWARE\Policies\Google\Chrome\NotificationsAllowedForUrls" "Chrome"
 call :RemoveUrlIfPresent "HKLM\SOFTWARE\Policies\Microsoft\Edge\NotificationsAllowedForUrls" "Edge"
 
 echo.
-echo 処理が完了しました。ブラウザを再起動してください。
-echo （反映されているか確認したい場合は、chrome://policy または edge://policy を開き、
-echo 　「再読み込み」を押してから NotificationsAllowedForUrls を確認してください）
+echo �������������܂����B�u���E�U���ċN�����Ă��������B
+echo �i���f����Ă��邩�m�F�������ꍇ�́Achrome://policy �܂��� edge://policy ���J���A
+echo �@�u�ēǂݍ��݁v�������Ă��� NotificationsAllowedForUrls ���m�F���Ă��������j
 pause
 exit /b
 
 
 :: ============================================================
-:: サブルーチン：指定したレジストリキーの中から、TARGET_URLが
-:: 登録されている値を探し、見つかればその番号だけを削除する。
-:: 他のURLが登録されている値には一切触れない。
-:: 引数1：レジストリキーのパス　引数2：表示用のブラウザ名
+:: �T�u���[�`���F�w�肵�����W�X�g���L�[�̒�����ATARGET_URL��
+:: �o�^����Ă���l��T���A������΂��̔ԍ��������폜����B
+:: ����URL���o�^����Ă���l�ɂ͈�ؐG��Ȃ��B
+:: ����1�F���W�X�g���L�[�̃p�X�@����2�F�\���p�̃u���E�U��
 :: ============================================================
 :RemoveUrlIfPresent
 setlocal enabledelayedexpansion
@@ -41,16 +41,16 @@ set "REGKEY=%~1"
 set "BROWSERNAME=%~2"
 set "FOUNDINDEX="
 
-:: 既存の登録内容を1件ずつ確認する（キーが存在しない場合はこのforループは何も処理しない）
+:: �����̓o�^���e��1�����m�F����i�L�[�����݂��Ȃ��ꍇ�͂���for���[�v�͉����������Ȃ��j
 for /f "tokens=1,3*" %%A in ('reg query "%REGKEY%" 2^>nul ^| findstr /i "REG_SZ"') do (
     if /i "%%B"=="%TARGET_URL%" set "FOUNDINDEX=%%A"
 )
 
 if defined FOUNDINDEX (
-    echo [%BROWSERNAME%] 値 !FOUNDINDEX! として登録されていたため削除します...
+    echo [%BROWSERNAME%] �l !FOUNDINDEX! �Ƃ��ēo�^����Ă������ߍ폜���܂�...
     reg delete "%REGKEY%" /v !FOUNDINDEX! /f
 ) else (
-    echo [%BROWSERNAME%] 登録されていなかったため、何もしません。
+    echo [%BROWSERNAME%] �o�^����Ă��Ȃ��������߁A�������܂���B
 )
 endlocal
 exit /b

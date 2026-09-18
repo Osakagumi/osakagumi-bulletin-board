@@ -1,28 +1,24 @@
 @echo off
 REM ============================================================
-REM 大坂組 社内ポータルサイト インストールスクリプト
+REM ���g �Г��|�[�^���T�C�g �C���X�g�[���X�N���v�g
 REM
-REM  必ず「管理者として実行」してください（右クリック→管理者として実行）。
-REM  このスクリプトが行うこと：
-REM   0. 既定のブラウザを判定する（Chrome以外の場合はEdgeを対象にする）
-REM   1. 対象ブラウザで社内ポータルからの通知を自動的に「許可」にする
-REM   2. 対象ブラウザに、社内ポータルをサイレントインストール
-REM      （ユーザーのクリック操作なし・デスクトップショートカットも自動作成）する
-REM   3. インストールされたWebアプリが、ログイン時に自動的に開くようにする
-REM      （ユーザーが後から手動でOFFにすることはできません）
+REM  �K���u�Ǘ��҂Ƃ��Ď��s�v���Ă��������i�E�N���b�N���Ǘ��҂Ƃ��Ď��s�j�B
+REM  ���̃X�N���v�g���s�����ƁF
+REM   0. ����̃u���E�U�𔻒肷��iChrome�ȊO�̏ꍇ��Edge��Ώۂɂ���j
+REM   1. �Ώۃu���E�U�ŎГ��|�[�^������̒ʒm�������I�Ɂu���v�ɂ���
+REM   2. �Ώۃu���E�U�ɁA�Г��|�[�^�����T�C�����g�C���X�g�[��
+REM      �i���[�U�[�̃N���b�N����Ȃ��E�f�X�N�g�b�v�V���[�g�J�b�g�������쐬�j����
+REM   3. �C���X�g�[�����ꂽWeb�A�v�����A���O�C�����Ɏ����I�ɊJ���悤�ɂ���
+REM      �i���[�U�[���ォ��蓮��OFF�ɂ��邱�Ƃ͂ł��܂���j
 REM
-REM  Edge・Chromeが両方入っている環境で、両方にアイコンや通知が二重に
-REM  できてしまうのを避けるため、既定のブラウザ1つだけに設定します。
-REM
-REM  行わないこと：
-REM   ・社内ポータルへのログイン（メールアドレス・パスワードの入力）
-REM     　→ これはセキュリティ上、各自で手動で行ってください
+REM  Edge�EChrome�����������Ă�����ŁA�����ɃA�C�R����ʒm����d��
+REM  �ł��Ă��܂��̂�����邽�߁A����̃u���E�U1�����ɐݒ肵�܂��B
 REM ============================================================
 
-:: 管理者権限チェック（net sessionは管理者でないと失敗する、という性質を利用している）
+:: �Ǘ��Ҍ����`�F�b�N�inet session�͊Ǘ��҂łȂ��Ǝ��s����A�Ƃ��������𗘗p���Ă���j
 net session >nul 2>&1
 if %errorlevel% neq 0 (
-    echo 管理者権限で実行してください。
+    echo �Ǘ��Ҍ����Ŏ��s���Ă��������B
     pause
     exit /b
 )
@@ -30,19 +26,19 @@ if %errorlevel% neq 0 (
 set PORTAL_URL=https://osakagumi.github.io/osakagumi-bulletin-board/
 set NOTICE_URL=https://osakagumi.github.io
 
-echo [0/3] 既定のブラウザを判定します...
+echo [0/3] ����̃u���E�U�𔻒肵�܂�...
 
 set "DEFAULT_PROGID="
 for /f "tokens=2,*" %%A in ('reg query "HKCU\SOFTWARE\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice" /v ProgId 2^>nul ^| findstr /i "ProgId"') do set "DEFAULT_PROGID=%%B"
 
-REM 既定はEdge。ProgIdが「ChromeHTML」で始まる場合だけChromeに切り替える。
-REM Firefoxなどそれ以外だった場合・判定できなかった場合はEdgeのままにする。
+REM �����Edge�BProgId���uChromeHTML�v�Ŏn�܂�ꍇ����Chrome�ɐ؂�ւ���B
+REM Firefox�Ȃǂ���ȊO�������ꍇ�E����ł��Ȃ������ꍇ��Edge�̂܂܂ɂ���B
 set "TARGET_BROWSER=Edge"
 echo %DEFAULT_PROGID% | findstr /i "^ChromeHTML" >nul
 if not errorlevel 1 set "TARGET_BROWSER=Chrome"
 
-echo   既定のブラウザ（ProgId）：%DEFAULT_PROGID%
-echo   → 今回の設定対象：%TARGET_BROWSER%
+echo   ����̃u���E�U�iProgId�j�F%DEFAULT_PROGID%
+echo   �� ����̐ݒ�ΏہF%TARGET_BROWSER%
 
 if /i "%TARGET_BROWSER%"=="Chrome" (
   set "POLICY_REGKEY=HKLM\SOFTWARE\Policies\Google\Chrome"
@@ -53,39 +49,39 @@ set "NOTIFY_REGKEY=%POLICY_REGKEY%\NotificationsAllowedForUrls"
 set "INSTALL_REGKEY=%POLICY_REGKEY%\WebAppInstallForceList"
 
 echo.
-echo [1/3] %TARGET_BROWSER% で社内ポータルからの通知を許可にします...
+echo [1/3] %TARGET_BROWSER% �ŎГ��|�[�^������̒ʒm�����ɂ��܂�...
 call :EnsureUrlAllowed "%NOTIFY_REGKEY%" "%TARGET_BROWSER%"
 
 echo.
-echo [2/3] %TARGET_BROWSER% に社内ポータルを強制インストールする設定をします...
+echo [2/3] %TARGET_BROWSER% �ɎГ��|�[�^���������C���X�g�[������ݒ�����܂�...
 reg add "%INSTALL_REGKEY%" /v 1 /t REG_SZ /d "{\"url\":\"%PORTAL_URL%\",\"default_launch_container\":\"window\",\"create_desktop_shortcut\":true}" /f
 
 echo.
-echo [3/3] インストールしたアプリが、ログイン時に自動的に開くようにします...
-REM WebAppSettings: manifest_idを社内ポータル自身のID（manifest.jsonにidの明示指定が
-REM 無いため、その場合の既定値であるstart_urlの解決後URL）にすることで、
-REM 他のWebアプリには一切影響を与えないようにする。
-REM run_on_os_login を run_windowed にすると、ユーザーが後からOFFにすることはできない。
+echo [3/3] �C���X�g�[�������A�v�����A���O�C�����Ɏ����I�ɊJ���悤�ɂ��܂�...
+REM WebAppSettings: manifest_id���Г��|�[�^�����g��ID�imanifest.json��id�̖����w�肪
+REM �������߁A���̏ꍇ�̊���l�ł���start_url�̉�����URL�j�ɂ��邱�ƂŁA
+REM ����Web�A�v���ɂ͈�؉e����^���Ȃ��悤�ɂ���B
+REM run_on_os_login �� run_windowed �ɂ���ƁA���[�U�[���ォ��OFF�ɂ��邱�Ƃ͂ł��Ȃ��B
 set "PORTAL_MANIFEST_ID=https://osakagumi.github.io/osakagumi-bulletin-board/index.html"
 reg add "%POLICY_REGKEY%" /v WebAppSettings /t REG_SZ /d "[{\"manifest_id\":\"%PORTAL_MANIFEST_ID%\",\"run_on_os_login\":\"run_windowed\"}]" /f
 
 echo.
-echo 設定が完了しました。
-echo %TARGET_BROWSER% を一度起動すると、数秒〜数十秒後に自動的にインストールされ、
-echo デスクトップにアイコンが作成されます（起動していない場合は反映されません）。
-echo 次回以降のログイン時から、自動的にアプリが開くようになります。
+echo �ݒ肪�������܂����B
+echo %TARGET_BROWSER% ����x�N������ƁA���b�`���\�b��Ɏ����I�ɃC���X�g�[������A
+echo �f�X�N�g�b�v�ɃA�C�R�����쐬����܂��i�N�����Ă��Ȃ��ꍇ�͔��f����܂���j�B
+echo ����ȍ~�̃��O�C��������A�����I�ɃA�v�����J���悤�ɂȂ�܂��B
 echo.
-echo この後、以下だけ手動で行ってください：
-echo   ・作成されたアプリを開き、社内ポータルへログイン
+echo ���̌�A�ȉ������蓮�ōs���Ă��������F
+echo   �E�쐬���ꂽ�A�v�����J���A�Г��|�[�^���փ��O�C��
 echo.
 pause
 exit /b
 
 
 :: ============================================================
-:: サブルーチン：指定したレジストリキーに、NOTICE_URLがまだ
-:: 登録されていなければ、次の空き番号で追加登録する。
-:: 引数1：レジストリキーのパス　引数2：表示用のブラウザ名
+:: �T�u���[�`���F�w�肵�����W�X�g���L�[�ɁANOTICE_URL���܂�
+:: �o�^����Ă��Ȃ���΁A���̋󂫔ԍ��Œǉ��o�^����B
+:: ����1�F���W�X�g���L�[�̃p�X�@����2�F�\���p�̃u���E�U��
 :: ============================================================
 :EnsureUrlAllowed
 setlocal enabledelayedexpansion
@@ -101,10 +97,10 @@ for /f "tokens=1,3*" %%A in ('reg query "%REGKEY%" 2^>nul ^| findstr /i "REG_SZ"
 )
 
 if "%FOUND%"=="1" (
-    echo   [%BROWSERNAME%] 既に登録済みのため、何もしません。
+    echo   [%BROWSERNAME%] ���ɓo�^�ς݂̂��߁A�������܂���B
 ) else (
     set /a "NEWINDEX=%MAXINDEX%+1"
-    echo   [%BROWSERNAME%] 未登録のため、値 !NEWINDEX! として追加登録します...
+    echo   [%BROWSERNAME%] ���o�^�̂��߁A�l !NEWINDEX! �Ƃ��Ēǉ��o�^���܂�...
     reg add "%REGKEY%" /v !NEWINDEX! /t REG_SZ /d "%NOTICE_URL%" /f
 )
 endlocal

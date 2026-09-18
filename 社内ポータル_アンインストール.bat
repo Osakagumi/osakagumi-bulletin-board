@@ -1,96 +1,96 @@
 @echo off
 REM ============================================================
-REM 大坂組 社内ポータルサイト 自動セットアップ 取り消し（アンインストール）
+REM ���g �Г��|�[�^���T�C�g �����Z�b�g�A�b�v �������i�A���C���X�g�[���j
 REM
-REM  必ず「管理者として実行」してください（右クリック→管理者として実行）。
+REM  �K���u�Ǘ��҂Ƃ��Ď��s�v���Ă��������i�E�N���b�N���Ǘ��҂Ƃ��Ď��s�j�B
 REM
-REM  このスクリプトが行うこと：
-REM   1.「社内ポータル_インストール.bat」で設定した、Edge / Chrome への
-REM     強制インストール設定（レジストリの値 "1"）だけを削除します。
-REM     他のアプリの強制インストール設定（値 "2" 以降など）が別途あっても、
-REM     それらには影響しません。
-REM   2.「社内ポータル通知有効化.bat」で NotificationsAllowedForUrls に
-REM     追加登録された、社内ポータルのURL（https://osakagumi.github.io）だけを
-REM     探して削除します。他に登録されている別サイトのURLには影響しません。
-REM   3.「社内ポータル_インストール.bat」で設定した、ログイン時の自動起動設定
-REM     （WebAppSettings）を削除します。
-REM     ※この値は社内ポータル専用のmanifest_idを指定して作成しているため、
-REM       他のWebアプリには影響しません。ただし今のところ、この値には
-REM       社内ポータルの設定しか入っていない前提で、値ごと削除しています。
-REM       もし今後、他のWebアプリの設定も同じ値に追加した場合は、
-REM       このスクリプトは使わず、該当箇所だけを手動で調整してください。
+REM  ���̃X�N���v�g���s�����ƁF
+REM   1.�u�Г��|�[�^��_�C���X�g�[��.bat�v�Őݒ肵���AEdge / Chrome �ւ�
+REM     �����C���X�g�[���ݒ�i���W�X�g���̒l "1"�j�������폜���܂��B
+REM     ���̃A�v���̋����C���X�g�[���ݒ�i�l "2" �ȍ~�Ȃǁj���ʓr�����Ă��A
+REM     �����ɂ͉e�����܂���B
+REM   2.�u�Г��|�[�^���ʒm�L����.bat�v�� NotificationsAllowedForUrls ��
+REM     �ǉ��o�^���ꂽ�A�Г��|�[�^����URL�ihttps://osakagumi.github.io�j������
+REM     �T���č폜���܂��B���ɓo�^����Ă���ʃT�C�g��URL�ɂ͉e�����܂���B
+REM   3.�u�Г��|�[�^��_�C���X�g�[��.bat�v�Őݒ肵���A���O�C�����̎����N���ݒ�
+REM     �iWebAppSettings�j���폜���܂��B
+REM     �����̒l�͎Г��|�[�^����p��manifest_id���w�肵�č쐬���Ă��邽�߁A
+REM       ����Web�A�v���ɂ͉e�����܂���B���������̂Ƃ���A���̒l�ɂ�
+REM       �Г��|�[�^���̐ݒ肵�������Ă��Ȃ��O��ŁA�l���ƍ폜���Ă��܂��B
+REM       ��������A����Web�A�v���̐ݒ�������l�ɒǉ������ꍇ�́A
+REM       ���̃X�N���v�g�͎g�킸�A�Y���ӏ��������蓮�Œ������Ă��������B
 REM
-REM  Microsoftの仕様上、1.の設定を削除すると、該当のアプリ（社内ポータル）は
-REM  Edge / Chromeによって自動的にアンインストールされます
-REM　（利用者が手動でアンインストールする必要はありません）。
+REM  Microsoft�̎d�l��A1.�̐ݒ���폜����ƁA�Y���̃A�v���i�Г��|�[�^���j��
+REM  Edge / Chrome�ɂ���Ď����I�ɃA���C���X�g�[������܂�
+REM�@�i���p�҂��蓮�ŃA���C���X�g�[������K�v�͂���܂���j�B
 REM ============================================================
 
-:: 管理者権限チェック（net sessionは管理者でないと失敗する、という性質を利用している）
+:: �Ǘ��Ҍ����`�F�b�N�inet session�͊Ǘ��҂łȂ��Ǝ��s����A�Ƃ��������𗘗p���Ă���j
 net session >nul 2>&1
 if %errorlevel% neq 0 (
-    echo 管理者権限で実行してください。
+    echo �Ǘ��Ҍ����Ŏ��s���Ă��������B
     pause
     exit /b
 )
 
 set TARGET_URL=https://osakagumi.github.io
 
-echo [1/3] Edge / Chrome の強制インストール設定を解除します...
+echo [1/3] Edge / Chrome �̋����C���X�g�[���ݒ���������܂�...
 
-REM --- Microsoft Edge 用（強制インストール） ---
+REM --- Microsoft Edge �p�i�����C���X�g�[���j ---
 reg query "HKLM\SOFTWARE\Policies\Microsoft\Edge\WebAppInstallForceList" /v 1 >nul 2>&1
 if %errorlevel%==0 (
   reg delete "HKLM\SOFTWARE\Policies\Microsoft\Edge\WebAppInstallForceList" /v 1 /f
 ) else (
-  echo   ※Edge側の設定（値 "1"）は見つかりませんでした。すでに解除済みか、未設定です。
+  echo   ��Edge���̐ݒ�i�l "1"�j�͌�����܂���ł����B���łɉ����ς݂��A���ݒ�ł��B
 )
 
-REM --- Google Chrome 用（強制インストール） ---
+REM --- Google Chrome �p�i�����C���X�g�[���j ---
 reg query "HKLM\SOFTWARE\Policies\Google\Chrome\WebAppInstallForceList" /v 1 >nul 2>&1
 if %errorlevel%==0 (
   reg delete "HKLM\SOFTWARE\Policies\Google\Chrome\WebAppInstallForceList" /v 1 /f
 ) else (
-  echo   ※Chrome側の設定（値 "1"）は見つかりませんでした。すでに解除済みか、未設定です。
+  echo   ��Chrome���̐ݒ�i�l "1"�j�͌�����܂���ł����B���łɉ����ς݂��A���ݒ�ł��B
 )
 
 echo.
-echo [2/3] 通知の強制許可設定を解除します...
+echo [2/3] �ʒm�̋������ݒ���������܂�...
 
 call :RemoveUrlIfPresent "HKLM\SOFTWARE\Policies\Google\Chrome\NotificationsAllowedForUrls" "Chrome"
 call :RemoveUrlIfPresent "HKLM\SOFTWARE\Policies\Microsoft\Edge\NotificationsAllowedForUrls" "Edge"
 
 echo.
-echo [3/3] ログイン時の自動起動設定を解除します...
+echo [3/3] ���O�C�����̎����N���ݒ���������܂�...
 
 reg query "HKLM\SOFTWARE\Policies\Microsoft\Edge" /v WebAppSettings >nul 2>&1
 if %errorlevel%==0 (
   reg delete "HKLM\SOFTWARE\Policies\Microsoft\Edge" /v WebAppSettings /f
 ) else (
-  echo   ※Edge側の設定は見つかりませんでした。すでに解除済みか、未設定です。
+  echo   ��Edge���̐ݒ�͌�����܂���ł����B���łɉ����ς݂��A���ݒ�ł��B
 )
 
 reg query "HKLM\SOFTWARE\Policies\Google\Chrome" /v WebAppSettings >nul 2>&1
 if %errorlevel%==0 (
   reg delete "HKLM\SOFTWARE\Policies\Google\Chrome" /v WebAppSettings /f
 ) else (
-  echo   ※Chrome側の設定は見つかりませんでした。すでに解除済みか、未設定です。
+  echo   ��Chrome���̐ݒ�͌�����܂���ł����B���łɉ����ς݂��A���ݒ�ł��B
 )
 
 echo.
-echo 設定を解除しました。
-echo Edge / Chromeを一度再起動すると、社内ポータルのアプリが自動的に削除され、
-echo 通知の強制許可・ログイン時の自動起動も解除された状態になります。
-echo （デスクトップに作成されたショートカットも、それに合わせて消えるはずです）
+echo �ݒ���������܂����B
+echo Edge / Chrome����x�ċN������ƁA�Г��|�[�^���̃A�v���������I�ɍ폜����A
+echo �ʒm�̋������E���O�C�����̎����N�����������ꂽ��ԂɂȂ�܂��B
+echo �i�f�X�N�g�b�v�ɍ쐬���ꂽ�V���[�g�J�b�g���A����ɍ��킹�ď�����͂��ł��j
 echo.
 pause
 exit /b
 
 
 :: ============================================================
-:: サブルーチン：指定したレジストリキーの中から、TARGET_URLが
-:: 登録されている値を探し、見つかればその番号だけを削除する。
-:: 他のURLが登録されている値には一切触れない。
-:: 引数1：レジストリキーのパス　引数2：表示用のブラウザ名
+:: �T�u���[�`���F�w�肵�����W�X�g���L�[�̒�����ATARGET_URL��
+:: �o�^����Ă���l��T���A������΂��̔ԍ��������폜����B
+:: ����URL���o�^����Ă���l�ɂ͈�ؐG��Ȃ��B
+:: ����1�F���W�X�g���L�[�̃p�X�@����2�F�\���p�̃u���E�U��
 :: ============================================================
 :RemoveUrlIfPresent
 setlocal enabledelayedexpansion
@@ -103,10 +103,10 @@ for /f "tokens=1,3*" %%A in ('reg query "%REGKEY%" 2^>nul ^| findstr /i "REG_SZ"
 )
 
 if defined FOUNDINDEX (
-    echo   [%BROWSERNAME%] 値 !FOUNDINDEX! として登録されていたため削除します...
+    echo   [%BROWSERNAME%] �l !FOUNDINDEX! �Ƃ��ēo�^����Ă������ߍ폜���܂�...
     reg delete "%REGKEY%" /v !FOUNDINDEX! /f
 ) else (
-    echo   [%BROWSERNAME%] 登録されていませんでした。何もしません。
+    echo   [%BROWSERNAME%] �o�^����Ă��܂���ł����B�������܂���B
 )
 endlocal
 exit /b
