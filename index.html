@@ -116,6 +116,7 @@
   #notice-board-cards{
     flex:1 1 auto; overflow-y:auto; display:grid;
     grid-template-columns:repeat(auto-fill, minmax(320px,1fr)); gap:20px; align-content:start;
+    align-items:start;
   }
   .nb-card{
     background:#fff; border:1px solid var(--line); border-radius:14px; padding:22px 24px;
@@ -4413,18 +4414,6 @@ function renderNoticeBoardCards(){
     `;
     card.addEventListener("click", ()=> openNoticeBoardDetail(n));
     cardsEl.appendChild(card);
-  });
-  // ▼一時的な調査用：カードの「見た目の高さ(offsetHeight)」と「中身が必要とする高さ(scrollHeight)」を
-  //   画面上に表示する。両者が一致していればCSSのボックス自体は正しく、原因は別（重なり順など）。
-  //   scrollHeightの方が大きければ、本当に中身がボックスからはみ出している。原因判明後に削除すること。
-  requestAnimationFrame(()=>{
-    document.querySelectorAll("#notice-board-cards .nb-card").forEach(card=>{
-      const oh = card.offsetHeight, sh = card.scrollHeight;
-      const tag = document.createElement("div");
-      tag.style.cssText = "margin-top:6px;font-size:11px;color:#c0392b;font-weight:700;background:#fff3f3;padding:2px 6px;border-radius:4px;align-self:flex-start;";
-      tag.textContent = `[調査用] offsetHeight=${oh} / scrollHeight=${sh}${sh>oh ? "（はみ出しあり）" : ""}`;
-      card.appendChild(tag);
-    });
   });
 }
 function openNoticeBoardDetail(n){
