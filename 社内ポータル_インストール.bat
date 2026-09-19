@@ -67,12 +67,8 @@ reg add "%POLICY_REGKEY%" /v WebAppSettings /t REG_SZ /d "[{\"manifest_id\":\"%P
 
 echo.
 echo 設定が完了しました。
-echo %TARGET_BROWSER% を一度起動すると、数秒～数十秒後に自動的にインストールされ、
-echo デスクトップにアイコンが作成されます（起動していない場合は反映されません）。
-echo 次回以降のログイン時から、自動的にアプリが開くようになります。
-echo.
-echo この後、以下だけ手動で行ってください：
-echo   ・作成されたアプリを開き、社内ポータルへログイン
+echo このあとPCを再起動してください。再起動後、Chrome/Edgeへのインストールが完了し、
+echo デスクトップにアイコンが作成され、次回以降のログイン時から自動的にアプリが開くようになります。
 echo.
 pause
 exit /b
