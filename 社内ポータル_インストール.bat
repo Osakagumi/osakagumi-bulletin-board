@@ -36,7 +36,7 @@ echo.
 echo 開始する前に、保存していない作業を済ませ、他のアプリケーションは
 echo 全て終了しておいてください。
 echo.
-choice /c YN /m "準備ができたら続行しますか"
+choice /c YN /m "準備ができたら y を、中止する場合は n を"
 if errorlevel 2 (
   echo 中止しました。
   pause
@@ -103,8 +103,59 @@ if /i "%TARGET_BROWSER%"=="Chrome" (
 )
 
 echo.
-echo [4/4] 1回目の再起動を準備します...
-REM 次回ログイン時に、このバッチ自身を「/phase2」付きで自動実行するよう登録する。
+echo [4/4] ブラウザを起動し、1回目の再起動の準備をします...
+REM デスクトップの場所がフォルダリダイレクト等で標準以外（例：Dドライブ）に
+REM 変更されている場合があるため、%USERPROFILE%決め打ちではなく、実際の場所を
+REM レジストリから取得する。ブラウザによっては「パブリックデスクトップ」に
+REM 作られる場合もあるため、両方を確認する。
+set "DESKTOP_DIR="
+for /f "tokens=2,*" %%A in ('reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders" /v Desktop 2^>nul ^| findstr /i "REG_SZ"') do set "DESKTOP_DIR=%%B"
+if not defined DESKTOP_DIR set "DESKTOP_DIR=%USERPROFILE%\Desktop"
+
+set "PUBLIC_DESKTOP_DIR="
+for /f "tokens=2,*" %%A in ('reg query "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders" /v "Common Desktop" 2^>nul ^| findstr /i "REG_SZ"') do set "PUBLIC_DESKTOP_DIR=%%B"
+if not defined PUBLIC_DESKTOP_DIR set "PUBLIC_DESKTOP_DIR=%PUBLIC%\Desktop"
+
+set "SHORTCUT_NAME=大坂組社内ポータルサイト*.lnk"
+set "SHORTCUT_PATTERN1=%DESKTOP_DIR%\%SHORTCUT_NAME%"
+set "SHORTCUT_PATTERN2=%PUBLIC_DESKTOP_DIR%\%SHORTCUT_NAME%"
+
+if /i "%TARGET_BROWSER%"=="Chrome" goto :LaunchChrome
+goto :LaunchEdge
+
+:LaunchChrome
+REM Chromeは、起動してデスクトップアイコンができるまで待つと、
+REM その場でインストールが完了することを確認済み。
+start "" chrome
+echo   デスクトップにアイコンが作成されるまで待ちます...
+set /a WAITED=0
+:WaitChromeInstall
+if exist "%SHORTCUT_PATTERN1%" goto :CloseChrome
+if exist "%SHORTCUT_PATTERN2%" goto :CloseChrome
+if %WAITED% GEQ 60 (
+  echo   ※60秒待ちましたが確認できませんでした。このまま次に進みます。
+  goto :CloseChrome
+)
+timeout /t 2 /nobreak >nul
+set /a WAITED+=2
+goto :WaitChromeInstall
+:CloseChrome
+taskkill /IM chrome.exe /F >nul 2>&1
+goto :BrowserLaunchDone
+
+:LaunchEdge
+REM Edgeは、起動して待ってもその場でインストールが完了しないことが多い
+REM （Edge側の既知の挙動と思われる）ため、長く待たせず、コンソールの
+REM メッセージを確認できる程度の短い時間だけ待つ。
+start "" msedge
+echo   3秒ほど待ちます...
+timeout /t 3 /nobreak >nul
+taskkill /IM msedge.exe /F >nul 2>&1
+
+:BrowserLaunchDone
+
+echo.
+echo 次回ログイン時に、このバッチ自身を「/phase2」付きで自動実行するよう登録します...
 REM RunOnceは実行されると自動的に消えるが、念のためPhase2側でも明示的に削除する。
 reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\RunOnce" /v OsakagumiPortalSetupPhase2 /t REG_SZ /d "\"%~f0\" /phase2" /f
 
