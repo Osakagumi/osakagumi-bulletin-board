@@ -9,7 +9,8 @@ REM   1. 対象ブラウザで社内ポータルからの通知を自動的に「許可」にする
 REM   2. 対象ブラウザに、社内ポータルをサイレントインストール
 REM      （ユーザーのクリック操作なし・デスクトップショートカットも自動作成）する
 REM   3. インストールされたWebアプリが、ログイン時に自動的に開くようにする
-REM      （ユーザーが後から手動でOFFにすることはできません）
+REM      （ユーザーが後から手動でOFFにすることはできません）。あわせて、
+REM      ブラウザ本体（Chrome/Edge自体）がログイン時に自動起動しないようにする
 REM   4. 対象ブラウザを一時的に起動し、デスクトップショートカットの作成を確認してから終了する
 REM      （こうしないと、初回だけ再起動が2回必要になるため）
 REM
@@ -66,6 +67,14 @@ REM 他のWebアプリには一切影響を与えないようにする。
 REM run_on_os_login を run_windowed にすると、ユーザーが後からOFFにすることはできない。
 set "PORTAL_MANIFEST_ID=https://osakagumi.github.io/osakagumi-bulletin-board/index.html"
 reg add "%POLICY_REGKEY%" /v WebAppSettings /t REG_SZ /d "[{\"manifest_id\":\"%PORTAL_MANIFEST_ID%\",\"run_on_os_login\":\"run_windowed\"}]" /f
+
+REM Chrome本体・Edge本体そのものがログイン時に自動起動してしまう現象を防ぐ
+REM （アプリ自体の自動起動とは別に、ブラウザ本体側の設定が独立してONになることがあるため）。
+if /i "%TARGET_BROWSER%"=="Chrome" (
+  reg add "%POLICY_REGKEY%" /v StartupBrowserWindowLaunchSuppressed /t REG_DWORD /d 1 /f
+) else (
+  reg add "%POLICY_REGKEY%" /v LaunchEdgeOnWindowsStartupEnabled /t REG_DWORD /d 0 /f
+)
 
 echo.
 echo [4/4] %TARGET_BROWSER% を一時的に起動し、インストールを完了させます...

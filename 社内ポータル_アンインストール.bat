@@ -19,6 +19,8 @@ REM       他のWebアプリには影響しません。ただし今のところ、この値には
 REM       社内ポータルの設定しか入っていない前提で、値ごと削除しています。
 REM       もし今後、他のWebアプリの設定も同じ値に追加した場合は、
 REM       このスクリプトは使わず、該当箇所だけを手動で調整してください。
+REM   4.「社内ポータル_インストール.bat」で設定した、ブラウザ本体（Chrome/Edge自体）の
+REM     ログイン時自動起動を抑制する設定を削除します。
 REM
 REM  Microsoftの仕様上、1.の設定を削除すると、該当のアプリ（社内ポータル）は
 REM  Edge / Chromeによって自動的にアンインストールされます
@@ -35,7 +37,7 @@ if %errorlevel% neq 0 (
 
 set TARGET_URL=https://osakagumi.github.io
 
-echo [1/3] Edge / Chrome の強制インストール設定を解除します...
+echo [1/4] Edge / Chrome の強制インストール設定を解除します...
 
 REM --- Microsoft Edge 用（強制インストール） ---
 reg query "HKLM\SOFTWARE\Policies\Microsoft\Edge\WebAppInstallForceList" /v 1 >nul 2>&1
@@ -54,13 +56,13 @@ if %errorlevel%==0 (
 )
 
 echo.
-echo [2/3] 通知の強制許可設定を解除します...
+echo [2/4] 通知の強制許可設定を解除します...
 
 call :RemoveUrlIfPresent "HKLM\SOFTWARE\Policies\Google\Chrome\NotificationsAllowedForUrls" "Chrome"
 call :RemoveUrlIfPresent "HKLM\SOFTWARE\Policies\Microsoft\Edge\NotificationsAllowedForUrls" "Edge"
 
 echo.
-echo [3/3] ログイン時の自動起動設定を解除します...
+echo [3/4] ログイン時の自動起動設定を解除します...
 
 reg query "HKLM\SOFTWARE\Policies\Microsoft\Edge" /v WebAppSettings >nul 2>&1
 if %errorlevel%==0 (
@@ -77,14 +79,30 @@ if %errorlevel%==0 (
 )
 
 echo.
+echo [4/4] ブラウザ本体のログイン時自動起動の抑制設定を解除します...
+
+reg query "HKLM\SOFTWARE\Policies\Microsoft\Edge" /v LaunchEdgeOnWindowsStartupEnabled >nul 2>&1
+if %errorlevel%==0 (
+  reg delete "HKLM\SOFTWARE\Policies\Microsoft\Edge" /v LaunchEdgeOnWindowsStartupEnabled /f
+) else (
+  echo   ※Edge側の設定は見つかりませんでした。すでに解除済みか、未設定です。
+)
+
+reg query "HKLM\SOFTWARE\Policies\Google\Chrome" /v StartupBrowserWindowLaunchSuppressed >nul 2>&1
+if %errorlevel%==0 (
+  reg delete "HKLM\SOFTWARE\Policies\Google\Chrome" /v StartupBrowserWindowLaunchSuppressed /f
+) else (
+  echo   ※Chrome側の設定は見つかりませんでした。すでに解除済みか、未設定です。
+)
+
+echo.
 echo 設定を解除しました。
 echo PCを再起動すると、社内ポータルのアプリが自動的に削除され、
 echo デスクトップアイコンも消え、通知の強制許可・ログイン時の自動起動も解除された状態になります。
 echo.
 choice /c YN /m "今すぐPCを再起動しますか"
 if errorlevel 2 goto :SkipRestart
-echo 15秒後に再起動します。取り消したい場合は、コマンドプロンプトで shutdown /a と入力してください。
-shutdown /r /t 15
+shutdown /r /t 0
 goto :End
 
 :SkipRestart
