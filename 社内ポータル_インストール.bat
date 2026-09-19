@@ -10,6 +10,8 @@ REM   2. 対象ブラウザに、社内ポータルをサイレントインストール
 REM      （ユーザーのクリック操作なし・デスクトップショートカットも自動作成）する
 REM   3. インストールされたWebアプリが、ログイン時に自動的に開くようにする
 REM      （ユーザーが後から手動でOFFにすることはできません）
+REM   4. 対象ブラウザを一時的に起動・終了し、その場でインストールを完了させる
+REM      （こうしないと、初回だけ再起動が2回必要になるため）
 REM
 REM  Edge・Chromeが両方入っている環境で、両方にアイコンや通知が二重に
 REM  できてしまうのを避けるため、既定のブラウザ1つだけに設定します。
@@ -26,7 +28,7 @@ if %errorlevel% neq 0 (
 set PORTAL_URL=https://osakagumi.github.io/osakagumi-bulletin-board/
 set NOTICE_URL=https://osakagumi.github.io
 
-echo [0/3] 既定のブラウザを判定します...
+echo [0/4] 既定のブラウザを判定します...
 
 set "DEFAULT_PROGID="
 for /f "tokens=2,*" %%A in ('reg query "HKCU\SOFTWARE\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice" /v ProgId 2^>nul ^| findstr /i "ProgId"') do set "DEFAULT_PROGID=%%B"
@@ -49,15 +51,15 @@ set "NOTIFY_REGKEY=%POLICY_REGKEY%\NotificationsAllowedForUrls"
 set "INSTALL_REGKEY=%POLICY_REGKEY%\WebAppInstallForceList"
 
 echo.
-echo [1/3] %TARGET_BROWSER% で社内ポータルからの通知を許可にします...
+echo [1/4] %TARGET_BROWSER% で社内ポータルからの通知を許可にします...
 call :EnsureUrlAllowed "%NOTIFY_REGKEY%" "%TARGET_BROWSER%"
 
 echo.
-echo [2/3] %TARGET_BROWSER% に社内ポータルを強制インストールする設定をします...
+echo [2/4] %TARGET_BROWSER% に社内ポータルを強制インストールする設定をします...
 reg add "%INSTALL_REGKEY%" /v 1 /t REG_SZ /d "{\"url\":\"%PORTAL_URL%\",\"default_launch_container\":\"window\",\"create_desktop_shortcut\":true}" /f
 
 echo.
-echo [3/3] インストールしたアプリが、ログイン時に自動的に開くようにします...
+echo [3/4] インストールしたアプリが、ログイン時に自動的に開くようにします...
 REM WebAppSettings: manifest_idを社内ポータル自身のID（manifest.jsonにidの明示指定が
 REM 無いため、その場合の既定値であるstart_urlの解決後URL）にすることで、
 REM 他のWebアプリには一切影響を与えないようにする。
@@ -66,9 +68,28 @@ set "PORTAL_MANIFEST_ID=https://osakagumi.github.io/osakagumi-bulletin-board/ind
 reg add "%POLICY_REGKEY%" /v WebAppSettings /t REG_SZ /d "[{\"manifest_id\":\"%PORTAL_MANIFEST_ID%\",\"run_on_os_login\":\"run_windowed\"}]" /f
 
 echo.
+echo [4/4] %TARGET_BROWSER% を一時的に起動し、インストールを完了させます...
+REM ポリシー登録直後は、実際のインストール処理がまだ完了していない。
+REM 一度ブラウザを起動して少し待つことで、この場でインストールまで完了させ、
+REM 「初回だけ再起動が2回必要」という状態を避ける。
+if /i "%TARGET_BROWSER%"=="Chrome" (
+  start "" chrome
+) else (
+  start "" msedge
+)
+echo   インストール完了まで15秒ほど待ちます...
+timeout /t 15 /nobreak >nul
+echo   %TARGET_BROWSER% を閉じます...
+if /i "%TARGET_BROWSER%"=="Chrome" (
+  taskkill /IM chrome.exe /F >nul 2>&1
+) else (
+  taskkill /IM msedge.exe /F >nul 2>&1
+)
+
+echo.
 echo 設定が完了しました。
-echo PCを再起動すると、Chrome/Edgeへのインストールが完了し、
-echo デスクトップにアイコンが作成され、次回以降のログイン時から自動的にアプリが開くようになります。
+echo PCを再起動すると、デスクトップのアイコンから開くのと同様に、
+echo 次回のログイン時から自動的にアプリ（社内ポータル）が開くようになります。
 echo.
 choice /c YN /m "今すぐPCを再起動しますか"
 if errorlevel 2 goto :SkipRestart
