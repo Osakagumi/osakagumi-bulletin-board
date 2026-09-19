@@ -6,9 +6,9 @@ REM 大坂組 社内ポータルサイト インストールスクリプト
 REM
 REM  必ず「管理者として実行」してください（右クリック→管理者として実行）。
 REM
-REM  【重要】このスクリプトは、PCを自動で「2回」再起動します。
-REM  1回目の再起動後、ユーザーの操作なしで自動的に2回目の再起動が
-REM  かかります（Windowsの RunOnce の仕組みを利用）。
+REM  【重要】既定のブラウザがEdgeの場合、このスクリプトはPCを自動で
+REM  「2回」再起動します（1回目の再起動後、自動的に2回目がかかります）。
+REM  Chromeの場合、その場でインストール完了を確認できれば1回のみです。
 REM
 REM  このスクリプトが行うこと：
 REM   0. 既定のブラウザを判定する（Chrome以外の場合はEdgeを対象にする）
@@ -30,11 +30,10 @@ echo ============================================================
 echo  大坂組 社内ポータルサイト インストール
 echo ============================================================
 echo.
-echo このセットアップでは、PCを自動で「2回」再起動します。
-echo 1回目の再起動のあとは、確認なしで自動的に2回目の再起動が行われます。
-echo.
 echo 開始する前に、保存していない作業を済ませ、他のアプリケーションは
-echo 全て終了しておいてください。
+echo 全て終了しておいてください（既定のブラウザがEdgeの場合、PCが自動で
+echo 2回再起動します。1回目のあとは確認なしで自動的に2回目が行われます。
+echo Chromeの場合は1回のみです）。
 echo.
 choice /c YN /m "準備ができたら y を、中止する場合は n を"
 if errorlevel 2 (
@@ -120,18 +119,25 @@ set "SHORTCUT_NAME=大坂組社内ポータルサイト*.lnk"
 set "SHORTCUT_PATTERN1=%DESKTOP_DIR%\%SHORTCUT_NAME%"
 set "SHORTCUT_PATTERN2=%PUBLIC_DESKTOP_DIR%\%SHORTCUT_NAME%"
 
+if /i "%TARGET_BROWSER%"=="Chrome" set "INSTALL_CONFIRMED=0"
 if /i "%TARGET_BROWSER%"=="Chrome" goto :LaunchChrome
 goto :LaunchEdge
 
 :LaunchChrome
 REM Chromeは、起動してデスクトップアイコンができるまで待つと、
-REM その場でインストールが完了することを確認済み。
+REM その場でインストールが完了することを確認済み（この場合、2回目の再起動は不要）。
 start "" chrome
 echo   デスクトップにアイコンが作成されるまで待ちます...
 set /a WAITED=0
 :WaitChromeInstall
-if exist "%SHORTCUT_PATTERN1%" goto :CloseChrome
-if exist "%SHORTCUT_PATTERN2%" goto :CloseChrome
+if exist "%SHORTCUT_PATTERN1%" (
+  set "INSTALL_CONFIRMED=1"
+  goto :CloseChrome
+)
+if exist "%SHORTCUT_PATTERN2%" (
+  set "INSTALL_CONFIRMED=1"
+  goto :CloseChrome
+)
 if %WAITED% GEQ 60 (
   echo   ※60秒待ちましたが確認できませんでした。このまま次に進みます。
   goto :CloseChrome
@@ -146,13 +152,21 @@ goto :BrowserLaunchDone
 :LaunchEdge
 REM Edgeは、起動して待ってもその場でインストールが完了しないことが多い
 REM （Edge側の既知の挙動と思われる）ため、長く待たせず、コンソールの
-REM メッセージを確認できる程度の短い時間だけ待つ。
+REM メッセージを確認できる程度の短い時間だけ待つ。2回目の再起動が必要になる。
 start "" msedge
 echo   3秒ほど待ちます...
 timeout /t 3 /nobreak >nul
 taskkill /IM msedge.exe /F >nul 2>&1
 
 :BrowserLaunchDone
+
+if "%INSTALL_CONFIRMED%"=="1" (
+  echo.
+  echo インストール完了を確認できたため、再起動は1回だけで済みます。
+  echo 再起動します...
+  shutdown /r /t 0
+  exit /b
+)
 
 echo.
 echo 次回ログイン時に、このバッチ自身を「/phase2」付きで自動実行するよう登録します...
