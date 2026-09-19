@@ -88,9 +88,20 @@ if /i "%TARGET_BROWSER%"=="Chrome" (
 )
 REM ブラウザによって、ショートカットが「自分のデスクトップ」ではなく
 REM 「パブリックデスクトップ（全ユーザー共通）」に作られる場合があるため、両方を確認する。
+REM デスクトップの場所がフォルダリダイレクト等で標準以外（例：Dドライブ）に
+REM 変更されている場合があるため、%USERPROFILE%決め打ちではなく、実際の場所を
+REM レジストリから取得する。
+set "DESKTOP_DIR="
+for /f "tokens=2,*" %%A in ('reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders" /v Desktop 2^>nul ^| findstr /i "REG_SZ"') do set "DESKTOP_DIR=%%B"
+if not defined DESKTOP_DIR set "DESKTOP_DIR=%USERPROFILE%\Desktop"
+
+set "PUBLIC_DESKTOP_DIR="
+for /f "tokens=2,*" %%A in ('reg query "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders" /v "Common Desktop" 2^>nul ^| findstr /i "REG_SZ"') do set "PUBLIC_DESKTOP_DIR=%%B"
+if not defined PUBLIC_DESKTOP_DIR set "PUBLIC_DESKTOP_DIR=%PUBLIC%\Desktop"
+
 set "SHORTCUT_NAME=大坂組社内ポータルサイト*.lnk"
-set "SHORTCUT_PATTERN1=%USERPROFILE%\Desktop\%SHORTCUT_NAME%"
-set "SHORTCUT_PATTERN2=%PUBLIC%\Desktop\%SHORTCUT_NAME%"
+set "SHORTCUT_PATTERN1=%DESKTOP_DIR%\%SHORTCUT_NAME%"
+set "SHORTCUT_PATTERN2=%PUBLIC_DESKTOP_DIR%\%SHORTCUT_NAME%"
 set /a WAITED=0
 :WaitForInstall
 if exist "%SHORTCUT_PATTERN1%" (
