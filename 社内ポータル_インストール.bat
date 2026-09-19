@@ -10,7 +10,7 @@ REM   2. 対象ブラウザに、社内ポータルをサイレントインストール
 REM      （ユーザーのクリック操作なし・デスクトップショートカットも自動作成）する
 REM   3. インストールされたWebアプリが、ログイン時に自動的に開くようにする
 REM      （ユーザーが後から手動でOFFにすることはできません）
-REM   4. 対象ブラウザを一時的に起動・終了し、その場でインストールを完了させる
+REM   4. 対象ブラウザを一時的に起動し、デスクトップショートカットの作成を確認してから終了する
 REM      （こうしないと、初回だけ再起動が2回必要になるため）
 REM
 REM  Edge・Chromeが両方入っている環境で、両方にアイコンや通知が二重に
@@ -70,15 +70,29 @@ reg add "%POLICY_REGKEY%" /v WebAppSettings /t REG_SZ /d "[{\"manifest_id\":\"%P
 echo.
 echo [4/4] %TARGET_BROWSER% を一時的に起動し、インストールを完了させます...
 REM ポリシー登録直後は、実際のインストール処理がまだ完了していない。
-REM 一度ブラウザを起動して少し待つことで、この場でインストールまで完了させ、
-REM 「初回だけ再起動が2回必要」という状態を避ける。
+REM 一度ブラウザを起動し、デスクトップに実際にショートカットが作成されるまで
+REM 2秒おきに確認する（最大60秒）。固定時間の待機ではなく、完了し次第すぐ次に進む。
 if /i "%TARGET_BROWSER%"=="Chrome" (
   start "" chrome
 ) else (
   start "" msedge
 )
-echo   インストール完了まで15秒ほど待ちます...
-timeout /t 15 /nobreak >nul
+set "SHORTCUT_PATTERN=%USERPROFILE%\Desktop\大坂組社内ポータルサイト*.lnk"
+set /a WAITED=0
+:WaitForInstall
+if exist "%SHORTCUT_PATTERN%" (
+  echo   インストールを確認しました（約%WAITED%秒）。
+  goto :CloseBrowser
+)
+if %WAITED% GEQ 60 (
+  echo   ※60秒待ちましたが確認できませんでした。時間をおいて手動でご確認ください。
+  goto :CloseBrowser
+)
+timeout /t 2 /nobreak >nul
+set /a WAITED+=2
+goto :WaitForInstall
+
+:CloseBrowser
 echo   %TARGET_BROWSER% を閉じます...
 if /i "%TARGET_BROWSER%"=="Chrome" (
   taskkill /IM chrome.exe /F >nul 2>&1
@@ -93,8 +107,7 @@ echo 次回のログイン時から自動的にアプリ（社内ポータル）が開くようになります。
 echo.
 choice /c YN /m "今すぐPCを再起動しますか"
 if errorlevel 2 goto :SkipRestart
-echo 15秒後に再起動します。取り消したい場合は、コマンドプロンプトで shutdown /a と入力してください。
-shutdown /r /t 15
+shutdown /r /t 0
 goto :End
 
 :SkipRestart
