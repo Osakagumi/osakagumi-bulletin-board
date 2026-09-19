@@ -86,11 +86,19 @@ if /i "%TARGET_BROWSER%"=="Chrome" (
 ) else (
   start "" msedge
 )
-set "SHORTCUT_PATTERN=%USERPROFILE%\Desktop\大坂組社内ポータルサイト*.lnk"
+REM ブラウザによって、ショートカットが「自分のデスクトップ」ではなく
+REM 「パブリックデスクトップ（全ユーザー共通）」に作られる場合があるため、両方を確認する。
+set "SHORTCUT_NAME=大坂組社内ポータルサイト*.lnk"
+set "SHORTCUT_PATTERN1=%USERPROFILE%\Desktop\%SHORTCUT_NAME%"
+set "SHORTCUT_PATTERN2=%PUBLIC%\Desktop\%SHORTCUT_NAME%"
 set /a WAITED=0
 :WaitForInstall
-if exist "%SHORTCUT_PATTERN%" (
-  echo   インストールを確認しました（約%WAITED%秒）。
+if exist "%SHORTCUT_PATTERN1%" (
+  echo   インストールを確認しました（約%WAITED%秒、ユーザーのデスクトップ）。
+  goto :CloseBrowser
+)
+if exist "%SHORTCUT_PATTERN2%" (
+  echo   インストールを確認しました（約%WAITED%秒、パブリックデスクトップ）。
   goto :CloseBrowser
 )
 if %WAITED% GEQ 60 (
@@ -113,6 +121,8 @@ echo.
 echo 設定が完了しました。
 echo PCを再起動すると、デスクトップのアイコンから開くのと同様に、
 echo 次回のログイン時から自動的にアプリ（社内ポータル）が開くようになります。
+echo （Edgeの場合、初回起動時に「タスクバーに登録しますか」等の確認ダイアログが
+echo 　表示されることがあります。これはEdge側の仕様で、何か選択すれば消えます）
 echo.
 choice /c YN /m "今すぐPCを再起動しますか"
 if errorlevel 2 goto :SkipRestart

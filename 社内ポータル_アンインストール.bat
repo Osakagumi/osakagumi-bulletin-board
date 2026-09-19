@@ -100,9 +100,13 @@ if %errorlevel%==0 (
 
 echo.
 echo [5/5] ブラウザを一時的に起動し、アンインストールを完了させます...
-set "SHORTCUT_PATTERN=%USERPROFILE%\Desktop\大坂組社内ポータルサイト*.lnk"
+REM ブラウザによって、ショートカットが「自分のデスクトップ」ではなく
+REM 「パブリックデスクトップ（全ユーザー共通）」にある場合があるため、両方を確認する。
+set "SHORTCUT_NAME=大坂組社内ポータルサイト*.lnk"
+set "SHORTCUT_PATTERN1=%USERPROFILE%\Desktop\%SHORTCUT_NAME%"
+set "SHORTCUT_PATTERN2=%PUBLIC%\Desktop\%SHORTCUT_NAME%"
 
-if not exist "%SHORTCUT_PATTERN%" (
+if not exist "%SHORTCUT_PATTERN1%" if not exist "%SHORTCUT_PATTERN2%" (
   echo   デスクトップにショートカットが見当たらないため、この手順は不要です。
   goto :SkipUninstallWait
 )
@@ -111,7 +115,7 @@ start "" chrome
 start "" msedge
 set /a WAITED=0
 :WaitForUninstall
-if not exist "%SHORTCUT_PATTERN%" (
+if not exist "%SHORTCUT_PATTERN1%" if not exist "%SHORTCUT_PATTERN2%" (
   echo   ショートカットの削除を確認しました（約%WAITED%秒）。
   goto :CloseBrowsers
 )
