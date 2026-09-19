@@ -1,8 +1,15 @@
 @echo off
+if "%~1"=="/phase2" goto :Phase2
+
 REM ============================================================
 REM ‘åâ‘g ŽÐ“àƒ|[ƒ^ƒ‹ƒTƒCƒg ƒCƒ“ƒXƒg[ƒ‹ƒXƒNƒŠƒvƒg
 REM
 REM  •K‚¸uŠÇ—ŽÒ‚Æ‚µ‚ÄŽÀsv‚µ‚Ä‚­‚¾‚³‚¢i‰EƒNƒŠƒbƒN¨ŠÇ—ŽÒ‚Æ‚µ‚ÄŽÀsjB
+REM
+REM  yd—vz‚±‚ÌƒXƒNƒŠƒvƒg‚ÍAPC‚ðŽ©“®‚Åu2‰ñvÄ‹N“®‚µ‚Ü‚·B
+REM  1‰ñ–Ú‚ÌÄ‹N“®ŒãAƒ†[ƒU[‚Ì‘€ì‚È‚µ‚ÅŽ©“®“I‚É2‰ñ–Ú‚ÌÄ‹N“®‚ª
+REM  ‚©‚©‚è‚Ü‚·iWindows‚Ì RunOnce ‚ÌŽd‘g‚Ý‚ð—˜—pjB
+REM
 REM  ‚±‚ÌƒXƒNƒŠƒvƒg‚ªs‚¤‚±‚ÆF
 REM   0. Šù’è‚Ìƒuƒ‰ƒEƒU‚ð”»’è‚·‚éiChromeˆÈŠO‚Ìê‡‚ÍEdge‚ð‘ÎÛ‚É‚·‚éj
 REM   1. ‘ÎÛƒuƒ‰ƒEƒU‚ÅŽÐ“àƒ|[ƒ^ƒ‹‚©‚ç‚Ì’Ê’m‚ðŽ©“®“I‚Éu‹–‰Âv‚É‚·‚é
@@ -11,12 +18,30 @@ REM      iƒ†[ƒU[‚ÌƒNƒŠƒbƒN‘€ì‚È‚µEƒfƒXƒNƒgƒbƒvƒVƒ‡[ƒgƒJƒbƒg‚àŽ©“®ì¬j‚·‚
 REM   3. ƒCƒ“ƒXƒg[ƒ‹‚³‚ê‚½WebƒAƒvƒŠ‚ªAƒƒOƒCƒ“Žž‚ÉŽ©“®“I‚ÉŠJ‚­‚æ‚¤‚É‚·‚é
 REM      iƒ†[ƒU[‚ªŒã‚©‚çŽè“®‚ÅOFF‚É‚·‚é‚±‚Æ‚Í‚Å‚«‚Ü‚¹‚ñjB‚ ‚í‚¹‚ÄA
 REM      ƒuƒ‰ƒEƒU–{‘ÌiChrome/EdgeŽ©‘Ìj‚ªƒƒOƒCƒ“Žž‚ÉŽ©“®‹N“®‚µ‚È‚¢‚æ‚¤‚É‚·‚é
-REM   4. ‘ÎÛƒuƒ‰ƒEƒU‚ðˆêŽž“I‚É‹N“®‚µAƒfƒXƒNƒgƒbƒvƒVƒ‡[ƒgƒJƒbƒg‚Ìì¬‚ðŠm”F‚µ‚Ä‚©‚çI—¹‚·‚é
-REM      i‚±‚¤‚µ‚È‚¢‚ÆA‰‰ñ‚¾‚¯Ä‹N“®‚ª2‰ñ•K—v‚É‚È‚é‚½‚ßj
+REM   4. 1‰ñ–Ú‚ÌÄ‹N“®‚ðs‚¤iŠm”F‚ÍÅ‰‚Ì1‰ñ‚Ì‚ÝBˆÈ~‚ÍŽ©“®j
+REM   5.i1‰ñ–Ú‚ÌÄ‹N“®ŒãAŽ©“®“I‚ÉŽÀs‚³‚ê‚éjƒfƒXƒNƒgƒbƒv‚ÉƒVƒ‡[ƒgƒJƒbƒg‚ª
+REM      ì¬‚³‚ê‚é‚Ì‚ðŠm”F‚µ‚Ä‚©‚çA2‰ñ–ÚiÅŒãj‚ÌÄ‹N“®‚ðs‚¤
 REM
 REM  EdgeEChrome‚ª—¼•û“ü‚Á‚Ä‚¢‚éŠÂ‹«‚ÅA—¼•û‚ÉƒAƒCƒRƒ“‚â’Ê’m‚ª“ñd‚É
 REM  ‚Å‚«‚Ä‚µ‚Ü‚¤‚Ì‚ð”ð‚¯‚é‚½‚ßAŠù’è‚Ìƒuƒ‰ƒEƒU1‚Â‚¾‚¯‚ÉÝ’è‚µ‚Ü‚·B
 REM ============================================================
+
+echo ============================================================
+echo  ‘åâ‘g ŽÐ“àƒ|[ƒ^ƒ‹ƒTƒCƒg ƒCƒ“ƒXƒg[ƒ‹
+echo ============================================================
+echo.
+echo ‚±‚ÌƒZƒbƒgƒAƒbƒv‚Å‚ÍAPC‚ðŽ©“®‚Åu2‰ñvÄ‹N“®‚µ‚Ü‚·B
+echo 1‰ñ–Ú‚ÌÄ‹N“®‚Ì‚ ‚Æ‚ÍAŠm”F‚È‚µ‚ÅŽ©“®“I‚É2‰ñ–Ú‚ÌÄ‹N“®‚ªs‚í‚ê‚Ü‚·B
+echo.
+echo ŠJŽn‚·‚é‘O‚ÉA•Û‘¶‚µ‚Ä‚¢‚È‚¢ì‹Æ‚ðÏ‚Ü‚¹A‘¼‚ÌƒAƒvƒŠƒP[ƒVƒ‡ƒ“‚Í
+echo ‘S‚ÄI—¹‚µ‚Ä‚¨‚¢‚Ä‚­‚¾‚³‚¢B
+echo.
+choice /c YN /m "€”õ‚ª‚Å‚«‚½‚ç‘±s‚µ‚Ü‚·‚©"
+if errorlevel 2 (
+  echo ’†Ž~‚µ‚Ü‚µ‚½B
+  pause
+  exit /b
+)
 
 :: ŠÇ—ŽÒŒ ŒÀƒ`ƒFƒbƒNinet session‚ÍŠÇ—ŽÒ‚Å‚È‚¢‚ÆŽ¸”s‚·‚éA‚Æ‚¢‚¤«Ž¿‚ð—˜—p‚µ‚Ä‚¢‚éj
 net session >nul 2>&1
@@ -29,6 +54,7 @@ if %errorlevel% neq 0 (
 set PORTAL_URL=https://osakagumi.github.io/osakagumi-bulletin-board/
 set NOTICE_URL=https://osakagumi.github.io
 
+echo.
 echo [0/4] Šù’è‚Ìƒuƒ‰ƒEƒU‚ð”»’è‚µ‚Ü‚·...
 
 set "DEFAULT_PROGID="
@@ -77,20 +103,29 @@ if /i "%TARGET_BROWSER%"=="Chrome" (
 )
 
 echo.
-echo [4/4] %TARGET_BROWSER% ‚ðˆêŽž“I‚É‹N“®‚µAƒCƒ“ƒXƒg[ƒ‹‚ðŠ®—¹‚³‚¹‚Ü‚·...
-REM ƒ|ƒŠƒV[“o˜^’¼Œã‚ÍAŽÀÛ‚ÌƒCƒ“ƒXƒg[ƒ‹ˆ—‚ª‚Ü‚¾Š®—¹‚µ‚Ä‚¢‚È‚¢B
-REM ˆê“xƒuƒ‰ƒEƒU‚ð‹N“®‚µAƒfƒXƒNƒgƒbƒv‚ÉŽÀÛ‚ÉƒVƒ‡[ƒgƒJƒbƒg‚ªì¬‚³‚ê‚é‚Ü‚Å
-REM 2•b‚¨‚«‚ÉŠm”F‚·‚éiÅ‘å60•bjBŒÅ’èŽžŠÔ‚Ì‘Ò‹@‚Å‚Í‚È‚­AŠ®—¹‚µŽŸ‘æ‚·‚®ŽŸ‚Éi‚ÞB
-if /i "%TARGET_BROWSER%"=="Chrome" (
-  start "" chrome
-) else (
-  start "" msedge
-)
-REM ƒuƒ‰ƒEƒU‚É‚æ‚Á‚ÄAƒVƒ‡[ƒgƒJƒbƒg‚ªuŽ©•ª‚ÌƒfƒXƒNƒgƒbƒvv‚Å‚Í‚È‚­
-REM uƒpƒuƒŠƒbƒNƒfƒXƒNƒgƒbƒvi‘Sƒ†[ƒU[‹¤’Êjv‚Éì‚ç‚ê‚éê‡‚ª‚ ‚é‚½‚ßA—¼•û‚ðŠm”F‚·‚éB
+echo [4/4] 1‰ñ–Ú‚ÌÄ‹N“®‚ð€”õ‚µ‚Ü‚·...
+REM ŽŸ‰ñƒƒOƒCƒ“Žž‚ÉA‚±‚Ìƒoƒbƒ`Ž©g‚ðu/phase2v•t‚«‚ÅŽ©“®ŽÀs‚·‚é‚æ‚¤“o˜^‚·‚éB
+REM RunOnce‚ÍŽÀs‚³‚ê‚é‚ÆŽ©“®“I‚ÉÁ‚¦‚é‚ªA”O‚Ì‚½‚ßPhase2‘¤‚Å‚à–¾Ž¦“I‚Éíœ‚·‚éB
+reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\RunOnce" /v OsakagumiPortalSetupPhase2 /t REG_SZ /d "\"%~f0\" /phase2" /f
+
+echo.
+echo 1‰ñ–Ú‚ÌÄ‹N“®‚ðs‚¢‚Ü‚·BƒƒOƒCƒ“ŒãAŽ©“®“I‚É‘±‚«‚ªŽÀs‚³‚ê‚Ü‚·B
+shutdown /r /t 0
+exit /b
+
+
+REM ============================================================
+REM Phase2F1‰ñ–Ú‚ÌÄ‹N“®ŒãARunOnce‚É‚æ‚èŽ©“®“I‚ÉŽÀs‚³‚ê‚é•”•ªB
+REM ƒ†[ƒU[‚Ì‘€ì‚Í•s—vBƒfƒXƒNƒgƒbƒv‚ÉƒVƒ‡[ƒgƒJƒbƒg‚ªì¬‚³‚ê‚é‚Ì‚ð
+REM Šm”F‚µ‚Ä‚©‚çA2‰ñ–ÚiÅŒãj‚ÌÄ‹N“®‚ðs‚¤B
+REM ============================================================
+:Phase2
+reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\RunOnce" /v OsakagumiPortalSetupPhase2 /f >nul 2>&1
+
 REM ƒfƒXƒNƒgƒbƒv‚ÌêŠ‚ªƒtƒHƒ‹ƒ_ƒŠƒ_ƒCƒŒƒNƒg“™‚Å•W€ˆÈŠOi—áFDƒhƒ‰ƒCƒuj‚É
 REM •ÏX‚³‚ê‚Ä‚¢‚éê‡‚ª‚ ‚é‚½‚ßA%USERPROFILE%Œˆ‚ß‘Å‚¿‚Å‚Í‚È‚­AŽÀÛ‚ÌêŠ‚ð
-REM ƒŒƒWƒXƒgƒŠ‚©‚çŽæ“¾‚·‚éB
+REM ƒŒƒWƒXƒgƒŠ‚©‚çŽæ“¾‚·‚éBƒuƒ‰ƒEƒU‚É‚æ‚Á‚Ä‚ÍuƒpƒuƒŠƒbƒNƒfƒXƒNƒgƒbƒvv‚É
+REM ì‚ç‚ê‚éê‡‚à‚ ‚é‚½‚ßA—¼•û‚ðŠm”F‚·‚éB
 set "DESKTOP_DIR="
 for /f "tokens=2,*" %%A in ('reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders" /v Desktop 2^>nul ^| findstr /i "REG_SZ"') do set "DESKTOP_DIR=%%B"
 if not defined DESKTOP_DIR set "DESKTOP_DIR=%USERPROFILE%\Desktop"
@@ -102,49 +137,18 @@ if not defined PUBLIC_DESKTOP_DIR set "PUBLIC_DESKTOP_DIR=%PUBLIC%\Desktop"
 set "SHORTCUT_NAME=‘åâ‘gŽÐ“àƒ|[ƒ^ƒ‹ƒTƒCƒg*.lnk"
 set "SHORTCUT_PATTERN1=%DESKTOP_DIR%\%SHORTCUT_NAME%"
 set "SHORTCUT_PATTERN2=%PUBLIC_DESKTOP_DIR%\%SHORTCUT_NAME%"
+
 set /a WAITED=0
-:WaitForInstall
-if exist "%SHORTCUT_PATTERN1%" (
-  echo   ƒCƒ“ƒXƒg[ƒ‹‚ðŠm”F‚µ‚Ü‚µ‚½i–ñ%WAITED%•bAƒ†[ƒU[‚ÌƒfƒXƒNƒgƒbƒvjB
-  goto :CloseBrowser
-)
-if exist "%SHORTCUT_PATTERN2%" (
-  echo   ƒCƒ“ƒXƒg[ƒ‹‚ðŠm”F‚µ‚Ü‚µ‚½i–ñ%WAITED%•bAƒpƒuƒŠƒbƒNƒfƒXƒNƒgƒbƒvjB
-  goto :CloseBrowser
-)
-if %WAITED% GEQ 60 (
-  echo   ¦60•b‘Ò‚¿‚Ü‚µ‚½‚ªŠm”F‚Å‚«‚Ü‚¹‚ñ‚Å‚µ‚½BŽžŠÔ‚ð‚¨‚¢‚ÄŽè“®‚Å‚²Šm”F‚­‚¾‚³‚¢B
-  goto :CloseBrowser
-)
-timeout /t 2 /nobreak >nul
-set /a WAITED+=2
-goto :WaitForInstall
+:WaitPhase2
+if exist "%SHORTCUT_PATTERN1%" goto :Phase2Reboot
+if exist "%SHORTCUT_PATTERN2%" goto :Phase2Reboot
+if %WAITED% GEQ 90 goto :Phase2Reboot
+timeout /t 5 /nobreak >nul
+set /a WAITED+=5
+goto :WaitPhase2
 
-:CloseBrowser
-echo   %TARGET_BROWSER% ‚ð•Â‚¶‚Ü‚·...
-if /i "%TARGET_BROWSER%"=="Chrome" (
-  taskkill /IM chrome.exe /F >nul 2>&1
-) else (
-  taskkill /IM msedge.exe /F >nul 2>&1
-)
-
-echo.
-echo Ý’è‚ªŠ®—¹‚µ‚Ü‚µ‚½B
-echo PC‚ðÄ‹N“®‚·‚é‚ÆAƒfƒXƒNƒgƒbƒv‚ÌƒAƒCƒRƒ“‚©‚çŠJ‚­‚Ì‚Æ“¯—l‚ÉA
-echo ŽŸ‰ñ‚ÌƒƒOƒCƒ“Žž‚©‚çŽ©“®“I‚ÉƒAƒvƒŠiŽÐ“àƒ|[ƒ^ƒ‹j‚ªŠJ‚­‚æ‚¤‚É‚È‚è‚Ü‚·B
-echo iEdge‚Ìê‡A‰‰ñ‹N“®Žž‚Éuƒ^ƒXƒNƒo[‚É“o˜^‚µ‚Ü‚·‚©v“™‚ÌŠm”Fƒ_ƒCƒAƒƒO‚ª
-echo @•\Ž¦‚³‚ê‚é‚±‚Æ‚ª‚ ‚è‚Ü‚·B‚±‚ê‚ÍEdge‘¤‚ÌŽd—l‚ÅA‰½‚©‘I‘ð‚·‚ê‚ÎÁ‚¦‚Ü‚·j
-echo.
-choice /c YN /m "¡‚·‚®PC‚ðÄ‹N“®‚µ‚Ü‚·‚©"
-if errorlevel 2 goto :SkipRestart
+:Phase2Reboot
 shutdown /r /t 0
-goto :End
-
-:SkipRestart
-echo ‚ ‚Æ‚ÅŽè“®‚ÅPC‚ðÄ‹N“®‚µ‚Ä‚­‚¾‚³‚¢B
-pause
-
-:End
 exit /b
 
 
