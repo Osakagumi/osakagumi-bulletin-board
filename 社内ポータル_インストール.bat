@@ -1,5 +1,6 @@
 @echo off
 if "%~1"=="/phase2" goto :Phase2
+if "%~1"=="/final" goto :FinalPhase
 
 REM ============================================================
 REM ‘åâ‘g Ğ“àƒ|[ƒ^ƒ‹ƒTƒCƒg ƒCƒ“ƒXƒg[ƒ‹ƒXƒNƒŠƒvƒg
@@ -9,8 +10,12 @@ REM
 REM  yd—vzŠù’è‚Ìƒuƒ‰ƒEƒU‚ªEdge‚Ìê‡A‚±‚ÌƒXƒNƒŠƒvƒg‚ÍPC‚ğ©“®‚Å
 REM  u2‰ñvÄ‹N“®‚µ‚Ü‚·i1‰ñ–Ú‚ÌÄ‹N“®ŒãA©“®“I‚É2‰ñ–Ú‚ª‚©‚©‚è‚Ü‚·jB
 REM  Chrome‚Ìê‡A‚»‚Ìê‚ÅƒCƒ“ƒXƒg[ƒ‹Š®—¹‚ğŠm”F‚Å‚«‚ê‚Î1‰ñ‚Ì‚İ‚Å‚·B
+REM  ÅŒã‚ÌÄ‹N“®‚Ì‚ ‚ÆAƒAƒvƒŠ‚ª©“®‹N“®‚·‚é‚Ì‚ğŠm”F‚µ‚Ä‚©‚çA
+REM  ƒ|ƒbƒvƒAƒbƒv‚ÅŠ®—¹‚ğ‚¨’m‚ç‚¹‚µ‚Ü‚·iƒRƒ“ƒ\[ƒ‹‚ÌƒƒbƒZ[ƒW‚ÍA
+REM  –³lÄ‹N“®Œã‚¾‚ÆŒ©‚Ä‚à‚ç‚¦‚È‚¢‰Â”\«‚ª‚ ‚é‚½‚ßjB
 REM
 REM  ‚±‚ÌƒXƒNƒŠƒvƒg‚ªs‚¤‚±‚ÆF
+REM   EŠù‚ÉƒCƒ“ƒXƒg[ƒ‹Ï‚İ‚Å‚ ‚ê‚ÎA‚»‚Ì“_‚Åˆ—‚ğ’†~‚·‚é
 REM   0. Šù’è‚Ìƒuƒ‰ƒEƒU‚ğ”»’è‚·‚éiChromeˆÈŠO‚Ìê‡‚ÍEdge‚ğ‘ÎÛ‚É‚·‚éj
 REM   1. ‘ÎÛƒuƒ‰ƒEƒU‚ÅĞ“àƒ|[ƒ^ƒ‹‚©‚ç‚Ì’Ê’m‚ğ©“®“I‚Éu‹–‰Âv‚É‚·‚é
 REM   2. ‘ÎÛƒuƒ‰ƒEƒU‚ÉAĞ“àƒ|[ƒ^ƒ‹‚ğƒTƒCƒŒƒ“ƒgƒCƒ“ƒXƒg[ƒ‹
@@ -18,29 +23,18 @@ REM      iƒ†[ƒU[‚ÌƒNƒŠƒbƒN‘€ì‚È‚µEƒfƒXƒNƒgƒbƒvƒVƒ‡[ƒgƒJƒbƒg‚à©“®ì¬j‚·‚
 REM   3. ƒCƒ“ƒXƒg[ƒ‹‚³‚ê‚½WebƒAƒvƒŠ‚ªAƒƒOƒCƒ“‚É©“®“I‚ÉŠJ‚­‚æ‚¤‚É‚·‚é
 REM      iƒ†[ƒU[‚ªŒã‚©‚çè“®‚ÅOFF‚É‚·‚é‚±‚Æ‚Í‚Å‚«‚Ü‚¹‚ñjB‚ ‚í‚¹‚ÄA
 REM      ƒuƒ‰ƒEƒU–{‘ÌiChrome/Edge©‘Ìj‚ªƒƒOƒCƒ“‚É©“®‹N“®‚µ‚È‚¢‚æ‚¤‚É‚·‚é
-REM   4. 1‰ñ–Ú‚ÌÄ‹N“®‚ğs‚¤iŠm”F‚ÍÅ‰‚Ì1‰ñ‚Ì‚İBˆÈ~‚Í©“®j
-REM   5.i1‰ñ–Ú‚ÌÄ‹N“®ŒãA©“®“I‚ÉÀs‚³‚ê‚éjƒfƒXƒNƒgƒbƒv‚ÉƒVƒ‡[ƒgƒJƒbƒg‚ª
-REM      ì¬‚³‚ê‚é‚Ì‚ğŠm”F‚µ‚Ä‚©‚çA2‰ñ–ÚiÅŒãj‚ÌÄ‹N“®‚ğs‚¤
+REM   4. Ä‹N“®‚·‚éi‚»‚Ìê‚ÅŠ®—¹‚ğŠm”F‚Å‚«‚È‚¯‚ê‚ÎA1‰ñ–Ú‚ÌÄ‹N“®Œã‚É
+REM     ©“®‚Å2‰ñ–Ú‚às‚¤j
+REM   5. ÅŒã‚ÌÄ‹N“®‚Ì‚ ‚ÆA©“®“I‚ÉÀs‚³‚ê‚éBƒAƒvƒŠ‚Ì©“®‹N“®‚ğ‘Ò‚Á‚Ä‚©‚çA
+REM     ƒ|ƒbƒvƒAƒbƒv‚ÅŠ®—¹‚ğ‚¨’m‚ç‚¹‚·‚é
 REM
 REM  EdgeEChrome‚ª—¼•û“ü‚Á‚Ä‚¢‚éŠÂ‹«‚ÅA—¼•û‚ÉƒAƒCƒRƒ“‚â’Ê’m‚ª“ñd‚É
 REM  ‚Å‚«‚Ä‚µ‚Ü‚¤‚Ì‚ğ”ğ‚¯‚é‚½‚ßAŠù’è‚Ìƒuƒ‰ƒEƒU1‚Â‚¾‚¯‚Éİ’è‚µ‚Ü‚·B
 REM ============================================================
 
-echo ============================================================
+echo ========================================================================
 echo  ‘åâ‘g Ğ“àƒ|[ƒ^ƒ‹ƒTƒCƒg ƒCƒ“ƒXƒg[ƒ‹
-echo ============================================================
-echo.
-echo ŠJn‚·‚é‘O‚ÉA•Û‘¶‚µ‚Ä‚¢‚È‚¢ì‹Æ‚ğÏ‚Ü‚¹A‘¼‚ÌƒAƒvƒŠƒP[ƒVƒ‡ƒ“‚Í
-echo ‘S‚ÄI—¹‚µ‚Ä‚¨‚¢‚Ä‚­‚¾‚³‚¢iŠù’è‚Ìƒuƒ‰ƒEƒU‚ªEdge‚Ìê‡APC‚ª©“®‚Å
-echo 2‰ñÄ‹N“®‚µ‚Ü‚·B1‰ñ–Ú‚Ì‚ ‚Æ‚ÍŠm”F‚È‚µ‚Å©“®“I‚É2‰ñ–Ú‚ªs‚í‚ê‚Ü‚·B
-echo Chrome‚Ìê‡‚Í1‰ñ‚Ì‚İ‚Å‚·jB
-echo.
-choice /c YN /m "€”õ‚ª‚Å‚«‚½‚ç y ‚ğA’†~‚·‚éê‡‚Í n ‚ğ"
-if errorlevel 2 (
-  echo ’†~‚µ‚Ü‚µ‚½B
-  pause
-  exit /b
-)
+echo ========================================================================
 
 :: ŠÇ—ÒŒ ŒÀƒ`ƒFƒbƒNinet session‚ÍŠÇ—Ò‚Å‚È‚¢‚Æ¸”s‚·‚éA‚Æ‚¢‚¤«¿‚ğ—˜—p‚µ‚Ä‚¢‚éj
 net session >nul 2>&1
@@ -52,6 +46,32 @@ if %errorlevel% neq 0 (
 
 set PORTAL_URL=https://osakagumi.github.io/osakagumi-bulletin-board/
 set NOTICE_URL=https://osakagumi.github.io
+
+echo Šù‚ÉƒCƒ“ƒXƒg[ƒ‹Ï‚İ‚Å‚È‚¢‚©Šm”F‚µ‚Ü‚·...
+set "ALREADY_INSTALLED=0"
+reg query "HKLM\SOFTWARE\Policies\Microsoft\Edge\WebAppInstallForceList" /v 1 2>nul | findstr /i "%PORTAL_URL%" >nul
+if not errorlevel 1 set "ALREADY_INSTALLED=1"
+reg query "HKLM\SOFTWARE\Policies\Google\Chrome\WebAppInstallForceList" /v 1 2>nul | findstr /i "%PORTAL_URL%" >nul
+if not errorlevel 1 set "ALREADY_INSTALLED=1"
+
+if "%ALREADY_INSTALLED%"=="1" (
+  echo   Šù‚ÉƒCƒ“ƒXƒg[ƒ‹Ï‚İ‚Ì‚æ‚¤‚Å‚·Bˆ—‚ğ’†~‚µ‚Ü‚·B
+  echo   ƒAƒ“ƒCƒ“ƒXƒg[ƒ‹‚µ‚½‚¢ê‡‚ÍAĞ“àƒ|[ƒ^ƒ‹_ƒAƒ“ƒCƒ“ƒXƒg[ƒ‹.bat ‚ğÀs‚µ‚Ä‚­‚¾‚³‚¢B
+  pause
+  exit /b
+)
+
+echo.
+echo ŠJn‚·‚é‘O‚ÉA•Û‘¶‚µ‚Ä‚¢‚È‚¢ì‹Æ‚ğÏ‚Ü‚¹A‘¼‚ÌƒAƒvƒŠƒP[ƒVƒ‡ƒ“‚Í‘S‚Ä
+echo I—¹‚µ‚Ä‚¨‚¢‚Ä‚­‚¾‚³‚¢B
+echo Å‘å2‰ñA©“®“I‚ÉÄ‹N“®‚µ‚Ü‚·B(‰ñ”‚ÍŠù’è‚Ìƒuƒ‰ƒEƒU‚É‚æ‚èˆÙ‚È‚è‚Ü‚·)
+echo.
+choice /c YN /m "€”õ‚ª‚Å‚«‚½‚ç y ‚ğA’†~‚·‚éê‡‚Í n ‚ğ‰Ÿ‚µ‚Ä‚­‚¾‚³‚¢B"
+if errorlevel 2 (
+  echo ’†~‚µ‚Ü‚µ‚½B
+  pause
+  exit /b
+)
 
 echo.
 echo [0/4] Šù’è‚Ìƒuƒ‰ƒEƒU‚ğ”»’è‚µ‚Ü‚·...
@@ -162,7 +182,8 @@ taskkill /IM msedge.exe /F >nul 2>&1
 
 if "%INSTALL_CONFIRMED%"=="1" (
   echo.
-  echo ƒCƒ“ƒXƒg[ƒ‹Š®—¹‚ğŠm”F‚Å‚«‚½‚½‚ßAÄ‹N“®‚Í1‰ñ‚¾‚¯‚ÅÏ‚İ‚Ü‚·B
+  echo ƒCƒ“ƒXƒg[ƒ‹‚ğŠm”F‚Å‚«‚Ü‚µ‚½BÄ‹N“®‚Í1‰ñ‚¾‚¯‚ÅÏ‚İ‚Ü‚·B
+  reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\RunOnce" /v OsakagumiPortalInstallFinal /t REG_SZ /d "\"%~f0\" /final" /f
   echo Ä‹N“®‚µ‚Ü‚·...
   shutdown /r /t 0
   exit /b
@@ -170,7 +191,6 @@ if "%INSTALL_CONFIRMED%"=="1" (
 
 echo.
 echo Ÿ‰ñƒƒOƒCƒ“‚ÉA‚±‚Ìƒoƒbƒ`©g‚ğu/phase2v•t‚«‚Å©“®Às‚·‚é‚æ‚¤“o˜^‚µ‚Ü‚·...
-REM RunOnce‚ÍÀs‚³‚ê‚é‚Æ©“®“I‚ÉÁ‚¦‚é‚ªA”O‚Ì‚½‚ßPhase2‘¤‚Å‚à–¾¦“I‚Éíœ‚·‚éB
 reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\RunOnce" /v OsakagumiPortalSetupPhase2 /t REG_SZ /d "\"%~f0\" /phase2" /f
 
 echo.
@@ -182,15 +202,11 @@ exit /b
 REM ============================================================
 REM Phase2F1‰ñ–Ú‚ÌÄ‹N“®ŒãARunOnce‚É‚æ‚è©“®“I‚ÉÀs‚³‚ê‚é•”•ªB
 REM ƒ†[ƒU[‚Ì‘€ì‚Í•s—vBƒfƒXƒNƒgƒbƒv‚ÉƒVƒ‡[ƒgƒJƒbƒg‚ªì¬‚³‚ê‚é‚Ì‚ğ
-REM Šm”F‚µ‚Ä‚©‚çA2‰ñ–ÚiÅŒãj‚ÌÄ‹N“®‚ğs‚¤B
+REM Šm”F‚µ‚Ä‚©‚çA2‰ñ–ÚiÅŒãj‚ÌÄ‹N“®‚ğ—\–ñ‚·‚éB
 REM ============================================================
 :Phase2
 reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\RunOnce" /v OsakagumiPortalSetupPhase2 /f >nul 2>&1
 
-REM ƒfƒXƒNƒgƒbƒv‚ÌêŠ‚ªƒtƒHƒ‹ƒ_ƒŠƒ_ƒCƒŒƒNƒg“™‚Å•W€ˆÈŠOi—áFDƒhƒ‰ƒCƒuj‚É
-REM •ÏX‚³‚ê‚Ä‚¢‚éê‡‚ª‚ ‚é‚½‚ßA%USERPROFILE%Œˆ‚ß‘Å‚¿‚Å‚Í‚È‚­AÀÛ‚ÌêŠ‚ğ
-REM ƒŒƒWƒXƒgƒŠ‚©‚çæ“¾‚·‚éBƒuƒ‰ƒEƒU‚É‚æ‚Á‚Ä‚ÍuƒpƒuƒŠƒbƒNƒfƒXƒNƒgƒbƒvv‚É
-REM ì‚ç‚ê‚éê‡‚à‚ ‚é‚½‚ßA—¼•û‚ğŠm”F‚·‚éB
 set "DESKTOP_DIR="
 for /f "tokens=2,*" %%A in ('reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders" /v Desktop 2^>nul ^| findstr /i "REG_SZ"') do set "DESKTOP_DIR=%%B"
 if not defined DESKTOP_DIR set "DESKTOP_DIR=%USERPROFILE%\Desktop"
@@ -213,7 +229,20 @@ set /a WAITED+=5
 goto :WaitPhase2
 
 :Phase2Reboot
+reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\RunOnce" /v OsakagumiPortalInstallFinal /t REG_SZ /d "\"%~f0\" /final" /f
 shutdown /r /t 0
+exit /b
+
+
+REM ============================================================
+REM FinalPhaseFÅŒã‚ÌÄ‹N“®ŒãARunOnce‚É‚æ‚è©“®“I‚ÉÀs‚³‚ê‚é•”•ªB
+REM ƒ†[ƒU[‚Ì‘€ì‚Í•s—vBƒAƒvƒŠ‚Ì©“®‹N“®‚ğ­‚µ‘Ò‚Á‚Ä‚©‚çA
+REM ƒ|ƒbƒvƒAƒbƒv‚ÅŠ®—¹‚ğ‚¨’m‚ç‚¹‚·‚éiÄ‹N“®‚Í‚à‚¤s‚í‚È‚¢jB
+REM ============================================================
+:FinalPhase
+reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\RunOnce" /v OsakagumiPortalInstallFinal /f >nul 2>&1
+timeout /t 10 /nobreak >nul
+powershell -NoProfile -WindowStyle Hidden -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('‘åâ‘gĞ“àƒ|[ƒ^ƒ‹ƒTƒCƒg‚ÌƒCƒ“ƒXƒg[ƒ‹‚ªŠ®—¹‚µ‚Ü‚µ‚½B', 'Ğ“àƒ|[ƒ^ƒ‹ ƒCƒ“ƒXƒg[ƒ‹Š®—¹') | Out-Null"
 exit /b
 
 
