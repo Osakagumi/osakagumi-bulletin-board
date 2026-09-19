@@ -67,10 +67,20 @@ reg add "%POLICY_REGKEY%" /v WebAppSettings /t REG_SZ /d "[{\"manifest_id\":\"%P
 
 echo.
 echo 設定が完了しました。
-echo このあとPCを再起動してください。再起動後、Chrome/Edgeへのインストールが完了し、
+echo PCを再起動すると、Chrome/Edgeへのインストールが完了し、
 echo デスクトップにアイコンが作成され、次回以降のログイン時から自動的にアプリが開くようになります。
 echo.
+choice /c YN /m "今すぐPCを再起動しますか"
+if errorlevel 2 goto :SkipRestart
+echo 15秒後に再起動します。取り消したい場合は、コマンドプロンプトで shutdown /a と入力してください。
+shutdown /r /t 15
+goto :End
+
+:SkipRestart
+echo あとで手動でPCを再起動してください。
 pause
+
+:End
 exit /b
 
 

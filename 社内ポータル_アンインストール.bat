@@ -78,10 +78,20 @@ if %errorlevel%==0 (
 
 echo.
 echo 設定を解除しました。
-echo このあとPCを再起動してください。再起動後、社内ポータルのアプリが自動的に削除され、
+echo PCを再起動すると、社内ポータルのアプリが自動的に削除され、
 echo デスクトップアイコンも消え、通知の強制許可・ログイン時の自動起動も解除された状態になります。
 echo.
+choice /c YN /m "今すぐPCを再起動しますか"
+if errorlevel 2 goto :SkipRestart
+echo 15秒後に再起動します。取り消したい場合は、コマンドプロンプトで shutdown /a と入力してください。
+shutdown /r /t 15
+goto :End
+
+:SkipRestart
+echo あとで手動でPCを再起動してください。
 pause
+
+:End
 exit /b
 
 
