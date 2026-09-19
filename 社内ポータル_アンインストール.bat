@@ -21,6 +21,9 @@ REM       もし今後、他のWebアプリの設定も同じ値に追加した場合は、
 REM       このスクリプトは使わず、該当箇所だけを手動で調整してください。
 REM   4.「社内ポータル_インストール.bat」で設定した、ブラウザ本体（Chrome/Edge自体）の
 REM     ログイン時自動起動を抑制する設定を削除します。
+REM   5. Chrome / Edgeを一時的に起動し、デスクトップショートカットが実際に
+REM     削除されるまで待ってから閉じます（こうしないと、再起動時に一瞬だけ
+REM     アプリが表示されてしまうため）。
 REM
 REM  Microsoftの仕様上、1.の設定を削除すると、該当のアプリ（社内ポータル）は
 REM  Edge / Chromeによって自動的にアンインストールされます
@@ -37,7 +40,7 @@ if %errorlevel% neq 0 (
 
 set TARGET_URL=https://osakagumi.github.io
 
-echo [1/4] Edge / Chrome の強制インストール設定を解除します...
+echo [1/5] Edge / Chrome の強制インストール設定を解除します...
 
 REM --- Microsoft Edge 用（強制インストール） ---
 reg query "HKLM\SOFTWARE\Policies\Microsoft\Edge\WebAppInstallForceList" /v 1 >nul 2>&1
@@ -56,13 +59,13 @@ if %errorlevel%==0 (
 )
 
 echo.
-echo [2/4] 通知の強制許可設定を解除します...
+echo [2/5] 通知の強制許可設定を解除します...
 
 call :RemoveUrlIfPresent "HKLM\SOFTWARE\Policies\Google\Chrome\NotificationsAllowedForUrls" "Chrome"
 call :RemoveUrlIfPresent "HKLM\SOFTWARE\Policies\Microsoft\Edge\NotificationsAllowedForUrls" "Edge"
 
 echo.
-echo [3/4] ログイン時の自動起動設定を解除します...
+echo [3/5] ログイン時の自動起動設定を解除します...
 
 reg query "HKLM\SOFTWARE\Policies\Microsoft\Edge" /v WebAppSettings >nul 2>&1
 if %errorlevel%==0 (
@@ -79,7 +82,7 @@ if %errorlevel%==0 (
 )
 
 echo.
-echo [4/4] ブラウザ本体のログイン時自動起動の抑制設定を解除します...
+echo [4/5] ブラウザ本体のログイン時自動起動の抑制設定を解除します...
 
 reg query "HKLM\SOFTWARE\Policies\Microsoft\Edge" /v LaunchEdgeOnWindowsStartupEnabled >nul 2>&1
 if %errorlevel%==0 (
@@ -96,9 +99,39 @@ if %errorlevel%==0 (
 )
 
 echo.
+echo [5/5] ブラウザを一時的に起動し、アンインストールを完了させます...
+set "SHORTCUT_PATTERN=%USERPROFILE%\Desktop\大坂組社内ポータルサイト*.lnk"
+
+if not exist "%SHORTCUT_PATTERN%" (
+  echo   デスクトップにショートカットが見当たらないため、この手順は不要です。
+  goto :SkipUninstallWait
+)
+
+start "" chrome
+start "" msedge
+set /a WAITED=0
+:WaitForUninstall
+if not exist "%SHORTCUT_PATTERN%" (
+  echo   ショートカットの削除を確認しました（約%WAITED%秒）。
+  goto :CloseBrowsers
+)
+if %WAITED% GEQ 60 (
+  echo   ※60秒待ちましたが確認できませんでした。時間をおいて手動でご確認ください。
+  goto :CloseBrowsers
+)
+timeout /t 2 /nobreak >nul
+set /a WAITED+=2
+goto :WaitForUninstall
+
+:CloseBrowsers
+taskkill /IM chrome.exe /F >nul 2>&1
+taskkill /IM msedge.exe /F >nul 2>&1
+
+:SkipUninstallWait
+
+echo.
 echo 設定を解除しました。
-echo PCを再起動すると、社内ポータルのアプリが自動的に削除され、
-echo デスクトップアイコンも消え、通知の強制許可・ログイン時の自動起動も解除された状態になります。
+echo PCを再起動すると、通知の強制許可・ログイン時の自動起動が解除された状態になります。
 echo.
 choice /c YN /m "今すぐPCを再起動しますか"
 if errorlevel 2 goto :SkipRestart
