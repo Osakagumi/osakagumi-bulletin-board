@@ -166,7 +166,7 @@ timeout /t 2 /nobreak >nul
 set /a WAITED+=2
 goto :WaitChromeInstall
 :CloseChrome
-taskkill /IM chrome.exe /F >nul 2>&1
+taskkill /IM chrome.exe >nul 2>&1
 goto :BrowserLaunchDone
 
 :LaunchEdge
@@ -176,7 +176,7 @@ REM メッセージを確認できる程度の短い時間だけ待つ。2回目の再起動が必要になる。
 start "" msedge
 echo   3秒ほど待ちます...
 timeout /t 3 /nobreak >nul
-taskkill /IM msedge.exe /F >nul 2>&1
+taskkill /IM msedge.exe >nul 2>&1
 
 :BrowserLaunchDone
 

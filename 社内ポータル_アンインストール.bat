@@ -211,7 +211,7 @@ set /a WAITED+=2
 goto :WaitUninstall
 
 :CloseApp
-taskkill /IM chrome.exe /F >nul 2>&1
+taskkill /IM chrome.exe >nul 2>&1
 goto :MonitorDone
 
 :SkipMonitor
