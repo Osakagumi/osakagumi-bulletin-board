@@ -1766,7 +1766,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, addDoc, deleteDoc, query, where,
-  onSnapshot, orderBy, limit, documentId, arrayUnion, arrayRemove, Timestamp, FieldPath
+  onSnapshot, orderBy, limit, documentId, arrayUnion, arrayRemove, Timestamp, FieldPath, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig, BUSINESS_HOURS, EQUIPMENT_STATUSES, SAFETY_STATUSES, EMAILJS_CONFIG, resolveMailRecipients, isMailOverrideActive, MAIL_SEND_TARGET, NOTICE_BOARD_AUTO_LOGIN } from "./firebase-config.js";
 import { initStorageHelper, uploadFileToStorage, deleteFileFromStorage } from "./storage-helper.js";
@@ -9060,7 +9060,7 @@ function rebuildChatConversations(){
     const otherName = isMine ? (m.recipientName||m.recipientEmail) : (m.senderName||m.senderEmail);
     const convId = m.conversationId || chatConversationId(myEmail, otherEmail);
     const existing = map.get(convId);
-    if(!existing || m.createdAt > existing.lastAt){
+    if(!existing || chatTimeMillis(m.createdAt) > chatTimeMillis(existing.lastAt)){
       map.set(convId, {
         conversationId: convId, otherEmail, otherName,
         lastText: m.text || "", lastAt: m.createdAt || "",
@@ -9073,7 +9073,7 @@ function rebuildChatConversations(){
   map.forEach(conv=>{
     conv.unread = chatReceivedMsgs.some(m=> (m.conversationId===conv.conversationId) && !m.read);
   });
-  chatConversations = [...map.values()].sort((a,b)=> String(b.lastAt).localeCompare(String(a.lastAt)));
+  chatConversations = [...map.values()].sort((a,b)=> chatTimeMillis(b.lastAt) - chatTimeMillis(a.lastAt));
   const badge = document.getElementById("chat-tab-badge");
   const hasUnreadChat = chatConversations.some(c=>c.unread);
   if(badge) badge.style.display = hasUnreadChat ? "inline-block" : "none";
@@ -9136,8 +9136,22 @@ function renderChatConversationList(){
     body.appendChild(row);
   });
 }
-function formatChatTime(iso){
-  const d = new Date(iso);
+// チャットのcreatedAtは、PCの時計のズレの影響を受けないよう送信者の端末時刻ではなく
+// Firestoreサーバー側の時刻（serverTimestamp()）で記録している。その結果、値の型が
+// ①Firestore Timestampオブジェクト（送信後、サーバーから反映された状態）
+// ②null（自分が送信した直後、まだサーバーの値が反映されていない一瞬の間。＝ほぼ「今」）
+// ③文字列のISO日時（本機能の導入前に送信された古いメッセージ。互換性のため残る）
+// の3通りありうるため、どれが来ても比較・表示できるようミリ秒に変換するヘルパーを用意する。
+function chatTimeMillis(v){
+  if(!v) return Date.now();
+  if(typeof v.toMillis === "function") return v.toMillis();
+  if(typeof v.seconds === "number") return v.seconds*1000 + Math.floor((v.nanoseconds||0)/1e6);
+  if(typeof v === "string"){ const t = new Date(v).getTime(); return isNaN(t) ? 0 : t; }
+  return 0;
+}
+function formatChatTime(ts){
+  const millis = chatTimeMillis(ts);
+  const d = new Date(millis);
   if(isNaN(d.getTime())) return "";
   const now = new Date();
   const sameDay = d.toDateString()===now.toDateString();
@@ -9172,7 +9186,7 @@ function openChatThread(otherEmail, otherName){
   const renderAndMark = ()=>{
     const msgs = [...chatThreadSentMsgs, ...chatThreadReceivedMsgs]
       .filter(m=> m.conversationId===chatCurrentConversationId)
-      .sort((a,b)=> String(a.createdAt).localeCompare(String(b.createdAt)));
+      .sort((a,b)=> chatTimeMillis(a.createdAt) - chatTimeMillis(b.createdAt));
     chatThreadLatestMsgs = msgs;
     renderChatMessages(msgs);
     markChatMessagesRead(msgs);
@@ -9465,7 +9479,7 @@ async function sendChatMessage(){
         attachmentFileName: file.name,
         attachmentKind: kind,
         read: false,
-        createdAt: new Date().toISOString()
+        createdAt: serverTimestamp() // 送信者PCの時計ズレの影響を受けないよう、サーバー側の時刻を記録する
       });
       notifyChatRecipient(chatCurrentOtherEmail, myDisplayName(), currentUser.email, msgRef.id);
     }catch(e){
@@ -9488,7 +9502,7 @@ async function sendChatMessage(){
         recipientName: otherEmp?.name || chatCurrentOtherEmail,
         text,
         read: false,
-        createdAt: new Date().toISOString()
+        createdAt: serverTimestamp() // 送信者PCの時計ズレの影響を受けないよう、サーバー側の時刻を記録する
       });
       notifyChatRecipient(chatCurrentOtherEmail, myDisplayName(), currentUser.email, msgRef.id);
     }catch(e){
@@ -9587,24 +9601,32 @@ async function cleanupOldChatMessages(){
   chatCleanupLastRun = now0;
   try{
     const now = Date.now();
-    const attachmentCutoff = new Date(now - chatCleanupSettings.imageHours*60*60*1000).toISOString();
-    const textCutoff = new Date(now - chatCleanupSettings.textHours*60*60*1000).toISOString();
+    const attachmentCutoffMs = now - chatCleanupSettings.imageHours*60*60*1000;
+    const textCutoffMs = now - chatCleanupSettings.textHours*60*60*1000;
     // 「1時間」「24時間」のうち短い方（多くの場合は添付側）より前のものを広めに候補として取得し、
     // 添付付きかどうかで実際の削除基準（添付だけ消すか、メッセージごと消すか）を分ける
     // クエリで拾う範囲は、2つの基準時刻のうち「より新しい方（＝1時間前など、短い方の期間の基準時刻）」にする。
     // こうすることで「1時間は経ったが24時間はまだ経っていない」添付ファイルも、正しく候補に含まれる。
     // （逆に「より古い方」を使ってしまうと、24時間経つまで添付が全く候補に入らないバグになる）
-    const broadestCutoff = attachmentCutoff > textCutoff ? attachmentCutoff : textCutoff;
-    console.log("[チャット自動削除] クエリに使う基準時刻（新しい方）：", broadestCutoff);
+    const broadestCutoffMs = Math.max(attachmentCutoffMs, textCutoffMs);
+    // createdAtは、PCの時計ズレ対策（serverTimestamp()化）の前後で型が混在する過渡期がある
+    // （新しいメッセージ＝Firestore Timestamp型、導入前の古いメッセージ＝文字列型）。
+    // Firestoreの範囲クエリ（<）は同じ型同士でしか正しく比較できないため、両方の型で問い合わせて結果を合算する。
+    const broadestCutoffStr = new Date(broadestCutoffMs).toISOString();
+    const broadestCutoffTs = Timestamp.fromMillis(broadestCutoffMs);
+    console.log("[チャット自動削除] クエリに使う基準時刻（新しい方）：", broadestCutoffStr);
     const myEmail = currentUser.email;
-    const [sentOld, receivedOld] = await Promise.all([
-      getDocs(query(collection(db,"direct_messages"), where("senderEmail","==",myEmail), where("createdAt","<",broadestCutoff))),
-      getDocs(query(collection(db,"direct_messages"), where("recipientEmail","==",myEmail), where("createdAt","<",broadestCutoff)))
+    const [sentOldStr, receivedOldStr, sentOldTs, receivedOldTs] = await Promise.all([
+      getDocs(query(collection(db,"direct_messages"), where("senderEmail","==",myEmail), where("createdAt","<",broadestCutoffStr))),
+      getDocs(query(collection(db,"direct_messages"), where("recipientEmail","==",myEmail), where("createdAt","<",broadestCutoffStr))),
+      getDocs(query(collection(db,"direct_messages"), where("senderEmail","==",myEmail), where("createdAt","<",broadestCutoffTs))),
+      getDocs(query(collection(db,"direct_messages"), where("recipientEmail","==",myEmail), where("createdAt","<",broadestCutoffTs)))
     ]);
-    const docsById = new Map([...sentOld.docs, ...receivedOld.docs].map(d=>[d.id, d]));
+    const docsById = new Map([...sentOldStr.docs, ...receivedOldStr.docs, ...sentOldTs.docs, ...receivedOldTs.docs].map(d=>[d.id, d]));
     for(const [id, docSnap] of docsById){
       const data = docSnap.data();
-      if(data.attachmentFileId && data.createdAt < attachmentCutoff){
+      const createdMs = chatTimeMillis(data.createdAt);
+      if(data.attachmentFileId && createdMs < attachmentCutoffMs){
         // 添付を削除し、メッセージ本文自体は残す（アイコン表示に切り替わる）
         try{ await deleteFileFromStorage(data.attachmentFileId); }catch(e){ /* 添付削除に失敗しても続行 */ }
         try{
@@ -9613,7 +9635,7 @@ async function cleanupOldChatMessages(){
         continue;
       }
       // 添付を含まない（または既に添付削除済みの）メッセージは、テキストの削除時間が経過していればメッセージごと削除
-      if(data.createdAt < textCutoff){
+      if(createdMs < textCutoffMs){
         try{ await deleteDoc(doc(db,"direct_messages", id)); }catch(e){ /* 1件失敗しても続行 */ }
       }
     }
