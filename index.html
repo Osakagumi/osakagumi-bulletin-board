@@ -1744,7 +1744,7 @@
       </div>
       <div class="field">
         <label>利用目的・使用機材・行き先など</label>
-        <textarea id="modal-purpose" placeholder="例）〇〇現場／〇〇会議(Zoom+スピーカーマイク)"></textarea>
+        <textarea id="modal-purpose" placeholder="例）◯◯現場／Zoom+スピーカーマイク使用"></textarea>
       </div>
       <div class="modal-err" id="modal-error"></div>
       <div class="row-btns">
@@ -4010,7 +4010,10 @@ function buildDaySlots(wrap, dateStr, dayReservations){
       const bookingEndM = timeToMinutes(booking.endTime);
       const bookingIsPast = isPastDate || (isToday && bookingEndM <= nowMins);
       const canEdit = !bookingIsPast && (booking.userEmail===currentUser.email || isAdmin);
-      div.title = `${booking.startTime}-${booking.endTime} ${booking.subject||booking.userName||booking.userEmail}\n${booking.purpose||""}` + (canEdit ? "\n（タップで編集）" : "");
+      const tooltipNameLine = booking.subject
+        ? `${booking.userName||booking.userEmail}（${booking.subject}）`
+        : `${booking.userName||booking.userEmail}`;
+      div.title = `${booking.startTime}-${booking.endTime} ${tooltipNameLine}\n${booking.purpose||""}` + (canEdit ? "\n（タップで編集）" : "");
       if(canEdit){
         div.classList.add("editable-booked");
         div.addEventListener("click", ()=>{
