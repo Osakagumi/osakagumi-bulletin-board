@@ -17,10 +17,22 @@
  * トレードオフ：
  * 　「通知をタップすると、送ってきた相手とのチャット画面に直接ジャンプする」という
  * 　挙動は失われる（どの通知でもアプリのトップ画面が開く／前面に出るだけになる）。
+ *
+ * 補足：Service Workerは、既に画面を制御している古いバージョンが残っている間は
+ * 新しいバージョンに自動で切り替わらない（アプリを閉じて再度開き直すまで待機状態の
+ * まま、という仕様）。skipWaiting()とclients.claim()で、更新をダウンロードでき次第
+ * すぐ切り替わるようにしている（今後、このファイルをまた更新する時のため）。
  */
 
 const PORTAL_APP_PATH = "/osakagumi-bulletin-board/";
 const PORTAL_APP_URL = "https://osakagumi.github.io/osakagumi-bulletin-board/";
+
+self.addEventListener("install", function () {
+  self.skipWaiting();
+});
+self.addEventListener("activate", function (event) {
+  event.waitUntil(clients.claim());
+});
 
 self.addEventListener("notificationclick", function (event) {
   // OneSignal標準の「無条件で新規ウィンドウを開く」処理を止める
