@@ -467,12 +467,47 @@
           <button class="btn btn-ghost" id="res-clear-filter">絞り込み解除</button>
         </div>
         <table>
-          <thead><tr><th>日付</th><th>時間</th><th>設備</th><th>申請者</th><th>目的</th><th>操作</th></tr></thead>
+          <thead><tr><th>日付</th><th>時間</th><th>設備</th><th>申請者</th><th>件名</th><th>目的</th><th>操作</th></tr></thead>
           <tbody id="res-table-body"></tbody>
         </table>
         <div class="empty" id="res-empty" style="display:none;">該当する予約はありません。</div>
       </div>
     </section>
+
+    <!-- ============ 予約 編集モーダル ============ -->
+    <div class="modal-overlay" id="res-edit-modal">
+      <div class="modal" style="max-width:420px;">
+        <h3>予約内容を編集</h3>
+        <div class="sub" id="res-edit-summary" style="font-size:12.5px;color:var(--muted);margin:-8px 0 12px;"></div>
+        <div class="form-grid">
+          <div class="field">
+            <label>日付</label>
+            <input type="date" id="res-edit-date">
+          </div>
+          <div class="field">
+            <label>開始時刻</label>
+            <input type="time" id="res-edit-start">
+          </div>
+          <div class="field">
+            <label>終了時刻</label>
+            <input type="time" id="res-edit-end">
+          </div>
+        </div>
+        <div class="field" id="res-edit-subject-field" style="display:none;">
+          <label>件名</label>
+          <input type="text" id="res-edit-subject" placeholder="例）〇〇工事 打合せ">
+        </div>
+        <div class="field">
+          <label>利用目的・使用機材・行き先など</label>
+          <textarea id="res-edit-purpose"></textarea>
+        </div>
+        <div id="res-edit-error" style="color:var(--danger);font-size:12.5px;margin-top:4px;"></div>
+        <div class="row-btns">
+          <button class="btn btn-ghost" id="res-edit-cancel-btn" style="border:1px solid var(--line);">キャンセル</button>
+          <button class="btn btn-primary" id="res-edit-save-btn">保存</button>
+        </div>
+      </div>
+    </div>
 
     <!-- ============ ユーザー登録（CSV一括） ============ -->
     <section id="view-userimport" style="display:none;">
@@ -2382,9 +2417,14 @@ function renderReservationsTable(){
       <td>${r.startTime}〜${r.endTime}</td>
       <td>${escapeHtml(r.equipmentName)}</td>
       <td>${escapeHtml(r.userName || r.userEmail)}</td>
+      <td>${escapeHtml(r.subject||"")}</td>
       <td style="color:var(--muted);max-width:200px;">${escapeHtml(r.purpose||"")}</td>
       <td class="actions"></td>
     `;
+    const editBtn = document.createElement("button");
+    editBtn.className = "btn btn-ghost"; editBtn.textContent = "編集"; editBtn.style.border = "1px solid var(--line)";
+    editBtn.addEventListener("click", ()=> openResEditModal(r));
+    tr.querySelector(".actions").appendChild(editBtn);
     const btn = document.createElement("button");
     btn.className = "btn btn-danger"; btn.textContent = "取消";
     btn.addEventListener("click", async ()=>{
@@ -2396,6 +2436,57 @@ function renderReservationsTable(){
     body.appendChild(tr);
   });
 }
+
+/* ============================================================
+   予約状況（全体）：一覧からの編集
+============================================================ */
+let editingResId = null;
+function openResEditModal(r){
+  editingResId = r.id;
+  const cat = catInfo(r.category);
+  document.getElementById("res-edit-summary").textContent = `${r.equipmentName} / ${nameForEmail(r.userEmail) || r.userName || r.userEmail}`;
+  document.getElementById("res-edit-date").value = r.date || "";
+  document.getElementById("res-edit-start").value = r.startTime || "";
+  document.getElementById("res-edit-end").value = r.endTime || "";
+  document.getElementById("res-edit-subject-field").style.display = cat.acceptsSubject ? "block" : "none";
+  document.getElementById("res-edit-subject").value = r.subject || "";
+  document.getElementById("res-edit-purpose").value = r.purpose || "";
+  document.getElementById("res-edit-error").textContent = "";
+  document.getElementById("res-edit-modal").classList.add("show");
+}
+document.getElementById("res-edit-cancel-btn")?.addEventListener("click", ()=>{
+  document.getElementById("res-edit-modal").classList.remove("show");
+});
+document.getElementById("res-edit-save-btn")?.addEventListener("click", async ()=>{
+  const errEl = document.getElementById("res-edit-error");
+  errEl.textContent = "";
+  const original = allReservations.find(x=>x.id===editingResId);
+  if(!original){ errEl.textContent = "対象の予約が見つかりませんでした。画面を更新してください。"; return; }
+  const date = document.getElementById("res-edit-date").value;
+  const startTime = document.getElementById("res-edit-start").value;
+  const endTime = document.getElementById("res-edit-end").value;
+  if(!date || !startTime || !endTime){ errEl.textContent = "日付・開始時刻・終了時刻を入力してください。"; return; }
+  if(startTime >= endTime){ errEl.textContent = "終了時刻は開始時刻より後にしてください。"; return; }
+  const conflict = allReservations.some(x=>
+    x.id !== editingResId && x.equipmentId === original.equipmentId && x.date === date &&
+    startTime < x.endTime && endTime > x.startTime
+  );
+  if(conflict){ errEl.textContent = "この時間帯は既に他の予約があります。"; return; }
+  const cat = catInfo(original.category);
+  const payload = {
+    date, startTime, endTime,
+    purpose: document.getElementById("res-edit-purpose").value.trim(),
+    subject: cat.acceptsSubject ? document.getElementById("res-edit-subject").value.trim() : ""
+  };
+  try{
+    await updateDoc(doc(db,"reservations", editingResId), payload);
+    toast("予約を更新しました。");
+    document.getElementById("res-edit-modal").classList.remove("show");
+    editingResId = null;
+  }catch(e){
+    errEl.textContent = "保存に失敗しました。権限をご確認ください。";
+  }
+});
 
 /* ============ システム管理者管理 ============ */
 let lastAdminEmails = [];
