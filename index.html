@@ -2683,6 +2683,14 @@ function renderDashboard(){
         row.addEventListener("click", ()=>{ switchToTab("chat"); openChatThread(conv.otherEmail, conv.otherName); });
         chatBody.appendChild(row);
       });
+      const chatRemaining = chatConversations.length - 4;
+      if(chatRemaining>0){
+        const more = document.createElement("div");
+        more.style.cssText = "font-size:12px;color:var(--muted);margin-top:4px;cursor:pointer;";
+        more.textContent = `他${chatRemaining}件`;
+        more.addEventListener("click", ()=> switchToTab("chat"));
+        chatBody.appendChild(more);
+      }
     }
   }
 
