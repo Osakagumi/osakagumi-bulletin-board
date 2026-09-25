@@ -322,6 +322,10 @@
               <option value="inventory">在庫数管理（敷鉄板など）</option>
             </select>
           </div>
+          <div class="field" id="cat-accepts-subject-field" style="display:none;align-items:center;gap:6px;padding-top:20px;">
+            <input type="checkbox" id="cat-accepts-subject" style="width:auto;">
+            <label style="margin:0;font-size:12.5px;color:var(--text);">件名入力を受け付ける</label>
+          </div>
         </div>
         <button class="btn btn-primary" id="cat-save-btn">追加</button>
         <button class="btn btn-ghost" id="cat-cancel-edit" style="display:none;">編集をやめる</button>
@@ -1484,12 +1488,22 @@ function renderCategoriesTable(){
     body.appendChild(tr);
   });
 }
+// 「件名入力を受け付ける」は時間枠予約（timeline）方式のカテゴリでのみ意味を持つため、
+// 方式の選択に連動して表示・非表示を切り替える。timeline以外に切り替えた場合はチェックも外す。
+function applyCategoryFormModeUI(){
+  const isTimeline = document.getElementById("cat-mode").value === "timeline";
+  document.getElementById("cat-accepts-subject-field").style.display = isTimeline ? "flex" : "none";
+  if(!isTimeline) document.getElementById("cat-accepts-subject").checked = false;
+}
+document.getElementById("cat-mode").addEventListener("change", applyCategoryFormModeUI);
 function startEditCategory(c){
   editingCategoryId = c.id;
   document.getElementById("cat-form-title").textContent = "カテゴリを編集：" + c.label;
   document.getElementById("cat-label").value = c.label || "";
   document.getElementById("cat-color").value = c.color || "#2E9E8F";
   document.getElementById("cat-mode").value = c.mode || "timeline";
+  applyCategoryFormModeUI();
+  document.getElementById("cat-accepts-subject").checked = c.acceptsSubject === true;
   document.getElementById("cat-save-btn").textContent = "変更を保存";
   document.getElementById("cat-cancel-edit").style.display = "inline-block";
   window.scrollTo({top:0, behavior:"smooth"});
@@ -1500,17 +1514,22 @@ function resetCategoryForm(){
   document.getElementById("cat-label").value = "";
   document.getElementById("cat-color").value = "#2E9E8F";
   document.getElementById("cat-mode").value = "timeline";
+  document.getElementById("cat-accepts-subject").checked = false;
+  applyCategoryFormModeUI();
   document.getElementById("cat-save-btn").textContent = "追加";
   document.getElementById("cat-cancel-edit").style.display = "none";
 }
+applyCategoryFormModeUI();
 document.getElementById("cat-cancel-edit").addEventListener("click", resetCategoryForm);
 document.getElementById("cat-save-btn").addEventListener("click", async ()=>{
   const label = document.getElementById("cat-label").value.trim();
   if(!label){ toast("カテゴリ名を入力してください。"); return; }
+  const mode = document.getElementById("cat-mode").value;
   const payload = {
     label,
     color: document.getElementById("cat-color").value,
-    mode: document.getElementById("cat-mode").value
+    mode,
+    acceptsSubject: mode==="timeline" && document.getElementById("cat-accepts-subject").checked
   };
   try{
     if(editingCategoryId){

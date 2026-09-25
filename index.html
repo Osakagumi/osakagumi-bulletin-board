@@ -1738,6 +1738,10 @@
     <div class="modal">
       <h3>予約内容の確認</h3>
       <div class="sub" id="modal-summary"></div>
+      <div class="field" id="modal-subject-field" style="display:none;">
+        <label>件名</label>
+        <input type="text" id="modal-subject" placeholder="例）〇〇工事 打合せ">
+      </div>
       <div class="field">
         <label>利用目的・使用機材・行き先など</label>
         <textarea id="modal-purpose" placeholder="例）〇〇現場／〇〇会議(Zoom+スピーカーマイク)"></textarea>
@@ -4006,7 +4010,7 @@ function buildDaySlots(wrap, dateStr, dayReservations){
       const bookingEndM = timeToMinutes(booking.endTime);
       const bookingIsPast = isPastDate || (isToday && bookingEndM <= nowMins);
       const canEdit = !bookingIsPast && (booking.userEmail===currentUser.email || isAdmin);
-      div.title = `${booking.startTime}-${booking.endTime} ${booking.userName||booking.userEmail}\n${booking.purpose||""}` + (canEdit ? "\n（タップで編集）" : "");
+      div.title = `${booking.startTime}-${booking.endTime} ${booking.subject||booking.userName||booking.userEmail}\n${booking.purpose||""}` + (canEdit ? "\n（タップで編集）" : "");
       if(canEdit){
         div.classList.add("editable-booked");
         div.addEventListener("click", ()=>{
@@ -4020,7 +4024,7 @@ function buildDaySlots(wrap, dateStr, dayReservations){
       if(s.start === Math.round(timeToMinutes(booking.startTime))){
         const lbl = document.createElement("div");
         lbl.className = "lbl";
-        lbl.textContent = `${booking.userName || booking.userEmail}`;
+        lbl.textContent = `${booking.subject || booking.userName || booking.userEmail}`;
         div.appendChild(lbl);
       }
     } else if(isPast){
@@ -4152,6 +4156,9 @@ function openReserveModalFor(dateStr){
   const lo = Math.min(pending.start,pending.end), hi = Math.max(pending.start,pending.end);
   document.getElementById("modal-summary").textContent =
     `${selectedEquipment.name} / ${formatDateJP(dateStr)} ${minutesToHHMM(lo)}〜${minutesToHHMM(hi)}`;
+  const cat = catInfo(selectedEquipment.category);
+  document.getElementById("modal-subject-field").style.display = cat.acceptsSubject ? "block" : "none";
+  document.getElementById("modal-subject").value = "";
   document.getElementById("modal-purpose").value = "";
   document.getElementById("modal-error").textContent = "";
   reserveModal.classList.add("show");
@@ -4171,13 +4178,16 @@ async function confirmReservation(){
     return;
   }
   const purpose = document.getElementById("modal-purpose").value.trim();
+  const cat = catInfo(selectedEquipment.category);
+  const subject = cat.acceptsSubject ? document.getElementById("modal-subject").value.trim() : "";
   try{
     if(editingReservationId){
       await updateDoc(doc(db,"reservations", editingReservationId), {
         date: dateStr,
         startTime: minutesToHHMM(lo),
         endTime: minutesToHHMM(hi),
-        purpose
+        purpose,
+        subject
       });
       editingReservationId = null;
       editingReservationDate = null;
@@ -4191,6 +4201,7 @@ async function confirmReservation(){
         startTime: minutesToHHMM(lo),
         endTime: minutesToHHMM(hi),
         purpose,
+        subject,
         userId: currentUser.uid,
         userEmail: currentUser.email,
         userName: myDisplayName(),
