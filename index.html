@@ -1834,6 +1834,32 @@ if(urlPreselect.email){
   if(emailInput) emailInput.value = urlPreselect.email;
 }
 
+/* ---------- 通知クリック時、Service Workerからの「このチャットを開いて」通知 ----------
+   複数のチャット相手がいる場合、既にアプリ画面が開いている（＝ページの再読み込みは
+   発生しない）状態で別の相手からの通知をクリックしても、URLの?chatパラメータ方式
+   （openChatFromUrlIfNeeded）はページ読み込み時にしか働かないため反応できない。
+   そこでService Worker側からpostMessageで送られてくる「どの相手のチャットを開くか」を
+   ここで受け取り、既に開いているページ上でそのままチャット画面を切り替える。 */
+let swPreselectChatEmail = null;
+function openChatFromSwMessageIfNeeded(){
+  if(!swPreselectChatEmail || !currentUser) return;
+  const otherEmail = swPreselectChatEmail;
+  swPreselectChatEmail = null;
+  const otherEmp = employeesAll.find(e=>(e.email||"").toLowerCase()===otherEmail.toLowerCase());
+  const otherName = otherEmp?.name || otherEmail;
+  switchToTab("chat");
+  openChatThread(otherEmail, otherName);
+}
+if(navigator.serviceWorker){
+  navigator.serviceWorker.addEventListener("message", (event)=>{
+    const data = event.data;
+    if(data && data.type === "OSAKAGUMI_OPEN_CHAT" && data.email){
+      swPreselectChatEmail = data.email;
+      openChatFromSwMessageIfNeeded(); // 社員名簿・ログインが既に済んでいれば、即座に反映される
+    }
+  });
+}
+
 /* ---------- サイネージ表示モード（行き先） ---------- */
 const isDisplayMode = urlParams.get("display") === "1";
 if(isDisplayMode){
@@ -5140,6 +5166,7 @@ function initEmployeesListener(){
     refreshDashboardIfActive();
     applyMyHiddenTabs();
     openChatFromUrlIfNeeded();
+    openChatFromSwMessageIfNeeded();
     // お知らせ（掲示板モード）の対象者判定には自分自身の社員レコードが必要なため、
     // こちらが後から届いた場合に備えて再描画する（掲示板モード中でなければ内部で何もしない）
     renderNoticeBoardCards();
@@ -9497,7 +9524,10 @@ async function notifyChatRecipient(recipientEmail, senderName, senderEmail, mess
   // 2026年9月：一時的に通知からリンクを外す変更を試したが、リンクを渡さなくても
   // OneSignal側の「Site URL」設定（ドメイン直下）へ飛ぼうとしてしまい、GitHub Pagesの
   // 実際の置き場所（サブフォルダ）と食い違って404になることが判明したため、元に戻した。
-  // 「クリックのたびにPWAのウィンドウが増える」問題自体は、既知の制限として残っている。
+  // 「クリックのたびにPWAのウィンドウが増える」問題自体は、Service Worker側の
+  // notificationclickハンドラでの重複防止で対処済み（OneSignalSDKWorker.js参照）。
+  // 併せて、既に画面が開いている場合に「どの相手とのチャットか」を伝えられるよう、
+  // senderEmailもWorker経由でOneSignalのdataフィールドに乗せて送る。
   const chatUrl = `${location.origin}${location.pathname}?chat=${encodeURIComponent(senderEmail)}`;
   fetch(CHAT_NOTIFY_WORKER_URL, {
     method: "POST",
@@ -9506,6 +9536,7 @@ async function notifyChatRecipient(recipientEmail, senderName, senderEmail, mess
       secret: CHAT_NOTIFY_SHARED_SECRET,
       recipientEmail,
       senderName,
+      senderEmail,
       chatUrl
     })
   })

@@ -14,9 +14,14 @@
  * 　後から登録されるOneSignal標準のハンドラ（＝無条件で新規ウィンドウを開く動作）を
  * 　止めている。OneSignalダッシュボード側の設定（連携タイプ等）は一切変更していない。
  *
- * トレードオフ：
- * 　「通知をタップすると、送ってきた相手とのチャット画面に直接ジャンプする」という
- * 　挙動は失われる（どの通知でもアプリのトップ画面が開く／前面に出るだけになる）。
+ * 2026年9月（追加）：どの相手からの通知かを、既に開いている画面にも伝えられるように、
+ * 通知送信元（onesignal-notify-worker.js）がOneSignalのdataフィールドに
+ * senderEmailを乗せて送ってくる。既に開いている画面が見つかった場合は、
+ * それをfocus()するだけでなく、postMessage()でsenderEmailを送り届け、
+ * index.html側でその相手とのチャット画面に自動で切り替えてもらう。
+ * 新規にウィンドウを開く場合は、senderEmailが分かればそのまま
+ * ?chat=<相手のメールアドレス> 付きのURLを開く（index.html既存の
+ * openChatFromUrlIfNeeded()の仕組みで、ページ読み込み後に自動でそのチャットが開く）。
  *
  * 補足：Service Workerは、既に画面を制御している古いバージョンが残っている間は
  * 新しいバージョンに自動で切り替わらない（アプリを閉じて再度開き直すまで待機状態の
@@ -34,10 +39,33 @@ self.addEventListener("activate", function (event) {
   event.waitUntil(clients.claim());
 });
 
+// OneSignalのAPIで送った data フィールド（{ senderEmail: "..." }）は、SDKのバージョンや
+// 状況によって event.notification.data に入る場所が微妙に異なることがあるため、
+// 考えられる置き場所をいくつか順番に確認する（見つからなければ null のまま＝従来通りの動作）。
+function extractSenderEmail(notification) {
+  const data = notification && notification.data;
+  if (!data) return null;
+  const candidates = [
+    data.senderEmail,
+    data.data && data.data.senderEmail,
+    data.custom && data.custom.a && data.custom.a.senderEmail,
+    data.additionalData && data.additionalData.senderEmail,
+  ];
+  for (const c of candidates) {
+    if (typeof c === "string" && c) return c;
+  }
+  return null;
+}
+
 self.addEventListener("notificationclick", function (event) {
   // OneSignal標準の「無条件で新規ウィンドウを開く」処理を止める
   event.stopImmediatePropagation();
   event.notification.close();
+
+  const senderEmail = extractSenderEmail(event.notification);
+  const openUrl = senderEmail
+    ? `${PORTAL_APP_URL}?chat=${encodeURIComponent(senderEmail)}`
+    : PORTAL_APP_URL;
 
   event.waitUntil(
     clients
@@ -46,12 +74,19 @@ self.addEventListener("notificationclick", function (event) {
         // 既に社内ポータルの画面が開いていれば、新規に開かず前面に出すだけにする
         for (const client of clientList) {
           if (client.url && client.url.indexOf(PORTAL_APP_PATH) !== -1 && "focus" in client) {
-            return client.focus();
+            return client.focus().then(function (focusedClient) {
+              // 送信者が分かっていれば、既に開いている画面にそのままチャット相手を伝える
+              // （ページの再読み込みは起きないため、URLの?chatパラメータ方式では反応できない）
+              if (senderEmail && focusedClient && "postMessage" in focusedClient) {
+                focusedClient.postMessage({ type: "OSAKAGUMI_OPEN_CHAT", email: senderEmail });
+              }
+              return focusedClient;
+            });
           }
         }
-        // 開いている画面が無ければ、1つだけ新規に開く
+        // 開いている画面が無ければ、1つだけ新規に開く（分かっていれば該当チャット直行のURLで）
         if (clients.openWindow) {
-          return clients.openWindow(PORTAL_APP_URL);
+          return clients.openWindow(openUrl);
         }
       })
   );

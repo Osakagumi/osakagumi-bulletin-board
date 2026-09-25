@@ -60,6 +60,7 @@ export default {
 
     const recipientEmail = (body.recipientEmail || "").trim();
     const senderName = (body.senderName || "").trim();
+    const senderEmail = (body.senderEmail || "").trim();
     const chatUrl = (body.chatUrl || "").trim();
     if (!recipientEmail || !chatUrl) {
       return new Response(JSON.stringify({ error: "recipientEmail and chatUrl are required" }), {
@@ -84,6 +85,9 @@ export default {
           contents: { en: "タップしてチャットを開く" },
           // 通知をタップした際に、該当のチャット画面へ直接遷移させる
           url: chatUrl,
+          // Service Worker側（notificationclick）が、既に開いている画面に対して
+          // 「どの相手とのチャットを開くか」をpostMessageで伝えるために使う
+          data: { senderEmail: senderEmail },
         }),
       });
 
