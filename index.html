@@ -2731,7 +2731,7 @@ function renderDashboard(){
       const cat = catInfo(r.category);
       const row = document.createElement("div");
       row.className = "dash-row";
-      row.innerHTML = `<span>${escapeHtml(r.equipmentName)} <span style="color:${cat.color};font-size:11px;">[${escapeHtml(cat.label)}]</span>${r.subject ? ` ・ ${escapeHtml(r.subject)}` : ""}</span><span class="dash-row-sub">${formatDateJP(r.date)} ${escapeHtml(r.startTime)}</span>`;
+      row.innerHTML = `<span>${escapeHtml(r.equipmentName)} <span style="color:${cat.color};font-size:11px;">[${escapeHtml(cat.label)}]</span>${r.subject ? ` ${escapeHtml(r.subject)}` : ""}</span><span class="dash-row-sub">${formatDateJP(r.date)} ${escapeHtml(r.startTime)}</span>`;
       row.addEventListener("click", ()=> jumpToReservationForView(r));
       resBody.appendChild(row);
     });
@@ -4250,8 +4250,7 @@ function renderMyReservations(list){
     const cat = catInfo(r.category);
     item.innerHTML = `
       <div class="meta">
-        <b>${escapeHtml(r.equipmentName)} <span style="color:${cat.color};font-size:11px;">[${cat.label}]</span></b>
-        ${r.subject ? `<div style="font-size:12.5px;font-weight:600;margin-top:2px;">${escapeHtml(r.subject)}</div>` : ""}
+        <b>${escapeHtml(r.equipmentName)} <span style="color:${cat.color};font-size:11px;">[${cat.label}]</span>${r.subject ? ` ${escapeHtml(r.subject)}` : ""}</b>
         <div class="time">${formatDateJP(r.date)} ${r.startTime}〜${r.endTime}</div>
         <div style="color:var(--muted);font-size:12px;margin-top:2px;">${escapeHtml(r.purpose||"")}</div>
       </div>
