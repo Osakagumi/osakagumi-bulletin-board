@@ -2824,6 +2824,7 @@ function switchToTab(viewName){
     stopChatThreadListeners();
     chatCurrentConversationId = null;
     chatCurrentOtherEmail = null;
+    chatThreadLatestMsgs = [];
   }
   document.querySelectorAll(".tab-btn").forEach(b=>{
     b.classList.toggle("active", b.dataset.view===viewName);
@@ -9101,9 +9102,16 @@ function formatChatTime(iso){
 }
 let chatThreadSentUnsub = null, chatThreadReceivedUnsub = null;
 let chatThreadSentMsgs = [], chatThreadReceivedMsgs = [];
+let chatThreadLatestMsgs = []; // 直近に描画したスレッドのメッセージ一覧（画面が見えるようになった時に既読処理をやり直すため保持）
 function stopChatThreadListeners(){
   if(chatThreadSentUnsub){ chatThreadSentUnsub(); chatThreadSentUnsub = null; }
   if(chatThreadReceivedUnsub){ chatThreadReceivedUnsub(); chatThreadReceivedUnsub = null; }
+}
+// 「今まさにこの画面をユーザーが見ているか」の判定。
+// タブが裏に隠れている（document.hidden）だけでなく、最小化・他のウィンドウの裏に
+// 隠れている場合（タブ自体は表示中でもウィンドウにフォーカスが無い）も「見ていない」扱いにする。
+function isWindowActuallyVisible(){
+  return document.visibilityState === "visible" && document.hasFocus();
 }
 function openChatThread(otherEmail, otherName){
   chatCurrentConversationId = chatConversationId(currentUser.email, otherEmail);
@@ -9122,6 +9130,7 @@ function openChatThread(otherEmail, otherName){
     const msgs = [...chatThreadSentMsgs, ...chatThreadReceivedMsgs]
       .filter(m=> m.conversationId===chatCurrentConversationId)
       .sort((a,b)=> String(a.createdAt).localeCompare(String(b.createdAt)));
+    chatThreadLatestMsgs = msgs;
     renderChatMessages(msgs);
     markChatMessagesRead(msgs);
   };
@@ -9192,17 +9201,32 @@ function renderChatMessages(msgs){
   body.scrollTop = body.scrollHeight;
 }
 async function markChatMessagesRead(msgs){
+  // 画面（ウィンドウ）が最小化・裏に隠れている間は、チャット画面自体は開いたままでも
+  // 「見ていない」= 未読のままにする。実際に見えるようになったタイミングで
+  // （visibilitychange/focus のリスナー経由で）改めて呼び直される。
+  if(!isWindowActuallyVisible()) return;
   const toMark = msgs.filter(m=> m.recipientEmail===currentUser.email && !m.read);
   for(const m of toMark){
     try{ await updateDoc(doc(db,"direct_messages", m.id), { read: true }); }catch(e){ /* 1件失敗しても続行 */ }
   }
 }
+// ウィンドウが最小化／裏に隠れた状態から、再び実際に見える状態に戻った時に呼ぶ。
+// チャットのスレッド画面を開いたままだった場合、見ていない間に届いていたメッセージを
+// ここで改めて既読にする。
+function retryMarkChatReadIfVisible(){
+  if(chatCurrentConversationId && chatThreadLatestMsgs.length && isWindowActuallyVisible()){
+    markChatMessagesRead(chatThreadLatestMsgs);
+  }
+}
+document.addEventListener("visibilitychange", retryMarkChatReadIfVisible);
+window.addEventListener("focus", retryMarkChatReadIfVisible);
 function updateChatThreadTitleAndUnread(){
   // 現在開いているスレッドの未読ドットを消すため、一覧の再描画は openChatThread 側のリアルタイム反映に任せる
 }
 document.getElementById("chat-back-btn")?.addEventListener("click", ()=>{
   stopChatThreadListeners();
   chatCurrentConversationId = null;
+  chatThreadLatestMsgs = [];
   chatLastConvEmail = null; // 手動で一覧に戻った場合は、タブ再訪時に自動で会話を再表示しない
   document.getElementById("chat-thread-view").style.display = "none";
   document.getElementById("chat-list-view").style.display = "block";
