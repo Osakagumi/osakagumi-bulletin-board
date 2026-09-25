@@ -4161,8 +4161,10 @@ function openReserveModalFor(dateStr){
     `${selectedEquipment.name} / ${formatDateJP(dateStr)} ${minutesToHHMM(lo)}〜${minutesToHHMM(hi)}`;
   const cat = catInfo(selectedEquipment.category);
   document.getElementById("modal-subject-field").style.display = cat.acceptsSubject ? "block" : "none";
-  document.getElementById("modal-subject").value = "";
-  document.getElementById("modal-purpose").value = "";
+  // 編集中（既存の予約をタップした場合）は、件名・利用目的とも既存の内容を表示する
+  const editingBooking = editingReservationId ? monthReservations.find(r=>r.id===editingReservationId) : null;
+  document.getElementById("modal-subject").value = editingBooking?.subject || "";
+  document.getElementById("modal-purpose").value = editingBooking?.purpose || "";
   document.getElementById("modal-error").textContent = "";
   reserveModal.classList.add("show");
 }
