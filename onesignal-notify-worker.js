@@ -13,11 +13,10 @@
  *   SHARED_SECRET          … このWorkerを勝手に叩かれないようにするための合言葉（自分で決めてよい）
  *   ALLOWED_ORIGIN         … Webアプリの公開URL（例：https://osakagumi.github.io）
  *
- * 2026年9月：以前は通知に「タップした際に遷移させるURL」（chatUrl）を持たせていたが、
- * PWAとしてインストールした環境で、通知をタップするたびにアプリのウィンドウが
- * 新規に増え続けてしまう問題が解決できなかったため、リンクを持たせるのをやめた。
- * これに伴い、chatUrlの受け取り・OneSignalへの送信（urlフィールド）を廃止している。
- * 通知はタップしても画面遷移はせず、消えるだけになる。
+ * 2026年9月：一時的に通知のリンク（chatUrl）を廃止する変更を試したが、リンクを渡さない場合
+ * OneSignal側が「Site URL」設定（ドメイン直下）へ飛ぼうとしてGitHub Pagesの実際の
+ * 置き場所（サブフォルダ）と食い違い404になることが判明したため、元の「chatUrlを受け取り、
+ * OneSignalのurlフィールドへ渡す」方式に戻した。
  */
 
 export default {
@@ -61,8 +60,9 @@ export default {
 
     const recipientEmail = (body.recipientEmail || "").trim();
     const senderName = (body.senderName || "").trim();
-    if (!recipientEmail) {
-      return new Response(JSON.stringify({ error: "recipientEmail is required" }), {
+    const chatUrl = (body.chatUrl || "").trim();
+    if (!recipientEmail || !chatUrl) {
+      return new Response(JSON.stringify({ error: "recipientEmail and chatUrl are required" }), {
         status: 400,
         headers: { "Content-Type": "application/json", ...corsHeaders },
       });
@@ -81,10 +81,9 @@ export default {
           target_channel: "push",
           // プライバシー上の理由から、メッセージ本文は通知に含めない（誰からか、だけを伝える）
           headings: { en: `${senderName || "誰か"}さんからメッセージ` },
-          // タップしても画面遷移はしないため、「タップして開く」という案内は避ける
-          contents: { en: "社内ポータルのチャットをご確認ください" },
-          // 2026年9月：urlフィールドを廃止（PWAでウィンドウが増え続ける問題のため）。
-          // 通知はタップしても画面遷移せず、消えるだけになる。
+          contents: { en: "タップしてチャットを開く" },
+          // 通知をタップした際に、該当のチャット画面へ直接遷移させる
+          url: chatUrl,
         }),
       });
 

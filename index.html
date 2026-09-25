@@ -9474,10 +9474,10 @@ document.getElementById("chat-input")?.addEventListener("paste", (e)=>{
 // 通知の送信に失敗しても、チャット自体の送信は既に完了しているので、ここでは静かに無視する
 // （通知はあくまで補助的な気づかせ機能であり、失敗してもチャット機能自体は支障なく動く）。
 // プライバシー上の理由から、メッセージ本文は通知に含めない（OneSignal側にも送らない）。
-// 2026年9月：以前は通知にリンク（?chat=送信者のメールアドレス付きのURL）を持たせて
-// タップ時にチャット画面へ直接遷移させていたが、PWAとしてインストールした環境で
-// タップするたびにアプリのウィンドウが新規に増え続けてしまう問題が解決できなかったため、
-// リンクを持たせるのをやめた（タップしても通知が消えるだけになる）。
+// 通知をタップした際に該当のチャット画面へ直接遷移できるよう、
+// 「?chat=送信者のメールアドレス」付きのURLをWorker経由でOneSignalに渡している。
+// 2026年9月：一時的にリンクを外す変更を試したが、OneSignal側がリンク省略時に
+// 「Site URL」設定（ドメイン直下）へ飛ぼうとして404になることが判明したため元に戻した。
 const CHAT_NOTIFY_WORKER_URL = "https://osakagumi-chat-notify.osakagumi-sys.workers.dev";
 const CHAT_NOTIFY_SHARED_SECRET = "452003d668f70b5d0534f9f6d053cd6572f796522b0b56cf";
 // 新着チャットのプッシュ通知を、Cloudflare Worker経由でOneSignalに依頼する。
@@ -9494,16 +9494,19 @@ async function notifyChatRecipient(recipientEmail, senderName, senderEmail, mess
       }
     }catch(e){ /* 既読確認に失敗した場合は、念のため通常通り通知する */ }
   }
-  // 2026年9月：通知をタップするたびにアプリ（PWA）のウィンドウが新規に増え続ける問題が
-  // 解決できなかったため、通知にリンク（タップ時の遷移先）を持たせるのをやめた。
-  // タップしても画面遷移はせず、通知が消えるだけになる（Worker側もchatUrlを受け取らなくなった）。
+  // 2026年9月：一時的に通知からリンクを外す変更を試したが、リンクを渡さなくても
+  // OneSignal側の「Site URL」設定（ドメイン直下）へ飛ぼうとしてしまい、GitHub Pagesの
+  // 実際の置き場所（サブフォルダ）と食い違って404になることが判明したため、元に戻した。
+  // 「クリックのたびにPWAのウィンドウが増える」問題自体は、既知の制限として残っている。
+  const chatUrl = `${location.origin}${location.pathname}?chat=${encodeURIComponent(senderEmail)}`;
   fetch(CHAT_NOTIFY_WORKER_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       secret: CHAT_NOTIFY_SHARED_SECRET,
       recipientEmail,
-      senderName
+      senderName,
+      chatUrl
     })
   })
     .catch(()=>{});
