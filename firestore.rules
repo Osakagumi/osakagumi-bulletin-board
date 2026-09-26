@@ -87,10 +87,13 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // 所属（部署）マスタ: 全員が読める。追加・編集・削除はシステム管理者のみ。
+    // 所属（部署）マスタ: 全員が読める。
+    // 追加・編集・削除はシステム管理者または行き先の他者設定権限者
+    // （admin.html「行き先管理」タブは行き先の他者設定権限者にも開放されており、
+    // 部署マスタの追加・編集フォームも同タブ内にあるため、同タブ内のwb_presetsと権限を揃えている）。
     match /departments/{deptId} {
       allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow write: if isWhereaboutsEditor();
     }
 
     // アプリ全体の設定（行き先ビューの列数など）: 全員が読める。書き込みはシステム管理者のみ。
@@ -155,16 +158,19 @@ service cloud.firestore {
       allow read, write: if isSignedIn() && request.auth.token.email == email;
     }
 
-    // 行き先ステータスマスタ（在席・外出・現場・休みなど）: 全員が読める。管理はシステム管理者のみ。
+    // 行き先ステータスマスタ（在席・外出・現場・休みなど）: 全員が読める。
+    // 管理はシステム管理者または行き先の他者設定権限者（理由はdepartmentsのコメントを参照）。
     match /wb_statuses/{statusId} {
       allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow write: if isWhereaboutsEditor();
     }
 
-    // 設備カテゴリ（会議室・業務共用車輌・測量機器・ドローンなど）: 全員が読める。管理はシステム管理者のみ。
+    // 設備カテゴリ（会議室・業務共用車輌・測量機器・ドローンなど）: 全員が読める。
+    // 管理はシステム管理者または設備管理者（admin.html「設備管理」タブは設備管理者にも開放されており、
+    // カテゴリ追加・編集フォームも同タブ内にあるため、equipmentコレクション本体の権限と揃えている）。
     match /equipment_categories/{categoryId} {
       allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow write: if isEquipmentManager();
     }
 
     // 社員名簿（行き先ボード兼用）: ログインすると自動で自分の行が作られる。
