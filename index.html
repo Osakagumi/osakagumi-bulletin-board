@@ -1247,7 +1247,7 @@
               <span id="wb-preset-unsaved-note" style="display:none;font-size:12px;color:var(--danger);white-space:nowrap;">未保存の変更があります</span>
               <button class="btn-ghost" id="wb-order-toggle-btn" style="border:1px solid var(--line);">社員の表示順を編集</button>
               <button class="btn-ghost" id="wb-preset-discard-btn" style="border:1px solid var(--line);" disabled>変更を破棄</button>
-              <button class="btn-primary" id="wb-preset-save-btn">この内容のまま保存</button>
+              <button class="btn-primary" id="wb-preset-save-btn">保存</button>
             </div>
           </div>
           <p id="wb-order-hint" style="display:none;font-size:12px;color:var(--muted);margin:0 0 10px;">
@@ -6418,7 +6418,7 @@ function updateWbPresetSaveButtonState(){
   // まだ誰も事前設定しておらず「初期状態」由来の内容がそのまま表示されている場合に、
   // その内容をこの日の事前設定として明示的に確定したい、というケースのため）。
   saveBtn.disabled = false;
-  saveBtn.textContent = count>0 ? `保存（${count}件）` : "この内容のまま保存";
+  saveBtn.textContent = count>0 ? `保存（${count}件）` : "保存";
   if(discardBtn) discardBtn.disabled = count===0;
   if(note) note.style.display = count>0 ? "inline" : "none";
 }
