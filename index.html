@@ -4918,9 +4918,10 @@ document.getElementById("notice-submit").addEventListener("click", async ()=>{
         title, body, attachmentUrl, attachmentStoragePath, attachmentFileName, targetDepartments,
         excludedEmails: noticeExcludedEmails,
         neverAutoDelete,
-        createdAt: Timestamp.now(), // 編集（添付差し替え含む）のたびに投稿日時を更新し、一覧の表示順にも反映させる
         updatedAt: Timestamp.now(),
-        ...(resetRead ? { readByAt: {} } : {}) // チェックがONなら、既読情報を全てクリアして未読に戻す
+        // 「更新通知を行い、全て未読に戻す」がONの時だけ、投稿日時（createdAt）も今に更新して
+        // 一覧の表示順に反映させる。OFFの場合は軽微な修正とみなし、投稿日時は変更しない。
+        ...(resetRead ? { createdAt: Timestamp.now(), readByAt: {} } : {})
       });
       // 添付が別のものに差し替わった／削除された場合は、以前のファイルをドライブから完全削除する
       if(originalAttachmentStoragePath && originalAttachmentStoragePath !== attachmentStoragePath){
