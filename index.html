@@ -1246,7 +1246,8 @@
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
               <span id="wb-preset-unsaved-note" style="display:none;font-size:12px;color:var(--danger);white-space:nowrap;">未保存の変更があります</span>
               <button class="btn-ghost" id="wb-order-toggle-btn" style="border:1px solid var(--line);">社員の表示順を編集</button>
-              <button class="btn-primary" id="wb-preset-save-btn" disabled>保存</button>
+              <button class="btn-ghost" id="wb-preset-discard-btn" style="border:1px solid var(--line);" disabled>変更を破棄</button>
+              <button class="btn-primary" id="wb-preset-save-btn">この内容のまま保存</button>
             </div>
           </div>
           <p id="wb-order-hint" style="display:none;font-size:12px;color:var(--muted);margin:0 0 10px;">
@@ -6373,7 +6374,7 @@ document.getElementById("wb-preset-modal-save").addEventListener("click", ()=>{
   if(isEditingWbDefaults()){
     wbPresetPendingEdits[wbPresetEditingEmail] = status ? { status, note } : null;
     document.getElementById("wb-preset-modal").classList.remove("show");
-    toast("内容を保持しました。画面右上の「保存」ボタンを押すと確定します。");
+    toast("内容を変更しました。画面右上の「保存」ボタンを押すと確定します。");
     renderWbPresetTable();
     updateWbPresetSaveButtonState();
     return;
@@ -6399,7 +6400,7 @@ document.getElementById("wb-preset-modal-save").addEventListener("click", ()=>{
     timeLeaveEnd: tlChecked ? tlEnd : ""
   };
   document.getElementById("wb-preset-modal").classList.remove("show");
-  toast("内容を保持しました。画面右上の「保存」ボタンを押すと確定します。");
+  toast("内容を変更しました。画面右上の「保存」ボタンを押すと確定します。");
   renderWbPresetTable();
   updateWbPresetSaveButtonState();
 });
@@ -6409,26 +6410,47 @@ function hasWbPresetPendingEdits(){
 }
 function updateWbPresetSaveButtonState(){
   const saveBtn = document.getElementById("wb-preset-save-btn");
+  const discardBtn = document.getElementById("wb-preset-discard-btn");
   const note = document.getElementById("wb-preset-unsaved-note");
   if(!saveBtn) return;
   const count = Object.keys(wbPresetPendingEdits).length;
-  saveBtn.disabled = count===0;
-  saveBtn.textContent = count>0 ? `保存（${count}件）` : "保存";
+  // 保存ボタンは、保留中の変更が無くても押せるようにしている（例：日付を進めた先が
+  // まだ誰も事前設定しておらず「初期状態」由来の内容がそのまま表示されている場合に、
+  // その内容をこの日の事前設定として明示的に確定したい、というケースのため）。
+  saveBtn.disabled = false;
+  saveBtn.textContent = count>0 ? `保存（${count}件）` : "この内容のまま保存";
+  if(discardBtn) discardBtn.disabled = count===0;
   if(note) note.style.display = count>0 ? "inline" : "none";
 }
+// 保留中（未保存）の変更をその場で取り消す。日付や「初期状態」の切り替えは伴わないため、
+// confirmDiscardWbPresetPendingIfAny（切り替え時の確認）とは別に用意している。
+function discardWbPresetPendingEdits(){
+  if(!hasWbPresetPendingEdits()){ toast("変更はありません。"); return; }
+  if(!confirm("保存されていない変更を破棄しますか？")) return;
+  wbPresetPendingEdits = {};
+  renderWbPresetTable();
+  updateWbPresetSaveButtonState();
+  toast("変更を破棄しました。");
+}
+document.getElementById("wb-preset-discard-btn").addEventListener("click", discardWbPresetPendingEdits);
 // 未保存の変更を残したまま日付や「初期状態」を切り替えようとした場合に確認する。
 // falseを返した呼び出し側は、切り替えを中止すること。
 function confirmDiscardWbPresetPendingIfAny(){
   if(!hasWbPresetPendingEdits()) return true;
   if(confirm("保存されていない変更があります。破棄して移動しますか？")){
     wbPresetPendingEdits = {};
+    // ここで保存ボタン・「未保存の変更」表示を更新しておかないと、日付等を切り替えた後も
+    // 直前の件数のまま「保存」ボタンが押せる状態で残ってしまい、押しても
+    // 保存対象が無いため何も起こらない（ように見える）不具合になる。
+    updateWbPresetSaveButtonState();
     return true;
   }
   return false;
 }
 
 async function saveWbPresetPendingEdits(){
-  if(!hasWbPresetPendingEdits()){ toast("変更はありません。"); return; }
+  // 保留中の変更が無くても、「今表示されている内容（初期状態からのフォールバックを含む）を
+  // この日の事前設定として明示的に保存したい」というケースのため、あえて処理を止めない。
   const saveBtn = document.getElementById("wb-preset-save-btn");
   saveBtn.disabled = true;
   const editingDefaults = isEditingWbDefaults();
