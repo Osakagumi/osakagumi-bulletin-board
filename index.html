@@ -313,6 +313,9 @@
     border:none;background:none;color:var(--muted);font-size:14px;line-height:1;padding:3px 6px;border-radius:50%;cursor:pointer;
   }
   .wb-preset-date-pill .wb-preset-date-del:hover{background:#FDF2F2;color:var(--danger);}
+  /* 「保存」ボタンを押すまでFirestoreに反映されていない、画面上だけの未保存編集行を示す */
+  .wb-preset-row-dirty{background:#FFFBEA;}
+  .wb-preset-row-dirty .name-cell::after{content:"●";color:#EF9F27;font-size:9px;margin-left:4px;vertical-align:middle;}
 
   /* equipment grid */
   .eq-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:18px;}
@@ -1240,8 +1243,10 @@
               </div>
               <button class="btn-primary" id="wb-preset-bulk-done-btn" style="display:none;">連続設定を終了</button>
             </div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+              <span id="wb-preset-unsaved-note" style="display:none;font-size:12px;color:var(--danger);white-space:nowrap;">未保存の変更があります</span>
               <button class="btn-ghost" id="wb-order-toggle-btn" style="border:1px solid var(--line);">社員の表示順を編集</button>
+              <button class="btn-primary" id="wb-preset-save-btn" disabled>保存</button>
             </div>
           </div>
           <p id="wb-order-hint" style="display:none;font-size:12px;color:var(--muted);margin:0 0 10px;">
@@ -1255,9 +1260,8 @@
           <div class="wb-list-columns" id="wb-preset-columns"></div>
           <p style="font-size:11.5px;color:var(--muted);margin-top:10px;">
             指定できるのは、カレンダー上で休日になっていない日のみです。事前設定は最大7日分まで保持されます（過去の日付は自動的に削除されます）。<br>
-            各社員の状態をクリックして変更すると、その場で即座に保存されます。<br>
-            個別に変更していない社員は、「保存済：」の「初期状態」の内容がそのまま使われます（初期状態を後から変更すると、個別に変更していない日にはさかのぼって反映されます）。<br>
-            当日、本人が「自分の行き先を入力」でその場で変更した場合は、その内容が優先して表示されます。
+            各社員の状態をクリックして変更しても、この画面上で内容が変わるだけで、まだ保存はされません。画面右上の「保存」ボタンを押した時点で、変更した社員・変更していない社員を問わず、表示されている内容がその日（または初期状態）の行き先として全員分まとめて保存されます。保存する前に日付や「初期状態」を切り替えると、変更内容は破棄されます。<br>
+            当日、本人または権限保持者が「自分の行き先を入力」などでその場で変更した場合は、事前設定の保存内容よりもその場での変更が優先して表示されます。
           </p>
         </div>
       </section>
@@ -2200,6 +2204,10 @@ let wbPresetsLoaded = false;
 let wbPresetSelectedDate = null;
 let wbPresetEditingDefaults = false;
 let wbPresetBulkStatus = null;
+// 事前設定・初期状態の「保存」ボタンを押すまでFirestoreに書き込まない、画面上だけの未保存編集内容。
+// email -> {status, note, timeLeaveType, timeLeaveStart, timeLeaveEnd}（日付指定時）
+// email -> {status, note} | null（初期状態編集時。nullは「未設定に戻す」保留中を表す）
+let wbPresetPendingEdits = {};
 let calWorkStartTime = "08:00";
 let calWorkEndTime = "17:00";
 let wbOffHoursBufferMin = 15;
@@ -6088,32 +6096,34 @@ document.getElementById("wb-preset-bulk-done-btn").addEventListener("click", ()=
   renderWbPresetBulkToggle();
 });
 
-async function applyWbPresetBulkStatus(email){
-  if(isEditingWbDefaults()){
-    const existing = wbPresetDefaults[email] || {};
-    try{
-      await saveWbDefaultForEmployee(email, wbPresetBulkStatus, existing.note || "");
-    }catch(e){
-      toast("更新に失敗しました。権限をご確認ください。");
-    }
-    return;
+function wbPresetEffectiveForEmail(email){
+  // 現在画面に表示すべき実効値（未保存の編集があればそれを優先）を返す。保存処理・連続設定・モーダル初期値の共通ロジック。
+  const editingDefaults = isEditingWbDefaults();
+  const hasPending = Object.prototype.hasOwnProperty.call(wbPresetPendingEdits, email);
+  if(editingDefaults){
+    if(hasPending) return wbPresetPendingEdits[email];
+    return wbPresetDefaults[email] || null;
   }
-  const existing = (wbPresetsByDate[wbPresetSelectedDate] && wbPresetsByDate[wbPresetSelectedDate][email]) || {};
-  try{
-    await setDoc(doc(db,"wb_presets", `${wbPresetSelectedDate}_${email}`), {
-      date: wbPresetSelectedDate,
-      email,
+  const dayPresets = wbPresetsByDate[wbPresetSelectedDate] || {};
+  if(hasPending) return wbPresetPendingEdits[email];
+  return dayPresets[email] || null;
+}
+
+function applyWbPresetBulkStatus(email){
+  const existing = wbPresetEffectiveForEmail(email) || {};
+  if(isEditingWbDefaults()){
+    wbPresetPendingEdits[email] = wbPresetBulkStatus ? { status: wbPresetBulkStatus, note: existing.note || "" } : null;
+  } else {
+    wbPresetPendingEdits[email] = {
       status: wbPresetBulkStatus,
       note: existing.note || "",
       timeLeaveType: existing.timeLeaveType || "",
       timeLeaveStart: existing.timeLeaveStart || "",
-      timeLeaveEnd: existing.timeLeaveEnd || "",
-      updatedBy: currentUser.email,
-      updatedAt: new Date().toISOString()
-    });
-  }catch(e){
-    toast("更新に失敗しました。権限をご確認ください。");
+      timeLeaveEnd: existing.timeLeaveEnd || ""
+    };
   }
+  renderWbPresetTable();
+  updateWbPresetSaveButtonState();
 }
 
 function presetNoteLines(preset){
@@ -6160,6 +6170,7 @@ function renderWbPresetTable(){
   }
 
   const dayPresets = editingDefaults ? {} : (wbPresetsByDate[wbPresetSelectedDate] || {});
+  updateWbPresetSaveButtonState();
 
   // 一般画面の一覧と同じ計算式：列数は上限として扱い、実際の幅で1列あたり最低260px確保できる数まで自動的に減らす
   const MIN_COL_WIDTH = 260 * (wbFontSizePx/13);
@@ -6180,12 +6191,14 @@ function renderWbPresetTable(){
     thead.innerHTML = `<tr><th class="drag-grip-cell"></th><th class="dept-cell">所属</th><th class="name-cell">氏名</th><th class="status-cell">状態</th><th>備考</th></tr>`;
     const tbody = document.createElement("tbody");
     chunk.forEach(emp=>{
-      const preset = editingDefaults ? (wbPresetDefaults[emp.email] || null) : (dayPresets[emp.email] || null);
+      const hasPending = Object.prototype.hasOwnProperty.call(wbPresetPendingEdits, emp.email);
+      const preset = hasPending ? wbPresetPendingEdits[emp.email] : (editingDefaults ? (wbPresetDefaults[emp.email] || null) : (dayPresets[emp.email] || null));
       const fallback = editingDefaults ? null : (wbPresetDefaults[emp.email] || null);
       const effective = (preset && preset.status) ? preset : ((fallback && fallback.status) ? fallback : null);
       const st = effective ? wbStatusInfo(effective.status) : null;
       const tr = document.createElement("tr");
       tr.dataset.email = emp.email;
+      if(hasPending) tr.classList.add("wb-preset-row-dirty");
       const tdGrip = document.createElement("td");
       tdGrip.className = "drag-grip-cell";
       tdGrip.textContent = "⠿";
@@ -6226,6 +6239,7 @@ function renderWbPresetTable(){
 
 async function selectWbPresetDate(dateStr){
   if(!dateStr) return;
+  if(!confirmDiscardWbPresetPendingIfAny()) return;
   if(dateStr <= todayStr()){
     toast("当日・過去の日付は事前設定できません。当日分を修正したい場合は、一覧画面から直接編集してください。");
     return;
@@ -6287,7 +6301,8 @@ function openWbPresetModal(email){
     sel.appendChild(opt);
   });
   const dayPresets = editingDefaults ? {} : (wbPresetsByDate[wbPresetSelectedDate] || {});
-  const preset = editingDefaults ? (wbPresetDefaults[email] || null) : (dayPresets[email] || null);
+  const hasPending = Object.prototype.hasOwnProperty.call(wbPresetPendingEdits, email);
+  const preset = hasPending ? wbPresetPendingEdits[email] : (editingDefaults ? (wbPresetDefaults[email] || null) : (dayPresets[email] || null));
   const fallback = editingDefaults ? null : (wbPresetDefaults[email] || null);
   const effective = (preset && preset.status) ? preset : ((fallback && fallback.status) ? fallback : null);
   sel.value = effective ? effective.status||"" : "";
@@ -6347,20 +6362,20 @@ document.getElementById("wb-preset-tl-end").addEventListener("click", (e)=>{
 document.getElementById("wb-preset-modal-cancel").addEventListener("click", ()=>{
   document.getElementById("wb-preset-modal").classList.remove("show");
 });
-document.getElementById("wb-preset-modal-save").addEventListener("click", async ()=>{
+document.getElementById("wb-preset-modal-save").addEventListener("click", ()=>{
+  // このボタンは画面上の内容を保留（未保存）状態にするだけで、Firestoreへの書き込みは
+  // 画面右上の「保存」ボタン（saveWbPresetPendingEdits）を押した時にまとめて行う。
   if(!wbPresetEditingEmail) return;
   const errEl = document.getElementById("wb-preset-modal-error");
   const status = document.getElementById("wb-preset-status-select").value;
   const note = document.getElementById("wb-preset-note").value.trim();
 
   if(isEditingWbDefaults()){
-    try{
-      await saveWbDefaultForEmployee(wbPresetEditingEmail, status, note);
-      document.getElementById("wb-preset-modal").classList.remove("show");
-      toast("初期状態を保存しました。");
-    }catch(e){
-      errEl.textContent = "保存に失敗しました。権限をご確認ください。";
-    }
+    wbPresetPendingEdits[wbPresetEditingEmail] = status ? { status, note } : null;
+    document.getElementById("wb-preset-modal").classList.remove("show");
+    toast("内容を保持しました。画面右上の「保存」ボタンを押すと確定します。");
+    renderWbPresetTable();
+    updateWbPresetSaveButtonState();
     return;
   }
 
@@ -6377,36 +6392,95 @@ document.getElementById("wb-preset-modal-save").addEventListener("click", async 
       return;
     }
   }
-  try{
-    await setDoc(doc(db,"wb_presets", `${wbPresetSelectedDate}_${wbPresetEditingEmail}`), {
-      date: wbPresetSelectedDate,
-      email: wbPresetEditingEmail,
-      status, note,
-      timeLeaveType: tlChecked ? wbPresetTlType : "",
-      timeLeaveStart: tlChecked ? tlStart : "",
-      timeLeaveEnd: tlChecked ? tlEnd : "",
-      updatedBy: currentUser.email,
-      updatedAt: new Date().toISOString()
-    });
-    document.getElementById("wb-preset-modal").classList.remove("show");
-    toast("事前設定を保存しました。");
-  }catch(e){
-    errEl.textContent = "保存に失敗しました。権限をご確認ください。";
-  }
+  wbPresetPendingEdits[wbPresetEditingEmail] = {
+    status, note,
+    timeLeaveType: tlChecked ? wbPresetTlType : "",
+    timeLeaveStart: tlChecked ? tlStart : "",
+    timeLeaveEnd: tlChecked ? tlEnd : ""
+  };
+  document.getElementById("wb-preset-modal").classList.remove("show");
+  toast("内容を保持しました。画面右上の「保存」ボタンを押すと確定します。");
+  renderWbPresetTable();
+  updateWbPresetSaveButtonState();
 });
 
-async function saveWbDefaultForEmployee(email, status, note){
-  const snap = await getDoc(doc(db,"wb_presets", WB_DEFAULTS_KEY));
-  const states = (snap.exists() && snap.data().states) || {};
-  if(status){
-    states[email] = { status, note: note||"" };
-  } else {
-    delete states[email];
-  }
-  await setDoc(doc(db,"wb_presets", WB_DEFAULTS_KEY), {
-    states, updatedBy: currentUser.email, updatedAt: new Date().toISOString()
-  });
+function hasWbPresetPendingEdits(){
+  return Object.keys(wbPresetPendingEdits).length > 0;
 }
+function updateWbPresetSaveButtonState(){
+  const saveBtn = document.getElementById("wb-preset-save-btn");
+  const note = document.getElementById("wb-preset-unsaved-note");
+  if(!saveBtn) return;
+  const count = Object.keys(wbPresetPendingEdits).length;
+  saveBtn.disabled = count===0;
+  saveBtn.textContent = count>0 ? `保存（${count}件）` : "保存";
+  if(note) note.style.display = count>0 ? "inline" : "none";
+}
+// 未保存の変更を残したまま日付や「初期状態」を切り替えようとした場合に確認する。
+// falseを返した呼び出し側は、切り替えを中止すること。
+function confirmDiscardWbPresetPendingIfAny(){
+  if(!hasWbPresetPendingEdits()) return true;
+  if(confirm("保存されていない変更があります。破棄して移動しますか？")){
+    wbPresetPendingEdits = {};
+    return true;
+  }
+  return false;
+}
+
+async function saveWbPresetPendingEdits(){
+  if(!hasWbPresetPendingEdits()){ toast("変更はありません。"); return; }
+  const saveBtn = document.getElementById("wb-preset-save-btn");
+  saveBtn.disabled = true;
+  const editingDefaults = isEditingWbDefaults();
+  const list = getSortedEmployees();
+  try{
+    if(editingDefaults){
+      // 変更した社員・していない社員を問わず、全員分の現在の実効値をまとめて1つのdocに保存する
+      const states = {};
+      list.forEach(emp=>{
+        const effective = wbPresetEffectiveForEmail(emp.email);
+        if(effective && effective.status){
+          states[emp.email] = { status: effective.status, note: effective.note || "" };
+        }
+      });
+      await setDoc(doc(db,"wb_presets", WB_DEFAULTS_KEY), {
+        states, updatedBy: currentUser.email, updatedAt: new Date().toISOString()
+      });
+      toast("初期状態を保存しました。");
+    } else {
+      // 変更した社員・していない社員を問わず、全員分をその日の事前設定として明示的に保存する
+      const fallbackDefaults = wbPresetDefaults;
+      let failCount = 0;
+      await Promise.all(list.map(emp=>{
+        const preset = wbPresetEffectiveForEmail(emp.email);
+        const fallback = fallbackDefaults[emp.email] || null;
+        const effective = (preset && preset.status) ? preset : ((fallback && fallback.status) ? fallback : null);
+        return setDoc(doc(db,"wb_presets", `${wbPresetSelectedDate}_${emp.email}`), {
+          date: wbPresetSelectedDate,
+          email: emp.email,
+          status: effective ? (effective.status || "") : "",
+          note: effective ? (effective.note || "") : "",
+          timeLeaveType: effective ? (effective.timeLeaveType || "") : "",
+          timeLeaveStart: effective ? (effective.timeLeaveStart || "") : "",
+          timeLeaveEnd: effective ? (effective.timeLeaveEnd || "") : "",
+          updatedBy: currentUser.email,
+          updatedAt: new Date().toISOString()
+        }).catch(()=>{ failCount++; });
+      }));
+      if(failCount>0){
+        toast(`${failCount}件の保存に失敗しました。権限をご確認ください。`);
+      } else {
+        toast(`${formatDateJP(wbPresetSelectedDate)}の事前設定を保存しました（${list.length}名分）。`);
+      }
+    }
+    wbPresetPendingEdits = {};
+  }catch(e){
+    toast("保存に失敗しました。権限をご確認ください。");
+  }
+  updateWbPresetSaveButtonState();
+  renderWbPresetTable();
+}
+document.getElementById("wb-preset-save-btn").addEventListener("click", saveWbPresetPendingEdits);
 
 /* =========================================================
    行き先：社員の表示順（システム全体の設定。個人ごとの設定ではない）
@@ -6530,6 +6604,7 @@ function renderWbPresetDatesList(){
   defaultTextSpan.className = "wb-preset-date-text";
   defaultTextSpan.textContent = "初期状態";
   defaultTextSpan.addEventListener("click", ()=>{
+    if(!confirmDiscardWbPresetPendingIfAny()) return;
     wbPresetEditingDefaults = !isEditingWbDefaults();
     renderWbPresetTable();
   });
@@ -6551,6 +6626,7 @@ function renderWbPresetDatesList(){
     textSpan.className = "wb-preset-date-text";
     textSpan.textContent = formatDateJP(dateStr);
     textSpan.addEventListener("click", ()=>{
+      if(!confirmDiscardWbPresetPendingIfAny()) return;
       wbPresetSelectedDate = dateStr;
       wbPresetEditingDefaults = false;
       renderWbPresetTable();
@@ -6574,6 +6650,7 @@ function renderWbPresetDatesList(){
 
 document.querySelectorAll("#wb-view-toggle .seg-btn").forEach(btn=>{
   btn.addEventListener("click", ()=>{
+    if(wbCurrentView==="preset" && btn.dataset.wbview!=="preset" && !confirmDiscardWbPresetPendingIfAny()) return;
     document.querySelectorAll("#wb-view-toggle .seg-btn").forEach(b=>b.classList.remove("active"));
     btn.classList.add("active");
     wbCurrentView = btn.dataset.wbview;
