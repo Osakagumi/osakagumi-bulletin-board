@@ -1494,13 +1494,13 @@
           <input type="checkbox" id="notice-send-email" checked style="width:auto;">
           <label id="notice-send-email-label" style="margin:0;font-size:12.5px;color:var(--text);">Eメールでも送信する（自分のメールソフトが起動します）</label>
         </div>
+        <div id="notice-reset-read-row" style="display:flex;align-items:center;gap:6px;margin-top:8px;">
+          <input type="checkbox" id="notice-reset-read" style="width:auto;">
+          <label style="margin:0;font-size:12.5px;color:var(--text);">更新通知を行い、全て未読に戻す</label>
+        </div>
         <div style="display:flex;align-items:center;gap:6px;margin-top:8px;">
           <input type="checkbox" id="notice-never-auto-delete" style="width:auto;">
-          <label style="margin:0;font-size:12.5px;color:var(--text);">永続的なお知らせ</label>
-        </div>
-        <div id="notice-reset-read-row" style="display:flex;align-items:center;gap:6px;margin-top:8px;">
-          <input type="checkbox" id="notice-reset-read" checked style="width:auto;">
-          <label style="margin:0;font-size:12.5px;color:var(--text);">全て未読に戻す</label>
+          <label style="margin:0;font-size:12.5px;color:var(--text);">自動的に削除しない</label>
         </div>
       </div>
       <div class="field" id="notice-attach-field">
@@ -4813,7 +4813,7 @@ function openNoticeEditModal(n){
   renderNoticeExcludedChips();
   document.getElementById("notice-never-auto-delete").checked = !!n.neverAutoDelete;
   document.getElementById("notice-reset-read").disabled = false;
-  document.getElementById("notice-reset-read").checked = true; // 編集時はデフォルトON
+  document.getElementById("notice-reset-read").checked = false; // 編集時はデフォルトOFF（更新通知を出したい時のみON）
   document.getElementById("notice-dropzone-hint").textContent = "";
   resetNoticeDropzone();
   const existingRow = document.getElementById("notice-existing-attachment-row");
@@ -4861,9 +4861,11 @@ document.getElementById("notice-submit").addEventListener("click", async ()=>{
   const errEl = document.getElementById("notice-error");
   const statusEl = document.getElementById("notice-send-status");
   if(!title){ errEl.textContent = "タイトルを入力してください。"; return; }
-  // 編集して保存したことが一覧でひと目で分かるよう、タイトル先頭に「[更新] 」を付ける。
+  // 「更新通知を行い、全て未読に戻す」がONの場合のみ、更新したことが一覧でひと目で分かるよう
+  // タイトル先頭に「[更新] 」を付ける（このチェックは既読を全員未読に戻す処理と連動している）。
   // 何度も編集して保存し直しても、二重に付かないようにする。
-  if(editingNoticeId && !title.startsWith("[更新] ")){
+  const resetRead = editingNoticeId ? document.getElementById("notice-reset-read").checked : false;
+  if(editingNoticeId && resetRead && !title.startsWith("[更新] ")){
     title = "[更新] " + title;
   }
   if(attachmentUploadFailed){
@@ -4912,7 +4914,6 @@ document.getElementById("notice-submit").addEventListener("click", async ()=>{
 
   if(editingNoticeId){
     try{
-      const resetRead = document.getElementById("notice-reset-read").checked;
       await updateDoc(doc(db,"announcements", editingNoticeId), {
         title, body, attachmentUrl, attachmentStoragePath, attachmentFileName, targetDepartments,
         excludedEmails: noticeExcludedEmails,
