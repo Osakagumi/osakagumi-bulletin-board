@@ -1864,12 +1864,20 @@ import {
   getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, addDoc, deleteDoc, query, where,
   onSnapshot, orderBy, limit, documentId, arrayUnion, arrayRemove, Timestamp, FieldPath, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {
+  getDatabase, ref as rtdbRef, set as rtdbSet, onValue as rtdbOnValue, onDisconnect as rtdbOnDisconnect,
+  serverTimestamp as rtdbServerTimestamp
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 import { firebaseConfig, BUSINESS_HOURS, EQUIPMENT_STATUSES, SAFETY_STATUSES, EMAILJS_CONFIG, resolveMailRecipients, isMailOverrideActive, MAIL_SEND_TARGET, NOTICE_BOARD_AUTO_LOGIN } from "./firebase-config.js";
 import { initStorageHelper, uploadFileToStorage, deleteFileFromStorage } from "./storage-helper.js";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+// 在席状況（オンライン表示）専用：Realtime Database。
+// databaseURLが未設定（firebase-config.js参照）の場合はnullのままとなり、
+// 在席状況の機能だけが静かに無効化される（他の機能には影響しない）。
+const rtdb = firebaseConfig.databaseURL ? getDatabase(app) : null;
 initStorageHelper(app);
 
 let emailjsReady = false;
@@ -2081,15 +2089,22 @@ function toast(msg){
 
 /* =========================================================
    在席状況（ポータルサイトを開いているかどうか）
-   ログイン中は自分の presence/{email} ドキュメントを一定間隔で更新し続け（ハートビート）、
-   他の画面（チャット・社員選択モーダル）では「最終更新が一定時間以内かどうか」でオンライン扱いにする。
-   「閉じた瞬間にオフラインにする」処理はブラウザの都合上確実に検知できないため行わず、
-   更新が止まって一定時間経てば自然にオフライン扱いになる方式にしている。
+   Firestoreの presence コレクション＋定期ハートビートは廃止し、Realtime Database（RTDB）に移行した。
+   RTDBの「.info/connected」と「onDisconnect()」により、タブを閉じた・回線が切れたタイミングを
+   サーバー側が自動検知できるため、Firestore版のように一定間隔で書き込み続ける必要がない。
+   （Firestore版は「全員が1分ごとに書き込み、それを全員がリアルタイム購読する」構成だったため、
+   　社員数の2乗に比例して読み取り数が増え、Firestoreの1日あたりの無料枠を圧迫する原因になっていた。
+　　RTDBは読み取り回数ではなく転送データ量での課金のため、この問題が起きない。）
+   ※RTDBのキーには "." "#" "$" "[" "]" を使えないため、メールアドレスの "." は "," に
+   置き換えて保存する（sanitizeEmailForRtdbKey / unsanitizeEmailFromRtdbKey）。
 ========================================================= */
-const PRESENCE_HEARTBEAT_MS = 60000; // 1分ごとに更新
-const PRESENCE_ONLINE_THRESHOLD_MS = 150000; // 最終更新から2分30秒以内ならオンライン扱い
-let presenceLastActiveAt = {}; // { email: 最終更新日時（ISO文字列） }
-let presenceHeartbeatTimer = null;
+function sanitizeEmailForRtdbKey(email){
+  return (email || "").replace(/\./g, ",");
+}
+function unsanitizeEmailFromRtdbKey(key){
+  return (key || "").replace(/,/g, ".");
+}
+let presenceOnlineMap = {}; // { email: true/false }
 
 /* =========================================================
    OneSignal（チャット新着通知）
@@ -2116,28 +2131,41 @@ function initOneSignalForCurrentUser(){
   });
 }
 
+let presenceConnectedUnsub = null;
+let presenceListUnsub = null;
 function initPresence(){
-  const writeHeartbeat = async ()=>{
-    try{ await setDoc(doc(db,"presence", currentUser.email), { lastActiveAt: new Date().toISOString() }, { merge:true }); }
-    catch(e){ /* 失敗しても次回の更新に任せる */ }
-  };
-  writeHeartbeat();
-  if(presenceHeartbeatTimer) clearInterval(presenceHeartbeatTimer);
-  presenceHeartbeatTimer = setInterval(writeHeartbeat, PRESENCE_HEARTBEAT_MS);
-  onSnapshot(collection(db,"presence"), snap=>{
-    presenceLastActiveAt = {};
-    snap.docs.forEach(d=>{ presenceLastActiveAt[d.id] = d.data().lastActiveAt || null; });
+  if(!rtdb){
+    // databaseURL未設定（firebase-config.js参照）。在席状況機能のみ無効化して他機能は継続する。
+    console.warn("[在席状況] Realtime DatabaseのdatabaseURLが未設定のため、オンライン表示は無効です。firebase-config.jsをご確認ください。");
+    return;
+  }
+  const myKey = sanitizeEmailForRtdbKey(currentUser.email);
+  const myStatusRef = rtdbRef(rtdb, `presence/${myKey}`);
+  const connectedRef = rtdbRef(rtdb, ".info/connected");
+  if(presenceConnectedUnsub) presenceConnectedUnsub();
+  presenceConnectedUnsub = rtdbOnValue(connectedRef, (snap)=>{
+    if(snap.val() === false) return;
+    // 接続が確立（または再接続）したタイミングで、先に「切断されたらoffline」を予約してから、
+    // 自分をonlineにする（この順序が重要：予約前に接続が切れると、offline化されずに残ってしまう）。
+    rtdbOnDisconnect(myStatusRef).set({ online: false, ownerEmail: currentUser.email, lastChangedAt: rtdbServerTimestamp() }).then(()=>{
+      rtdbSet(myStatusRef, { online: true, ownerEmail: currentUser.email, lastChangedAt: rtdbServerTimestamp() });
+    });
+  });
+  if(presenceListUnsub) presenceListUnsub();
+  const presenceRootRef = rtdbRef(rtdb, "presence");
+  presenceListUnsub = rtdbOnValue(presenceRootRef, (snap)=>{
+    const val = snap.val() || {};
+    const map = {};
+    Object.keys(val).forEach(key=>{
+      map[unsanitizeEmailFromRtdbKey(key)] = !!(val[key] && val[key].online);
+    });
+    presenceOnlineMap = map;
     refreshOnlineMarksIfActive();
   }, (err)=>{ console.error("[在席状況取得エラー]", err); });
 }
 function isUserOnline(email){
-  const lastActiveAt = presenceLastActiveAt[email];
-  if(!lastActiveAt) return false;
-  const diff = Date.now() - new Date(lastActiveAt).getTime();
-  return diff >= 0 && diff <= PRESENCE_ONLINE_THRESHOLD_MS;
+  return !!presenceOnlineMap[email];
 }
-// 在席状況は1分ごとにしか更新されないため、表示中の画面のオンラインマークも定期的に再チェックする
-// （例えば相手がタブを閉じてから2分半経った、というタイミングを反映するため）
 function refreshOnlineMarksIfActive(){
   if(document.getElementById("chat-list-view")?.style.display !== "none"){
     renderChatConversationList();
@@ -2150,7 +2178,6 @@ function refreshOnlineMarksIfActive(){
   }
   refreshDashboardIfActive();
 }
-setInterval(refreshOnlineMarksIfActive, 30000); // 30秒ごとに再チェック（新たな書き込みが無くても経過時間で変わるため）
 
 let categoriesAll = [];
 function catInfo(id){ return categoriesAll.find(c=>c.id===id) || {label:id, color:"#888"}; }

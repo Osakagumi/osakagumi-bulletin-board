@@ -7,6 +7,15 @@ export const firebaseConfig = {
   storageBucket: "osakagumi-bulletin-board.firebasestorage.app",
   messagingSenderId: "416929871112",
   appId: "1:416929871112:web:8a322a28a0323ccab168bd",
+  // 在席状況（オンライン表示）専用：Realtime Database の URL。
+  // 手順：
+  // 1. Firebaseコンソール > 構築 > Realtime Database を開き、まだ作成していなければ「データベースを作成」
+  //    （ロケーションはどこでもよい。セキュリティルールは「ロックモード」のままでOK。後でdatabase.rules.jsonの内容を貼り替える）
+  // 2. 作成後、画面上部に表示される databaseURL（例: https://osakagumi-bulletin-board-default-rtdb.asia-southeast1.firebasedatabase.app）
+  //    をコピーして、下の "" の中に貼り付ける
+  // 3. Realtime Database の「ルール」タブに database.rules.json の内容を貼り付けて「公開」する
+  // 未設定（空文字のまま）の場合は、在席状況（オンライン表示）の機能だけが無効になり、他の機能には影響しません。
+  databaseURL: "https://osakagumi-bulletin-board-default-rtdb.firebaseio.com"
 };
 
 // 予約可能時間帯・時間単位の設定（必要に応じて変更してください）
@@ -109,4 +118,3 @@ export function isMailOverrideActive(){
   const override = (MAIL_SEND_TARGET || "").trim();
   return override !== "" && override !== "*";
 }
-
