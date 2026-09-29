@@ -931,7 +931,7 @@
       <button class="tab-btn" data-view="contracts">入札</button>
       <button class="tab-btn" data-view="bizinfo">業務情報</button>
       <button class="tab-btn" data-view="checkout">機材</button>
-      <button class="tab-btn" data-view="visitors">来客予定</button>
+      <button class="tab-btn" data-view="visitors">出入予定</button>
       <button class="tab-btn" data-view="safety" style="display:none;">安否確認</button>
       <button class="tab-btn" data-view="safetyresponse" style="display:none;">安否回答</button>
       <button class="tab-reorder-btn" id="tab-reorder-toggle" title="タブの並び替え">並び替え</button>
@@ -1025,12 +1025,21 @@
         </table>
       </section>
 
-      <!-- ---- 来客予定 ---- -->
+      <!-- ---- 出入予定（来客・役員） ---- -->
       <section id="view-visitors" style="display:none;">
-        <div class="section-toolbar">
+        <div class="section-toolbar" style="flex-wrap:wrap;">
           <button class="btn-primary" id="visitor-new-btn">追加</button>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-left:auto;">
-            <label style="font-size:12.5px;color:var(--muted);white-space:nowrap;">日付で絞り込み：</label>
+            <label style="font-size:12.5px;color:var(--muted);white-space:nowrap;">種別：</label>
+            <select id="visitor-type-filter-select" style="padding:7px 8px;border:1px solid var(--line);border-radius:7px;font-size:13px;">
+              <option value="">すべて</option>
+              <option value="visitor">来客</option>
+              <option value="officer">役員</option>
+            </select>
+            <label style="font-size:12.5px;color:var(--muted);white-space:nowrap;">対象社員：</label>
+            <button type="button" class="btn-ghost" id="visitor-host-filter-btn" style="border:1px solid var(--line);">すべて</button>
+            <button class="btn-ghost" id="visitor-host-filter-clear-btn" style="border:1px solid var(--line);display:none;">クリア</button>
+            <label style="font-size:12.5px;color:var(--muted);white-space:nowrap;">日付：</label>
             <button type="button" class="date-field-btn placeholder" id="visitor-date-filter-btn" data-value="">すべて表示</button>
             <button class="btn-ghost" id="visitor-date-filter-clear-btn" style="border:1px solid var(--line);display:none;">クリア</button>
           </div>
@@ -1201,8 +1210,8 @@
             <div class="dash-card" id="dash-card-visitors">
               <div class="dash-card-head">
                 <span class="dash-drag-handle" title="ドラッグして並び替え">⠿</span>
-                <h3>来客予定</h3>
-                <span class="dash-card-link" id="dash-visitors-link" title="来客予定を見る">▶</span>
+                <h3>出入予定</h3>
+                <span class="dash-card-link" id="dash-visitors-link" title="出入予定を見る">▶</span>
               </div>
               <div id="dash-visitors-body"></div>
             </div>
@@ -1745,16 +1754,23 @@
     </div>
   </div>
 
-  <!-- ============ 来客予定 追加・編集モーダル ============ -->
+  <!-- ============ 出入予定（来客・役員） 追加・編集モーダル ============ -->
   <div class="modal-overlay" id="visitor-modal">
     <div class="modal">
-      <h3 id="visitor-modal-title">来客予定を追加</h3>
+      <h3 id="visitor-modal-title">出入予定を追加</h3>
+      <div class="field" id="visitor-type-field" style="display:none;">
+        <label>種別</label>
+        <div class="seg-toggle" id="visitor-type-toggle">
+          <button type="button" class="seg-btn active" data-visitortype="visitor">来客</button>
+          <button type="button" class="seg-btn" data-visitortype="officer">役員</button>
+        </div>
+      </div>
       <div class="field">
-        <label>来客者名</label>
+        <label id="visitor-name-label">来客者名</label>
         <input type="text" id="visitor-name-input" maxlength="60" placeholder="例：〇〇建設　山田様">
       </div>
       <div class="field">
-        <label>対応する社員</label>
+        <label id="visitor-host-label">対応する社員</label>
         <div style="display:flex;align-items:center;gap:8px;">
           <span id="visitor-host-display" style="flex:1;color:var(--muted);">未選択</span>
           <button type="button" class="btn-ghost" id="visitor-host-pick-btn" style="border:1px solid var(--line);">選択</button>
@@ -1767,12 +1783,12 @@
           <button type="button" class="date-field-btn placeholder" id="visitor-time-btn" data-value="" style="flex:1;"></button>
         </div>
       </div>
-      <div class="field">
+      <div class="field" id="visitor-headcount-field">
         <label>人数（任意）</label>
         <input type="number" id="visitor-headcount-input" min="1" style="width:100px;">
       </div>
       <div class="field">
-        <label>来訪目的（任意）</label>
+        <label id="visitor-purpose-label">来訪目的（任意）</label>
         <textarea id="visitor-purpose-input" rows="2" maxlength="200"></textarea>
       </div>
       <div class="modal-err" id="visitor-modal-error"></div>
@@ -2149,6 +2165,7 @@ let isContractEditor = false;
 let isSafetySender = false;
 let isBizInfoManager = false;
 let isVisitorManager = false;
+let visitorTargetOfficerEmails = []; // 出入予定：役員予定の対象にできる社員（管理画面で設定）
 let isSharedAccount = false; // ログイン中の自分自身が「共用アカウント」かどうか
 // お知らせ掲示板モード（共用アカウント）のキオスク画面で、ログアウトボタンの代わりに
 // 使う「秘密のショートカットキー」の設定。管理画面（システム管理）から変更できる。
@@ -2407,6 +2424,8 @@ onAuthStateChanged(auth, async (user)=>{
     initSteelPlateTxListener();
     initContractsListener();
     initVisitorSchedulesListener();
+    initVisitorTargetOfficersListener();
+    cleanupOldVisitorSchedules();
     initBizInfoListener();
     initBizInfoCategoriesListener();
     initChatCleanupSettingsListener();
@@ -2863,7 +2882,7 @@ function renderDashboard(){
     });
   }
 
-  // ---- 来客予定（今日以降。来客予定管理権限者は全員分、それ以外は自分が対応する分のみ） ----
+  // ---- 出入予定（来客・役員。今日以降。出入予定管理権限者は全員分、それ以外は自分が対象の分のみ） ----
   const visitorsBody = document.getElementById("dash-visitors-body");
   if(visitorsBody){
     visitorsBody.innerHTML = "";
@@ -2875,12 +2894,13 @@ function renderDashboard(){
       .filter(v=> (v.date||"") >= todayStrForVisitors)
       .sort((a,b)=> (a.date+((a.time)||"")).localeCompare(b.date+((b.time)||"")));
     if(upcomingVisitors.length===0){
-      visitorsBody.innerHTML = `<div class="dash-empty">今後の来客予定はありません。</div>`;
+      visitorsBody.innerHTML = `<div class="dash-empty">今後の出入予定はありません。</div>`;
     } else {
       upcomingVisitors.slice(0,5).forEach(v=>{
         const row = document.createElement("div");
         row.className = "dash-row";
-        row.innerHTML = `<span>${escapeHtml(v.visitorName||"")}　対応：${escapeHtml(v.hostName||v.hostEmail||"")}</span><span class="dash-row-sub">${formatDateJP(v.date)} ${escapeHtml(v.time||"")}</span>`;
+        const typeLabel = v.type==="officer" ? "役員" : "来客";
+        row.innerHTML = `<span>［${typeLabel}］${escapeHtml(v.visitorName||"")}　対象：${escapeHtml(v.hostName||v.hostEmail||"")}</span><span class="dash-row-sub">${formatDateJP(v.date)} ${escapeHtml(v.time||"")}</span>`;
         row.addEventListener("click", ()=> switchToTab("visitors"));
         visitorsBody.appendChild(row);
       });
@@ -3015,7 +3035,7 @@ function switchToTab(viewName){
     try{ renderCheckoutTab(); }catch(e){ console.error("[貸出タブの表示エラー]", e); }
   }
   if(viewName==="visitors"){
-    try{ renderVisitorsTab(); }catch(e){ console.error("[来客予定タブの表示エラー]", e); }
+    try{ renderVisitorsTab(); }catch(e){ console.error("[出入予定タブの表示エラー]", e); }
   }
   if(viewName==="dashboard"){
     try{ renderDashboard(); }catch(e){ console.error("[ダッシュボードの表示エラー]", e); }
@@ -3667,14 +3687,18 @@ document.getElementById("checkout-modal-confirm").addEventListener("click", asyn
 });
 
 /* =========================================================
-   来客予定
+   出入予定（来客・役員）
 ========================================================= */
 let visitorSchedulesAll = [];
 let editingVisitorId = null;
 let visitorHostEmail = null;
 let visitorHostName = null;
 let visitorModalDate = "";
+let visitorModalType = "visitor"; // "visitor"=来客 / "officer"=役員（役員は出入予定管理権限者のみ選択可）
 let visitorDateFilter = ""; // ""=すべて表示
+let visitorTypeFilter = ""; // ""=すべて／"visitor"／"officer"
+let visitorHostFilterEmail = null;
+let visitorHostFilterName = null;
 function initVisitorSchedulesListener(){
   onSnapshot(collection(db,"visitor_schedules"), snap=>{
     visitorSchedulesAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
@@ -3682,9 +3706,44 @@ function initVisitorSchedulesListener(){
       renderVisitorsTab();
     }
     refreshDashboardIfActive();
-  }, (err)=>{ console.error("[来客予定取得エラー]", err); });
+  }, (err)=>{ console.error("[出入予定取得エラー]", err); });
+}
+// 出入予定：役員予定の対象にできる社員一覧（管理画面「出入予定管理」タブで設定）
+function initVisitorTargetOfficersListener(){
+  onSnapshot(collection(db,"visitor_target_officers"), snap=>{
+    visitorTargetOfficerEmails = snap.docs.map(d=>d.id);
+  }, (err)=>{ console.error("[出入予定：対象役員取得エラー]", err); });
+}
+let visitorCleanupRunning = false;
+// 過去の日付になった出入予定を自動削除する（本人が対象の予定は誰でも、それ以外は出入予定管理権限者のみ削除できる）
+async function cleanupOldVisitorSchedules(){
+  if(visitorCleanupRunning) return;
+  visitorCleanupRunning = true;
+  try{
+    let cleanupDays = 14;
+    try{
+      const settingsDoc = await getDoc(doc(db,"app_settings","visitor_cleanup"));
+      if(settingsDoc.exists() && settingsDoc.data().days){ cleanupDays = settingsDoc.data().days; }
+    }catch(e){ /* 設定取得に失敗した場合は既定値のまま続行 */ }
+    const cutoff = new Date(Date.now() - cleanupDays*24*60*60*1000);
+    const cutoffStr = `${cutoff.getFullYear()}-${String(cutoff.getMonth()+1).padStart(2,"0")}-${String(cutoff.getDate()).padStart(2,"0")}`;
+    const snap = await getDocs(query(collection(db,"visitor_schedules"), where("date","<", cutoffStr)));
+    if(snap.empty) return;
+    const targets = isVisitorManager
+      ? snap.docs
+      : snap.docs.filter(d => d.data().hostEmail === currentUser.email);
+    if(targets.length===0) return;
+    for(const d of targets){
+      try{ await deleteDoc(doc(db,"visitor_schedules", d.id)); }catch(e){ /* 1件失敗しても他の削除は続行 */ }
+    }
+  }catch(e){
+    console.error("[出入予定自動削除エラー]", e);
+  }finally{
+    visitorCleanupRunning = false;
+  }
 }
 function canEditVisitorEntry(v){
+  if((v.type||"visitor")==="officer") return isVisitorManager; // 役員予定は出入予定管理権限者のみ編集・削除可
   return isVisitorManager || v.hostEmail === currentUser.email;
 }
 function updateVisitorDateFilterUI(){
@@ -3715,27 +3774,62 @@ document.getElementById("visitor-date-filter-clear-btn").addEventListener("click
   updateVisitorDateFilterUI();
   renderVisitorsTab();
 });
+document.getElementById("visitor-type-filter-select").addEventListener("change", (e)=>{
+  visitorTypeFilter = e.target.value;
+  renderVisitorsTab();
+});
+function updateVisitorHostFilterUI(){
+  const btn = document.getElementById("visitor-host-filter-btn");
+  const clearBtn = document.getElementById("visitor-host-filter-clear-btn");
+  if(visitorHostFilterEmail){
+    btn.textContent = visitorHostFilterName || visitorHostFilterEmail;
+    clearBtn.style.display = "inline-block";
+  } else {
+    btn.textContent = "すべて";
+    clearBtn.style.display = "none";
+  }
+}
+document.getElementById("visitor-host-filter-btn").addEventListener("click", async ()=>{
+  const emp = await openEmployeePicker();
+  if(emp){
+    visitorHostFilterEmail = emp.email;
+    visitorHostFilterName = emp.name || emp.email;
+    updateVisitorHostFilterUI();
+    renderVisitorsTab();
+  }
+});
+document.getElementById("visitor-host-filter-clear-btn").addEventListener("click", ()=>{
+  visitorHostFilterEmail = null;
+  visitorHostFilterName = null;
+  updateVisitorHostFilterUI();
+  renderVisitorsTab();
+});
 function renderVisitorsTab(){
   const body = document.getElementById("visitor-list");
   if(!body) return;
   body.innerHTML = "";
-  // 対応する社員は自分の来客予定のみ、来客予定管理権限者は全件を表示する
+  // 対象社員は自分の出入予定のみ、出入予定管理権限者は全件を表示する
   const visible = isVisitorManager
     ? visitorSchedulesAll
     : visitorSchedulesAll.filter(v=> v.hostEmail===currentUser.email);
-  const filtered = visitorDateFilter ? visible.filter(v=> v.date===visitorDateFilter) : visible;
+  let filtered = visitorDateFilter ? visible.filter(v=> v.date===visitorDateFilter) : visible;
+  if(visitorTypeFilter) filtered = filtered.filter(v=> (v.type||"visitor")===visitorTypeFilter);
+  if(visitorHostFilterEmail) filtered = filtered.filter(v=> v.hostEmail===visitorHostFilterEmail);
   const sorted = filtered.slice().sort((a,b)=> (a.date+(a.time||"")).localeCompare(b.date+(b.time||"")));
   if(sorted.length===0){
-    body.innerHTML = `<div style="color:var(--muted);text-align:center;padding:24px;">${visitorDateFilter ? "この日の来客予定はありません。" : "来客予定はまだ登録されていません。"}</div>`;
+    body.innerHTML = `<div style="color:var(--muted);text-align:center;padding:24px;">${(visitorDateFilter||visitorTypeFilter||visitorHostFilterEmail) ? "条件に一致する出入予定はありません。" : "出入予定はまだ登録されていません。"}</div>`;
     return;
   }
   const table = document.createElement("table");
   table.className = "notice-table";
-  table.innerHTML = `<thead><tr><th>来客者名</th><th style="width:140px;">対応社員</th><th style="width:150px;">日時</th><th style="width:70px;">人数</th><th>目的</th><th style="width:110px;"></th></tr></thead>`;
+  table.innerHTML = `<thead><tr><th style="width:60px;">種別</th><th>来客者名／予定内容</th><th style="width:140px;">対象社員</th><th style="width:150px;">日時</th><th style="width:70px;">人数</th><th>目的・備考</th><th style="width:110px;"></th></tr></thead>`;
   const tbody = document.createElement("tbody");
   sorted.forEach(v=>{
     const tr = document.createElement("tr");
     const canEdit = canEditVisitorEntry(v);
+    const isOfficer = (v.type||"visitor")==="officer";
+    const tdType = document.createElement("td");
+    tdType.textContent = isOfficer ? "役員" : "来客";
     const tdName = document.createElement("td");
     tdName.textContent = v.visitorName || "";
     const tdHost = document.createElement("td");
@@ -3758,7 +3852,7 @@ function renderVisitorsTab(){
       delBtn.style.cssText = "border:1px solid var(--danger);color:var(--danger);font-size:12px;padding:4px 8px;";
       delBtn.textContent = "削除";
       delBtn.addEventListener("click", async ()=>{
-        if(!confirm(`「${v.visitorName||""}」の来客予定を削除しますか？`)) return;
+        if(!confirm(`「${v.visitorName||""}」の出入予定を削除しますか？`)) return;
         try{
           await deleteDoc(doc(db,"visitor_schedules", v.id));
           toast("削除しました。");
@@ -3769,7 +3863,7 @@ function renderVisitorsTab(){
       tdActions.appendChild(editBtn);
       tdActions.appendChild(delBtn);
     }
-    tr.appendChild(tdName); tr.appendChild(tdHost); tr.appendChild(tdDateTime);
+    tr.appendChild(tdType); tr.appendChild(tdName); tr.appendChild(tdHost); tr.appendChild(tdDateTime);
     tr.appendChild(tdHeadcount); tr.appendChild(tdPurpose); tr.appendChild(tdActions);
     tbody.appendChild(tr);
   });
@@ -3789,15 +3883,44 @@ function setVisitorModalDate(dateStr){
   el.textContent = visitorModalDate ? formatDateJP(visitorModalDate) : "未設定";
   el.style.color = visitorModalDate ? "var(--text)" : "var(--muted)";
 }
+// 種別（来客／役員）に応じて、モーダル内の項目ラベル・表示を切り替える
+function applyVisitorTypeUI(type){
+  document.getElementById("visitor-name-label").textContent = type==="officer" ? "予定内容" : "来客者名";
+  document.getElementById("visitor-host-label").textContent = type==="officer" ? "対象役員" : "対応する社員";
+  document.getElementById("visitor-purpose-label").textContent = type==="officer" ? "備考（任意）" : "来訪目的（任意）";
+  document.getElementById("visitor-headcount-field").style.display = type==="officer" ? "none" : "";
+  document.querySelectorAll("#visitor-type-toggle .seg-btn").forEach(b=>{
+    b.classList.toggle("active", b.dataset.visitortype===type);
+  });
+}
+document.querySelectorAll("#visitor-type-toggle .seg-btn").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    const type = btn.dataset.visitortype;
+    if(visitorModalType===type) return;
+    visitorModalType = type;
+    applyVisitorTypeUI(type);
+    // 種別切り替え時は対象者の候補が異なるため、選択済みの対象者をリセットする
+    if(type==="officer"){
+      setVisitorHost(null);
+    } else {
+      setVisitorHost({ email: currentUser.email, name: myDisplayName() });
+    }
+  });
+});
 function openVisitorModal(v){
   editingVisitorId = v ? v.id : null;
-  document.getElementById("visitor-modal-title").textContent = v ? "来客予定を編集" : "来客予定を追加";
+  visitorModalType = v ? (v.type || "visitor") : "visitor";
+  document.getElementById("visitor-type-field").style.display = isVisitorManager ? "" : "none";
+  applyVisitorTypeUI(visitorModalType);
+  document.getElementById("visitor-modal-title").textContent = v ? "出入予定を編集" : "出入予定を追加";
   document.getElementById("visitor-name-input").value = v ? (v.visitorName||"") : "";
   if(v){
     const hostEmp = employeesAll.find(e=>e.email===v.hostEmail);
     setVisitorHost({ email: v.hostEmail, name: v.hostName || (hostEmp && hostEmp.name) });
+  } else if(visitorModalType==="officer"){
+    setVisitorHost(null);
   } else {
-    // 新規追加時は、入力者本人をデフォルトの対応社員にする（社員選択で別の人に変更可能）
+    // 新規追加（来客）時は、入力者本人をデフォルトの対象社員にする（社員選択で別の人に変更可能）
     setVisitorHost({ email: currentUser.email, name: myDisplayName() });
   }
   setVisitorModalDate(v ? (v.date||"") : "");
@@ -3809,8 +3932,17 @@ function openVisitorModal(v){
 }
 document.getElementById("visitor-new-btn").addEventListener("click", ()=> openVisitorModal(null));
 document.getElementById("visitor-host-pick-btn").addEventListener("click", async ()=>{
-  const emp = await openEmployeePicker();
-  if(emp) setVisitorHost(emp);
+  if(visitorModalType==="officer"){
+    if(visitorTargetOfficerEmails.length===0){
+      document.getElementById("visitor-modal-error").textContent = "対象役員が登録されていません。管理画面「出入予定管理」で設定してください。";
+      return;
+    }
+    const emp = await openEmployeePicker({ restrictToEmails: visitorTargetOfficerEmails });
+    if(emp) setVisitorHost(emp);
+  } else {
+    const emp = await openEmployeePicker();
+    if(emp) setVisitorHost(emp);
+  }
 });
 document.getElementById("visitor-date-picker").addEventListener("click", (e)=>{
   openCalendarPicker(e.currentTarget, visitorModalDate, {
@@ -3829,16 +3961,30 @@ document.getElementById("visitor-modal-cancel").addEventListener("click", ()=>{
 });
 document.getElementById("visitor-modal-save").addEventListener("click", async ()=>{
   const errEl = document.getElementById("visitor-modal-error");
+  errEl.textContent = "";
+  const type = visitorModalType==="officer" ? "officer" : "visitor";
   const visitorName = document.getElementById("visitor-name-input").value.trim();
   const time = document.getElementById("visitor-time-btn").dataset.value || "";
   const headcountRaw = document.getElementById("visitor-headcount-input").value;
-  const headcount = headcountRaw ? Math.max(1, Number(headcountRaw)||0) : null;
+  const headcount = (type==="visitor" && headcountRaw) ? Math.max(1, Number(headcountRaw)||0) : null;
   const purpose = document.getElementById("visitor-purpose-input").value.trim();
-  if(!visitorName){ errEl.textContent = "来客者名を入力してください。"; return; }
-  if(!visitorHostEmail){ errEl.textContent = "対応する社員を選択してください。"; return; }
+  const nameLabel = type==="officer" ? "予定内容" : "来客者名";
+  const hostLabel = type==="officer" ? "対象役員" : "対応する社員";
+  if(!visitorName){ errEl.textContent = `${nameLabel}を入力してください。`; return; }
+  if(!visitorHostEmail){ errEl.textContent = `${hostLabel}を選択してください。`; return; }
   if(!visitorModalDate){ errEl.textContent = "日付を選択してください。"; return; }
   if(!time){ errEl.textContent = "開始時刻を選択してください。"; return; }
+  if(type==="officer" && !isVisitorManager){ errEl.textContent = "役員予定の登録には出入予定管理権限が必要です。"; return; }
+  // 過去日はNG（訂正が必要な場合は既存の予定を編集してもらう）
+  if(visitorModalDate < todayStr()){ errEl.textContent = "過去の日付は指定できません。"; return; }
+  // 休日が指定された場合は、意図した登録かどうかを確認する
+  try{
+    if(await isDateHoliday(visitorModalDate)){
+      if(!confirm("選択した日付は休日に設定されています。よろしいですか？")) return;
+    }
+  }catch(e){ /* 休日判定に失敗しても登録自体は継続する */ }
   const payload = {
+    type,
     visitorName,
     hostEmail: visitorHostEmail,
     hostName: visitorHostName || visitorHostEmail,
@@ -3852,12 +3998,12 @@ document.getElementById("visitor-modal-save").addEventListener("click", async ()
   try{
     if(editingVisitorId){
       await updateDoc(doc(db,"visitor_schedules", editingVisitorId), payload);
-      toast("来客予定を更新しました。");
+      toast("出入予定を更新しました。");
     } else {
       payload.createdByEmail = currentUser.email;
       payload.createdAt = new Date().toISOString();
       await addDoc(collection(db,"visitor_schedules"), payload);
-      toast("来客予定を追加しました。");
+      toast("出入予定を追加しました。");
     }
     document.getElementById("visitor-modal").classList.remove("show");
   }catch(e){
@@ -5605,6 +5751,7 @@ let empPickerSelectedEmail = null;
 let empPickerMulti = false;
 let empPickerSelectedEmails = new Set();
 let empPickerRestrictToDeptIds = null; // 指定した場合、この部署に所属する社員だけを候補にする（nullまたは空配列は制限なし＝全社）
+let empPickerRestrictToEmails = null; // 指定した場合、このメールアドレスの社員だけを候補にする（nullまたは空配列は制限なし＝全社）
 function openEmployeePicker(opts){
   return new Promise((resolve)=>{
     empPickerResolve = resolve;
@@ -5612,10 +5759,14 @@ function openEmployeePicker(opts){
     empPickerSelectedEmail = null;
     empPickerSelectedEmails = new Set(opts?.preselectedEmails || []);
     empPickerRestrictToDeptIds = (Array.isArray(opts?.restrictToDeptIds) && opts.restrictToDeptIds.length>0) ? opts.restrictToDeptIds : null;
+    empPickerRestrictToEmails = (Array.isArray(opts?.restrictToEmails) && opts.restrictToEmails.length>0) ? opts.restrictToEmails : null;
     const restrictHint = document.getElementById("emp-picker-restrict-hint");
     if(empPickerRestrictToDeptIds){
       const names = empPickerRestrictToDeptIds.map(id=>departmentName(id)).join("・");
       restrictHint.textContent = `発信先（${names}）の社員のみ表示しています。`;
+      restrictHint.style.display = "block";
+    } else if(empPickerRestrictToEmails){
+      restrictHint.textContent = `対象として登録されている社員のみ表示しています。`;
       restrictHint.style.display = "block";
     } else {
       restrictHint.style.display = "none";
@@ -5665,6 +5816,9 @@ function renderEmpPickerNameSelect(){
   let list = sortEmployeesByNo(employeesAll.filter(e=>!e.hidden && !e.isSharedAccount)).filter(e=> !deptId || empDepartments(e).includes(deptId));
   if(empPickerRestrictToDeptIds){
     list = list.filter(e=> empDepartments(e).some(d=>empPickerRestrictToDeptIds.includes(d)));
+  }
+  if(empPickerRestrictToEmails){
+    list = list.filter(e=> empPickerRestrictToEmails.includes(e.email));
   }
   if(searchText){
     list = list.filter(e=> (e.name||"").startsWith(searchText));

@@ -63,7 +63,7 @@ service cloud.firestore {
           exists(/databases/$(database)/documents/safety_senders/$(request.auth.token.email)));
     }
 
-    // 来客予定管理権限：本人以外の来客予定も含めて編集・削除できる（システム管理者に準じる）
+    // 出入予定管理権限：本人以外の出入予定も含めて編集・削除できる（システム管理者に準じる）
     function isVisitorManager() {
       return isAdmin() ||
         (isSignedIn() &&
@@ -104,10 +104,12 @@ service cloud.firestore {
     }
 
     // アプリ全体の設定（行き先ビューの列数など）: 全員が読める。書き込みはシステム管理者のみ。
-    // ただしnotice_cleanup（お知らせ自動削除の日数設定）は下の専用ルールで別途制限するため、ここでは対象外にする。
+    // ただしnotice_cleanup（お知らせ自動削除の日数設定）・visitor_cleanup（出入予定自動削除の日数設定）は
+    // 下の専用ルールで別途制限するため、ここでは対象外にする
+    // （同じパスに複数のmatchブロックが重なると、いずれかがtrueであれば書き込みできてしまうため）。
     match /app_settings/{settingId} {
       allow read: if isSignedIn();
-      allow write: if isSignedIn() && settingId != 'notice_cleanup' &&
+      allow write: if isSignedIn() && settingId != 'notice_cleanup' && settingId != 'visitor_cleanup' &&
         (isAdmin() || isContractEditor() || isPoster() || isSafetySender());
     }
 
@@ -115,6 +117,12 @@ service cloud.firestore {
     match /app_settings/notice_cleanup {
       allow read: if isSignedIn();
       allow write: if isSignedIn() && (isAdmin() || isNoticeManager());
+    }
+
+    // 出入予定自動削除の日数設定：システム管理者・出入予定管理権限者のみ変更可能。
+    match /app_settings/visitor_cleanup {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && (isAdmin() || isVisitorManager());
     }
 
     // タブの並び順・初期表示タブ・一般画面での既定の表示タブなど、システム全体の既定値。
@@ -321,19 +329,30 @@ service cloud.firestore {
         (resource.data.createdByEmail == request.auth.token.email || isAdmin() || isEquipmentManager());
     }
 
-    // 来客予定管理権限一覧: ログインしていれば読めるが、書き込みはシステム管理者のみ
+    // 出入予定管理権限一覧: ログインしていれば読めるが、書き込みはシステム管理者のみ
     match /visitor_managers/{email} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
 
-    // 来客予定: 全員が読める（一覧の絞り込み表示はアプリ側で行う）。
-    // 作成は全社員が可能（本人のcreatedByEmailでのみ）。更新・削除は対応する社員本人、または来客予定管理権限者のみ。
+    // 出入予定（役員予定）の対象にできる社員一覧: ログインしていれば読めるが、
+    // 書き込みはシステム管理者・出入予定管理権限者のみ（admin.html「出入予定管理」タブから設定するため）
+    match /visitor_target_officers/{email} {
+      allow read: if isSignedIn();
+      allow write: if isVisitorManager();
+    }
+
+    // 出入予定（来客・役員）: 全員が読める（一覧の絞り込み表示はアプリ側で行う）。
+    // 作成は全社員が可能（本人のcreatedByEmailでのみ）。ただし役員予定（type=officer）の作成は出入予定管理権限者のみ。
+    // 更新・削除は、来客予定は対象社員本人または出入予定管理権限者、役員予定は出入予定管理権限者のみ。
     match /visitor_schedules/{visitId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.createdByEmail == request.auth.token.email;
+      allow create: if isSignedIn() && request.resource.data.createdByEmail == request.auth.token.email &&
+        (request.resource.data.type != "officer" || isVisitorManager());
       allow update, delete: if isSignedIn() &&
-        (resource.data.hostEmail == request.auth.token.email || isVisitorManager());
+        (resource.data.type == "officer"
+          ? isVisitorManager()
+          : (resource.data.hostEmail == request.auth.token.email || isVisitorManager()));
     }
   }
 }

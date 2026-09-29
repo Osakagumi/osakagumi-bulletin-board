@@ -308,6 +308,7 @@
     <button class="tab-btn" data-view="contracts">入札管理</button>
     <button class="tab-btn" data-view="bizinfo">業務情報管理</button>
     <button class="tab-btn" data-view="chatsettings">チャット管理</button>
+    <button class="tab-btn" data-view="visitorsettings">出入予定管理</button>
     <button class="tab-btn" data-view="systemsettings">システム管理</button>
     <button class="tab-btn" data-view="calendar">カレンダー管理</button>
     <button class="tab-reorder-btn" id="tab-reorder-toggle" title="タブの並び替え">並び替え</button>
@@ -598,16 +599,16 @@
         <h2>CSVで一括登録</h2>
         <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
           1行目はヘッダー行として無視されます。2行目以降を1人ずつ登録します。<br>
-          列の順番：<b id="userimport-column-order-text">社員番号, 氏名, 所属, システム管理者フラグ, お知らせ投稿フラグ, お知らせ管理権限フラグ, 行き先編集権限フラグ, 設備管理者フラグ, 入札編集権限フラグ, カレンダー編集権限フラグ, 安否確認発信権限フラグ, メールアドレス, パスワード, 電話番号, 備考</b><br>
+          列の順番：<b id="userimport-column-order-text">社員番号, 氏名, 所属, システム管理者フラグ, お知らせ投稿フラグ, お知らせ管理権限フラグ, 行き先編集権限フラグ, 設備管理者フラグ, 入札編集権限フラグ, カレンダー編集権限フラグ, 安否確認発信権限フラグ, 出入予定管理権限フラグ, メールアドレス, パスワード, 電話番号, 備考</b><br>
           必須は「メールアドレス」「パスワード」のみで、他は省略可です。<br>
           各権限フラグは <code>1</code> / <code>TRUE</code> / <code>○</code> / <code>はい</code> のいずれかを入れると有効になります（空欄は無効）。業務情報の情報管理者フラグは、各項目とも最大3人までです（超過分は登録されません）。<br>
           所属欄には「ユーザー管理」タブで登録済みの部署名をそのまま入力してください（一致しない場合は未所属として登録されます）。複数の部署に所属させたい場合は「、」または「/」区切りで入力してください（例：役員、営業部）。
         </p>
         <div class="field full" style="margin-bottom:12px;">
           <label>サンプル</label>
-          <pre id="userimport-sample-text" style="background:#F7F8FA;border:1px solid var(--line);border-radius:7px;padding:10px 12px;font-size:12px;overflow-x:auto;">社員番号,氏名,所属,システム管理者フラグ,お知らせ投稿フラグ,お知らせ管理権限フラグ,行き先編集権限フラグ,設備管理者フラグ,入札編集権限フラグ,カレンダー編集権限フラグ,安否確認発信権限フラグ,メールアドレス,パスワード,電話番号,備考
-1001,山田太郎,工務部,,1,,,,,,,yamada@osakagumi.co.jp,Osaka2026!,090-1234-5678,現場責任者
-1002,佐藤花子,総務経理部,1,1,,,,,,1,sato@osakagumi.co.jp,Osaka2026!,090-2345-6789,</pre>
+          <pre id="userimport-sample-text" style="background:#F7F8FA;border:1px solid var(--line);border-radius:7px;padding:10px 12px;font-size:12px;overflow-x:auto;">社員番号,氏名,所属,システム管理者フラグ,お知らせ投稿フラグ,お知らせ管理権限フラグ,行き先編集権限フラグ,設備管理者フラグ,入札編集権限フラグ,カレンダー編集権限フラグ,安否確認発信権限フラグ,出入予定管理権限フラグ,メールアドレス,パスワード,電話番号,備考
+1001,山田太郎,工務部,,1,,,,,,,,yamada@osakagumi.co.jp,Osaka2026!,090-1234-5678,現場責任者
+1002,佐藤花子,総務経理部,1,1,,,,,,1,,sato@osakagumi.co.jp,Osaka2026!,090-2345-6789,</pre>
         </div>
       </div>
       -->
@@ -636,7 +637,7 @@
         <h3>登録内容の確認（<span id="userimport-count">0</span>件）</h3>
         <div style="max-height:50vh;overflow:auto;">
           <table>
-            <thead><tr id="userimport-preview-headrow"><th>登録区分</th><th>社員番号</th><th>氏名</th><th>所属</th><th>システム管理者</th><th>お知らせ投稿</th><th>お知らせ管理</th><th>行き先編集</th><th>測量機器管理</th><th>入札編集</th><th>カレンダー編集</th><th>安否確認発信</th><th>メールアドレス</th><th>電話番号</th><th>備考</th></tr></thead>
+            <thead><tr id="userimport-preview-headrow"><th>登録区分</th><th>社員番号</th><th>氏名</th><th>所属</th><th>システム管理者</th><th>お知らせ投稿</th><th>お知らせ管理</th><th>行き先編集</th><th>測量機器管理</th><th>入札編集</th><th>カレンダー編集</th><th>安否確認発信</th><th>出入予定管理</th><th>メールアドレス</th><th>電話番号</th><th>備考</th></tr></thead>
             <tbody id="userimport-preview-body"></tbody>
           </table>
         </div>
@@ -1104,6 +1105,33 @@
           <button class="btn btn-ghost" id="chat-color-reset-btn" style="border:1px solid var(--line);">既定の色に戻す</button>
         </div>
         <div id="chat-color-save-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px;"></div>
+      </div>
+    </section>
+
+    <!-- ============ 出入予定管理 ============ -->
+    <section id="view-visitorsettings" style="display:none;">
+      <div class="panel">
+        <h2>予定削除までの日数</h2>
+        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
+          出入予定（来客・役員）は、日付が過ぎてからここで設定した日数が経過すると、自動的に削除されます。
+        </p>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div class="field" style="margin:0;">
+            <label>削除までの日数</label>
+            <input type="number" id="visitor-cleanup-days-input" min="1" style="width:100px;">
+          </div>
+          <button class="btn btn-primary" id="visitor-cleanup-days-save-btn">保存</button>
+        </div>
+        <div id="visitor-cleanup-days-save-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px;"></div>
+      </div>
+      <div class="panel">
+        <h2>予定公開対象役員の選択</h2>
+        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
+          ここでチェックした社員だけが、出入予定タブで「役員」の予定を登録する対象として選べるようになります。
+        </p>
+        <div id="visitor-target-officer-checks" style="display:flex;flex-wrap:wrap;gap:10px;border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:12px;max-height:320px;overflow:auto;"></div>
+        <button class="btn btn-primary" id="visitor-target-officer-save-btn">保存</button>
+        <div id="visitor-target-officer-save-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px;"></div>
       </div>
     </section>
 
@@ -1730,6 +1758,7 @@ const ADMIN_SECTION_PERMISSIONS = {
   contracts:     { permission: "isContractEditor", generalTab: "contracts" },
   bizinfo:       { permission: null, generalTab: "bizinfo" },
   chatsettings:  { permission: null, generalTab: "chat" },
+  visitorsettings:{ permission: "isVisitorManager", generalTab: "visitors" },
   systemsettings:{ permission: null, generalTab: null }
 };
 let myAdminPermissions = {};
@@ -1768,7 +1797,7 @@ onAuthStateChanged(auth, async (user)=>{
   }
   currentUser = user;
 
-  const [adminDoc, posterDoc, noticeManagerDoc, wbEditorDoc, eqManagerDoc, calEditorDoc, contractEditorDoc, myEmpDoc, generalDefaultsDoc, bizInfoManagerSnap] = await Promise.all([
+  const [adminDoc, posterDoc, noticeManagerDoc, wbEditorDoc, eqManagerDoc, calEditorDoc, contractEditorDoc, visitorManagerDoc, myEmpDoc, generalDefaultsDoc, bizInfoManagerSnap] = await Promise.all([
     getDoc(doc(db, "admins", user.email)).catch(()=>null),
     getDoc(doc(db, "announcement_posters", user.email)).catch(()=>null),
     getDoc(doc(db, "notice_managers", user.email)).catch(()=>null),
@@ -1776,6 +1805,7 @@ onAuthStateChanged(auth, async (user)=>{
     getDoc(doc(db, "equipment_managers", user.email)).catch(()=>null),
     getDoc(doc(db, "calendar_editors", user.email)).catch(()=>null),
     getDoc(doc(db, "contract_editors", user.email)).catch(()=>null),
+    getDoc(doc(db, "visitor_managers", user.email)).catch(()=>null),
     getDoc(doc(db, "employees", user.email)).catch(()=>null),
     getDoc(doc(db, "system_tab_defaults", "general")).catch(()=>null),
     getDocs(query(collection(db, "business_info_items"), where("infoManagers", "array-contains", user.email.toLowerCase()))).catch(()=>null)
@@ -1787,7 +1817,8 @@ onAuthStateChanged(auth, async (user)=>{
     isWhereaboutsEditor: !!(wbEditorDoc && wbEditorDoc.exists()),
     isEquipmentManager: !!(eqManagerDoc && eqManagerDoc.exists()),
     isCalendarEditor: !!(calEditorDoc && calEditorDoc.exists()),
-    isContractEditor: !!(contractEditorDoc && contractEditorDoc.exists())
+    isContractEditor: !!(contractEditorDoc && contractEditorDoc.exists()),
+    isVisitorManager: !!(visitorManagerDoc && visitorManagerDoc.exists())
   };
   isBizInfoManager = !!(bizInfoManagerSnap && !bizInfoManagerSnap.empty);
   // 個人設定・システム設定のどちらかが「非表示」なら非表示にする（両方が「表示」の場合のみ表示する）
@@ -1832,6 +1863,8 @@ onAuthStateChanged(auth, async (user)=>{
   initContractEditorsListener();
   initSafetySendersListener();
   initVisitorManagersListener();
+  initVisitorTargetOfficersAdminListener();
+  initVisitorCleanupSettingsListener();
   populateSingleEmpPermissionsChecks();
   initBizInfoListener();
   initBizInfoCategoriesListener();
@@ -3169,6 +3202,7 @@ const GENERAL_TAB_ORDER_DEFS = [
   { id:"contracts", label:"入札" },
   { id:"bizinfo", label:"業務情報" },
   { id:"checkout", label:"機材" },
+  { id:"visitors", label:"出入予定" },
   { id:"safety", label:"安否確認" },
   { id:"safetyresponse", label:"安否回答" }
 ];
@@ -3183,6 +3217,7 @@ const ADMIN_TAB_ORDER_DEFS = [
   { id:"contracts", label:"入札管理" },
   { id:"bizinfo", label:"業務情報管理" },
   { id:"chatsettings", label:"チャット管理" },
+  { id:"visitorsettings", label:"出入予定管理" },
   { id:"systemsettings", label:"システム管理" }
 ];
 
@@ -4022,6 +4057,77 @@ function initVisitorManagersListener(){
     lastVisitorManagerEmails = sortEmailsByEmployeeNo(snap.docs.map(d=>d.id));
   });
 }
+
+/* ============================================================
+   出入予定管理（役員予定の対象社員・自動削除までの日数）
+============================================================ */
+let lastVisitorTargetOfficerEmails = [];
+function initVisitorTargetOfficersAdminListener(){
+  onSnapshot(collection(db,"visitor_target_officers"), snap=>{
+    lastVisitorTargetOfficerEmails = sortEmailsByEmployeeNo(snap.docs.map(d=>d.id));
+    renderVisitorTargetOfficerChecks();
+  });
+}
+function renderVisitorTargetOfficerChecks(){
+  const el = document.getElementById("visitor-target-officer-checks");
+  if(!el) return;
+  const roster = employeesAll.filter(e=>!e.hidden && !e.isSharedAccount);
+  el.innerHTML = "";
+  if(roster.length===0){
+    el.innerHTML = `<span style="font-size:12.5px;color:var(--muted);">社員データがありません。</span>`;
+    return;
+  }
+  roster.forEach(emp=>{
+    const label = document.createElement("label");
+    label.style.cssText = "display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;";
+    const cb = document.createElement("input");
+    cb.type = "checkbox"; cb.style.width = "auto";
+    cb.checked = lastVisitorTargetOfficerEmails.includes(emp.email);
+    cb.className = "visitor-target-officer-check";
+    cb.value = emp.email;
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(emp.name || emp.email));
+    el.appendChild(label);
+  });
+}
+document.getElementById("visitor-target-officer-save-btn")?.addEventListener("click", async ()=>{
+  const msgEl = document.getElementById("visitor-target-officer-save-msg");
+  const checkedEmails = [...document.querySelectorAll(".visitor-target-officer-check:checked")].map(cb=>cb.value);
+  const toAdd = checkedEmails.filter(e=> !lastVisitorTargetOfficerEmails.includes(e));
+  const toRemove = lastVisitorTargetOfficerEmails.filter(e=> !checkedEmails.includes(e));
+  try{
+    for(const email of toAdd){
+      await setDoc(doc(db,"visitor_target_officers", email), { addedBy: currentUser.email, addedAt: new Date().toISOString() });
+    }
+    for(const email of toRemove){
+      await deleteDoc(doc(db,"visitor_target_officers", email));
+    }
+    msgEl.textContent = "保存しました。";
+    msgEl.style.color = "var(--muted)";
+  }catch(e){
+    msgEl.textContent = "保存に失敗しました。権限をご確認ください。";
+    msgEl.style.color = "var(--danger)";
+  }
+});
+function initVisitorCleanupSettingsListener(){
+  onSnapshot(doc(db,"app_settings","visitor_cleanup"), snap=>{
+    const days = (snap.exists() && snap.data().days) ? snap.data().days : 14;
+    const input = document.getElementById("visitor-cleanup-days-input");
+    if(input && document.activeElement !== input) input.value = days;
+  }, (err)=>{ console.error("[出入予定：削除日数取得エラー]", err); });
+}
+document.getElementById("visitor-cleanup-days-save-btn")?.addEventListener("click", async ()=>{
+  const msgEl = document.getElementById("visitor-cleanup-days-save-msg");
+  const days = Math.max(1, Number(document.getElementById("visitor-cleanup-days-input").value) || 14);
+  try{
+    await setDoc(doc(db,"app_settings","visitor_cleanup"), { days }, { merge:true });
+    msgEl.textContent = "保存しました。";
+    msgEl.style.color = "var(--muted)";
+  }catch(e){
+    msgEl.textContent = "保存に失敗しました。権限をご確認ください。";
+    msgEl.style.color = "var(--danger)";
+  }
+});
 let contractDefaultDepartmentIdAdmin = null;
 function initContractSettingsListener(){
   onSnapshot(doc(db,"app_settings","contract_defaults"), snap=>{
@@ -4344,6 +4450,7 @@ function initEmployeesListener(){
     renderWbEditors(lastWbEditorEmails);
     renderCalendarEditors(lastCalEditorEmails);
     renderNoticesAdminTable(noticesAllAdmin);
+    renderVisitorTargetOfficerChecks();
   });
 }
 function departmentSortIndex(id){
@@ -4386,7 +4493,7 @@ const PERMISSION_DEFS = [
   { collection: "contract_editors", label: "入札編集権限", getList: ()=> lastContractEditorEmails },
   { collection: "calendar_editors", label: "カレンダー編集権限", getList: ()=> lastCalEditorEmails },
   { collection: "safety_senders", label: "安否確認発信権限", getList: ()=> lastSafetySenderEmails },
-  { collection: "visitor_managers", label: "来客予定管理権限", getList: ()=> lastVisitorManagerEmails }
+  { collection: "visitor_managers", label: "出入予定管理権限", getList: ()=> lastVisitorManagerEmails }
 ];
 
 /* ============================================================
@@ -4500,7 +4607,7 @@ const HIDEABLE_TABS = [
   { id:"chat", label:"チャット" },
   { id:"reserve", label:"予約" },
   { id:"checkout", label:"機材" },
-  { id:"visitors", label:"来客予定" },
+  { id:"visitors", label:"出入予定" },
   { id:"contracts", label:"入札" },
   { id:"bizinfo", label:"業務情報" }
 ];
@@ -4950,11 +5057,11 @@ function parseCsv(text){
   text = text.replace(/^\uFEFF/, "");
   const lines = text.split(/\r\n|\n|\r/).filter(l=>l.trim().length>0);
   const rows = [];
-  const fixedColCount = 11; // 社員番号〜安否確認発信権限フラグまでの固定列数
+  const fixedColCount = 12; // 社員番号〜出入予定管理権限フラグまでの固定列数
   for(let i=1;i<lines.length;i++){ // 1行目はヘッダーとして無視
     const cols = parseCsvLine(lines[i]);
     if(cols.length===0) continue;
-    const [employeeNo, name, department, adminFlag, posterFlag, noticeManagerFlag, wbEditorFlag, eqManagerFlag, contractEditorFlag, calEditorFlag, safetySenderFlag] = cols;
+    const [employeeNo, name, department, adminFlag, posterFlag, noticeManagerFlag, wbEditorFlag, eqManagerFlag, contractEditorFlag, calEditorFlag, safetySenderFlag, visitorManagerFlag] = cols;
     const bizInfoFlags = bizInfoItemsAll.map((item, idx)=> cols[fixedColCount + idx]);
     const [email, password, phone, memo] = cols.slice(fixedColCount + bizInfoItemsAll.length);
     if(!email || !email.trim()) continue;
@@ -4970,6 +5077,7 @@ function parseCsv(text){
       isContractEditor: isTruthyFlag(contractEditorFlag),
       isCalEditor: isTruthyFlag(calEditorFlag),
       isSafetySender: isTruthyFlag(safetySenderFlag),
+      isVisitorManager: isTruthyFlag(visitorManagerFlag),
       bizInfoItemIds: bizInfoItemsAll.filter((item, idx)=> isTruthyFlag(bizInfoFlags[idx])).map(item=>item.id),
       email: email.trim(),
       password: (password||"").trim(),
@@ -5038,11 +5146,11 @@ document.getElementById("userimport-cancel-btn")?.addEventListener("click", ()=>
 function renderUserImportPreview(){
   const body = document.getElementById("userimport-preview-body");
   document.getElementById("userimport-count").textContent = userImportRows.length;
-  const totalCols = 14 + bizInfoItemsAll.length;
-  // ヘッダー行を業務情報の項目数に合わせて組み直す（固定10列の直後、メールアドレス列の手前に挿入）
+  const totalCols = 15 + bizInfoItemsAll.length;
+  // ヘッダー行を業務情報の項目数に合わせて組み直す（固定11列の直後、メールアドレス列の手前に挿入）
   const headRow = document.getElementById("userimport-preview-headrow");
   headRow.querySelectorAll(".userimport-bizinfo-col").forEach(th=>th.remove());
-  const emailTh = headRow.children[11]; // 登録区分(0)+社員番号〜安否確認発信(1-10)の次＝メールアドレス列
+  const emailTh = headRow.children[12]; // 登録区分(0)+社員番号〜出入予定管理(1-11)の次＝メールアドレス列
   bizInfoItemsAll.forEach(item=>{
     const th = document.createElement("th");
     th.className = "userimport-bizinfo-col";
@@ -5085,6 +5193,7 @@ function renderUserImportPreview(){
       <td>${row.isContractEditor ? "○" : ""}</td>
       <td>${row.isCalEditor ? "○" : ""}</td>
       <td>${row.isSafetySender ? "○" : ""}</td>
+      <td>${row.isVisitorManager ? "○" : ""}</td>
       ${bizInfoCellsHtml}
       <td>${escapeHtml(row.email)}</td>
       <td>${escapeHtml(row.phone)}</td>
@@ -5106,12 +5215,12 @@ function updateUserImportBizInfoColumns(){
   if(!orderEl || !sampleEl) return;
   const bizFlagLabels = bizInfoItemsAll.map(item => `${item.name || "（無題）"}情報管理者フラグ`);
   orderEl.textContent =
-    ["社員番号", "氏名", "所属", "システム管理者フラグ", "お知らせ投稿フラグ", "お知らせ管理権限フラグ", "行き先編集権限フラグ", "設備管理者フラグ", "入札編集権限フラグ", "カレンダー編集権限フラグ", "安否確認発信権限フラグ", ...bizFlagLabels, "メールアドレス", "パスワード", "電話番号", "備考"].join(", ");
+    ["社員番号", "氏名", "所属", "システム管理者フラグ", "お知らせ投稿フラグ", "お知らせ管理権限フラグ", "行き先編集権限フラグ", "設備管理者フラグ", "入札編集権限フラグ", "カレンダー編集権限フラグ", "安否確認発信権限フラグ", "出入予定管理権限フラグ", ...bizFlagLabels, "メールアドレス", "パスワード", "電話番号", "備考"].join(", ");
   const bizHeaderCols = bizInfoItemsAll.map(item => `${item.name || "（無題）"}情報管理者フラグ`).join(",");
   const bizBlankCols = bizInfoItemsAll.map(()=> "").join(",");
-  const headerLine = `社員番号,氏名,所属,システム管理者フラグ,お知らせ投稿フラグ,お知らせ管理権限フラグ,行き先編集権限フラグ,設備管理者フラグ,入札編集権限フラグ,カレンダー編集権限フラグ,安否確認発信権限フラグ${bizHeaderCols ? ","+bizHeaderCols : ""},メールアドレス,パスワード,電話番号,備考`;
-  const row1 = `1001,山田太郎,工務部,,1,,,,,,,${bizBlankCols ? bizBlankCols+"," : ""}yamada@osakagumi.co.jp,Osaka2026!,090-1234-5678,現場責任者`;
-  const row2 = `1002,佐藤花子,総務経理部,1,1,,,,,,1${bizBlankCols ? ","+bizBlankCols : ""},sato@osakagumi.co.jp,Osaka2026!,090-2345-6789,`;
+  const headerLine = `社員番号,氏名,所属,システム管理者フラグ,お知らせ投稿フラグ,お知らせ管理権限フラグ,行き先編集権限フラグ,設備管理者フラグ,入札編集権限フラグ,カレンダー編集権限フラグ,安否確認発信権限フラグ,出入予定管理権限フラグ${bizHeaderCols ? ","+bizHeaderCols : ""},メールアドレス,パスワード,電話番号,備考`;
+  const row1 = `1001,山田太郎,工務部,,1,,,,,,,,${bizBlankCols ? bizBlankCols+"," : ""}yamada@osakagumi.co.jp,Osaka2026!,090-1234-5678,現場責任者`;
+  const row2 = `1002,佐藤花子,総務経理部,1,1,,,,,,1,${bizBlankCols ? bizBlankCols+"," : ""}sato@osakagumi.co.jp,Osaka2026!,090-2345-6789,`;
   sampleEl.textContent = `${headerLine}\n${row1}\n${row2}`;
 }
 function populateSingleEmpDeptSelect(){
@@ -5326,6 +5435,9 @@ document.getElementById("userimport-execute-btn").addEventListener("click", asyn
       if(row.isSafetySender){
         await setDoc(doc(db,"safety_senders", targetEmail), { addedBy: currentUser.email, addedAt: new Date().toISOString() });
       }
+      if(row.isVisitorManager){
+        await setDoc(doc(db,"visitor_managers", targetEmail), { addedBy: currentUser.email, addedAt: new Date().toISOString() });
+      }
       for(const itemId of row.bizInfoItemIds){
         const item = bizInfoItemsAll.find(i=>i.id===itemId);
         const currentManagers = (item && Array.isArray(item.infoManagers)) ? item.infoManagers : [];
@@ -5361,7 +5473,7 @@ document.getElementById("user-export-cancel-btn")?.addEventListener("click", ()=
 });
 document.getElementById("user-export-download-btn")?.addEventListener("click", ()=>{
   const bizFlagLabels = bizInfoItemsAll.map(item => `${item.name || "（無題）"}情報管理者フラグ`);
-  const header = ["社員番号","氏名","所属","システム管理者フラグ","お知らせ投稿フラグ","お知らせ管理権限フラグ","行き先編集権限フラグ","設備管理者フラグ","入札編集権限フラグ","カレンダー編集権限フラグ","安否確認発信権限フラグ",...bizFlagLabels,"メールアドレス","パスワード","電話番号","備考"];
+  const header = ["社員番号","氏名","所属","システム管理者フラグ","お知らせ投稿フラグ","お知らせ管理権限フラグ","行き先編集権限フラグ","設備管理者フラグ","入札編集権限フラグ","カレンダー編集権限フラグ","安否確認発信権限フラグ","出入予定管理権限フラグ",...bizFlagLabels,"メールアドレス","パスワード","電話番号","備考"];
   const rows = [header];
   const headersOnly = document.getElementById("user-export-headers-only").checked;
   if(!headersOnly){
@@ -5381,6 +5493,7 @@ document.getElementById("user-export-download-btn")?.addEventListener("click", (
       lastContractEditorEmails.includes(emp.email) ? "1" : "",
       lastCalEditorEmails.includes(emp.email) ? "1" : "",
       lastSafetySenderEmails.includes(emp.email) ? "1" : "",
+      lastVisitorManagerEmails.includes(emp.email) ? "1" : "",
       ...bizFlags,
       emp.email || "",
       "", // パスワードは保存されていないため空欄（既存社員の再登録時は別途入力が必要）
