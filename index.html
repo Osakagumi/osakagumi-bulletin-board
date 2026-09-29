@@ -1832,6 +1832,13 @@
           <button type="button" class="date-field-btn placeholder" id="visitor-time-btn" data-value="" style="flex:1;"></button>
         </div>
       </div>
+      <div class="field">
+        <label>終了日時（任意）</label>
+        <div style="display:flex;gap:8px;">
+          <span class="date-picker-label" id="visitor-enddate-picker" style="flex:1;"></span>
+          <button type="button" class="date-field-btn placeholder" id="visitor-endtime-btn" data-value="" style="flex:1;"></button>
+        </div>
+      </div>
       <div class="field" id="visitor-headcount-field">
         <label>人数（任意）</label>
         <input type="number" id="visitor-headcount-input" min="1" style="width:100px;">
@@ -2965,7 +2972,7 @@ function renderDashboard(){
     const todayStrForVisitors = todayStr();
     const visibleVisitors = isVisitorManager
       ? visitorSchedulesAll
-      : visitorSchedulesAll.filter(v=> v.hostEmail===currentUser.email);
+      : visitorSchedulesAll.filter(v=> getVisitorHostEmails(v).includes(currentUser.email));
     const upcomingVisitors = visibleVisitors
       .filter(v=> (v.date||"") >= todayStrForVisitors)
       .sort((a,b)=> (a.date+((a.time)||"")).localeCompare(b.date+((b.time)||"")));
@@ -2977,7 +2984,7 @@ function renderDashboard(){
         row.className = "dash-row";
         const isOfficerRow = v.type==="officer";
         const pillHtml = `<span class="visitor-type-pill ${isOfficerRow ? "type-officer" : "type-visitor"}" style="padding:1px 8px;font-size:11px;">${isOfficerRow ? "役員" : "来客"}</span>`;
-        row.innerHTML = `<span>${pillHtml} ${escapeHtml(v.visitorName||"")}　${escapeHtml(v.hostName||v.hostEmail||"")}</span><span class="dash-row-sub">${formatDateJP(v.date)} ${escapeHtml(v.time||"")}</span>`;
+        row.innerHTML = `<span>${pillHtml} ${escapeHtml(v.visitorName||"")}　${escapeHtml(formatVisitorHostNames(v))}</span><span class="dash-row-sub">${escapeHtml(formatVisitorDateTimeRange(v))}</span>`;
         row.addEventListener("click", ()=> switchToTab("visitors"));
         visitorsBody.appendChild(row);
       });
@@ -3768,13 +3775,38 @@ document.getElementById("checkout-modal-confirm").addEventListener("click", asyn
 ========================================================= */
 let visitorSchedulesAll = [];
 let editingVisitorId = null;
-let visitorHostEmail = null;
-let visitorHostName = null;
+let visitorHostEmails = []; // 対象社員（複数対応）のメールアドレス一覧
+let visitorHostNames = [];  // 上記に対応する表示名の一覧（同じ並び順）
 let visitorModalDate = "";
+let visitorModalEndDate = ""; // 終了日（任意。開始日と異なる日も指定可＝複数日の予定に対応）
 let visitorModalType = "visitor"; // "visitor"=来客 / "officer"=役員（役員は出入予定管理権限者のみ選択可）
 let visitorDateFilter = ""; // ""=すべて表示
 let visitorTypeFilter = ""; // ""=すべて／"visitor"／"officer"
 let visitorHostFilterEmail = null;
+// 対象社員（複数対応）：新データは配列(hostEmails/hostNames)、
+// 旧データ（複数対応前に登録された分）は単数(hostEmail/hostName)のまま残っているため、
+// 表示・絞り込み・権限判定はすべてこのヘルパー経由で行い、両方の形に対応する。
+function getVisitorHostEmails(v){
+  if(Array.isArray(v.hostEmails) && v.hostEmails.length>0) return v.hostEmails;
+  return v.hostEmail ? [v.hostEmail] : [];
+}
+function getVisitorHostNames(v){
+  if(Array.isArray(v.hostNames) && v.hostNames.length>0) return v.hostNames;
+  if(v.hostName) return [v.hostName];
+  return getVisitorHostEmails(v);
+}
+function formatVisitorHostNames(v){
+  return getVisitorHostNames(v).join("、");
+}
+// 開始日時に加え、終了日時（任意）が設定されていればあわせて表示する。
+// 終了日が開始日と同じ場合は終了時刻のみ、異なる場合は終了日も含めて表示する。
+function formatVisitorDateTimeRange(v){
+  const start = `${formatDateJP(v.date)} ${v.time||""}`.trim();
+  if(v.endDate && v.endTime){
+    return v.endDate===v.date ? `${start}〜${v.endTime}` : `${start}〜${formatDateJP(v.endDate)} ${v.endTime}`;
+  }
+  return start;
+}
 function initVisitorSchedulesListener(){
   onSnapshot(collection(db,"visitor_schedules"), snap=>{
     visitorSchedulesAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
@@ -3808,7 +3840,7 @@ async function cleanupOldVisitorSchedules(){
     if(snap.empty) return;
     const targets = isVisitorManager
       ? snap.docs
-      : snap.docs.filter(d => d.data().hostEmail === currentUser.email);
+      : snap.docs.filter(d => getVisitorHostEmails(d.data()).includes(currentUser.email));
     if(targets.length===0) return;
     for(const d of targets){
       try{ await deleteDoc(doc(db,"visitor_schedules", d.id)); }catch(e){ /* 1件失敗しても他の削除は続行 */ }
@@ -3820,8 +3852,8 @@ async function cleanupOldVisitorSchedules(){
   }
 }
 function canEditVisitorEntry(v){
-  if((v.type||"visitor")==="officer") return isVisitorManager; // 役員予定は出入予定管理権限者のみ編集・削除可
-  return isVisitorManager || v.hostEmail === currentUser.email;
+  // 来客・役員のどちらも、出入予定管理権限者、または対象社員のうち誰か1人でも編集・削除可
+  return isVisitorManager || getVisitorHostEmails(v).includes(currentUser.email);
 }
 // 対象社員・日付の絞り込みを単純なドロップダウンにする。
 // 選択肢は固定リストではなく、その時点で（自分に見えている）一覧に実際に登場している
@@ -3832,10 +3864,14 @@ function populateVisitorFilterSelects(){
   if(!hostSel || !dateSel) return;
   const visible = isVisitorManager
     ? visitorSchedulesAll
-    : visitorSchedulesAll.filter(v=> v.hostEmail===currentUser.email);
+    : visitorSchedulesAll.filter(v=> getVisitorHostEmails(v).includes(currentUser.email));
 
   const hostMap = new Map(); // email -> name
-  visible.forEach(v=>{ if(v.hostEmail) hostMap.set(v.hostEmail, v.hostName || v.hostEmail); });
+  visible.forEach(v=>{
+    const emails = getVisitorHostEmails(v);
+    const names = getVisitorHostNames(v);
+    emails.forEach((email,i)=>{ if(email) hostMap.set(email, names[i] || email); });
+  });
   const hostOptions = [...hostMap.entries()].sort((a,b)=> a[1].localeCompare(b[1], "ja"));
   const prevHost = hostSel.value;
   hostSel.innerHTML = `<option value="">すべて</option>` +
@@ -3889,10 +3925,10 @@ function renderVisitorsTab(){
   // 対象社員は自分の出入予定のみ、出入予定管理権限者は全件を表示する
   const visible = isVisitorManager
     ? visitorSchedulesAll
-    : visitorSchedulesAll.filter(v=> v.hostEmail===currentUser.email);
+    : visitorSchedulesAll.filter(v=> getVisitorHostEmails(v).includes(currentUser.email));
   let filtered = visitorDateFilter ? visible.filter(v=> v.date===visitorDateFilter) : visible;
   if(visitorTypeFilter) filtered = filtered.filter(v=> (v.type||"visitor")===visitorTypeFilter);
-  if(visitorHostFilterEmail) filtered = filtered.filter(v=> v.hostEmail===visitorHostFilterEmail);
+  if(visitorHostFilterEmail) filtered = filtered.filter(v=> getVisitorHostEmails(v).includes(visitorHostFilterEmail));
   const sorted = filtered.slice().sort((a,b)=> (a.date+(a.time||"")).localeCompare(b.date+(b.time||"")));
   if(sorted.length===0){
     body.innerHTML = `<div style="color:var(--muted);text-align:center;padding:24px;">${(visitorDateFilter||visitorTypeFilter||visitorHostFilterEmail) ? "条件に一致する出入予定はありません。" : "出入予定はまだ登録されていません。"}</div>`;
@@ -3915,11 +3951,12 @@ function renderVisitorsTab(){
     tdName.textContent = v.visitorName || "";
     const tdHost = document.createElement("td");
     tdHost.className = "vt-col-host";
-    tdHost.title = v.hostName || v.hostEmail || "";
-    tdHost.textContent = v.hostName || v.hostEmail || "";
+    tdHost.title = formatVisitorHostNames(v);
+    tdHost.textContent = formatVisitorHostNames(v);
     const tdDateTime = document.createElement("td");
     tdDateTime.className = "vt-col-datetime";
-    tdDateTime.textContent = `${formatDateJP(v.date)} ${v.time||""}`;
+    tdDateTime.textContent = formatVisitorDateTimeRange(v);
+    tdDateTime.title = formatVisitorDateTimeRange(v);
     const tdHeadcount = document.createElement("td");
     tdHeadcount.className = "vt-col-count";
     tdHeadcount.textContent = v.headcount ? `${v.headcount}名` : "";
@@ -3962,12 +3999,13 @@ function renderVisitorsTab(){
   table.appendChild(tbody);
   body.appendChild(table);
 }
-function setVisitorHost(emp){
-  visitorHostEmail = emp ? emp.email : null;
-  visitorHostName = emp ? (emp.name || emp.email) : null;
+function setVisitorHosts(emps){
+  const list = Array.isArray(emps) ? emps : (emps ? [emps] : []);
+  visitorHostEmails = list.map(e=>e.email).filter(Boolean);
+  visitorHostNames = list.map(e=>e.name || e.email).filter(Boolean);
   const display = document.getElementById("visitor-host-display");
-  display.textContent = visitorHostName || "未選択";
-  display.style.color = visitorHostName ? "var(--text)" : "var(--muted)";
+  display.textContent = visitorHostNames.length>0 ? visitorHostNames.join("、") : "未選択";
+  display.style.color = visitorHostNames.length>0 ? "var(--text)" : "var(--muted)";
 }
 function setVisitorModalDate(dateStr){
   visitorModalDate = dateStr || "";
@@ -3975,10 +4013,16 @@ function setVisitorModalDate(dateStr){
   el.textContent = visitorModalDate ? formatDateJP(visitorModalDate) : "未設定";
   el.style.color = visitorModalDate ? "var(--text)" : "var(--muted)";
 }
+function setVisitorModalEndDate(dateStr){
+  visitorModalEndDate = dateStr || "";
+  const el = document.getElementById("visitor-enddate-picker");
+  el.textContent = visitorModalEndDate ? formatDateJP(visitorModalEndDate) : "未設定";
+  el.style.color = visitorModalEndDate ? "var(--text)" : "var(--muted)";
+}
 // 種別（来客／役員）に応じて、モーダル内の項目ラベル・表示を切り替える
 function applyVisitorTypeUI(type){
   document.getElementById("visitor-name-label").textContent = type==="officer" ? "予定内容" : "来客者名";
-  document.getElementById("visitor-host-label").textContent = type==="officer" ? "対象役員" : "対応する社員";
+  document.getElementById("visitor-host-label").textContent = type==="officer" ? "対象役員（複数可）" : "対応する社員（複数可）";
   document.getElementById("visitor-datetime-label").textContent = type==="officer" ? "日時（時刻は任意）" : "日時";
   document.getElementById("visitor-headcount-field").style.display = type==="officer" ? "none" : "";
   document.querySelectorAll("#visitor-type-toggle .seg-btn").forEach(b=>{
@@ -3993,9 +4037,9 @@ document.querySelectorAll("#visitor-type-toggle .seg-btn").forEach(btn=>{
     applyVisitorTypeUI(type);
     // 種別切り替え時は対象者の候補が異なるため、選択済みの対象者をリセットする
     if(type==="officer"){
-      setVisitorHost(null);
+      setVisitorHosts([]);
     } else {
-      setVisitorHost({ email: currentUser.email, name: myDisplayName() });
+      setVisitorHosts([{ email: currentUser.email, name: myDisplayName() }]);
     }
     // 時刻欄のプレースホルダー文言も種別に合わせて切り替える（値自体は保持する）
     const timeBtn = document.getElementById("visitor-time-btn");
@@ -4010,16 +4054,19 @@ function openVisitorModal(v){
   document.getElementById("visitor-modal-title").textContent = v ? "出入予定を編集" : "出入予定を追加";
   document.getElementById("visitor-name-input").value = v ? (v.visitorName||"") : "";
   if(v){
-    const hostEmp = employeesAll.find(e=>e.email===v.hostEmail);
-    setVisitorHost({ email: v.hostEmail, name: v.hostName || (hostEmp && hostEmp.name) });
+    const emails = getVisitorHostEmails(v);
+    const names = getVisitorHostNames(v);
+    setVisitorHosts(emails.map((email,i)=>({ email, name: names[i] || email })));
   } else if(visitorModalType==="officer"){
-    setVisitorHost(null);
+    setVisitorHosts([]);
   } else {
     // 新規追加（来客）時は、入力者本人をデフォルトの対象社員にする（社員選択で別の人に変更可能）
-    setVisitorHost({ email: currentUser.email, name: myDisplayName() });
+    setVisitorHosts([{ email: currentUser.email, name: myDisplayName() }]);
   }
   setVisitorModalDate(v ? (v.date||"") : "");
   setTimeFieldValue(document.getElementById("visitor-time-btn"), v ? (v.time||"") : "", visitorModalType==="officer" ? "未設定（任意）" : "未設定");
+  setVisitorModalEndDate(v ? (v.endDate||"") : "");
+  setTimeFieldValue(document.getElementById("visitor-endtime-btn"), v ? (v.endTime||"") : "", "未設定");
   document.getElementById("visitor-headcount-input").value = v && v.headcount ? v.headcount : "";
   document.getElementById("visitor-purpose-input").value = v ? (v.purpose||"") : "";
   document.getElementById("visitor-modal-error").textContent = "";
@@ -4032,11 +4079,11 @@ document.getElementById("visitor-host-pick-btn").addEventListener("click", async
       document.getElementById("visitor-modal-error").textContent = "対象役員が登録されていません。管理画面「出入予定管理」で設定してください。";
       return;
     }
-    const emp = await openEmployeePicker({ restrictToEmails: visitorTargetOfficerEmails });
-    if(emp) setVisitorHost(emp);
+    const emps = await openEmployeePicker({ multi:true, restrictToEmails: visitorTargetOfficerEmails, preselectedEmails: visitorHostEmails });
+    if(emps) setVisitorHosts(emps);
   } else {
-    const emp = await openEmployeePicker();
-    if(emp) setVisitorHost(emp);
+    const emps = await openEmployeePicker({ multi:true, preselectedEmails: visitorHostEmails });
+    if(emps) setVisitorHosts(emps);
   }
 });
 document.getElementById("visitor-date-picker").addEventListener("click", (e)=>{
@@ -4049,6 +4096,19 @@ document.getElementById("visitor-time-btn").addEventListener("click", (e)=>{
   openTimePicker(el, el.dataset.value, {
     stepMinutes: 5, minTime: "06:00", maxTime: "20:00",
     onSelect: (v)=> setTimeFieldValue(el, v)
+  });
+});
+document.getElementById("visitor-enddate-picker").addEventListener("click", (e)=>{
+  openCalendarPicker(e.currentTarget, visitorModalEndDate || visitorModalDate, {
+    allowClear: true,
+    onSelect: (dateStr)=> setVisitorModalEndDate(dateStr || "")
+  });
+});
+document.getElementById("visitor-endtime-btn").addEventListener("click", (e)=>{
+  const el = e.currentTarget;
+  openTimePicker(el, el.dataset.value, {
+    stepMinutes: 5, minTime: "06:00", maxTime: "20:00",
+    onSelect: (v)=> setTimeFieldValue(el, v, "未設定")
   });
 });
 document.getElementById("visitor-modal-cancel").addEventListener("click", ()=>{
@@ -4066,10 +4126,21 @@ document.getElementById("visitor-modal-save").addEventListener("click", async ()
   const nameLabel = type==="officer" ? "予定内容" : "来客者名";
   const hostLabel = type==="officer" ? "対象役員" : "対応する社員";
   if(!visitorName){ errEl.textContent = `${nameLabel}を入力してください。`; return; }
-  if(!visitorHostEmail){ errEl.textContent = `${hostLabel}を選択してください。`; return; }
+  if(visitorHostEmails.length===0){ errEl.textContent = `${hostLabel}を選択してください。`; return; }
   if(!visitorModalDate){ errEl.textContent = "日付を選択してください。"; return; }
   if(type==="visitor" && !time){ errEl.textContent = "開始時刻を選択してください。"; return; } // 役員予定は時刻を任意とする
   if(type==="officer" && !isVisitorManager){ errEl.textContent = "役員予定の登録には出入予定管理権限が必要です。"; return; }
+  const endDate = visitorModalEndDate || "";
+  const endTime = document.getElementById("visitor-endtime-btn").dataset.value || "";
+  if((endDate && !endTime) || (!endDate && endTime)){
+    errEl.textContent = "終了日時は、日付・時刻の両方を選択するか、両方とも空欄にしてください。";
+    return;
+  }
+  if(endDate && endTime){
+    const startKey = `${visitorModalDate}T${time || "00:00"}`;
+    const endKey = `${endDate}T${endTime}`;
+    if(endKey < startKey){ errEl.textContent = "終了日時が開始日時より前になっています。"; return; }
+  }
   // 過去日NG・休日確認は新規追加時のみ行う（既存の予定を編集・修正する際は対象外。
   // そうしないと、日付が過ぎた予定を編集・削除しようとするたびにエラーで弾かれてしまうため）
   if(!editingVisitorId){
@@ -4083,10 +4154,14 @@ document.getElementById("visitor-modal-save").addEventListener("click", async ()
   const payload = {
     type,
     visitorName,
-    hostEmail: visitorHostEmail,
-    hostName: visitorHostName || visitorHostEmail,
+    hostEmails: visitorHostEmails,
+    hostNames: visitorHostNames,
+    hostEmail: visitorHostEmails[0] || null, // 後方互換用（1人目。旧バージョンの表示・検索コードのため保持）
+    hostName: visitorHostNames[0] || null,
     date: visitorModalDate,
     time,
+    endDate: endDate || null,
+    endTime: endTime || null,
     headcount,
     purpose,
     updatedBy: currentUser.email,

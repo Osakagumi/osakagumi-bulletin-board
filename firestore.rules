@@ -341,15 +341,16 @@ service cloud.firestore {
 
     // 出入予定（来客・役員）: 全員が読める（一覧の絞り込み表示はアプリ側で行う）。
     // 作成は全社員が可能（本人のcreatedByEmailでのみ）。ただし役員予定（type=officer）の作成は出入予定管理権限者のみ。
-    // 更新・削除は、来客予定は対象社員本人または出入予定管理権限者、役員予定は出入予定管理権限者のみ。
+    // 更新・削除は、対象社員（hostEmails配列。複数設定可）のうち誰か1人、または出入予定管理権限者。
+    // hostEmailは複数対応化前の旧データとの後方互換用。
     match /visitor_schedules/{visitId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && request.resource.data.createdByEmail == request.auth.token.email &&
         (request.resource.data.type != "officer" || isVisitorManager());
       allow update, delete: if isSignedIn() &&
-        (resource.data.type == "officer"
-          ? isVisitorManager()
-          : (resource.data.hostEmail == request.auth.token.email || isVisitorManager()));
+        (resource.data.get('hostEmails', []).hasAny([request.auth.token.email])
+          || resource.data.get('hostEmail', '') == request.auth.token.email
+          || isVisitorManager());
     }
   }
 }
