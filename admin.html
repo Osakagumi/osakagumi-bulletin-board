@@ -4071,10 +4071,16 @@ function initVisitorTargetOfficersAdminListener(){
 function renderVisitorTargetOfficerChecks(){
   const el = document.getElementById("visitor-target-officer-checks");
   if(!el) return;
-  const roster = employeesAll.filter(e=>!e.hidden && !e.isSharedAccount);
+  // 所属＝「役員」の社員のみを候補にする
+  const officerDeptIds = departmentsAll.filter(d=>d.name==="役員").map(d=>d.id);
+  const roster = employeesAll.filter(e=>!e.hidden && !e.isSharedAccount && empDepartmentsAdmin(e).some(id=>officerDeptIds.includes(id)));
   el.innerHTML = "";
+  if(officerDeptIds.length===0){
+    el.innerHTML = `<span style="font-size:12.5px;color:var(--muted);">「ユーザー管理」タブに所属「役員」が登録されていません。先に部署を登録してください。</span>`;
+    return;
+  }
   if(roster.length===0){
-    el.innerHTML = `<span style="font-size:12.5px;color:var(--muted);">社員データがありません。</span>`;
+    el.innerHTML = `<span style="font-size:12.5px;color:var(--muted);">所属「役員」の社員がいません。</span>`;
     return;
   }
   roster.forEach(emp=>{

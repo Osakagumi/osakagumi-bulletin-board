@@ -1798,7 +1798,7 @@
         </div>
       </div>
       <div class="field">
-        <label>日時</label>
+        <label id="visitor-datetime-label">日時</label>
         <div style="display:flex;gap:8px;">
           <span class="date-picker-label" id="visitor-date-picker" style="flex:1;"></span>
           <button type="button" class="date-field-btn placeholder" id="visitor-time-btn" data-value="" style="flex:1;"></button>
@@ -3912,6 +3912,7 @@ function setVisitorModalDate(dateStr){
 function applyVisitorTypeUI(type){
   document.getElementById("visitor-name-label").textContent = type==="officer" ? "予定内容" : "来客者名";
   document.getElementById("visitor-host-label").textContent = type==="officer" ? "対象役員" : "対応する社員";
+  document.getElementById("visitor-datetime-label").textContent = type==="officer" ? "日時（時刻は任意）" : "日時";
   document.getElementById("visitor-headcount-field").style.display = type==="officer" ? "none" : "";
   document.querySelectorAll("#visitor-type-toggle .seg-btn").forEach(b=>{
     b.classList.toggle("active", b.dataset.visitortype===type);
@@ -3929,6 +3930,9 @@ document.querySelectorAll("#visitor-type-toggle .seg-btn").forEach(btn=>{
     } else {
       setVisitorHost({ email: currentUser.email, name: myDisplayName() });
     }
+    // 時刻欄のプレースホルダー文言も種別に合わせて切り替える（値自体は保持する）
+    const timeBtn = document.getElementById("visitor-time-btn");
+    setTimeFieldValue(timeBtn, timeBtn.dataset.value || "", type==="officer" ? "未設定（任意）" : "未設定");
   });
 });
 function openVisitorModal(v){
@@ -3948,7 +3952,7 @@ function openVisitorModal(v){
     setVisitorHost({ email: currentUser.email, name: myDisplayName() });
   }
   setVisitorModalDate(v ? (v.date||"") : "");
-  setTimeFieldValue(document.getElementById("visitor-time-btn"), v ? (v.time||"") : "");
+  setTimeFieldValue(document.getElementById("visitor-time-btn"), v ? (v.time||"") : "", visitorModalType==="officer" ? "未設定（任意）" : "未設定");
   document.getElementById("visitor-headcount-input").value = v && v.headcount ? v.headcount : "";
   document.getElementById("visitor-purpose-input").value = v ? (v.purpose||"") : "";
   document.getElementById("visitor-modal-error").textContent = "";
@@ -3997,7 +4001,7 @@ document.getElementById("visitor-modal-save").addEventListener("click", async ()
   if(!visitorName){ errEl.textContent = `${nameLabel}を入力してください。`; return; }
   if(!visitorHostEmail){ errEl.textContent = `${hostLabel}を選択してください。`; return; }
   if(!visitorModalDate){ errEl.textContent = "日付を選択してください。"; return; }
-  if(!time){ errEl.textContent = "開始時刻を選択してください。"; return; }
+  if(type==="visitor" && !time){ errEl.textContent = "開始時刻を選択してください。"; return; } // 役員予定は時刻を任意とする
   if(type==="officer" && !isVisitorManager){ errEl.textContent = "役員予定の登録には出入予定管理権限が必要です。"; return; }
   // 過去日はNG（訂正が必要な場合は既存の予定を編集してもらう）
   if(visitorModalDate < todayStr()){ errEl.textContent = "過去の日付は指定できません。"; return; }
