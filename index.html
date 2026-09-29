@@ -800,6 +800,36 @@
     .visitor-toolbar{flex-wrap:wrap;overflow-x:visible;}
     .visitor-toolbar-filters{flex-wrap:wrap;}
   }
+  /* ---------- 出入予定：カレンダー表示（月単位・日付ごとの行） ---------- */
+  .vcal-day-row{display:flex;align-items:stretch;border-bottom:1px solid var(--line);background:var(--surface);}
+  .vcal-day-row:last-child{border-bottom:none;}
+  .vcal-day-row.vcal-past{opacity:0.6;}
+  .vcal-day-head{
+    flex:0 0 64px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    font-size:12.5px;padding:8px 4px;font-family:var(--mono);color:var(--text);
+    border-right:1px solid var(--line);cursor:pointer;
+  }
+  .vcal-day-head:hover{background:#F4F8FC;}
+  .vcal-day-head .vcal-day-num{font-size:16px;font-weight:700;line-height:1.2;}
+  .vcal-day-head .vcal-day-dow{font-size:10.5px;}
+  .vcal-day-head.weekend-sat{color:#2E6FA3;}
+  .vcal-day-head.weekend-sun, .vcal-day-head.vcal-holiday{color:var(--danger);}
+  .vcal-day-head.vcal-today{background:#CDEFFB;}
+  .vcal-day-body{flex:1;min-width:0;padding:6px 10px;display:flex;flex-direction:column;gap:4px;cursor:pointer;}
+  .vcal-day-body:hover{background:#FAFBFC;}
+  .vcal-entry{
+    display:flex;align-items:center;gap:6px;font-size:12.5px;padding:3px 0;flex-wrap:wrap;cursor:pointer;
+  }
+  .vcal-entry:hover{text-decoration:underline;}
+  .vcal-entry .vcal-entry-time{color:var(--muted);font-family:var(--mono);font-size:11.5px;flex-shrink:0;}
+  .vcal-entry .vcal-entry-name{font-weight:600;}
+  .vcal-entry .vcal-entry-host{color:var(--muted);}
+  .vcal-day-empty{font-size:12px;color:var(--muted);padding:5px 0;}
+  @media (max-width:640px){
+    .vcal-day-head{flex:0 0 48px;font-size:11px;padding:6px 2px;}
+    .vcal-day-head .vcal-day-num{font-size:14px;}
+    .vcal-entry{font-size:11.5px;}
+  }
   .wb-note-cell{
     color:var(--muted);font-size:calc(var(--wb-font-size) * 0.962);line-height:1.35;
     max-width:85px;overflow-wrap:break-word;
@@ -1094,12 +1124,27 @@
             </div>
             <label style="font-size:12.5px;color:var(--muted);white-space:nowrap;">社員：</label>
             <select id="visitor-host-filter-select"></select>
-            <label style="font-size:12.5px;color:var(--muted);white-space:nowrap;">日付：</label>
+            <label id="visitor-date-filter-label" style="font-size:12.5px;color:var(--muted);white-space:nowrap;">日付：</label>
             <select id="visitor-date-filter-select"></select>
             <button type="button" class="btn-ghost" id="visitor-type-filter-all-btn" style="border:1px solid var(--line);">すべて</button>
           </div>
         </div>
-        <div id="visitor-list"></div>
+        <div class="seg-toggle" id="visitor-view-toggle" style="margin-bottom:12px;">
+          <button type="button" class="seg-btn active" data-visitorview="list">一覧表示</button>
+          <button type="button" class="seg-btn" data-visitorview="calendar">カレンダー表示</button>
+        </div>
+        <div id="visitor-list-view">
+          <div id="visitor-list"></div>
+        </div>
+        <div id="visitor-calendar-view" style="display:none;">
+          <div class="date-nav" id="visitor-cal-nav" style="margin-bottom:10px;">
+            <button id="visitor-cal-prev">◀</button>
+            <span class="date-picker-label" id="visitor-cal-month-label"></span>
+            <button id="visitor-cal-next">▶</button>
+            <input type="month" id="visitor-cal-month-input" style="opacity:0;position:absolute;width:1px;height:1px;pointer-events:none;">
+          </div>
+          <div id="visitor-cal-panels"></div>
+        </div>
       </section>
 
       <!-- 敷鉄板 貸出・返却モーダル -->
@@ -3125,7 +3170,7 @@ function switchToTab(viewName){
     try{ renderCheckoutTab(); }catch(e){ console.error("[貸出タブの表示エラー]", e); }
   }
   if(viewName==="visitors"){
-    try{ renderVisitorsTab(); }catch(e){ console.error("[出入予定タブの表示エラー]", e); }
+    try{ renderActiveVisitorView(); }catch(e){ console.error("[出入予定タブの表示エラー]", e); }
   }
   if(viewName==="dashboard"){
     try{ renderDashboard(); }catch(e){ console.error("[ダッシュボードの表示エラー]", e); }
@@ -3789,6 +3834,8 @@ let visitorModalType = "visitor"; // "visitor"=来客 / "officer"=役員（役�
 let visitorDateFilter = ""; // ""=すべて表示
 let visitorTypeFilter = ""; // ""=すべて／"visitor"／"officer"
 let visitorHostFilterEmail = null;
+let visitorViewMode = "list"; // "list"=一覧表示 / "calendar"=カレンダー表示（月単位）
+let visitorCalMonth = todayStr().slice(0,7); // カレンダー表示の対象月 "YYYY-MM"
 // 対象社員（複数対応）：新データは配列(hostEmails/hostNames)、
 // 旧データ（複数対応前に登録された分）は単数(hostEmail/hostName)のまま残っているため、
 // 表示・絞り込み・権限判定はすべてこのヘルパー経由で行い、両方の形に対応する。
@@ -3825,7 +3872,7 @@ function initVisitorSchedulesListener(){
     visitorSchedulesAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
     populateVisitorFilterSelects();
     if(document.getElementById("view-visitors").style.display !== "none"){
-      renderVisitorsTab();
+      renderActiveVisitorView();
     }
     refreshDashboardIfActive();
   }, (err)=>{ console.error("[出入予定取得エラー]", err); });
@@ -3902,11 +3949,11 @@ function populateVisitorFilterSelects(){
 }
 document.getElementById("visitor-host-filter-select").addEventListener("change", (e)=>{
   visitorHostFilterEmail = e.target.value || null;
-  renderVisitorsTab();
+  renderActiveVisitorView();
 });
 document.getElementById("visitor-date-filter-select").addEventListener("change", (e)=>{
   visitorDateFilter = e.target.value === "__today__" ? todayStr() : (e.target.value || "");
-  renderVisitorsTab();
+  renderVisitorsTab(); // 日付での絞り込みは一覧表示のみが対象（カレンダー表示は月送りで日付を選ぶため）
 });
 // 種別の絞り込み：「来客」「役員」の2つはグループ内でのトグル。
 // 「すべて」はグループ外の独立ボタン（右端配置）で、種別だけでなく社員・日付の条件もまとめて解除する。
@@ -3919,7 +3966,7 @@ document.querySelectorAll("#visitor-type-filter-toggle .visitor-type-pill-btn").
   btn.addEventListener("click", ()=>{
     visitorTypeFilter = btn.dataset.visitortypefilter || "";
     updateVisitorTypeFilterUI();
-    renderVisitorsTab();
+    renderActiveVisitorView();
   });
 });
 document.getElementById("visitor-type-filter-all-btn").addEventListener("click", ()=>{
@@ -3929,8 +3976,128 @@ document.getElementById("visitor-type-filter-all-btn").addEventListener("click",
   document.getElementById("visitor-host-filter-select").value = "";
   document.getElementById("visitor-date-filter-select").value = "";
   updateVisitorTypeFilterUI();
-  renderVisitorsTab();
+  renderActiveVisitorView();
 });
+// 一覧表示／カレンダー表示の切り替え。種別・社員の絞り込みは両方の表示で共通、
+// 日付の絞り込み（プルダウン）はカレンダー表示では月送りに役割が重複するため一覧表示のみで使う。
+function renderActiveVisitorView(){
+  if(visitorViewMode==="calendar") renderVisitorCalendar();
+  else renderVisitorsTab();
+}
+document.querySelectorAll("#visitor-view-toggle .seg-btn").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    const mode = btn.dataset.visitorview;
+    if(visitorViewMode===mode) return;
+    visitorViewMode = mode;
+    document.querySelectorAll("#visitor-view-toggle .seg-btn").forEach(b=>{
+      b.classList.toggle("active", b.dataset.visitorview===mode);
+    });
+    document.getElementById("visitor-list-view").style.display = mode==="list" ? "" : "none";
+    document.getElementById("visitor-calendar-view").style.display = mode==="calendar" ? "" : "none";
+    document.getElementById("visitor-date-filter-label").style.display = mode==="calendar" ? "none" : "";
+    document.getElementById("visitor-date-filter-select").style.display = mode==="calendar" ? "none" : "";
+    renderActiveVisitorView();
+  });
+});
+function updateVisitorCalMonthLabel(){
+  const [y,m] = visitorCalMonth.split("-").map(Number);
+  document.getElementById("visitor-cal-month-label").textContent = `${y}年${m}月`;
+}
+function shiftVisitorCalMonth(delta){
+  const [y,m] = visitorCalMonth.split("-").map(Number);
+  const d = new Date(y, m-1+delta, 1);
+  visitorCalMonth = `${d.getFullYear()}-${pad2(d.getMonth()+1)}`;
+  updateVisitorCalMonthLabel();
+  renderVisitorCalendar();
+}
+document.getElementById("visitor-cal-prev").addEventListener("click", ()=> shiftVisitorCalMonth(-1));
+document.getElementById("visitor-cal-next").addEventListener("click", ()=> shiftVisitorCalMonth(1));
+document.getElementById("visitor-cal-month-label").addEventListener("click", ()=>{
+  const input = document.getElementById("visitor-cal-month-input");
+  input.value = visitorCalMonth;
+  if(input.showPicker){ input.showPicker(); } else { input.click(); }
+});
+document.getElementById("visitor-cal-month-input").addEventListener("change", (e)=>{
+  if(!e.target.value) return;
+  visitorCalMonth = e.target.value;
+  updateVisitorCalMonthLabel();
+  renderVisitorCalendar();
+});
+function daysInVisitorCalMonth(){
+  const [y,m] = visitorCalMonth.split("-").map(Number);
+  return new Date(y, m, 0).getDate();
+}
+// 出入予定のカレンダー表示：選択した月の日付を1日ずつ行として並べ、各日の出入予定をピル表示する。
+// 対象社員が複数日にまたがる予定（終了日が開始日と異なる）も、一覧表示同様に開始日の行にのみ表示する。
+function renderVisitorCalendar(){
+  const wrap = document.getElementById("visitor-cal-panels");
+  if(!wrap) return;
+  wrap.innerHTML = "";
+  updateVisitorCalMonthLabel();
+  const [y,m] = visitorCalMonth.split("-").map(Number);
+  const daysN = daysInVisitorCalMonth();
+  const weekdayLabels = ["日","月","火","水","木","金","土"];
+  const today = todayStr();
+
+  const visible = isVisitorManager
+    ? visitorSchedulesAll
+    : visitorSchedulesAll.filter(v=> getVisitorHostEmails(v).includes(currentUser.email));
+  let filtered = visible;
+  if(visitorTypeFilter) filtered = filtered.filter(v=> (v.type||"visitor")===visitorTypeFilter);
+  if(visitorHostFilterEmail) filtered = filtered.filter(v=> getVisitorHostEmails(v).includes(visitorHostFilterEmail));
+
+  const byDate = {};
+  filtered.forEach(v=>{ if(v.date){ (byDate[v.date] = byDate[v.date] || []).push(v); } });
+
+  for(let day=1; day<=daysN; day++){
+    const dateStr = `${y}-${pad2(m)}-${pad2(day)}`;
+    const d = new Date(y, m-1, day);
+    const dow = d.getDay();
+    const row = document.createElement("div");
+    row.className = "vcal-day-row";
+    if(dateStr < today) row.classList.add("vcal-past");
+
+    const head = document.createElement("div");
+    head.className = "vcal-day-head";
+    if(dow===6) head.classList.add("weekend-sat");
+    if(dow===0) head.classList.add("weekend-sun");
+    if(isDateHolidaySync(dateStr)) head.classList.add("vcal-holiday");
+    if(dateStr===today) head.classList.add("vcal-today");
+    head.innerHTML = `<span class="vcal-day-num">${day}</span><span class="vcal-day-dow">(${weekdayLabels[dow]})</span>`;
+    head.title = "クリックしてこの日の出入予定を追加";
+    head.addEventListener("click", ()=> openVisitorModal(null, dateStr));
+    row.appendChild(head);
+
+    const body = document.createElement("div");
+    body.className = "vcal-day-body";
+    body.title = "クリックしてこの日の出入予定を追加";
+    const dayEntries = (byDate[dateStr]||[]).slice().sort((a,b)=> (a.time||"").localeCompare(b.time||""));
+    if(dayEntries.length===0){
+      body.innerHTML = `<div class="vcal-day-empty">予定なし</div>`;
+    } else {
+      dayEntries.forEach(v=>{
+        const isOfficer = (v.type||"visitor")==="officer";
+        const nameWithCount = v.headcount ? `${v.visitorName||""}(${v.headcount}名)` : (v.visitorName||"");
+        const entry = document.createElement("div");
+        entry.className = "vcal-entry";
+        entry.title = "クリックして編集";
+        entry.innerHTML =
+          `<span class="visitor-type-pill ${isOfficer ? "type-officer" : "type-visitor"}" style="padding:1px 7px;font-size:10.5px;">${isOfficer ? "役員" : "来客"}</span>` +
+          `<span class="vcal-entry-time">${escapeHtml(v.time||"")}</span>` +
+          `<span class="vcal-entry-name">${escapeHtml(nameWithCount)}</span>` +
+          `<span class="vcal-entry-host">${escapeHtml(formatVisitorHostNames(v))}</span>`;
+        entry.addEventListener("click", (e)=>{
+          e.stopPropagation();
+          openVisitorModal(v);
+        });
+        body.appendChild(entry);
+      });
+    }
+    body.addEventListener("click", ()=> openVisitorModal(null, dateStr));
+    row.appendChild(body);
+    wrap.appendChild(row);
+  }
+}
 function renderVisitorsTab(){
   const body = document.getElementById("visitor-list");
   if(!body) return;
@@ -4059,7 +4226,7 @@ document.querySelectorAll("#visitor-type-toggle .seg-btn").forEach(btn=>{
     setTimeFieldValue(timeBtn, timeBtn.dataset.value || "", type==="officer" ? "未設定（任意）" : "未設定");
   });
 });
-function openVisitorModal(v){
+function openVisitorModal(v, presetDate){
   editingVisitorId = v ? v.id : null;
   visitorModalType = v ? (v.type || "visitor") : "visitor";
   document.getElementById("visitor-type-field").style.display = isVisitorManager ? "" : "none";
@@ -4076,7 +4243,7 @@ function openVisitorModal(v){
     // 新規追加（来客）時は、入力者本人をデフォルトの対象社員にする（社員選択で別の人に変更可能）
     setVisitorHosts([{ email: currentUser.email, name: myDisplayName() }]);
   }
-  setVisitorModalDate(v ? (v.date||"") : "");
+  setVisitorModalDate(v ? (v.date||"") : (presetDate||""));
   setTimeFieldValue(document.getElementById("visitor-time-btn"), v ? (v.time||"") : "", visitorModalType==="officer" ? "未設定（任意）" : "未設定");
   setVisitorModalEndDate(v ? (v.endDate||"") : "");
   setTimeFieldValue(document.getElementById("visitor-endtime-btn"), v ? (v.endTime||"") : "", "未設定");
