@@ -3875,7 +3875,11 @@ function renderVisitorsTab(){
           await deleteDoc(doc(db,"visitor_schedules", v.id));
           toast("削除しました。");
         }catch(e){
-          toast("削除に失敗しました。権限をご確認ください。");
+          if(e && e.code === "permission-denied"){
+            toast("この出入予定を削除する権限がありません。Firestoreのセキュリティルールが最新の内容で公開されているかご確認ください。");
+          } else {
+            toast("削除に失敗しました。しばらくしてから再度お試しください。");
+          }
         }
       });
       tdActions.appendChild(editBtn);
@@ -4030,7 +4034,13 @@ document.getElementById("visitor-modal-save").addEventListener("click", async ()
     }
     document.getElementById("visitor-modal").classList.remove("show");
   }catch(e){
-    errEl.textContent = "保存に失敗しました。権限をご確認ください。";
+    if(e && e.code === "permission-denied"){
+      errEl.textContent = editingVisitorId
+        ? "この出入予定を更新する権限がありません。Firestoreのセキュリティルールが最新の内容で公開されているかご確認ください。"
+        : "この出入予定を登録する権限がありません。Firestoreのセキュリティルールが最新の内容で公開されているかご確認ください。";
+    } else {
+      errEl.textContent = "保存に失敗しました。しばらくしてから再度お試しください。";
+    }
   }
 });
 
