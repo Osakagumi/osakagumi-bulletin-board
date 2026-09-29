@@ -824,6 +824,8 @@
   .vcal-entry .vcal-entry-time{color:var(--muted);font-family:var(--mono);font-size:11.5px;flex-shrink:0;}
   .vcal-entry .vcal-entry-name{font-weight:600;}
   .vcal-entry .vcal-entry-host{color:var(--muted);}
+  /* 複数日にまたがる予定は、期間であることが分かるよう左に色帯を付ける */
+  .vcal-entry.vcal-entry-period{border-left:3px solid var(--brand);padding-left:6px;margin-left:-9px;}
   .vcal-day-empty{font-size:12px;color:var(--muted);padding:5px 0;}
   @media (max-width:640px){
     .vcal-day-head{flex:0 0 48px;font-size:11px;padding:6px 2px;}
@@ -1310,8 +1312,14 @@
             <div class="dash-card" id="dash-card-visitors">
               <div class="dash-card-head">
                 <span class="dash-drag-handle" title="ドラッグして並び替え">⠿</span>
-                <h3>本日の来客・役員の予定</h3>
-                <span class="dash-card-link" id="dash-visitors-link" title="出入予定を見る">▶</span>
+                <h3>来客・役員の予定</h3>
+                <div style="margin-left:auto;display:flex;align-items:center;gap:6px;">
+                  <div class="seg-toggle" id="dash-visitors-range-toggle">
+                    <button type="button" class="seg-btn active" data-visitorsrange="today" style="padding:4px 10px;font-size:11.5px;">今日</button>
+                    <button type="button" class="seg-btn" data-visitorsrange="upcoming" style="padding:4px 10px;font-size:11.5px;">近日</button>
+                  </div>
+                  <span class="dash-card-link" id="dash-visitors-link" title="出入予定を見る" style="margin-left:0;">▶</span>
+                </div>
               </div>
               <div id="dash-visitors-body"></div>
             </div>
@@ -1869,6 +1877,10 @@
         <label id="visitor-name-label">来客者名</label>
         <input type="text" id="visitor-name-input" maxlength="60" placeholder="例：〇〇建設　山田様">
       </div>
+      <div class="field" id="visitor-headcount-field">
+        <label>人数（任意）</label>
+        <input type="number" id="visitor-headcount-input" min="1" style="width:100px;">
+      </div>
       <div class="field">
         <label id="visitor-host-label">対応する社員</label>
         <div style="display:flex;align-items:center;gap:8px;">
@@ -1877,7 +1889,7 @@
         </div>
       </div>
       <div class="field">
-        <label id="visitor-datetime-label">日時</label>
+        <label id="visitor-datetime-label">開始日時</label>
         <div style="display:flex;gap:8px;">
           <span class="date-picker-label" id="visitor-date-picker" style="flex:1;"></span>
           <button type="button" class="date-field-btn placeholder" id="visitor-time-btn" data-value="" style="flex:1;"></button>
@@ -1889,10 +1901,6 @@
           <span class="date-picker-label" id="visitor-enddate-picker" style="flex:1;"></span>
           <button type="button" class="date-field-btn placeholder" id="visitor-endtime-btn" data-value="" style="flex:1;"></button>
         </div>
-      </div>
-      <div class="field" id="visitor-headcount-field">
-        <label>人数（任意）</label>
-        <input type="number" id="visitor-headcount-input" min="1" style="width:100px;">
       </div>
       <div class="field">
         <label id="visitor-purpose-label">備考（任意）</label>
@@ -2864,6 +2872,54 @@ function refreshDashboardIfActive(){
     try{ renderDashboard(); }catch(e){ /* ignore */ }
   }
 }
+let dashVisitorsRange = "today"; // "today"=本日の予定のみ／"upcoming"=今日以降（従来通り）
+// ある出入予定が指定日を含む期間かどうか（終了日が未設定なら開始日=終了日として扱う）
+function visitorEntryCoversDate(v, dateStr){
+  const end = v.endDate || v.date;
+  return (v.date||"") <= dateStr && dateStr <= end;
+}
+document.querySelectorAll("#dash-visitors-range-toggle .seg-btn").forEach(btn=>{
+  btn.addEventListener("click", (e)=>{
+    e.stopPropagation();
+    const range = btn.dataset.visitorsrange;
+    if(dashVisitorsRange===range) return;
+    dashVisitorsRange = range;
+    document.querySelectorAll("#dash-visitors-range-toggle .seg-btn").forEach(b=>{
+      b.classList.toggle("active", b.dataset.visitorsrange===range);
+    });
+    renderDashboardVisitorsCard();
+  });
+});
+// ---- 出入予定カード（来客・役員。出入予定管理権限者は全員分、それ以外は自分が対象の分のみ） ----
+function renderDashboardVisitorsCard(){
+  const visitorsBody = document.getElementById("dash-visitors-body");
+  if(!visitorsBody) return;
+  visitorsBody.innerHTML = "";
+  const todayStrForVisitors = todayStr();
+  const visibleVisitors = isVisitorManager
+    ? visitorSchedulesAll
+    : visitorSchedulesAll.filter(v=> getVisitorHostEmails(v).includes(currentUser.email));
+  const targetVisitors = dashVisitorsRange==="today"
+    ? visibleVisitors
+        .filter(v=> visitorEntryCoversDate(v, todayStrForVisitors))
+        .sort((a,b)=> ((a.time)||"").localeCompare((b.time)||""))
+    : visibleVisitors
+        .filter(v=> (v.date||"") >= todayStrForVisitors)
+        .sort((a,b)=> (a.date+((a.time)||"")).localeCompare(b.date+((b.time)||"")));
+  if(targetVisitors.length===0){
+    visitorsBody.innerHTML = `<div class="dash-empty">${dashVisitorsRange==="today" ? "本日の出入予定はありません。" : "今後の出入予定はありません。"}</div>`;
+  } else {
+    targetVisitors.slice(0,5).forEach(v=>{
+      const row = document.createElement("div");
+      row.className = "dash-row";
+      const isOfficerRow = v.type==="officer";
+      const pillHtml = `<span class="visitor-type-pill ${isOfficerRow ? "type-officer" : "type-visitor"}" style="padding:1px 8px;font-size:11px;">${isOfficerRow ? "役員" : "来客"}</span>`;
+      row.innerHTML = `<span>${pillHtml} ${escapeHtml(v.visitorName||"")}　${escapeHtml(formatVisitorHostNames(v))}</span><span class="dash-row-sub">${escapeHtml(formatVisitorDateTimeRange(v))}</span>`;
+      row.addEventListener("click", ()=> switchToTab("visitors"));
+      visitorsBody.appendChild(row);
+    });
+  }
+}
 function renderDashboard(){
   if(!currentUser) return; // ログイン処理が終わる前に呼ばれた場合は何もしない（ログイン完了後、改めて描画される）
   // ---- 安否確認 ----
@@ -3016,31 +3072,7 @@ function renderDashboard(){
     });
   }
 
-  // ---- 出入予定（来客・役員。今日以降。出入予定管理権限者は全員分、それ以外は自分が対象の分のみ） ----
-  const visitorsBody = document.getElementById("dash-visitors-body");
-  if(visitorsBody){
-    visitorsBody.innerHTML = "";
-    const todayStrForVisitors = todayStr();
-    const visibleVisitors = isVisitorManager
-      ? visitorSchedulesAll
-      : visitorSchedulesAll.filter(v=> getVisitorHostEmails(v).includes(currentUser.email));
-    const upcomingVisitors = visibleVisitors
-      .filter(v=> (v.date||"") >= todayStrForVisitors)
-      .sort((a,b)=> (a.date+((a.time)||"")).localeCompare(b.date+((b.time)||"")));
-    if(upcomingVisitors.length===0){
-      visitorsBody.innerHTML = `<div class="dash-empty">今後の出入予定はありません。</div>`;
-    } else {
-      upcomingVisitors.slice(0,5).forEach(v=>{
-        const row = document.createElement("div");
-        row.className = "dash-row";
-        const isOfficerRow = v.type==="officer";
-        const pillHtml = `<span class="visitor-type-pill ${isOfficerRow ? "type-officer" : "type-visitor"}" style="padding:1px 8px;font-size:11px;">${isOfficerRow ? "役員" : "来客"}</span>`;
-        row.innerHTML = `<span>${pillHtml} ${escapeHtml(v.visitorName||"")}　${escapeHtml(formatVisitorHostNames(v))}</span><span class="dash-row-sub">${escapeHtml(formatVisitorDateTimeRange(v))}</span>`;
-        row.addEventListener("click", ()=> switchToTab("visitors"));
-        visitorsBody.appendChild(row);
-      });
-    }
-  }
+  renderDashboardVisitorsCard();
 
   // ---- 自分の機材（借用中の測量機器/ドローン＋自分が注文者の敷鉄板） ----
   const checkoutBody = document.getElementById("dash-checkout-body");
@@ -3858,10 +3890,30 @@ function formatVisitorHostNames(v){
 function getVisitorDateTimeParts(v){
   const start = `${formatDateJP(v.date)} ${v.time||""}`.trim();
   let end = "";
-  if(v.endDate && v.endTime){
-    end = v.endDate===v.date ? `〜${v.endTime}` : `〜${formatDateJP(v.endDate)} ${v.endTime}`;
+  if(v.endDate){
+    if(v.endDate===v.date){
+      end = v.endTime ? `〜${v.endTime}` : ""; // 同日で終了時刻未指定の場合は特に付け足す情報がない
+    } else {
+      end = v.endTime ? `〜${formatDateJP(v.endDate)} ${v.endTime}` : `〜${formatDateJP(v.endDate)}`;
+    }
   }
   return { start, end };
+}
+// 複数日にまたがる予定（endDateが開始日と異なる）が含む日付を、開始日から終了日まで
+// すべて列挙する（カレンダー表示で期間として表現するために使う）。念のため上限を設けて暴走を防ぐ。
+function getVisitorEntryDatesInRange(v){
+  if(!v.endDate || v.endDate <= v.date) return [v.date];
+  const dates = [v.date];
+  let cur = v.date;
+  let guard = 0;
+  while(cur < v.endDate && guard < 366){
+    const d = new Date(cur + "T00:00:00");
+    d.setDate(d.getDate()+1);
+    cur = `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+    dates.push(cur);
+    guard++;
+  }
+  return dates;
 }
 function formatVisitorDateTimeRange(v){
   const { start, end } = getVisitorDateTimeParts(v);
@@ -4046,8 +4098,17 @@ function renderVisitorCalendar(){
   if(visitorTypeFilter) filtered = filtered.filter(v=> (v.type||"visitor")===visitorTypeFilter);
   if(visitorHostFilterEmail) filtered = filtered.filter(v=> getVisitorHostEmails(v).includes(visitorHostFilterEmail));
 
+  // 複数日にまたがる予定は、期間内のすべての日の行に表示する（開始日／終了日／中日で見た目を変える）
   const byDate = {};
-  filtered.forEach(v=>{ if(v.date){ (byDate[v.date] = byDate[v.date] || []).push(v); } });
+  filtered.forEach(v=>{
+    if(!v.date) return;
+    const rangeDates = getVisitorEntryDatesInRange(v);
+    rangeDates.forEach(dateStr=>{
+      (byDate[dateStr] = byDate[dateStr] || []).push({
+        v, isStart: dateStr===v.date, isEnd: dateStr===rangeDates[rangeDates.length-1]
+      });
+    });
+  });
 
   for(let day=1; day<=daysN; day++){
     const dateStr = `${y}-${pad2(m)}-${pad2(day)}`;
@@ -4071,19 +4132,27 @@ function renderVisitorCalendar(){
     const body = document.createElement("div");
     body.className = "vcal-day-body";
     body.title = "クリックしてこの日の出入予定を追加";
-    const dayEntries = (byDate[dateStr]||[]).slice().sort((a,b)=> (a.time||"").localeCompare(b.time||""));
+    const dayEntries = (byDate[dateStr]||[]).slice().sort((a,b)=> ((a.v.time)||"").localeCompare((b.v.time)||""));
     if(dayEntries.length===0){
       body.innerHTML = `<div class="vcal-day-empty">予定なし</div>`;
     } else {
-      dayEntries.forEach(v=>{
+      dayEntries.forEach(({v, isStart, isEnd})=>{
         const isOfficer = (v.type||"visitor")==="officer";
+        const isMultiDay = !(isStart && isEnd);
         const nameWithCount = v.headcount ? `${v.visitorName||""}(${v.headcount}名)` : (v.visitorName||"");
+        // 複数日にまたがる予定：開始日は開始時刻、終了日は終了時刻、中日は「期間中」を表示する
+        let timeLabel = v.time || "";
+        if(isMultiDay){
+          if(isStart) timeLabel = v.time || "終日";
+          else if(isEnd) timeLabel = v.endTime ? `〜${v.endTime}` : "終日";
+          else timeLabel = "期間中";
+        }
         const entry = document.createElement("div");
-        entry.className = "vcal-entry";
+        entry.className = "vcal-entry" + (isMultiDay ? " vcal-entry-period" : "");
         entry.title = "クリックして編集";
         entry.innerHTML =
           `<span class="visitor-type-pill ${isOfficer ? "type-officer" : "type-visitor"}" style="padding:1px 7px;font-size:10.5px;">${isOfficer ? "役員" : "来客"}</span>` +
-          `<span class="vcal-entry-time">${escapeHtml(v.time||"")}</span>` +
+          `<span class="vcal-entry-time">${escapeHtml(timeLabel)}</span>` +
           `<span class="vcal-entry-name">${escapeHtml(nameWithCount)}</span>` +
           `<span class="vcal-entry-host">${escapeHtml(formatVisitorHostNames(v))}</span>`;
         entry.addEventListener("click", (e)=>{
@@ -4203,7 +4272,7 @@ function setVisitorModalEndDate(dateStr){
 function applyVisitorTypeUI(type){
   document.getElementById("visitor-name-label").textContent = type==="officer" ? "予定内容" : "来客者名";
   document.getElementById("visitor-host-label").textContent = type==="officer" ? "対象役員（複数可）" : "対応する社員（複数可）";
-  document.getElementById("visitor-datetime-label").textContent = type==="officer" ? "日時（時刻は任意）" : "日時";
+  document.getElementById("visitor-datetime-label").textContent = type==="officer" ? "開始日時（時刻は任意）" : "開始日時";
   document.getElementById("visitor-headcount-field").style.display = type==="officer" ? "none" : "";
   document.querySelectorAll("#visitor-type-toggle .seg-btn").forEach(b=>{
     b.classList.toggle("active", b.dataset.visitortype===type);
@@ -4312,13 +4381,14 @@ document.getElementById("visitor-modal-save").addEventListener("click", async ()
   if(type==="officer" && !isVisitorManager){ errEl.textContent = "役員予定の登録には出入予定管理権限が必要です。"; return; }
   const endDate = visitorModalEndDate || "";
   const endTime = document.getElementById("visitor-endtime-btn").dataset.value || "";
-  if((endDate && !endTime) || (!endDate && endTime)){
-    errEl.textContent = "終了日時は、日付・時刻の両方を選択するか、両方とも空欄にしてください。";
+  // 終了時刻は常に任意。ただし終了時刻だけ指定して終了日が未指定、という状態は不可とする
+  if(endTime && !endDate){
+    errEl.textContent = "終了時刻を指定する場合は、終了日もあわせて選択してください。";
     return;
   }
-  if(endDate && endTime){
+  if(endDate){
     const startKey = `${visitorModalDate}T${time || "00:00"}`;
-    const endKey = `${endDate}T${endTime}`;
+    const endKey = `${endDate}T${endTime || "23:59"}`; // 終了時刻未指定の場合は、その日の終わりまでとして開始日時との前後関係を確認する
     if(endKey < startKey){ errEl.textContent = "終了日時が開始日時より前になっています。"; return; }
   }
   // 過去日NG・休日確認は新規追加時のみ行う（既存の予定を編集・修正する際は対象外。
