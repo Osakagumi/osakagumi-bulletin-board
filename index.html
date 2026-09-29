@@ -1706,7 +1706,10 @@
       <h3 id="checkout-modal-title">貸出する</h3>
       <div class="field" id="checkout-recipient-field" style="display:none;">
         <label>貸出先</label>
-        <select id="checkout-recipient-select" style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;"></select>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span id="checkout-recipient-display" style="flex:1;color:var(--muted);">未選択</span>
+          <button type="button" class="btn-ghost" id="checkout-recipient-pick-btn" style="border:1px solid var(--line);">選択</button>
+        </div>
       </div>
       <div class="field">
         <label>返却予定日（任意）</label>
@@ -3504,6 +3507,15 @@ async function confirmAndTransition(eq, targetStatus, extra){
 }
 
 let checkoutModalTarget = null;
+let checkoutRecipientEmail = null;
+let checkoutRecipientName = null;
+function setCheckoutRecipient(emp){
+  checkoutRecipientEmail = emp ? emp.email : null;
+  checkoutRecipientName = emp ? (emp.name || emp.email) : null;
+  const display = document.getElementById("checkout-recipient-display");
+  display.textContent = checkoutRecipientName || "未選択";
+  display.style.color = checkoutRecipientName ? "var(--text)" : "var(--muted)";
+}
 function openCheckoutModal(eq, targetStatus, mode){
   checkoutModalTarget = { eq, targetStatus, mode: mode||"borrow" };
   const isLend = checkoutModalTarget.mode === "lend";
@@ -3514,22 +3526,19 @@ function openCheckoutModal(eq, targetStatus, mode){
   const recipientField = document.getElementById("checkout-recipient-field");
   recipientField.style.display = isLend ? "block" : "none";
   if(isLend){
-    const select = document.getElementById("checkout-recipient-select");
-    select.innerHTML = "";
-    const sortedEmployees = sortEmployeesByNo(employeesAll.filter(e=>!!e.email && !e.hidden && !e.isSharedAccount));
-    sortedEmployees.forEach(emp=>{
-      const opt = document.createElement("option");
-      opt.value = emp.email;
-      opt.textContent = emp.name || emp.email;
-      select.appendChild(opt);
-    });
-    // 現在ログイン中の自分をデフォルト選択にしない（誰かに貸し出す想定のため一覧の先頭のまま）
+    // 貸出先は社員選択モーダル（共通部品）で選ぶため、開くたびに未選択の状態に戻す
+    // （誰かに貸し出す想定のため、現在ログイン中の自分をデフォルト選択にはしない）。
+    setCheckoutRecipient(null);
   }
 
   setDateFieldValue(document.getElementById("checkout-return-date"), eq.returnDueDate || "");
   document.getElementById("checkout-modal-error").textContent = "";
   document.getElementById("checkout-modal").classList.add("show");
 }
+document.getElementById("checkout-recipient-pick-btn")?.addEventListener("click", async ()=>{
+  const emp = await openEmployeePicker();
+  if(emp) setCheckoutRecipient(emp);
+});
 document.getElementById("checkout-return-date").addEventListener("click", (e)=>{
   const el = e.currentTarget;
   openCalendarPicker(el, el.dataset.value, {
@@ -3547,12 +3556,9 @@ document.getElementById("checkout-modal-confirm").addEventListener("click", asyn
   const returnDueDate = document.getElementById("checkout-return-date").dataset.value || "";
   const extra = { returnDueDate };
   if(mode==="lend"){
-    const select = document.getElementById("checkout-recipient-select");
-    const recipientEmail = select.value;
-    if(!recipientEmail){ errEl.textContent = "貸出先を選択してください。"; return; }
-    const recipient = employeesAll.find(e=>e.email===recipientEmail);
-    extra.holderEmail = recipientEmail;
-    extra.holderName = (recipient && recipient.name) || recipientEmail;
+    if(!checkoutRecipientEmail){ errEl.textContent = "貸出先を選択してください。"; return; }
+    extra.holderEmail = checkoutRecipientEmail;
+    extra.holderName = checkoutRecipientName || checkoutRecipientEmail;
   } else {
     extra.holderEmail = currentUser.email;
     extra.holderName = myDisplayName();
