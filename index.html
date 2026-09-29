@@ -1090,7 +1090,7 @@
             <select id="visitor-host-filter-select"></select>
             <label style="font-size:12.5px;color:var(--muted);white-space:nowrap;">日付：</label>
             <select id="visitor-date-filter-select"></select>
-            <button type="button" class="visitor-type-pill-btn type-all active" id="visitor-type-filter-all-btn" data-visitortypefilter="">すべて</button>
+            <button type="button" class="btn-ghost" id="visitor-type-filter-all-btn" style="border:1px solid var(--line);">すべて</button>
           </div>
         </div>
         <div id="visitor-list"></div>
@@ -3862,7 +3862,7 @@ document.getElementById("visitor-date-filter-select").addEventListener("change",
 // 種別の絞り込み：「来客」「役員」の2つはグループ内でのトグル。
 // 「すべて」はグループ外の独立ボタン（右端配置）で、種別だけでなく社員・日付の条件もまとめて解除する。
 function updateVisitorTypeFilterUI(){
-  document.querySelectorAll("#visitor-type-filter-toggle .visitor-type-pill-btn, #visitor-type-filter-all-btn").forEach(b=>{
+  document.querySelectorAll("#visitor-type-filter-toggle .visitor-type-pill-btn").forEach(b=>{
     b.classList.toggle("active", (b.dataset.visitortypefilter || "") === visitorTypeFilter);
   });
 }
