@@ -1083,7 +1083,6 @@
           <button class="btn-primary" id="visitor-new-btn">追加</button>
           <div class="visitor-toolbar-filters">
             <div class="visitor-type-pill-group" id="visitor-type-filter-toggle">
-              <button type="button" class="visitor-type-pill-btn active type-all" data-visitortypefilter="">すべて</button>
               <button type="button" class="visitor-type-pill-btn type-visitor" data-visitortypefilter="visitor">来客</button>
               <button type="button" class="visitor-type-pill-btn type-officer" data-visitortypefilter="officer">役員</button>
             </div>
@@ -1091,6 +1090,7 @@
             <select id="visitor-host-filter-select"></select>
             <label style="font-size:12.5px;color:var(--muted);white-space:nowrap;">日付：</label>
             <select id="visitor-date-filter-select"></select>
+            <button type="button" class="visitor-type-pill-btn type-all active" id="visitor-type-filter-all-btn" data-visitortypefilter="">すべて</button>
           </div>
         </div>
         <div id="visitor-list"></div>
@@ -3843,27 +3843,44 @@ function populateVisitorFilterSelects(){
   hostSel.value = hostOptions.some(([email])=>email===prevHost) ? prevHost : "";
   visitorHostFilterEmail = hostSel.value || null;
 
+  // 「今日」は日々変わる相対的な選択肢のため、実在する日付一覧とは別に固定で先頭寄りに挿入する
   const dateOptions = [...new Set(visible.map(v=>v.date).filter(Boolean))].sort();
   const prevDate = dateSel.value;
-  dateSel.innerHTML = `<option value="">すべて表示</option>` +
+  dateSel.innerHTML = `<option value="">すべて表示</option><option value="__today__">今日</option>` +
     dateOptions.map(d=> `<option value="${d}">${formatDateJP(d)}</option>`).join("");
-  dateSel.value = dateOptions.includes(prevDate) ? prevDate : "";
-  visitorDateFilter = dateSel.value || "";
+  dateSel.value = (prevDate === "__today__") ? "__today__" : (dateOptions.includes(prevDate) ? prevDate : "");
+  visitorDateFilter = dateSel.value === "__today__" ? todayStr() : (dateSel.value || "");
 }
 document.getElementById("visitor-host-filter-select").addEventListener("change", (e)=>{
   visitorHostFilterEmail = e.target.value || null;
   renderVisitorsTab();
 });
 document.getElementById("visitor-date-filter-select").addEventListener("change", (e)=>{
-  visitorDateFilter = e.target.value || "";
+  visitorDateFilter = e.target.value === "__today__" ? todayStr() : (e.target.value || "");
   renderVisitorsTab();
 });
+// 種別の絞り込み：「来客」「役員」の2つはグループ内でのトグル。
+// 「すべて」はグループ外の独立ボタン（右端配置）で、種別だけでなく社員・日付の条件もまとめて解除する。
+function updateVisitorTypeFilterUI(){
+  document.querySelectorAll("#visitor-type-filter-toggle .visitor-type-pill-btn, #visitor-type-filter-all-btn").forEach(b=>{
+    b.classList.toggle("active", (b.dataset.visitortypefilter || "") === visitorTypeFilter);
+  });
+}
 document.querySelectorAll("#visitor-type-filter-toggle .visitor-type-pill-btn").forEach(btn=>{
   btn.addEventListener("click", ()=>{
     visitorTypeFilter = btn.dataset.visitortypefilter || "";
-    document.querySelectorAll("#visitor-type-filter-toggle .visitor-type-pill-btn").forEach(b=> b.classList.toggle("active", b===btn));
+    updateVisitorTypeFilterUI();
     renderVisitorsTab();
   });
+});
+document.getElementById("visitor-type-filter-all-btn").addEventListener("click", ()=>{
+  visitorTypeFilter = "";
+  visitorHostFilterEmail = null;
+  visitorDateFilter = "";
+  document.getElementById("visitor-host-filter-select").value = "";
+  document.getElementById("visitor-date-filter-select").value = "";
+  updateVisitorTypeFilterUI();
+  renderVisitorsTab();
 });
 function renderVisitorsTab(){
   const body = document.getElementById("visitor-list");
