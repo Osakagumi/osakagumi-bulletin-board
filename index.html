@@ -10744,9 +10744,11 @@ document.getElementById("chat-new-btn")?.addEventListener("click", async ()=>{
 let chatCleanupLastRun = 0;
 async function cleanupOldChatMessages(){
   const now0 = Date.now();
-  // 5分以内に実行済みなら再実行しない（Firestoreへの読み取りが頻繁になりすぎるのを防ぐため）。
-  // これにより、チャット画面を開きっぱなしにしていても、5分おきに削除対象がないか再確認される。
-  if(now0 - chatCleanupLastRun < 5*60*1000) return;
+  // 1時間以内に実行済みなら再実行しない（Firestoreへの読み取りを抑えるため）。
+  // バックグラウンドでの定期実行はやめ、チャットタブを開いた時（switchToTab側の呼び出し）
+  // にだけ実行されるようにしたので、このガードは「同じ人が短時間に何度もタブを
+  // 開閉した場合に読み取りが増えすぎないようにする」ためのもの。
+  if(now0 - chatCleanupLastRun < 60*60*1000) return;
   chatCleanupLastRun = now0;
   try{
     const now = Date.now();
@@ -10790,10 +10792,6 @@ async function cleanupOldChatMessages(){
     }
   }catch(e){ console.error("[チャット自動削除エラー]", e); }
 }
-// タブ切り替え時だけでなく、チャット画面を開きっぱなしにしていても削除対象を取りこぼさないよう、
-// 5分ごとに自動チェックする（cleanupOldChatMessages自体が5分間隔でスロットルされているため、
-// この間隔で呼んでも問題ない）
-setInterval(()=>{ if(currentUser) cleanupOldChatMessages(); }, 5*60*1000);
 /* =========================================================
    業務情報（Googleドライブ上のファイルをピル切り替えで表示）
 ========================================================= */
