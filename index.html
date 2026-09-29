@@ -2263,7 +2263,13 @@ async function doLogin(){
     errEl.textContent = "ログインに失敗しました。メールアドレスまたはパスワードをご確認ください。";
   }
 }
-document.getElementById("logout-btn").addEventListener("click", ()=> signOut(auth));
+document.getElementById("logout-btn").addEventListener("click", ()=>{
+  if(!confirmDiscardWbPresetPendingIfAny()) return;
+  signOut(auth);
+});
+document.getElementById("admin-link").addEventListener("click", (e)=>{
+  if(!confirmDiscardWbPresetPendingIfAny()) e.preventDefault();
+});
 
 onAuthStateChanged(auth, async (user)=>{
   if(user){
@@ -2874,6 +2880,12 @@ document.getElementById("dash-chat-link").addEventListener("click", ()=> switchT
 
 function switchToTab(viewName){
   const previousView = document.querySelector(".tab-btn.active")?.dataset.view;
+  // 行き先タブの「事前設定」画面で未保存の変更があるまま、他のタブへ切り替えようとした場合も
+  // 一覧・状態別への切り替え時と同じ確認を行う（切り替え先が再び「行き先」の場合は聞かない）。
+  if(previousView==="whereabouts" && viewName!=="whereabouts" && wbCurrentView==="preset" &&
+     !confirmDiscardWbPresetPendingIfAny()){
+    return;
+  }
   if(previousView==="chat" && viewName!=="chat" && chatCurrentConversationId &&
      document.getElementById("chat-thread-view").style.display !== "none"){
     // チャットの会話画面から離れる瞬間を記録しておく（30分以内に戻ってきたら同じ会話を再度開く）
@@ -5683,9 +5695,12 @@ window.addEventListener("resize", ()=>{
 });
 
 // 時間休の開始・終了時刻をまたいだ際、表示に自動反映されるよう1分ごとに再描画する
+// （renderWhereabouts()は一覧・ボード表示のみを再描画するため、「事前設定」画面を見ている間は
+// 対象外にする。時間休は当日の一覧・ボード表示にのみ関わり、事前設定には関係が無いうえ、
+// 定期的な再描画そのものが不要に見えてしまうため）
 setInterval(()=>{
   const wbView = document.getElementById("view-whereabouts");
-  if(wbView && wbView.style.display !== "none"){
+  if(wbView && wbView.style.display !== "none" && wbCurrentView !== "preset"){
     renderWhereabouts();
   }
 }, 60000);
