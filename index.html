@@ -701,6 +701,38 @@
     .notice-table td:last-child{ order:5; margin-left:auto; }
     .notice-table td:last-child .n-detail-btn{ padding:7px 16px; font-size:13px; }
   }
+  /* 出入予定一覧：各列の幅を絞り、PCでは1行に収める専用テーブル */
+  .visitor-table{width:100%;border-collapse:collapse;background:var(--surface);border:1.5px solid var(--line);border-radius:10px;overflow:hidden;table-layout:fixed;}
+  .visitor-table th{text-align:left;font-size:11.5px;color:var(--muted);padding:8px 8px;border-bottom:1.5px solid var(--line);background:#F7F9FB;white-space:nowrap;}
+  .visitor-table td{padding:8px 8px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:middle;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .visitor-table tr:last-child td{border-bottom:none;}
+  .visitor-table .vt-col-type{width:52px;}
+  .visitor-table .vt-col-name{width:auto;}
+  .visitor-table .vt-col-host{width:88px;}
+  .visitor-table .vt-col-datetime{width:120px;}
+  .visitor-table .vt-col-count{width:46px;text-align:center;}
+  .visitor-table .vt-col-note{width:130px;}
+  .visitor-table .vt-col-actions{width:100px;white-space:nowrap;overflow:visible;text-align:right;}
+  @media (max-width:720px){
+    .visitor-table thead{ display:none; }
+    .visitor-table, .visitor-table tbody{ display:block; width:100%; }
+    .visitor-table tr{
+      display:flex; flex-wrap:wrap; align-items:center; width:100%; box-sizing:border-box;
+      gap:4px 10px; padding:10px 12px; border-bottom:1px solid var(--line);
+    }
+    .visitor-table tr:last-child{ border-bottom:none; }
+    .visitor-table td{
+      display:inline-block; padding:0; border-bottom:none; width:auto; max-width:none;
+      white-space:nowrap; overflow:visible; text-overflow:clip; font-size:12.5px;
+    }
+    .visitor-table .vt-col-type{ order:1; }
+    .visitor-table .vt-col-name{ order:2; font-size:14px; font-weight:700; white-space:normal; flex:1 1 auto; min-width:0; }
+    .visitor-table .vt-col-host{ order:3; color:var(--muted); }
+    .visitor-table .vt-col-datetime{ order:4; color:var(--muted); }
+    .visitor-table .vt-col-count{ order:5; color:var(--muted); }
+    .visitor-table .vt-col-note{ order:6; width:100%; color:var(--muted); white-space:normal; }
+    .visitor-table .vt-col-actions{ order:7; width:100%; text-align:right; margin-top:2px; }
+  }
   .empty-state{padding:24px;text-align:center;color:var(--muted);font-size:13.5px;}
 
   #notice-detail-modal .modal{width:520px;max-width:92vw;}
@@ -1044,13 +1076,12 @@
         <div class="section-toolbar visitor-toolbar">
           <button class="btn-primary" id="visitor-new-btn">追加</button>
           <div class="visitor-toolbar-filters">
-            <label style="font-size:12.5px;color:var(--muted);white-space:nowrap;">種別：</label>
             <div class="visitor-type-pill-group" id="visitor-type-filter-toggle">
               <button type="button" class="visitor-type-pill-btn active type-all" data-visitortypefilter="">すべて</button>
               <button type="button" class="visitor-type-pill-btn type-visitor" data-visitortypefilter="visitor">来客</button>
               <button type="button" class="visitor-type-pill-btn type-officer" data-visitortypefilter="officer">役員</button>
             </div>
-            <label style="font-size:12.5px;color:var(--muted);white-space:nowrap;">対象社員：</label>
+            <label style="font-size:12.5px;color:var(--muted);white-space:nowrap;">社員：</label>
             <button type="button" class="btn-ghost" id="visitor-host-filter-btn" style="border:1px solid var(--line);">すべて</button>
             <button class="btn-ghost" id="visitor-host-filter-clear-btn" style="border:1px solid var(--line);display:none;">クリア</button>
             <label style="font-size:12.5px;color:var(--muted);white-space:nowrap;">日付：</label>
@@ -3866,26 +3897,36 @@ function renderVisitorsTab(){
     return;
   }
   const table = document.createElement("table");
-  table.className = "notice-table";
-  table.innerHTML = `<thead><tr><th style="width:60px;">種別</th><th>来客者名／予定内容</th><th style="width:140px;">対象社員</th><th style="width:150px;">日時</th><th style="width:70px;">人数</th><th>備考</th><th style="width:110px;"></th></tr></thead>`;
+  table.className = "visitor-table";
+  table.innerHTML = `<thead><tr><th class="vt-col-type">種別</th><th class="vt-col-name">来客者名／予定内容</th><th class="vt-col-host">対象社員</th><th class="vt-col-datetime">日時</th><th class="vt-col-count">人数</th><th class="vt-col-note">備考</th><th class="vt-col-actions"></th></tr></thead>`;
   const tbody = document.createElement("tbody");
   sorted.forEach(v=>{
     const tr = document.createElement("tr");
     const canEdit = canEditVisitorEntry(v);
     const isOfficer = (v.type||"visitor")==="officer";
     const tdType = document.createElement("td");
+    tdType.className = "vt-col-type";
     tdType.innerHTML = `<span class="visitor-type-pill ${isOfficer ? "type-officer" : "type-visitor"}">${isOfficer ? "役員" : "来客"}</span>`;
     const tdName = document.createElement("td");
+    tdName.className = "vt-col-name";
+    tdName.title = v.visitorName || "";
     tdName.textContent = v.visitorName || "";
     const tdHost = document.createElement("td");
+    tdHost.className = "vt-col-host";
+    tdHost.title = v.hostName || v.hostEmail || "";
     tdHost.textContent = v.hostName || v.hostEmail || "";
     const tdDateTime = document.createElement("td");
+    tdDateTime.className = "vt-col-datetime";
     tdDateTime.textContent = `${formatDateJP(v.date)} ${v.time||""}`;
     const tdHeadcount = document.createElement("td");
+    tdHeadcount.className = "vt-col-count";
     tdHeadcount.textContent = v.headcount ? `${v.headcount}名` : "";
     const tdPurpose = document.createElement("td");
+    tdPurpose.className = "vt-col-note";
+    tdPurpose.title = v.purpose || "";
     tdPurpose.textContent = v.purpose || "";
     const tdActions = document.createElement("td");
+    tdActions.className = "vt-col-actions";
     if(canEdit){
       const editBtn = document.createElement("button");
       editBtn.className = "btn-ghost";
