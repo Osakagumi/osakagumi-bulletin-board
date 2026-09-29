@@ -63,6 +63,13 @@ service cloud.firestore {
           exists(/databases/$(database)/documents/safety_senders/$(request.auth.token.email)));
     }
 
+    // 来客予定管理権限：本人以外の来客予定も含めて編集・削除できる（システム管理者に準じる）
+    function isVisitorManager() {
+      return isAdmin() ||
+        (isSignedIn() &&
+          exists(/databases/$(database)/documents/visitor_managers/$(request.auth.token.email)));
+    }
+
     // システム管理者一覧: ログインしていれば読めるが、書き込みはシステム管理者のみ
     match /admins/{email} {
       allow read: if isSignedIn();
@@ -312,6 +319,21 @@ service cloud.firestore {
         request.resource.data.createdByEmail == request.auth.token.email;
       allow update, delete: if isSignedIn() &&
         (resource.data.createdByEmail == request.auth.token.email || isAdmin() || isEquipmentManager());
+    }
+
+    // 来客予定管理権限一覧: ログインしていれば読めるが、書き込みはシステム管理者のみ
+    match /visitor_managers/{email} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // 来客予定: 全員が読める（一覧の絞り込み表示はアプリ側で行う）。
+    // 作成は全社員が可能（本人のcreatedByEmailでのみ）。更新・削除は対応する社員本人、または来客予定管理権限者のみ。
+    match /visitor_schedules/{visitId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.createdByEmail == request.auth.token.email;
+      allow update, delete: if isSignedIn() &&
+        (resource.data.hostEmail == request.auth.token.email || isVisitorManager());
     }
   }
 }

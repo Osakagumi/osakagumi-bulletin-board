@@ -1759,7 +1759,7 @@ function applySectionAccessToNav(){
   });
 }
 let myHiddenTabsForAdmin = [];
-const GENERAL_HIDEABLE_TAB_IDS_FOR_ADMIN = ["notices","calendar","whereabouts","chat","reserve","checkout","contracts","bizinfo"];
+const GENERAL_HIDEABLE_TAB_IDS_FOR_ADMIN = ["notices","calendar","whereabouts","chat","reserve","checkout","visitors","contracts","bizinfo"];
 onAuthStateChanged(auth, async (user)=>{
   if(!user){
     document.getElementById("gate").style.display = "flex";
@@ -1831,6 +1831,7 @@ onAuthStateChanged(auth, async (user)=>{
   initCalendarYearsListener();
   initContractEditorsListener();
   initSafetySendersListener();
+  initVisitorManagersListener();
   populateSingleEmpPermissionsChecks();
   initBizInfoListener();
   initBizInfoCategoriesListener();
@@ -4014,6 +4015,13 @@ function initContractEditorsListener(){
     renderContractEditors(lastContractEditorEmails);
   });
 }
+
+let lastVisitorManagerEmails = [];
+function initVisitorManagersListener(){
+  onSnapshot(collection(db,"visitor_managers"), snap=>{
+    lastVisitorManagerEmails = sortEmailsByEmployeeNo(snap.docs.map(d=>d.id));
+  });
+}
 let contractDefaultDepartmentIdAdmin = null;
 function initContractSettingsListener(){
   onSnapshot(doc(db,"app_settings","contract_defaults"), snap=>{
@@ -4377,7 +4385,8 @@ const PERMISSION_DEFS = [
   { collection: "equipment_managers", label: "設備管理者", getList: ()=> lastEqManagerEmails },
   { collection: "contract_editors", label: "入札編集権限", getList: ()=> lastContractEditorEmails },
   { collection: "calendar_editors", label: "カレンダー編集権限", getList: ()=> lastCalEditorEmails },
-  { collection: "safety_senders", label: "安否確認発信権限", getList: ()=> lastSafetySenderEmails }
+  { collection: "safety_senders", label: "安否確認発信権限", getList: ()=> lastSafetySenderEmails },
+  { collection: "visitor_managers", label: "来客予定管理権限", getList: ()=> lastVisitorManagerEmails }
 ];
 
 /* ============================================================
@@ -4491,6 +4500,7 @@ const HIDEABLE_TABS = [
   { id:"chat", label:"チャット" },
   { id:"reserve", label:"予約" },
   { id:"checkout", label:"機材" },
+  { id:"visitors", label:"来客予定" },
   { id:"contracts", label:"入札" },
   { id:"bizinfo", label:"業務情報" }
 ];

@@ -931,6 +931,7 @@
       <button class="tab-btn" data-view="contracts">入札</button>
       <button class="tab-btn" data-view="bizinfo">業務情報</button>
       <button class="tab-btn" data-view="checkout">機材</button>
+      <button class="tab-btn" data-view="visitors">来客予定</button>
       <button class="tab-btn" data-view="safety" style="display:none;">安否確認</button>
       <button class="tab-btn" data-view="safetyresponse" style="display:none;">安否回答</button>
       <button class="tab-reorder-btn" id="tab-reorder-toggle" title="タブの並び替え">並び替え</button>
@@ -1022,6 +1023,19 @@
           <thead><tr><th style="width:110px;">日付</th><th style="width:100px;">種別</th><th style="width:110px;">管理番号</th><th>設備名</th><th style="width:120px;">状態／数量</th></tr></thead>
           <tbody id="my-resources-list"></tbody>
         </table>
+      </section>
+
+      <!-- ---- 来客予定 ---- -->
+      <section id="view-visitors" style="display:none;">
+        <div class="section-toolbar">
+          <button class="btn-primary" id="visitor-new-btn">追加</button>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-left:auto;">
+            <label style="font-size:12.5px;color:var(--muted);white-space:nowrap;">日付で絞り込み：</label>
+            <button type="button" class="date-field-btn placeholder" id="visitor-date-filter-btn" data-value="">すべて表示</button>
+            <button class="btn-ghost" id="visitor-date-filter-clear-btn" style="border:1px solid var(--line);display:none;">クリア</button>
+          </div>
+        </div>
+        <div id="visitor-list"></div>
       </section>
 
       <!-- 敷鉄板 貸出・返却モーダル -->
@@ -1183,6 +1197,14 @@
                 <span class="dash-card-link" id="dash-checkout-link" title="機材を見る">▶</span>
               </div>
               <div id="dash-checkout-body"></div>
+            </div>
+            <div class="dash-card" id="dash-card-visitors">
+              <div class="dash-card-head">
+                <span class="dash-drag-handle" title="ドラッグして並び替え">⠿</span>
+                <h3>来客予定</h3>
+                <span class="dash-card-link" id="dash-visitors-link" title="来客予定を見る">▶</span>
+              </div>
+              <div id="dash-visitors-body"></div>
             </div>
             <div class="dash-card" id="dash-card-chat">
               <div class="dash-card-head">
@@ -1723,6 +1745,44 @@
     </div>
   </div>
 
+  <!-- ============ 来客予定 追加・編集モーダル ============ -->
+  <div class="modal-overlay" id="visitor-modal">
+    <div class="modal">
+      <h3 id="visitor-modal-title">来客予定を追加</h3>
+      <div class="field">
+        <label>来客者名</label>
+        <input type="text" id="visitor-name-input" maxlength="60" placeholder="例：〇〇建設　山田様">
+      </div>
+      <div class="field">
+        <label>対応する社員</label>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span id="visitor-host-display" style="flex:1;color:var(--muted);">未選択</span>
+          <button type="button" class="btn-ghost" id="visitor-host-pick-btn" style="border:1px solid var(--line);">選択</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>日時</label>
+        <div style="display:flex;gap:8px;">
+          <span class="date-picker-label" id="visitor-date-picker" style="flex:1;"></span>
+          <button type="button" class="date-field-btn placeholder" id="visitor-time-btn" data-value="" style="flex:1;"></button>
+        </div>
+      </div>
+      <div class="field">
+        <label>人数（任意）</label>
+        <input type="number" id="visitor-headcount-input" min="1" style="width:100px;">
+      </div>
+      <div class="field">
+        <label>来訪目的（任意）</label>
+        <textarea id="visitor-purpose-input" rows="2" maxlength="200"></textarea>
+      </div>
+      <div class="modal-err" id="visitor-modal-error"></div>
+      <div class="row-btns">
+        <button class="btn-ghost" id="visitor-modal-cancel" style="border:1px solid var(--line);">キャンセル</button>
+        <button class="btn-primary" id="visitor-modal-save">保存</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ============ INSPECTION DATE MODAL（前回点検日の編集） ============ -->
   <div class="modal-overlay" id="inspection-modal">
     <div class="modal">
@@ -2088,6 +2148,7 @@ let isCalendarEditor = false;
 let isContractEditor = false;
 let isSafetySender = false;
 let isBizInfoManager = false;
+let isVisitorManager = false;
 let isSharedAccount = false; // ログイン中の自分自身が「共用アカウント」かどうか
 // お知らせ掲示板モード（共用アカウント）のキオスク画面で、ログアウトボタンの代わりに
 // 使う「秘密のショートカットキー」の設定。管理画面（システム管理）から変更できる。
@@ -2294,7 +2355,7 @@ onAuthStateChanged(auth, async (user)=>{
     updateHeaderUserLabel();
     // 権限チェックは直列でawaitすると往復通信が5回分積み重なり、
     // 回線が遅いと数秒〜十数秒のロスになる。並列で一度に取得する。
-    const [adminDoc, posterDoc, noticeManagerDoc, wbEditorDoc, eqManagerDoc, calEditorDoc, contractEditorDoc, safetySenderDoc, bizInfoManagerSnap, meDoc] = await Promise.all([
+    const [adminDoc, posterDoc, noticeManagerDoc, wbEditorDoc, eqManagerDoc, calEditorDoc, contractEditorDoc, safetySenderDoc, visitorManagerDoc, bizInfoManagerSnap, meDoc] = await Promise.all([
       getDoc(doc(db, "admins", user.email)).catch(()=>null),
       getDoc(doc(db, "announcement_posters", user.email)).catch(()=>null),
       getDoc(doc(db, "notice_managers", user.email)).catch(()=>null),
@@ -2303,6 +2364,7 @@ onAuthStateChanged(auth, async (user)=>{
       getDoc(doc(db, "calendar_editors", user.email)).catch(()=>null),
       getDoc(doc(db, "contract_editors", user.email)).catch(()=>null),
       getDoc(doc(db, "safety_senders", user.email)).catch(()=>null),
+      getDoc(doc(db, "visitor_managers", user.email)).catch(()=>null),
       getDocs(query(collection(db, "business_info_items"), where("infoManagers", "array-contains", user.email.toLowerCase()))).catch(()=>null),
       getDoc(doc(db, "employees", user.email)).catch(()=>null)
     ]);
@@ -2314,6 +2376,7 @@ onAuthStateChanged(auth, async (user)=>{
     isCalendarEditor = isAdmin || !!(calEditorDoc && calEditorDoc.exists());
     isContractEditor = isAdmin || !!(contractEditorDoc && contractEditorDoc.exists());
     isSafetySender = isAdmin || !!(safetySenderDoc && safetySenderDoc.exists());
+    isVisitorManager = isAdmin || !!(visitorManagerDoc && visitorManagerDoc.exists());
     isBizInfoManager = !!(bizInfoManagerSnap && !bizInfoManagerSnap.empty);
     isSharedAccount = !!(meDoc && meDoc.exists() && meDoc.data().isSharedAccount);
     document.getElementById("admin-link").style.display =
@@ -2343,6 +2406,7 @@ onAuthStateChanged(auth, async (user)=>{
     initWbPresetsListener();
     initSteelPlateTxListener();
     initContractsListener();
+    initVisitorSchedulesListener();
     initBizInfoListener();
     initBizInfoCategoriesListener();
     initChatCleanupSettingsListener();
@@ -2411,7 +2475,7 @@ onAuthStateChanged(auth, async (user)=>{
 });
 
 /* ---------- tabs ---------- */
-const ALL_VIEWS = ["dashboard","notices","whereabouts","reserve","checkout","safety","safetyresponse","calendar","contracts","chat","bizinfo"];
+const ALL_VIEWS = ["dashboard","notices","whereabouts","reserve","checkout","visitors","safety","safetyresponse","calendar","contracts","chat","bizinfo"];
 // タブ名 → 対応するダッシュボードのカードID（ダッシュボード自体と安否確認は常時表示なので対象外）
 const DASH_CARD_BY_VIEW = {
   notices: "dash-card-notices",
@@ -2419,6 +2483,7 @@ const DASH_CARD_BY_VIEW = {
   whereabouts: "dash-card-whereabouts",
   reserve: "dash-card-reserve",
   checkout: "dash-card-checkout",
+  visitors: "dash-card-visitors",
   contracts: "dash-card-contracts",
   chat: "dash-card-chat"
 };
@@ -2427,7 +2492,7 @@ const DASH_CARD_BY_VIEW = {
 let systemTabDefaults = null;
 let hasPersonalTabOrderFlag = null; // null=未判定、true=個人設定あり、false=個人設定なし
 let hasPersonalDashCardOrderFlag = null; // null=未判定、true=個人設定あり、false=個人設定なし（ダッシュボードカード用）
-const GENERAL_HIDEABLE_TAB_IDS = ["notices","calendar","whereabouts","chat","reserve","checkout","contracts","bizinfo"];
+const GENERAL_HIDEABLE_TAB_IDS = ["notices","calendar","whereabouts","chat","reserve","checkout","visitors","contracts","bizinfo"];
 // 特定のタブが、システム管理画面の「既定で有効にするタブ」設定で有効になっているかどうかを判定する
 // （未設定（system_tab_defaultsドキュメント自体が無い、またはenabledTabsが未設定）の場合は既定で有効として扱う）
 function isGeneralTabSystemEnabled(tabId){
@@ -2798,6 +2863,30 @@ function renderDashboard(){
     });
   }
 
+  // ---- 来客予定（今日以降。来客予定管理権限者は全員分、それ以外は自分が対応する分のみ） ----
+  const visitorsBody = document.getElementById("dash-visitors-body");
+  if(visitorsBody){
+    visitorsBody.innerHTML = "";
+    const todayStrForVisitors = todayStr();
+    const visibleVisitors = isVisitorManager
+      ? visitorSchedulesAll
+      : visitorSchedulesAll.filter(v=> v.hostEmail===currentUser.email);
+    const upcomingVisitors = visibleVisitors
+      .filter(v=> (v.date||"") >= todayStrForVisitors)
+      .sort((a,b)=> (a.date+((a.time)||"")).localeCompare(b.date+((b.time)||"")));
+    if(upcomingVisitors.length===0){
+      visitorsBody.innerHTML = `<div class="dash-empty">今後の来客予定はありません。</div>`;
+    } else {
+      upcomingVisitors.slice(0,5).forEach(v=>{
+        const row = document.createElement("div");
+        row.className = "dash-row";
+        row.innerHTML = `<span>${escapeHtml(v.visitorName||"")}　対応：${escapeHtml(v.hostName||v.hostEmail||"")}</span><span class="dash-row-sub">${formatDateJP(v.date)} ${escapeHtml(v.time||"")}</span>`;
+        row.addEventListener("click", ()=> switchToTab("visitors"));
+        visitorsBody.appendChild(row);
+      });
+    }
+  }
+
   // ---- 自分の機材（借用中の測量機器/ドローン＋自分が注文者の敷鉄板） ----
   const checkoutBody = document.getElementById("dash-checkout-body");
   checkoutBody.innerHTML = "";
@@ -2876,6 +2965,7 @@ document.getElementById("dash-wb-link").addEventListener("click", ()=> switchToT
 document.getElementById("dash-reserve-link").addEventListener("click", ()=> switchToTab("reserve"));
 document.getElementById("dash-contracts-link").addEventListener("click", ()=> switchToTab("contracts"));
 document.getElementById("dash-checkout-link").addEventListener("click", ()=> switchToTab("checkout"));
+document.getElementById("dash-visitors-link").addEventListener("click", ()=> switchToTab("visitors"));
 document.getElementById("dash-calendar-link").addEventListener("click", ()=> switchToTab("calendar"));
 document.getElementById("dash-chat-link").addEventListener("click", ()=> switchToTab("chat"));
 
@@ -2923,6 +3013,9 @@ function switchToTab(viewName){
   }
   if(viewName==="checkout"){
     try{ renderCheckoutTab(); }catch(e){ console.error("[貸出タブの表示エラー]", e); }
+  }
+  if(viewName==="visitors"){
+    try{ renderVisitorsTab(); }catch(e){ console.error("[来客予定タブの表示エラー]", e); }
   }
   if(viewName==="dashboard"){
     try{ renderDashboard(); }catch(e){ console.error("[ダッシュボードの表示エラー]", e); }
@@ -3570,6 +3663,205 @@ document.getElementById("checkout-modal-confirm").addEventListener("click", asyn
     document.getElementById("checkout-modal").classList.remove("show");
   }catch(e){
     document.getElementById("checkout-modal-error").textContent = "更新に失敗しました。権限をご確認ください。";
+  }
+});
+
+/* =========================================================
+   来客予定
+========================================================= */
+let visitorSchedulesAll = [];
+let editingVisitorId = null;
+let visitorHostEmail = null;
+let visitorHostName = null;
+let visitorModalDate = "";
+let visitorDateFilter = ""; // ""=すべて表示
+function initVisitorSchedulesListener(){
+  onSnapshot(collection(db,"visitor_schedules"), snap=>{
+    visitorSchedulesAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    if(document.getElementById("view-visitors").style.display !== "none"){
+      renderVisitorsTab();
+    }
+    refreshDashboardIfActive();
+  }, (err)=>{ console.error("[来客予定取得エラー]", err); });
+}
+function canEditVisitorEntry(v){
+  return isVisitorManager || v.hostEmail === currentUser.email;
+}
+function updateVisitorDateFilterUI(){
+  const btn = document.getElementById("visitor-date-filter-btn");
+  const clearBtn = document.getElementById("visitor-date-filter-clear-btn");
+  if(visitorDateFilter){
+    btn.textContent = formatDateJP(visitorDateFilter);
+    btn.classList.remove("placeholder");
+    clearBtn.style.display = "inline-block";
+  } else {
+    btn.textContent = "すべて表示";
+    btn.classList.add("placeholder");
+    clearBtn.style.display = "none";
+  }
+}
+document.getElementById("visitor-date-filter-btn").addEventListener("click", (e)=>{
+  openCalendarPicker(e.currentTarget, visitorDateFilter, {
+    allowClear: true,
+    onSelect: (dateStr)=>{
+      visitorDateFilter = dateStr || "";
+      updateVisitorDateFilterUI();
+      renderVisitorsTab();
+    }
+  });
+});
+document.getElementById("visitor-date-filter-clear-btn").addEventListener("click", ()=>{
+  visitorDateFilter = "";
+  updateVisitorDateFilterUI();
+  renderVisitorsTab();
+});
+function renderVisitorsTab(){
+  const body = document.getElementById("visitor-list");
+  if(!body) return;
+  body.innerHTML = "";
+  // 対応する社員は自分の来客予定のみ、来客予定管理権限者は全件を表示する
+  const visible = isVisitorManager
+    ? visitorSchedulesAll
+    : visitorSchedulesAll.filter(v=> v.hostEmail===currentUser.email);
+  const filtered = visitorDateFilter ? visible.filter(v=> v.date===visitorDateFilter) : visible;
+  const sorted = filtered.slice().sort((a,b)=> (a.date+(a.time||"")).localeCompare(b.date+(b.time||"")));
+  if(sorted.length===0){
+    body.innerHTML = `<div style="color:var(--muted);text-align:center;padding:24px;">${visitorDateFilter ? "この日の来客予定はありません。" : "来客予定はまだ登録されていません。"}</div>`;
+    return;
+  }
+  const table = document.createElement("table");
+  table.className = "notice-table";
+  table.innerHTML = `<thead><tr><th>来客者名</th><th style="width:140px;">対応社員</th><th style="width:150px;">日時</th><th style="width:70px;">人数</th><th>目的</th><th style="width:110px;"></th></tr></thead>`;
+  const tbody = document.createElement("tbody");
+  sorted.forEach(v=>{
+    const tr = document.createElement("tr");
+    const canEdit = canEditVisitorEntry(v);
+    const tdName = document.createElement("td");
+    tdName.textContent = v.visitorName || "";
+    const tdHost = document.createElement("td");
+    tdHost.textContent = v.hostName || v.hostEmail || "";
+    const tdDateTime = document.createElement("td");
+    tdDateTime.textContent = `${formatDateJP(v.date)} ${v.time||""}`;
+    const tdHeadcount = document.createElement("td");
+    tdHeadcount.textContent = v.headcount ? `${v.headcount}名` : "";
+    const tdPurpose = document.createElement("td");
+    tdPurpose.textContent = v.purpose || "";
+    const tdActions = document.createElement("td");
+    if(canEdit){
+      const editBtn = document.createElement("button");
+      editBtn.className = "btn-ghost";
+      editBtn.style.cssText = "border:1px solid var(--line);font-size:12px;padding:4px 8px;margin-right:6px;";
+      editBtn.textContent = "編集";
+      editBtn.addEventListener("click", ()=> openVisitorModal(v));
+      const delBtn = document.createElement("button");
+      delBtn.className = "btn-ghost";
+      delBtn.style.cssText = "border:1px solid var(--danger);color:var(--danger);font-size:12px;padding:4px 8px;";
+      delBtn.textContent = "削除";
+      delBtn.addEventListener("click", async ()=>{
+        if(!confirm(`「${v.visitorName||""}」の来客予定を削除しますか？`)) return;
+        try{
+          await deleteDoc(doc(db,"visitor_schedules", v.id));
+          toast("削除しました。");
+        }catch(e){
+          toast("削除に失敗しました。権限をご確認ください。");
+        }
+      });
+      tdActions.appendChild(editBtn);
+      tdActions.appendChild(delBtn);
+    }
+    tr.appendChild(tdName); tr.appendChild(tdHost); tr.appendChild(tdDateTime);
+    tr.appendChild(tdHeadcount); tr.appendChild(tdPurpose); tr.appendChild(tdActions);
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  body.appendChild(table);
+}
+function setVisitorHost(emp){
+  visitorHostEmail = emp ? emp.email : null;
+  visitorHostName = emp ? (emp.name || emp.email) : null;
+  const display = document.getElementById("visitor-host-display");
+  display.textContent = visitorHostName || "未選択";
+  display.style.color = visitorHostName ? "var(--text)" : "var(--muted)";
+}
+function setVisitorModalDate(dateStr){
+  visitorModalDate = dateStr || "";
+  const el = document.getElementById("visitor-date-picker");
+  el.textContent = visitorModalDate ? formatDateJP(visitorModalDate) : "未設定";
+  el.style.color = visitorModalDate ? "var(--text)" : "var(--muted)";
+}
+function openVisitorModal(v){
+  editingVisitorId = v ? v.id : null;
+  document.getElementById("visitor-modal-title").textContent = v ? "来客予定を編集" : "来客予定を追加";
+  document.getElementById("visitor-name-input").value = v ? (v.visitorName||"") : "";
+  if(v){
+    const hostEmp = employeesAll.find(e=>e.email===v.hostEmail);
+    setVisitorHost({ email: v.hostEmail, name: v.hostName || (hostEmp && hostEmp.name) });
+  } else {
+    // 新規追加時は、入力者本人をデフォルトの対応社員にする（社員選択で別の人に変更可能）
+    setVisitorHost({ email: currentUser.email, name: myDisplayName() });
+  }
+  setVisitorModalDate(v ? (v.date||"") : "");
+  setTimeFieldValue(document.getElementById("visitor-time-btn"), v ? (v.time||"") : "");
+  document.getElementById("visitor-headcount-input").value = v && v.headcount ? v.headcount : "";
+  document.getElementById("visitor-purpose-input").value = v ? (v.purpose||"") : "";
+  document.getElementById("visitor-modal-error").textContent = "";
+  document.getElementById("visitor-modal").classList.add("show");
+}
+document.getElementById("visitor-new-btn").addEventListener("click", ()=> openVisitorModal(null));
+document.getElementById("visitor-host-pick-btn").addEventListener("click", async ()=>{
+  const emp = await openEmployeePicker();
+  if(emp) setVisitorHost(emp);
+});
+document.getElementById("visitor-date-picker").addEventListener("click", (e)=>{
+  openCalendarPicker(e.currentTarget, visitorModalDate, {
+    onSelect: (dateStr)=> dateStr && setVisitorModalDate(dateStr)
+  });
+});
+document.getElementById("visitor-time-btn").addEventListener("click", (e)=>{
+  const el = e.currentTarget;
+  openTimePicker(el, el.dataset.value, {
+    stepMinutes: 5, minTime: "06:00", maxTime: "20:00",
+    onSelect: (v)=> setTimeFieldValue(el, v)
+  });
+});
+document.getElementById("visitor-modal-cancel").addEventListener("click", ()=>{
+  document.getElementById("visitor-modal").classList.remove("show");
+});
+document.getElementById("visitor-modal-save").addEventListener("click", async ()=>{
+  const errEl = document.getElementById("visitor-modal-error");
+  const visitorName = document.getElementById("visitor-name-input").value.trim();
+  const time = document.getElementById("visitor-time-btn").dataset.value || "";
+  const headcountRaw = document.getElementById("visitor-headcount-input").value;
+  const headcount = headcountRaw ? Math.max(1, Number(headcountRaw)||0) : null;
+  const purpose = document.getElementById("visitor-purpose-input").value.trim();
+  if(!visitorName){ errEl.textContent = "来客者名を入力してください。"; return; }
+  if(!visitorHostEmail){ errEl.textContent = "対応する社員を選択してください。"; return; }
+  if(!visitorModalDate){ errEl.textContent = "日付を選択してください。"; return; }
+  if(!time){ errEl.textContent = "開始時刻を選択してください。"; return; }
+  const payload = {
+    visitorName,
+    hostEmail: visitorHostEmail,
+    hostName: visitorHostName || visitorHostEmail,
+    date: visitorModalDate,
+    time,
+    headcount,
+    purpose,
+    updatedBy: currentUser.email,
+    updatedAt: new Date().toISOString()
+  };
+  try{
+    if(editingVisitorId){
+      await updateDoc(doc(db,"visitor_schedules", editingVisitorId), payload);
+      toast("来客予定を更新しました。");
+    } else {
+      payload.createdByEmail = currentUser.email;
+      payload.createdAt = new Date().toISOString();
+      await addDoc(collection(db,"visitor_schedules"), payload);
+      toast("来客予定を追加しました。");
+    }
+    document.getElementById("visitor-modal").classList.remove("show");
+  }catch(e){
+    errEl.textContent = "保存に失敗しました。権限をご確認ください。";
   }
 });
 
