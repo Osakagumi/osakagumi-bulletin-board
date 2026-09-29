@@ -266,6 +266,19 @@
   .unanswered-row{background:#FFF7ED;}
   .status-pill-admin{display:inline-block;padding:3px 9px;border-radius:12px;font-size:11.5px;font-weight:700;color:#fff;}
 </style>
+<script>
+  // 管理画面の背景色を、Firestoreからの読み込み（非同期）を待たずに反映する。
+  // 前回表示時に保存した色をlocalStorageにキャッシュしておき、body描画前に適用することで、
+  // 既定のベージュ色が一瞬表示されてから変更後の色に切り替わる「チラつき」を防ぐ。
+  (function(){
+    try{
+      var cached = localStorage.getItem("themeAdminBg");
+      if(cached && /^#[0-9A-Fa-f]{6}$/.test(cached)){
+        document.documentElement.style.setProperty("--bg", cached);
+      }
+    }catch(e){}
+  })();
+</script>
 </head>
 <body>
 
@@ -1190,7 +1203,6 @@
           </div>
           <div style="display:flex;gap:10px;flex-wrap:wrap;">
             <button class="btn btn-primary" id="theme-colors-save-btn">保存</button>
-            <button class="btn btn-ghost" id="theme-colors-reset-btn" style="border:1px solid var(--line);">既定の色に戻す</button>
           </div>
           <div id="theme-colors-save-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px;"></div>
         </div>
@@ -3515,18 +3527,11 @@ function initThemeColorsListener(){
     adminColorInput.value = adminBg; adminTextInput.value = adminBg.toUpperCase();
     presetColorInput.value = presetBg; presetTextInput.value = presetBg.toUpperCase();
     previewAdminBg(adminBg);
+    // ページ再読み込み時に、Firestoreからの読み込み待ちでベージュが一瞬表示されるのを防ぐため、
+    // 取得できた色をlocalStorageにキャッシュしておく（次回読み込み時は<head>内の早期スクリプトが使用）。
+    try{ localStorage.setItem("themeAdminBg", adminBg); }catch(e){}
   }, (err)=>{ console.error("[画面の背景色設定取得エラー]", err); });
 }
-document.getElementById("theme-colors-reset-btn")?.addEventListener("click", ()=>{
-  document.getElementById("theme-admin-bg-input").value = THEME_DEFAULT_ADMIN_BG;
-  document.getElementById("theme-admin-bg-text").value = THEME_DEFAULT_ADMIN_BG;
-  document.getElementById("theme-preset-bg-input").value = THEME_DEFAULT_PRESET_BG;
-  document.getElementById("theme-preset-bg-text").value = THEME_DEFAULT_PRESET_BG;
-  previewAdminBg(THEME_DEFAULT_ADMIN_BG);
-  const msgEl = document.getElementById("theme-colors-save-msg");
-  msgEl.textContent = "既定の色に戻しました。「保存」を押すと確定します。";
-  msgEl.style.color = "var(--muted)";
-});
 document.getElementById("theme-colors-save-btn")?.addEventListener("click", async ()=>{
   const msgEl = document.getElementById("theme-colors-save-msg");
   const adminBgColor = document.getElementById("theme-admin-bg-text").value.trim().toUpperCase();
@@ -3540,6 +3545,7 @@ document.getElementById("theme-colors-save-btn")?.addEventListener("click", asyn
     await setDoc(doc(db,"system_tab_defaults","appearance"), {
       adminBgColor, wbPresetBgColor, updatedBy: currentUser.email, updatedAt: new Date().toISOString()
     }, { merge:true });
+    try{ localStorage.setItem("themeAdminBg", adminBgColor); }catch(e){}
     msgEl.textContent = "保存しました。";
     msgEl.style.color = "var(--muted)";
   }catch(e){
