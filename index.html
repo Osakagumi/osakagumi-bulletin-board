@@ -1088,10 +1088,9 @@
               <button type="button" class="visitor-type-pill-btn type-officer" data-visitortypefilter="officer">役員</button>
             </div>
             <label style="font-size:12.5px;color:var(--muted);white-space:nowrap;">社員：</label>
-            <button type="button" class="btn-ghost" id="visitor-host-filter-btn" style="border:1px solid var(--line);">すべて</button>
+            <select id="visitor-host-filter-select"></select>
             <label style="font-size:12.5px;color:var(--muted);white-space:nowrap;">日付：</label>
-            <button type="button" class="date-field-btn placeholder" id="visitor-date-filter-btn" data-value="">すべて表示</button>
-            <button class="btn-ghost" id="visitor-filter-clear-btn" style="border:1px solid var(--line);display:none;">クリア</button>
+            <select id="visitor-date-filter-select"></select>
           </div>
         </div>
         <div id="visitor-list"></div>
@@ -3776,10 +3775,10 @@ let visitorModalType = "visitor"; // "visitor"=来客 / "officer"=役員（役�
 let visitorDateFilter = ""; // ""=すべて表示
 let visitorTypeFilter = ""; // ""=すべて／"visitor"／"officer"
 let visitorHostFilterEmail = null;
-let visitorHostFilterName = null;
 function initVisitorSchedulesListener(){
   onSnapshot(collection(db,"visitor_schedules"), snap=>{
     visitorSchedulesAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    populateVisitorFilterSelects();
     if(document.getElementById("view-visitors").style.display !== "none"){
       renderVisitorsTab();
     }
@@ -3824,32 +3823,40 @@ function canEditVisitorEntry(v){
   if((v.type||"visitor")==="officer") return isVisitorManager; // 役員予定は出入予定管理権限者のみ編集・削除可
   return isVisitorManager || v.hostEmail === currentUser.email;
 }
-// 社員・日付、どちらか一方でも絞り込み中なら、右端の共通クリアボタンを表示する
-// （個別にクリアボタンを持たせると、両方指定したときに「クリア」ボタンが2つ並んでしまい紛らわしいため、1つにまとめている）
-function updateVisitorFilterClearBtnUI(){
-  const clearBtn = document.getElementById("visitor-filter-clear-btn");
-  clearBtn.style.display = (visitorDateFilter || visitorHostFilterEmail) ? "inline-block" : "none";
+// 対象社員・日付の絞り込みを単純なドロップダウンにする。
+// 選択肢は固定リストではなく、その時点で（自分に見えている）一覧に実際に登場している
+// 社員・日付だけをマージして表示する（存在しない選択肢を出さないようにするため）。
+function populateVisitorFilterSelects(){
+  const hostSel = document.getElementById("visitor-host-filter-select");
+  const dateSel = document.getElementById("visitor-date-filter-select");
+  if(!hostSel || !dateSel) return;
+  const visible = isVisitorManager
+    ? visitorSchedulesAll
+    : visitorSchedulesAll.filter(v=> v.hostEmail===currentUser.email);
+
+  const hostMap = new Map(); // email -> name
+  visible.forEach(v=>{ if(v.hostEmail) hostMap.set(v.hostEmail, v.hostName || v.hostEmail); });
+  const hostOptions = [...hostMap.entries()].sort((a,b)=> a[1].localeCompare(b[1], "ja"));
+  const prevHost = hostSel.value;
+  hostSel.innerHTML = `<option value="">すべて</option>` +
+    hostOptions.map(([email,name])=> `<option value="${email}">${name}</option>`).join("");
+  hostSel.value = hostOptions.some(([email])=>email===prevHost) ? prevHost : "";
+  visitorHostFilterEmail = hostSel.value || null;
+
+  const dateOptions = [...new Set(visible.map(v=>v.date).filter(Boolean))].sort();
+  const prevDate = dateSel.value;
+  dateSel.innerHTML = `<option value="">すべて表示</option>` +
+    dateOptions.map(d=> `<option value="${d}">${formatDateJP(d)}</option>`).join("");
+  dateSel.value = dateOptions.includes(prevDate) ? prevDate : "";
+  visitorDateFilter = dateSel.value || "";
 }
-function updateVisitorDateFilterUI(){
-  const btn = document.getElementById("visitor-date-filter-btn");
-  if(visitorDateFilter){
-    btn.textContent = formatDateJP(visitorDateFilter);
-    btn.classList.remove("placeholder");
-  } else {
-    btn.textContent = "すべて表示";
-    btn.classList.add("placeholder");
-  }
-  updateVisitorFilterClearBtnUI();
-}
-document.getElementById("visitor-date-filter-btn").addEventListener("click", (e)=>{
-  openCalendarPicker(e.currentTarget, visitorDateFilter, {
-    allowClear: true,
-    onSelect: (dateStr)=>{
-      visitorDateFilter = dateStr || "";
-      updateVisitorDateFilterUI();
-      renderVisitorsTab();
-    }
-  });
+document.getElementById("visitor-host-filter-select").addEventListener("change", (e)=>{
+  visitorHostFilterEmail = e.target.value || null;
+  renderVisitorsTab();
+});
+document.getElementById("visitor-date-filter-select").addEventListener("change", (e)=>{
+  visitorDateFilter = e.target.value || "";
+  renderVisitorsTab();
 });
 document.querySelectorAll("#visitor-type-filter-toggle .visitor-type-pill-btn").forEach(btn=>{
   btn.addEventListener("click", ()=>{
@@ -3857,32 +3864,6 @@ document.querySelectorAll("#visitor-type-filter-toggle .visitor-type-pill-btn").
     document.querySelectorAll("#visitor-type-filter-toggle .visitor-type-pill-btn").forEach(b=> b.classList.toggle("active", b===btn));
     renderVisitorsTab();
   });
-});
-function updateVisitorHostFilterUI(){
-  const btn = document.getElementById("visitor-host-filter-btn");
-  if(visitorHostFilterEmail){
-    btn.textContent = visitorHostFilterName || visitorHostFilterEmail;
-  } else {
-    btn.textContent = "すべて";
-  }
-  updateVisitorFilterClearBtnUI();
-}
-document.getElementById("visitor-host-filter-btn").addEventListener("click", async ()=>{
-  const emp = await openEmployeePicker();
-  if(emp){
-    visitorHostFilterEmail = emp.email;
-    visitorHostFilterName = emp.name || emp.email;
-    updateVisitorHostFilterUI();
-    renderVisitorsTab();
-  }
-});
-document.getElementById("visitor-filter-clear-btn").addEventListener("click", ()=>{
-  visitorDateFilter = "";
-  visitorHostFilterEmail = null;
-  visitorHostFilterName = null;
-  updateVisitorDateFilterUI();
-  updateVisitorHostFilterUI();
-  renderVisitorsTab();
 });
 function renderVisitorsTab(){
   const body = document.getElementById("visitor-list");
