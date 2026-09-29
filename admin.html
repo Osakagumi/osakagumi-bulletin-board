@@ -1096,9 +1096,6 @@
 
     <!-- ============ システム管理 ============ -->
     <section id="view-systemsettings" style="display:none;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-        <h2 style="margin:0;font-size:16px;">システム管理</h2>
-      </div>
       <div class="sysgrid-2col">
         <!-- 左上：ドライブ空き容量 -->
         <div class="panel" style="margin:0;">
@@ -1169,6 +1166,33 @@
             <button class="btn btn-primary" id="kiosk-shortcut-save-btn">保存</button>
           </div>
           <div id="kiosk-shortcut-save-msg" style="font-size:12.5px;color:var(--muted);"></div>
+        </div>
+
+        <!-- 画面の背景色 -->
+        <div class="panel" style="margin:0;">
+          <h2>画面の背景色</h2>
+          <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
+            管理画面全体と、一般画面「行き先」タブの事前設定パネルの背景色（現在はどちらもベージュ系）を、それぞれ変更できます。
+          </p>
+          <div class="field">
+            <label>管理画面（このadmin.html全体）の背景色</label>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <input type="color" id="theme-admin-bg-input" value="#FDF3E1" style="width:44px;height:36px;padding:2px;border:1px solid var(--line);border-radius:6px;">
+              <input type="text" id="theme-admin-bg-text" value="#FDF3E1" maxlength="7" style="width:100px;">
+            </div>
+          </div>
+          <div class="field">
+            <label>「行き先」事前設定パネルの背景色（一般画面）</label>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <input type="color" id="theme-preset-bg-input" value="#FDF3E1" style="width:44px;height:36px;padding:2px;border:1px solid var(--line);border-radius:6px;">
+              <input type="text" id="theme-preset-bg-text" value="#FDF3E1" maxlength="7" style="width:100px;">
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <button class="btn btn-primary" id="theme-colors-save-btn">保存</button>
+            <button class="btn btn-ghost" id="theme-colors-reset-btn" style="border:1px solid var(--line);">既定の色に戻す</button>
+          </div>
+          <div id="theme-colors-save-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px;"></div>
         </div>
       </div>
     </section>
@@ -1800,6 +1824,7 @@ onAuthStateChanged(auth, async (user)=>{
   initBizInfoCategoriesListener();
   initChatCleanupSettingsListener();
   initKioskLogoutShortcutListener();
+  initThemeColorsListener();
   initGeneralTabDefaultsListener();
   initAdminTabDefaultsListener();
   initContractSettingsListener();
@@ -3437,6 +3462,84 @@ document.getElementById("kiosk-shortcut-save-btn")?.addEventListener("click", as
   }
   try{
     await setDoc(doc(db,"app_settings","kiosk_logout_shortcut"), { ctrl, alt, shift, key }, { merge:true });
+    msgEl.textContent = "保存しました。";
+    msgEl.style.color = "var(--muted)";
+  }catch(e){
+    msgEl.textContent = "保存に失敗しました。権限をご確認ください。";
+    msgEl.style.color = "var(--danger)";
+  }
+});
+
+/* =========================================================
+   画面の背景色（管理画面全体・一般画面の行き先「事前設定」パネル）
+   システム全体の既定値なので、既存の「既定で有効にするタブ」等と同じ
+   system_tab_defaults コレクション（書き込みはシステム管理者のみ）に保存する。
+========================================================= */
+const THEME_DEFAULT_ADMIN_BG = "#FDF3E1";
+const THEME_DEFAULT_PRESET_BG = "#FDF3E1";
+function isValidHexColor(v){
+  return /^#[0-9A-Fa-f]{6}$/.test(v);
+}
+// 「保存」を押すまでは実際には保存されないが、色を選んだ時点でこの管理画面自体の背景には
+// その場でプレビュー反映する（行き先事前設定パネルは一般画面側にしかないためプレビューできない）。
+function previewAdminBg(hex){
+  if(isValidHexColor(hex)) document.documentElement.style.setProperty("--bg", hex);
+}
+function syncThemeColorInputs(colorInput, textInput, onPreview){
+  colorInput.addEventListener("input", ()=>{
+    textInput.value = colorInput.value.toUpperCase();
+    if(onPreview) onPreview(colorInput.value);
+  });
+  textInput.addEventListener("change", ()=>{
+    const v = textInput.value.trim();
+    if(isValidHexColor(v)){
+      colorInput.value = v;
+      if(onPreview) onPreview(v);
+    } else {
+      textInput.value = colorInput.value.toUpperCase(); // 不正な入力は直前の値に戻す
+    }
+  });
+}
+function initThemeColorsListener(){
+  const adminColorInput = document.getElementById("theme-admin-bg-input");
+  const adminTextInput = document.getElementById("theme-admin-bg-text");
+  const presetColorInput = document.getElementById("theme-preset-bg-input");
+  const presetTextInput = document.getElementById("theme-preset-bg-text");
+  if(!adminColorInput) return;
+  syncThemeColorInputs(adminColorInput, adminTextInput, previewAdminBg);
+  syncThemeColorInputs(presetColorInput, presetTextInput, null);
+  onSnapshot(doc(db,"system_tab_defaults","appearance"), snap=>{
+    const data = snap.exists() ? snap.data() : {};
+    const adminBg = isValidHexColor(data.adminBgColor) ? data.adminBgColor : THEME_DEFAULT_ADMIN_BG;
+    const presetBg = isValidHexColor(data.wbPresetBgColor) ? data.wbPresetBgColor : THEME_DEFAULT_PRESET_BG;
+    adminColorInput.value = adminBg; adminTextInput.value = adminBg.toUpperCase();
+    presetColorInput.value = presetBg; presetTextInput.value = presetBg.toUpperCase();
+    previewAdminBg(adminBg);
+  }, (err)=>{ console.error("[画面の背景色設定取得エラー]", err); });
+}
+document.getElementById("theme-colors-reset-btn")?.addEventListener("click", ()=>{
+  document.getElementById("theme-admin-bg-input").value = THEME_DEFAULT_ADMIN_BG;
+  document.getElementById("theme-admin-bg-text").value = THEME_DEFAULT_ADMIN_BG;
+  document.getElementById("theme-preset-bg-input").value = THEME_DEFAULT_PRESET_BG;
+  document.getElementById("theme-preset-bg-text").value = THEME_DEFAULT_PRESET_BG;
+  previewAdminBg(THEME_DEFAULT_ADMIN_BG);
+  const msgEl = document.getElementById("theme-colors-save-msg");
+  msgEl.textContent = "既定の色に戻しました。「保存」を押すと確定します。";
+  msgEl.style.color = "var(--muted)";
+});
+document.getElementById("theme-colors-save-btn")?.addEventListener("click", async ()=>{
+  const msgEl = document.getElementById("theme-colors-save-msg");
+  const adminBgColor = document.getElementById("theme-admin-bg-text").value.trim().toUpperCase();
+  const wbPresetBgColor = document.getElementById("theme-preset-bg-text").value.trim().toUpperCase();
+  if(!isValidHexColor(adminBgColor) || !isValidHexColor(wbPresetBgColor)){
+    msgEl.textContent = "色の指定が正しくありません（例：#FDF3E1）。";
+    msgEl.style.color = "var(--danger)";
+    return;
+  }
+  try{
+    await setDoc(doc(db,"system_tab_defaults","appearance"), {
+      adminBgColor, wbPresetBgColor, updatedBy: currentUser.email, updatedAt: new Date().toISOString()
+    }, { merge:true });
     msgEl.textContent = "保存しました。";
     msgEl.style.color = "var(--muted)";
   }catch(e){

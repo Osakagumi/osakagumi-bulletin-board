@@ -662,7 +662,7 @@
   .seg-btn.active{background:var(--brand);color:#fff;}
   #wb-view-toggle .seg-btn.active[data-wbview="preset"]{background:#EF9F27;color:#412402;}
   /* 事前設定は「未来の予定を編集するモード」なので、一覧・行き先別とは違うアンバー系の背景にして見分けやすくする */
-  #wb-preset-view{ background:#FDF3E1; border:1px solid #F0CE8F; border-radius:12px; padding:16px; }
+  #wb-preset-view{ background:var(--wb-preset-bg, #FDF3E1); border:1px solid #F0CE8F; border-radius:12px; padding:16px; }
 
   /* ---------- お知らせ ---------- */
   .notice-table{width:100%;border-collapse:collapse;background:var(--surface);border:1.5px solid var(--line);border-radius:10px;overflow:hidden;}
@@ -2346,6 +2346,7 @@ onAuthStateChanged(auth, async (user)=>{
     initContractSettingsListener();
     initUserPrefsListener();
     initSystemTabDefaultsListener();
+    initWbPresetBgColorListener();
     initDashCardDragDrop();
     cleanupResolvedContracts();
     ensureSteelPlateCategoryAndMigrate();
@@ -2468,6 +2469,19 @@ function initSystemTabDefaultsListener(){
     applyMyHiddenTabs(); // システム側の有効タブが変わった可能性があるので再適用
     updateSafetyTabVisibility(); // 「安否確認」タブの表示可否もシステム側の設定に連動するため再適用
   }, (err)=>{ console.error("[一般画面タブ既定値取得エラー]", err); });
+}
+// 行き先「事前設定」パネルの背景色（管理画面「システム管理」タブで設定）。
+// 未設定・不正値の場合はCSS側の既定値（#FDF3E1）にフォールバックする。
+function initWbPresetBgColorListener(){
+  onSnapshot(doc(db,"system_tab_defaults","appearance"), snap=>{
+    const data = snap.exists() ? snap.data() : {};
+    const v = data.wbPresetBgColor;
+    if(typeof v === "string" && /^#[0-9A-Fa-f]{6}$/.test(v)){
+      document.documentElement.style.setProperty("--wb-preset-bg", v);
+    } else {
+      document.documentElement.style.removeProperty("--wb-preset-bg");
+    }
+  }, (err)=>{ console.error("[行き先事前設定パネルの背景色取得エラー]", err); });
 }
 function applyMyHiddenTabs(){
   const me = employeesAll.find(e=>(e.email||"").toLowerCase()===(currentUser?.email||"").toLowerCase());
