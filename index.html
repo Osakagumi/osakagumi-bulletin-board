@@ -709,14 +709,14 @@
   .visitor-table .vt-col-type{width:66px;}
   .visitor-table .vt-col-name{width:200px;}
   /* 対象社員は複数人分をここで折り返して2行まで表示する（4人分程度を目安。それ以上は…で省略、全文はマウスオーバーで表示） */
-  .visitor-table .vt-col-host{
-    width:170px; white-space:normal; overflow:hidden; text-overflow:clip;
-    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; line-height:1.35;
-  }
+  .visitor-table .vt-col-host{width:170px; white-space:normal; overflow:hidden;}
   /* 日時は終了日時が設定されている場合、開始行・終了行の2行で表示する */
-  .visitor-table .vt-col-datetime{
-    width:150px; white-space:normal; overflow:hidden; text-overflow:clip;
-    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; line-height:1.35;
+  .visitor-table .vt-col-datetime{width:150px; white-space:normal; overflow:hidden;}
+  /* table-cell自体にdisplay:-webkit-boxを当てるとテーブルの列レイアウトが崩れるため、
+     2行クランプはセル内部のspanにのみ適用する */
+  .visitor-table .vt-clamp2{
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+    overflow:hidden; line-height:1.35;
   }
   .visitor-table .vt-col-count{width:46px;text-align:center;}
   .visitor-table .vt-col-note{width:130px;}
@@ -3967,11 +3967,12 @@ function renderVisitorsTab(){
     const tdHost = document.createElement("td");
     tdHost.className = "vt-col-host";
     tdHost.title = formatVisitorHostNames(v);
-    tdHost.textContent = formatVisitorHostNames(v);
+    tdHost.innerHTML = `<span class="vt-clamp2">${escapeHtml(formatVisitorHostNames(v))}</span>`;
     const tdDateTime = document.createElement("td");
     tdDateTime.className = "vt-col-datetime";
     const dtParts = getVisitorDateTimeParts(v);
-    tdDateTime.innerHTML = dtParts.end ? `${escapeHtml(dtParts.start)}<br>${escapeHtml(dtParts.end)}` : escapeHtml(dtParts.start);
+    const dtHtml = dtParts.end ? `${escapeHtml(dtParts.start)}<br>${escapeHtml(dtParts.end)}` : escapeHtml(dtParts.start);
+    tdDateTime.innerHTML = `<span class="vt-clamp2">${dtHtml}</span>`;
     tdDateTime.title = formatVisitorDateTimeRange(v);
     const tdHeadcount = document.createElement("td");
     tdHeadcount.className = "vt-col-count";
