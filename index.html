@@ -301,13 +301,6 @@
   .cat-pill.active{border-color:currentColor;background:rgba(0,0,0,0.02);}
   .bizinfo-pill{font-weight:700;}
 
-  /* 出入予定：種別（来客／役員）バッジ */
-  .visitor-type-pill{
-    display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:11.5px;font-weight:700;white-space:nowrap;
-  }
-  .visitor-type-pill.type-visitor{background:rgba(28,90,165,0.12);color:var(--brand-dark);}
-  .visitor-type-pill.type-officer{background:rgba(239,159,39,0.22);color:#8A5A00;}
-
   /* 事前設定：保存済み日付一覧 */
   .wb-preset-date-pill{
     display:flex;align-items:center;gap:6px;border-radius:20px;border:1.5px solid var(--line);
@@ -4003,14 +3996,16 @@ document.getElementById("visitor-modal-save").addEventListener("click", async ()
   if(!visitorModalDate){ errEl.textContent = "日付を選択してください。"; return; }
   if(type==="visitor" && !time){ errEl.textContent = "開始時刻を選択してください。"; return; } // 役員予定は時刻を任意とする
   if(type==="officer" && !isVisitorManager){ errEl.textContent = "役員予定の登録には出入予定管理権限が必要です。"; return; }
-  // 過去日はNG（訂正が必要な場合は既存の予定を編集してもらう）
-  if(visitorModalDate < todayStr()){ errEl.textContent = "過去の日付は指定できません。"; return; }
-  // 休日が指定された場合は、意図した登録かどうかを確認する
-  try{
-    if(await isDateHoliday(visitorModalDate)){
-      if(!confirm("選択した日付は休日に設定されています。よろしいですか？")) return;
-    }
-  }catch(e){ /* 休日判定に失敗しても登録自体は継続する */ }
+  // 過去日NG・休日確認は新規追加時のみ行う（既存の予定を編集・修正する際は対象外。
+  // そうしないと、日付が過ぎた予定を編集・削除しようとするたびにエラーで弾かれてしまうため）
+  if(!editingVisitorId){
+    if(visitorModalDate < todayStr()){ errEl.textContent = "過去の日付は指定できません。"; return; }
+    try{
+      if(await isDateHoliday(visitorModalDate)){
+        if(!confirm("選択した日付は休日に設定されています。よろしいですか？")) return;
+      }
+    }catch(e){ /* 休日判定に失敗しても登録自体は継続する */ }
+  }
   const payload = {
     type,
     visitorName,
