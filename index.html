@@ -1259,7 +1259,7 @@
             <div class="dash-card" id="dash-card-visitors">
               <div class="dash-card-head">
                 <span class="dash-drag-handle" title="ドラッグして並び替え">⠿</span>
-                <h3>出入予定</h3>
+                <h3>本日の来客・役員の予定</h3>
                 <span class="dash-card-link" id="dash-visitors-link" title="出入予定を見る">▶</span>
               </div>
               <div id="dash-visitors-body"></div>
@@ -2977,7 +2977,7 @@ function renderDashboard(){
         row.className = "dash-row";
         const isOfficerRow = v.type==="officer";
         const pillHtml = `<span class="visitor-type-pill ${isOfficerRow ? "type-officer" : "type-visitor"}" style="padding:1px 8px;font-size:11px;">${isOfficerRow ? "役員" : "来客"}</span>`;
-        row.innerHTML = `<span>${pillHtml} ${escapeHtml(v.visitorName||"")}　対象：${escapeHtml(v.hostName||v.hostEmail||"")}</span><span class="dash-row-sub">${formatDateJP(v.date)} ${escapeHtml(v.time||"")}</span>`;
+        row.innerHTML = `<span>${pillHtml} ${escapeHtml(v.visitorName||"")}　${escapeHtml(v.hostName||v.hostEmail||"")}</span><span class="dash-row-sub">${formatDateJP(v.date)} ${escapeHtml(v.time||"")}</span>`;
         row.addEventListener("click", ()=> switchToTab("visitors"));
         visitorsBody.appendChild(row);
       });
