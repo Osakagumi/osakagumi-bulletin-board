@@ -706,12 +706,12 @@
   .visitor-table th{text-align:left;font-size:11.5px;color:var(--muted);padding:8px 8px;border-bottom:1.5px solid var(--line);background:#F7F9FB;white-space:nowrap;}
   .visitor-table td{padding:8px 8px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:middle;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .visitor-table tr:last-child td{border-bottom:none;}
-  .visitor-table .vt-col-type{width:52px;}
-  .visitor-table .vt-col-name{width:auto;}
-  .visitor-table .vt-col-host{width:88px;}
-  .visitor-table .vt-col-datetime{width:120px;}
+  .visitor-table .vt-col-type{width:66px;}
+  .visitor-table .vt-col-name{width:200px;}
+  .visitor-table .vt-col-host{width:90px;}
+  .visitor-table .vt-col-datetime{width:172px;}
   .visitor-table .vt-col-count{width:46px;text-align:center;}
-  .visitor-table .vt-col-note{width:130px;}
+  .visitor-table .vt-col-note{width:140px;}
   .visitor-table .vt-col-actions{width:100px;white-space:nowrap;overflow:visible;text-align:right;}
   @media (max-width:720px){
     .visitor-table thead{ display:none; }
@@ -784,6 +784,10 @@
   .visitor-type-pill-btn.active.type-all{background:var(--text);border-color:var(--text);color:#fff;}
   .visitor-toolbar{flex-wrap:nowrap;overflow-x:auto;}
   .visitor-toolbar-filters{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;margin-left:auto;}
+  /* 絞り込みボタン（社員名など）が横幅不足でつぶれて縦書き状態になるのを防ぐ */
+  .visitor-toolbar-filters > button, .visitor-toolbar-filters > .date-field-btn{
+    white-space:nowrap; flex-shrink:0;
+  }
   @media (max-width:900px){
     .visitor-toolbar{flex-wrap:wrap;overflow-x:visible;}
     .visitor-toolbar-filters{flex-wrap:wrap;}
