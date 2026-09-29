@@ -707,11 +707,19 @@
   .visitor-table td{padding:8px 8px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:middle;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .visitor-table tr:last-child td{border-bottom:none;}
   .visitor-table .vt-col-type{width:66px;}
-  .visitor-table .vt-col-name{width:220px;}
-  .visitor-table .vt-col-host{width:90px;}
-  .visitor-table .vt-col-datetime{width:136px;}
+  .visitor-table .vt-col-name{width:200px;}
+  /* 対象社員は複数人分をここで折り返して2行まで表示する（4人分程度を目安。それ以上は…で省略、全文はマウスオーバーで表示） */
+  .visitor-table .vt-col-host{
+    width:170px; white-space:normal; overflow:hidden; text-overflow:clip;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; line-height:1.35;
+  }
+  /* 日時は終了日時が設定されている場合、開始行・終了行の2行で表示する */
+  .visitor-table .vt-col-datetime{
+    width:150px; white-space:normal; overflow:hidden; text-overflow:clip;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; line-height:1.35;
+  }
   .visitor-table .vt-col-count{width:46px;text-align:center;}
-  .visitor-table .vt-col-note{width:154px;}
+  .visitor-table .vt-col-note{width:130px;}
   .visitor-table .vt-col-actions{width:100px;white-space:nowrap;overflow:visible;text-align:right;}
   @media (max-width:720px){
     .visitor-table thead{ display:none; }
@@ -727,8 +735,8 @@
     }
     .visitor-table .vt-col-type{ order:1; }
     .visitor-table .vt-col-name{ order:2; font-size:14px; font-weight:700; white-space:normal; flex:1 1 auto; min-width:0; }
-    .visitor-table .vt-col-host{ order:3; color:var(--muted); }
-    .visitor-table .vt-col-datetime{ order:4; color:var(--muted); }
+    .visitor-table .vt-col-host{ order:3; color:var(--muted); white-space:normal; display:block; width:100%; }
+    .visitor-table .vt-col-datetime{ order:4; color:var(--muted); white-space:normal; display:block; width:100%; }
     .visitor-table .vt-col-count{ order:5; color:var(--muted); }
     .visitor-table .vt-col-note{ order:6; width:100%; color:var(--muted); white-space:normal; }
     .visitor-table .vt-col-actions{ order:7; width:100%; text-align:right; margin-top:2px; }
@@ -3800,12 +3808,19 @@ function formatVisitorHostNames(v){
 }
 // 開始日時に加え、終了日時（任意）が設定されていればあわせて表示する。
 // 終了日が開始日と同じ場合は終了時刻のみ、異なる場合は終了日も含めて表示する。
-function formatVisitorDateTimeRange(v){
+// start行／end行に分けて返すことで、一覧表示時に「〜」の位置ではなく行の境目で
+// きれいに折り返せるようにする（endが空文字なら終了日時未設定）。
+function getVisitorDateTimeParts(v){
   const start = `${formatDateJP(v.date)} ${v.time||""}`.trim();
+  let end = "";
   if(v.endDate && v.endTime){
-    return v.endDate===v.date ? `${start}〜${v.endTime}` : `${start}〜${formatDateJP(v.endDate)} ${v.endTime}`;
+    end = v.endDate===v.date ? `〜${v.endTime}` : `〜${formatDateJP(v.endDate)} ${v.endTime}`;
   }
-  return start;
+  return { start, end };
+}
+function formatVisitorDateTimeRange(v){
+  const { start, end } = getVisitorDateTimeParts(v);
+  return end ? `${start}${end}` : start;
 }
 function initVisitorSchedulesListener(){
   onSnapshot(collection(db,"visitor_schedules"), snap=>{
@@ -3955,7 +3970,8 @@ function renderVisitorsTab(){
     tdHost.textContent = formatVisitorHostNames(v);
     const tdDateTime = document.createElement("td");
     tdDateTime.className = "vt-col-datetime";
-    tdDateTime.textContent = formatVisitorDateTimeRange(v);
+    const dtParts = getVisitorDateTimeParts(v);
+    tdDateTime.innerHTML = dtParts.end ? `${escapeHtml(dtParts.start)}<br>${escapeHtml(dtParts.end)}` : escapeHtml(dtParts.start);
     tdDateTime.title = formatVisitorDateTimeRange(v);
     const tdHeadcount = document.createElement("td");
     tdHeadcount.className = "vt-col-count";
