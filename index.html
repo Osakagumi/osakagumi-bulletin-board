@@ -707,7 +707,7 @@
   .visitor-table td{padding:8px 8px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:middle;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .visitor-table tr:last-child td{border-bottom:none;}
   .visitor-table .vt-col-type{width:66px;}
-  .visitor-table .vt-col-name{width:200px;}
+  .visitor-table .vt-col-name{width:230px;}
   /* 対象社員は複数人分をここで折り返して2行まで表示する（4人分程度を目安。それ以上は…で省略、全文はマウスオーバーで表示） */
   .visitor-table .vt-col-host{width:170px; white-space:normal; overflow:hidden;}
   /* 日時は終了日時が設定されている場合、開始行・終了行の2行で表示する */
@@ -718,8 +718,7 @@
     display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
     overflow:hidden; line-height:1.35;
   }
-  .visitor-table .vt-col-count{width:46px;text-align:center;}
-  .visitor-table .vt-col-note{width:130px;}
+  .visitor-table .vt-col-note{width:154px;}
   .visitor-table .vt-col-actions{width:100px;white-space:nowrap;overflow:visible;text-align:right;}
   @media (max-width:720px){
     .visitor-table thead{ display:none; }
@@ -737,9 +736,8 @@
     .visitor-table .vt-col-name{ order:2; font-size:14px; font-weight:700; white-space:normal; flex:1 1 auto; min-width:0; }
     .visitor-table .vt-col-host{ order:3; color:var(--muted); white-space:normal; display:block; width:100%; }
     .visitor-table .vt-col-datetime{ order:4; color:var(--muted); white-space:normal; display:block; width:100%; }
-    .visitor-table .vt-col-count{ order:5; color:var(--muted); }
-    .visitor-table .vt-col-note{ order:6; width:100%; color:var(--muted); white-space:normal; }
-    .visitor-table .vt-col-actions{ order:7; width:100%; text-align:right; margin-top:2px; }
+    .visitor-table .vt-col-note{ order:5; width:100%; color:var(--muted); white-space:normal; }
+    .visitor-table .vt-col-actions{ order:6; width:100%; text-align:right; margin-top:2px; }
   }
   .empty-state{padding:24px;text-align:center;color:var(--muted);font-size:13.5px;}
 
@@ -3951,7 +3949,7 @@ function renderVisitorsTab(){
   }
   const table = document.createElement("table");
   table.className = "visitor-table";
-  table.innerHTML = `<thead><tr><th class="vt-col-type">種別</th><th class="vt-col-name">来客者名／予定内容</th><th class="vt-col-host">対象社員</th><th class="vt-col-datetime">日時</th><th class="vt-col-count">人数</th><th class="vt-col-note">備考</th><th class="vt-col-actions"></th></tr></thead>`;
+  table.innerHTML = `<thead><tr><th class="vt-col-type">種別</th><th class="vt-col-name">来客者名／予定内容</th><th class="vt-col-host">対象社員</th><th class="vt-col-datetime">日時</th><th class="vt-col-note">備考</th><th class="vt-col-actions"></th></tr></thead>`;
   const tbody = document.createElement("tbody");
   sorted.forEach(v=>{
     const tr = document.createElement("tr");
@@ -3962,8 +3960,9 @@ function renderVisitorsTab(){
     tdType.innerHTML = `<span class="visitor-type-pill ${isOfficer ? "type-officer" : "type-visitor"}">${isOfficer ? "役員" : "来客"}</span>`;
     const tdName = document.createElement("td");
     tdName.className = "vt-col-name";
-    tdName.title = v.visitorName || "";
-    tdName.textContent = v.visitorName || "";
+    const nameWithCount = v.headcount ? `${v.visitorName||""}(${v.headcount}名)` : (v.visitorName||"");
+    tdName.title = nameWithCount;
+    tdName.textContent = nameWithCount;
     const tdHost = document.createElement("td");
     tdHost.className = "vt-col-host";
     tdHost.title = formatVisitorHostNames(v);
@@ -3974,9 +3973,6 @@ function renderVisitorsTab(){
     const dtHtml = dtParts.end ? `${escapeHtml(dtParts.start)}<br>${escapeHtml(dtParts.end)}` : escapeHtml(dtParts.start);
     tdDateTime.innerHTML = `<span class="vt-clamp2">${dtHtml}</span>`;
     tdDateTime.title = formatVisitorDateTimeRange(v);
-    const tdHeadcount = document.createElement("td");
-    tdHeadcount.className = "vt-col-count";
-    tdHeadcount.textContent = v.headcount ? `${v.headcount}名` : "";
     const tdPurpose = document.createElement("td");
     tdPurpose.className = "vt-col-note";
     tdPurpose.title = v.purpose || "";
@@ -4010,7 +4006,7 @@ function renderVisitorsTab(){
       tdActions.appendChild(delBtn);
     }
     tr.appendChild(tdType); tr.appendChild(tdName); tr.appendChild(tdHost); tr.appendChild(tdDateTime);
-    tr.appendChild(tdHeadcount); tr.appendChild(tdPurpose); tr.appendChild(tdActions);
+    tr.appendChild(tdPurpose); tr.appendChild(tdActions);
     tbody.appendChild(tr);
   });
   table.appendChild(tbody);
