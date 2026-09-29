@@ -280,6 +280,20 @@
   .dash-row:last-child{border-bottom:none;}
   .dash-row:hover{color:var(--brand-dark);}
   .dash-row .dash-row-sub{color:var(--muted);font-size:11.5px;white-space:nowrap;}
+  /* ダッシュボード：出入予定カードの表形式表示（種別・予定・社員・日時。各セル最大2行） */
+  .dvis-table{width:100%;border-collapse:collapse;table-layout:fixed;}
+  .dvis-table tr{cursor:pointer;border-bottom:1px solid var(--line);}
+  .dvis-table tr:last-child{border-bottom:none;}
+  .dvis-table tr:hover td{background:#FAFBFC;}
+  .dvis-table td{padding:6px 4px;font-size:11.5px;vertical-align:middle;overflow:hidden;}
+  .dvis-table .dvis-col-type{width:15%;}
+  .dvis-table .dvis-col-name{width:32%;font-weight:600;}
+  .dvis-table .dvis-col-host{width:28%;color:var(--muted);}
+  .dvis-table .dvis-col-datetime{width:25%;color:var(--muted);font-size:11px;}
+  .dvis-clamp2{
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+    overflow:hidden;line-height:1.3;
+  }
   .dash-stat-grid{display:flex;flex-wrap:wrap;gap:8px;}
   .dash-stat{flex:1;min-width:70px;text-align:center;background:#F8FAFC;border-radius:8px;padding:8px 6px;}
   .dash-stat b{display:block;font-size:19px;}
@@ -494,6 +508,14 @@
   }
   .date-field-btn:hover{border-color:var(--brand);}
   .date-field-btn.placeholder{color:var(--muted);}
+  /* 追加・編集モーダル：開始日付以外の項目に付ける「未設定に戻す」✕（コントロール枠内・右側に重ねて表示） */
+  .field-with-clear{position:relative;flex:1;min-width:0;display:flex;}
+  .field-with-clear > *:first-child{flex:1;padding-right:26px;box-sizing:border-box;}
+  .field-clear-x{
+    position:absolute;right:8px;top:50%;transform:translateY(-50%);
+    color:var(--muted);font-size:13px;line-height:1;cursor:pointer;padding:2px 3px;
+  }
+  .field-clear-x:hover{color:var(--danger);}
 
   /* ---------- カレンダーポップアップ ---------- */
   .calendar-popup{
@@ -804,6 +826,7 @@
   .vcal-day-row{display:flex;align-items:stretch;border-bottom:1px solid var(--line);background:var(--surface);}
   .vcal-day-row:last-child{border-bottom:none;}
   .vcal-day-row.vcal-past{opacity:0.6;}
+  .vcal-day-row.vcal-jump-flash{box-shadow:0 0 0 2px var(--brand) inset;}
   .vcal-day-head{
     flex:0 0 64px;display:flex;flex-direction:column;align-items:center;justify-content:center;
     font-size:12.5px;padding:8px 4px;font-family:var(--mono);color:var(--text);
@@ -1884,7 +1907,10 @@
       <div class="field">
         <label id="visitor-host-label">対応する社員</label>
         <div style="display:flex;align-items:center;gap:8px;">
-          <span id="visitor-host-display" style="flex:1;color:var(--muted);">未選択</span>
+          <div class="field-with-clear">
+            <span id="visitor-host-display" style="color:var(--muted);">未選択</span>
+            <span class="field-clear-x" id="visitor-host-clear-x" title="未設定にする">✕</span>
+          </div>
           <button type="button" class="btn-ghost" id="visitor-host-pick-btn" style="border:1px solid var(--line);">選択</button>
         </div>
       </div>
@@ -1892,14 +1918,23 @@
         <label id="visitor-datetime-label">開始日時</label>
         <div style="display:flex;gap:8px;">
           <span class="date-picker-label" id="visitor-date-picker" style="flex:1;"></span>
-          <button type="button" class="date-field-btn placeholder" id="visitor-time-btn" data-value="" style="flex:1;"></button>
+          <div class="field-with-clear">
+            <button type="button" class="date-field-btn placeholder" id="visitor-time-btn" data-value="" style="flex:1;"></button>
+            <span class="field-clear-x" id="visitor-time-clear-x" title="未設定にする">✕</span>
+          </div>
         </div>
       </div>
       <div class="field">
         <label>終了日時（任意）</label>
         <div style="display:flex;gap:8px;">
-          <span class="date-picker-label" id="visitor-enddate-picker" style="flex:1;"></span>
-          <button type="button" class="date-field-btn placeholder" id="visitor-endtime-btn" data-value="" style="flex:1;"></button>
+          <div class="field-with-clear">
+            <span class="date-picker-label" id="visitor-enddate-picker" style="flex:1;"></span>
+            <span class="field-clear-x" id="visitor-enddate-clear-x" title="未設定にする">✕</span>
+          </div>
+          <div class="field-with-clear">
+            <button type="button" class="date-field-btn placeholder" id="visitor-endtime-btn" data-value="" style="flex:1;"></button>
+            <span class="field-clear-x" id="visitor-endtime-clear-x" title="未設定にする">✕</span>
+          </div>
         </div>
       </div>
       <div class="field">
@@ -2908,17 +2943,25 @@ function renderDashboardVisitorsCard(){
         .sort((a,b)=> (a.date+((a.time)||"")).localeCompare(b.date+((b.time)||"")));
   if(targetVisitors.length===0){
     visitorsBody.innerHTML = `<div class="dash-empty">${dashVisitorsRange==="today" ? "本日の出入予定はありません。" : "今後の出入予定はありません。"}</div>`;
-  } else {
-    targetVisitors.slice(0,5).forEach(v=>{
-      const row = document.createElement("div");
-      row.className = "dash-row";
-      const isOfficerRow = v.type==="officer";
-      const pillHtml = `<span class="visitor-type-pill ${isOfficerRow ? "type-officer" : "type-visitor"}" style="padding:1px 8px;font-size:11px;">${isOfficerRow ? "役員" : "来客"}</span>`;
-      row.innerHTML = `<span>${pillHtml} ${escapeHtml(v.visitorName||"")}　${escapeHtml(formatVisitorHostNames(v))}</span><span class="dash-row-sub">${escapeHtml(formatVisitorDateTimeRange(v))}</span>`;
-      row.addEventListener("click", ()=> switchToTab("visitors"));
-      visitorsBody.appendChild(row);
-    });
+    return;
   }
+  const table = document.createElement("table");
+  table.className = "dvis-table";
+  const tbody = document.createElement("tbody");
+  targetVisitors.slice(0,5).forEach(v=>{
+    const isOfficerRow = (v.type||"visitor")==="officer";
+    const nameWithCount = v.headcount ? `${v.visitorName||""}(${v.headcount}名)` : (v.visitorName||"");
+    const tr = document.createElement("tr");
+    tr.innerHTML =
+      `<td class="dvis-col-type"><span class="visitor-type-pill ${isOfficerRow ? "type-officer" : "type-visitor"}" style="padding:1px 7px;font-size:10.5px;">${isOfficerRow ? "役員" : "来客"}</span></td>` +
+      `<td class="dvis-col-name"><span class="dvis-clamp2">${escapeHtml(nameWithCount)}</span></td>` +
+      `<td class="dvis-col-host"><span class="dvis-clamp2">${escapeHtml(formatVisitorHostNames(v))}</span></td>` +
+      `<td class="dvis-col-datetime"><span class="dvis-clamp2">${escapeHtml(formatVisitorDateTimeRange(v))}</span></td>`;
+    tr.addEventListener("click", ()=> jumpToVisitorCalendarDate(v.date));
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  visitorsBody.appendChild(table);
 }
 function renderDashboard(){
   if(!currentUser) return; // ログイン処理が終わる前に呼ばれた場合は何もしない（ログイン完了後、改めて描画される）
@@ -4036,21 +4079,41 @@ function renderActiveVisitorView(){
   if(visitorViewMode==="calendar") renderVisitorCalendar();
   else renderVisitorsTab();
 }
+function setVisitorViewMode(mode){
+  visitorViewMode = mode;
+  document.querySelectorAll("#visitor-view-toggle .seg-btn").forEach(b=>{
+    b.classList.toggle("active", b.dataset.visitorview===mode);
+  });
+  document.getElementById("visitor-list-view").style.display = mode==="list" ? "" : "none";
+  document.getElementById("visitor-calendar-view").style.display = mode==="calendar" ? "" : "none";
+  document.getElementById("visitor-date-filter-label").style.display = mode==="calendar" ? "none" : "";
+  document.getElementById("visitor-date-filter-select").style.display = mode==="calendar" ? "none" : "";
+}
 document.querySelectorAll("#visitor-view-toggle .seg-btn").forEach(btn=>{
   btn.addEventListener("click", ()=>{
     const mode = btn.dataset.visitorview;
     if(visitorViewMode===mode) return;
-    visitorViewMode = mode;
-    document.querySelectorAll("#visitor-view-toggle .seg-btn").forEach(b=>{
-      b.classList.toggle("active", b.dataset.visitorview===mode);
-    });
-    document.getElementById("visitor-list-view").style.display = mode==="list" ? "" : "none";
-    document.getElementById("visitor-calendar-view").style.display = mode==="calendar" ? "" : "none";
-    document.getElementById("visitor-date-filter-label").style.display = mode==="calendar" ? "none" : "";
-    document.getElementById("visitor-date-filter-select").style.display = mode==="calendar" ? "none" : "";
+    setVisitorViewMode(mode);
     renderActiveVisitorView();
   });
 });
+// ダッシュボードの出入予定カードから、該当日付のカレンダー表示へジャンプする
+function jumpToVisitorCalendarDate(dateStr){
+  switchToTab("visitors");
+  setVisitorViewMode("calendar");
+  if(!dateStr) return;
+  visitorCalMonth = dateStr.slice(0,7);
+  updateVisitorCalMonthLabel();
+  renderVisitorCalendar();
+  requestAnimationFrame(()=>{
+    const row = document.querySelector(`.vcal-day-row[data-date="${dateStr}"]`);
+    if(row){
+      row.scrollIntoView({ behavior:"smooth", block:"center" });
+      row.classList.add("vcal-jump-flash");
+      setTimeout(()=> row.classList.remove("vcal-jump-flash"), 1500);
+    }
+  });
+}
 function updateVisitorCalMonthLabel(){
   const [y,m] = visitorCalMonth.split("-").map(Number);
   document.getElementById("visitor-cal-month-label").textContent = `${y}年${m}月`;
@@ -4116,6 +4179,7 @@ function renderVisitorCalendar(){
     const dow = d.getDay();
     const row = document.createElement("div");
     row.className = "vcal-day-row";
+    row.dataset.date = dateStr;
     if(dateStr < today) row.classList.add("vcal-past");
 
     const head = document.createElement("div");
@@ -4359,6 +4423,24 @@ document.getElementById("visitor-endtime-btn").addEventListener("click", (e)=>{
     stepMinutes: 5, minTime: "06:00", maxTime: "20:00",
     onSelect: (v)=> setTimeFieldValue(el, v, "未設定")
   });
+});
+// 開始日付以外の項目は、コントロール右側の✕でいつでも未設定に戻せるようにする
+document.getElementById("visitor-host-clear-x").addEventListener("click", (e)=>{
+  e.stopPropagation();
+  setVisitorHosts([]);
+});
+document.getElementById("visitor-time-clear-x").addEventListener("click", (e)=>{
+  e.stopPropagation();
+  setTimeFieldValue(document.getElementById("visitor-time-btn"), "", visitorModalType==="officer" ? "未設定（任意）" : "未設定");
+});
+document.getElementById("visitor-enddate-clear-x").addEventListener("click", (e)=>{
+  e.stopPropagation();
+  setVisitorModalEndDate(""); // 終了日をクリアすると終了時刻だけが残るのは無意味なため、終了時刻もあわせてクリアする
+  setTimeFieldValue(document.getElementById("visitor-endtime-btn"), "", "未設定");
+});
+document.getElementById("visitor-endtime-clear-x").addEventListener("click", (e)=>{
+  e.stopPropagation();
+  setTimeFieldValue(document.getElementById("visitor-endtime-btn"), "", "未設定");
 });
 document.getElementById("visitor-modal-cancel").addEventListener("click", ()=>{
   document.getElementById("visitor-modal").classList.remove("show");
