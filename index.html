@@ -5858,6 +5858,12 @@ const WB_ROW_PAD_COMFORT = 9; // 既定のpadding（px）＝これまでの見�
 const WB_ROW_PAD_MIN = 3; // これ未満に詰めると読みにくくなる下限
 function fitWbListToHeight(container, targetEl){
   if(!targetEl) targetEl = container;
+  // 「事前設定」など他のサブビューを見ている間は、一覧（container）自体がdisplay:noneで隠れており、
+  // getBoundingClientRect・scrollHeightが常に0を返してしまう。その状態で測り直すと、
+  // 「詰める必要なし＝既定値のまま」と誤判定し、以前に詰めていた値を既定値へ戻してしまう
+  // （他のタブへ切り替えて「行き先」タブに戻った際、事前設定画面の行間隔が広がって見える不具合の原因）。
+  // 非表示の間は測定・変更をせず、現在の値をそのまま維持する。
+  if(container.offsetParent === null) return;
   targetEl.style.setProperty("--wb-row-pad-v", `${WB_ROW_PAD_COMFORT}px`);
   const rect = container.getBoundingClientRect();
   const availableHeight = Math.max(150, window.innerHeight - rect.top - 16);
@@ -6228,7 +6234,11 @@ function renderWbPresetTable(){
       const hasPending = Object.prototype.hasOwnProperty.call(wbPresetPendingEdits, emp.email);
       const preset = hasPending ? wbPresetPendingEdits[emp.email] : (editingDefaults ? (wbPresetDefaults[emp.email] || null) : (dayPresets[emp.email] || null));
       const fallback = editingDefaults ? null : (wbPresetDefaults[emp.email] || null);
-      const effective = (preset && preset.status) ? preset : ((fallback && fallback.status) ? fallback : null);
+      // presetオブジェクト自体が存在する（＝その日について何らかの選択が既に保存・入力されている）場合は、
+      // statusが空文字（＝モーダルで「未設定」を明示的に選んだ）であってもそれを優先する。
+      // ここを preset.status の真偽値で判定してしまうと、「未設定」を選んだつもりでも
+      // 初期状態の内容にフォールバックしてしまい、見た目上「未設定」にならない不具合になる。
+      const effective = preset ? preset : ((fallback && fallback.status) ? fallback : null);
       const st = effective ? wbStatusInfo(effective.status) : null;
       const tr = document.createElement("tr");
       tr.dataset.email = emp.email;
@@ -6338,7 +6348,9 @@ function openWbPresetModal(email){
   const hasPending = Object.prototype.hasOwnProperty.call(wbPresetPendingEdits, email);
   const preset = hasPending ? wbPresetPendingEdits[email] : (editingDefaults ? (wbPresetDefaults[email] || null) : (dayPresets[email] || null));
   const fallback = editingDefaults ? null : (wbPresetDefaults[email] || null);
-  const effective = (preset && preset.status) ? preset : ((fallback && fallback.status) ? fallback : null);
+  // presetオブジェクト自体が存在する場合は、statusが空文字（「未設定」を明示的に選んだ）であっても
+  // それを優先する（renderWbPresetTable側の同種の判定と揃えている）。
+  const effective = preset ? preset : ((fallback && fallback.status) ? fallback : null);
   sel.value = effective ? effective.status||"" : "";
   document.getElementById("wb-preset-note").value = effective ? effective.note||"" : "";
   document.getElementById("wb-preset-modal-error").textContent = "";
@@ -6515,7 +6527,10 @@ async function saveWbPresetPendingEdits(){
       await Promise.all(list.map(emp=>{
         const preset = wbPresetEffectiveForEmail(emp.email);
         const fallback = fallbackDefaults[emp.email] || null;
-        const effective = (preset && preset.status) ? preset : ((fallback && fallback.status) ? fallback : null);
+        // presetオブジェクト自体が存在する場合は、statusが空文字（「未設定」を明示的に選んだ）であっても
+        // それを優先して保存する（表示側の判定と揃えている。ここが preset.status の真偽値判定のままだと、
+        // 「未設定」を選んで保存したはずが、実際には初期状態の内容で上書き保存されてしまう）。
+        const effective = preset ? preset : ((fallback && fallback.status) ? fallback : null);
         return setDoc(doc(db,"wb_presets", `${wbPresetSelectedDate}_${emp.email}`), {
           date: wbPresetSelectedDate,
           email: emp.email,
