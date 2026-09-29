@@ -784,9 +784,11 @@
   .visitor-type-pill-btn.active.type-all{background:var(--text);border-color:var(--text);color:#fff;}
   .visitor-toolbar{flex-wrap:nowrap;overflow-x:auto;}
   .visitor-toolbar-filters{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;margin-left:auto;}
-  /* 絞り込みボタン（社員名など）が横幅不足でつぶれて縦書き状態になるのを防ぐ */
+  /* 絞り込みボタン（社員名など）が横幅不足でつぶれて縦書き状態になるのを防ぐ。
+     .date-field-btnは通常width:100%（フォーム内で親幅いっぱいに広げる用）だが、
+     ここでは横並びのflexなので、内容に応じた幅（auto）に上書きする。 */
   .visitor-toolbar-filters > button, .visitor-toolbar-filters > .date-field-btn{
-    white-space:nowrap; flex-shrink:0;
+    white-space:nowrap; flex-shrink:0; width:auto;
   }
   @media (max-width:900px){
     .visitor-toolbar{flex-wrap:wrap;overflow-x:visible;}
@@ -1087,9 +1089,9 @@
             </div>
             <label style="font-size:12.5px;color:var(--muted);white-space:nowrap;">社員：</label>
             <button type="button" class="btn-ghost" id="visitor-host-filter-btn" style="border:1px solid var(--line);">すべて</button>
-            <button class="btn-ghost" id="visitor-host-filter-clear-btn" style="border:1px solid var(--line);display:none;">クリア</button>
             <label style="font-size:12.5px;color:var(--muted);white-space:nowrap;">日付：</label>
             <button type="button" class="date-field-btn placeholder" id="visitor-date-filter-btn" data-value="">すべて表示</button>
+            <button class="btn-ghost" id="visitor-host-filter-clear-btn" style="border:1px solid var(--line);display:none;">クリア</button>
             <button class="btn-ghost" id="visitor-date-filter-clear-btn" style="border:1px solid var(--line);display:none;">クリア</button>
           </div>
         </div>
