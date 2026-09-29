@@ -6470,6 +6470,12 @@ function confirmDiscardWbPresetPendingIfAny(){
     // 直前の件数のまま「保存」ボタンが押せる状態で残ってしまい、押しても
     // 保存対象が無いため何も起こらない（ように見える）不具合になる。
     updateWbPresetSaveButtonState();
+    // 表そのもの（各行の入力欄）も、破棄前の編集内容が残ったまま表示され続けてしまうため、
+    // 他のタブ等へ切り替えて「行き先」に戻ってきた際に未保存の状態に見えてしまう。
+    // ここで即座に再描画し、保存済み内容に戻しておく。
+    if(wbCurrentView==="preset"){
+      try{ renderWbPresetTable(); }catch(e){ console.error("[事前設定の再描画エラー]", e); }
+    }
     return true;
   }
   return false;
@@ -9673,19 +9679,49 @@ document.getElementById("chat-input")?.addEventListener("paste", (e)=>{
 // 「Site URL」設定（ドメイン直下）へ飛ぼうとして404になることが判明したため元に戻した。
 const CHAT_NOTIFY_WORKER_URL = "https://osakagumi-chat-notify.osakagumi-sys.workers.dev";
 const CHAT_NOTIFY_SHARED_SECRET = "452003d668f70b5d0534f9f6d053cd6572f796522b0b56cf";
+// messageIdの既読状態をリアルタイムで監視し、指定時間内に既読になれば true を返す。
+// タイムアウトした場合はfalseを返す（＝まだ見ていないとみなし、通知を送る）。
+// 固定時間だけ待ってから1回だけ確認する方式（以前の実装）だと、現場のスマホ回線など
+// 通信状況が悪い場面で「既読処理そのものは間に合うがチェック時点にはまだ間に合っていない」
+// ケースが起こり得た（チャット画面を開いて実際に会話しているのに通知が届いてしまう不具合の一因）。
+// onSnapshotでリアルタイムに監視し、既読になった瞬間に即座に反応する方式にすることで、
+// 待ち時間の長さに関わらず、既読が付き次第すぐに通知をキャンセルできるようにする。
+function waitForChatMessageReadOrTimeout(messageId, timeoutMs){
+  return new Promise(resolve=>{
+    let done = false;
+    let unsub = null;
+    const finish = (result)=>{
+      if(done) return;
+      done = true;
+      if(unsub) unsub();
+      clearTimeout(timer);
+      resolve(result);
+    };
+    const timer = setTimeout(()=> finish(false), timeoutMs);
+    try{
+      unsub = onSnapshot(doc(db,"direct_messages", messageId), snap=>{
+        if(snap.exists() && snap.data().read){
+          finish(true);
+        }
+      }, (err)=>{
+        console.error("[チャット既読監視エラー]", err);
+        finish(false); // 監視自体に失敗した場合は、念のため通常通り通知する
+      });
+    }catch(e){
+      console.error("[チャット既読監視エラー]", e);
+      finish(false);
+    }
+  });
+}
 // 新着チャットのプッシュ通知を、Cloudflare Worker経由でOneSignalに依頼する。
-// messageIdが渡された場合、数秒待ってからそのメッセージが既読になっていないか確認し、
+// messageIdが渡された場合、しばらく既読状態をリアルタイム監視し、
 // 既に既読（＝相手がチャット画面を見ていた）であれば、通知を送らずに済ませる
 // （わざわざ画面を見ている人に通知を出す必要はないため）。
 async function notifyChatRecipient(recipientEmail, senderName, senderEmail, messageId){
   if(messageId){
-    await new Promise(resolve=> setTimeout(resolve, 4000));
-    try{
-      const snap = await getDoc(doc(db,"direct_messages", messageId));
-      if(snap.exists() && snap.data().read){
-        return; // 既に既読なら、通知を送らない
-      }
-    }catch(e){ /* 既読確認に失敗した場合は、念のため通常通り通知する */ }
+    // 通信状況が悪い環境でも既読処理が間に合うよう、余裕をもって5秒まで待つ。
+    const alreadyRead = await waitForChatMessageReadOrTimeout(messageId, 5000);
+    if(alreadyRead) return; // 既に既読なら、通知を送らない
   }
   // 2026年9月：一時的に通知からリンクを外す変更を試したが、リンクを渡さなくても
   // OneSignal側の「Site URL」設定（ドメイン直下）へ飛ぼうとしてしまい、GitHub Pagesの
