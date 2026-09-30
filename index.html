@@ -3756,11 +3756,11 @@ function renderCheckoutGrid(grid, items){
       const holderRow = document.createElement("div");
       holderRow.className = "checkout-meta-row holder-row";
       let text = `借用者: <b>${escapeHtml(eq.holderName||eq.holderEmail)}</b>（${formatDateTimeJP(eq.holderSince)}から）`;
-      if(eq.returnDueDate){
-        text += `　返却予定日: <b>${escapeHtml(eq.returnDueDate)}</b>`;
-      }
       if(eq.projectName){
         text += `<br>工事名: <b>${escapeHtml(eq.projectName)}</b>`;
+      }
+      if(eq.returnDueDate){
+        text += `<br>返却予定日: <b>${escapeHtml(eq.returnDueDate)}</b>`;
       }
       holderRow.innerHTML = text;
       card.appendChild(holderRow);
