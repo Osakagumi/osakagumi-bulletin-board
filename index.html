@@ -1133,7 +1133,7 @@
         <!-- ---- 借用中の機材（測量機器/ドローンの借用・点検中、敷鉄板の自分の貸出中数量） ---- -->
         <div class="section-divider" style="margin-top:24px;">借用中の機材</div>
         <table class="sp-history-table" style="min-width:0;">
-          <thead><tr><th style="width:110px;">日付</th><th style="width:100px;">種別</th><th style="width:110px;">管理番号</th><th>設備名</th><th style="width:120px;">状態／数量</th></tr></thead>
+          <thead><tr><th style="width:110px;">日付</th><th style="width:100px;">種別</th><th style="width:110px;">管理番号</th><th>設備名</th><th>工事名</th><th style="width:120px;">状態／数量</th></tr></thead>
           <tbody id="my-resources-list"></tbody>
         </table>
       </section>
@@ -1876,6 +1876,10 @@
       <div class="field">
         <label>返却予定日（任意）</label>
         <button type="button" class="date-field-btn placeholder" id="checkout-return-date" data-value=""></button>
+      </div>
+      <div class="field">
+        <label>工事名（任意）</label>
+        <input type="text" id="checkout-project-name-input" maxlength="60" placeholder="例：〇〇道路改良工事">
       </div>
       <div class="modal-err" id="checkout-modal-error"></div>
       <div class="row-btns">
@@ -3622,6 +3626,7 @@ function renderMyResourcesSummary(){
       catLabel: cat.label, catColor: cat.color,
       assetNo: eq.assetNo || "",
       name: eq.name || "",
+      projectName: eq.projectName || "",
       statusHtml: `<span class="sp-type-badge" style="background:${st.color};">${escapeHtml(st.label)}</span>`,
       equipmentId: eq.id
     });
@@ -3646,7 +3651,7 @@ function renderMyResourcesSummary(){
   });
 
   if(rows.length===0){
-    body.innerHTML = `<tr><td colspan="5" style="color:var(--muted);text-align:center;padding:14px;">現在、借用中の機材はありません。</td></tr>`;
+    body.innerHTML = `<tr><td colspan="6" style="color:var(--muted);text-align:center;padding:14px;">現在、借用中の機材はありません。</td></tr>`;
     return;
   }
   rows.forEach(r=>{
@@ -3658,6 +3663,7 @@ function renderMyResourcesSummary(){
       <td class="sp-nowrap"><span class="sp-type-badge" style="background:${r.catColor};">${escapeHtml(r.catLabel)}</span></td>
       <td class="sp-nowrap" style="color:var(--muted);">${escapeHtml(r.assetNo)}</td>
       <td>${escapeHtml(r.name)}</td>
+      <td style="color:var(--muted);">${escapeHtml(r.projectName||"")}</td>
       <td class="sp-nowrap">${r.statusHtml}</td>
     `;
     body.appendChild(tr);
@@ -3753,6 +3759,9 @@ function renderCheckoutGrid(grid, items){
       if(eq.returnDueDate){
         text += `　返却予定日: <b>${escapeHtml(eq.returnDueDate)}</b>`;
       }
+      if(eq.projectName){
+        text += `<br>工事名: <b>${escapeHtml(eq.projectName)}</b>`;
+      }
       holderRow.innerHTML = text;
       card.appendChild(holderRow);
     }
@@ -3820,6 +3829,7 @@ async function confirmAndTransition(eq, targetStatus, extra){
     payload.holderName = "";
     payload.holderSince = null;
     payload.returnDueDate = "";
+    payload.projectName = "";
   }
   try{
     await updateDoc(doc(db,"equipment", eq.id), payload);
@@ -3855,6 +3865,8 @@ function openCheckoutModal(eq, targetStatus, mode){
   }
 
   setDateFieldValue(document.getElementById("checkout-return-date"), eq.returnDueDate || "");
+  // 工事名は「今回の貸出・借用」に対して都度入力するものなので、モーダルを開くたびに空欄に戻す
+  document.getElementById("checkout-project-name-input").value = "";
   document.getElementById("checkout-modal-error").textContent = "";
   document.getElementById("checkout-modal").classList.add("show");
 }
@@ -3877,7 +3889,8 @@ document.getElementById("checkout-modal-confirm").addEventListener("click", asyn
   const { eq, targetStatus, mode } = checkoutModalTarget;
   const errEl = document.getElementById("checkout-modal-error");
   const returnDueDate = document.getElementById("checkout-return-date").dataset.value || "";
-  const extra = { returnDueDate };
+  const projectName = document.getElementById("checkout-project-name-input").value.trim();
+  const extra = { returnDueDate, projectName };
   if(mode==="lend"){
     if(!checkoutRecipientEmail){ errEl.textContent = "貸出先を選択してください。"; return; }
     extra.holderEmail = checkoutRecipientEmail;
