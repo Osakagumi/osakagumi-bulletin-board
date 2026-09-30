@@ -2001,7 +2001,8 @@ import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, sendPasswordResetEmail
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, addDoc, deleteDoc, query, where,
+  initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
+  collection, doc, getDoc, getDocs, setDoc, updateDoc, addDoc, deleteDoc, query, where,
   onSnapshot, orderBy, limit, documentId, arrayUnion, arrayRemove, Timestamp, FieldPath, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
@@ -2013,7 +2014,17 @@ import { initStorageHelper, uploadFileToStorage, deleteFileFromStorage } from ".
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = getFirestore(app);
+// Firestoreのオフライン永続化（IndexedDB）を有効にする。
+// これにより、ページを開き直すたびに全コレクションを無条件で読み直すのではなく、
+// 前回ブラウザに保存したデータをまず即座に表示し（読み取りゼロ）、
+// サーバーとは「前回以降に実際に変わった分」だけをやりとりするようになる（想定。実測で要検証）。
+// 複数タブを同時に開く使い方があるため、persistentMultipleTabManagerで対応する。
+// 万一この端末でIndexedDBが使えない場合（プライベートブラウジング等）でも、
+// Firestore SDK側の仕様により、永続化なしの通常モードで動作が継続される
+// （＝この機能が原因でアプリ自体が止まることはない）。
+const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+});
 // 在席状況（オンライン表示）専用：Realtime Database。
 // databaseURLが未設定（firebase-config.js参照）の場合はnullのままとなり、
 // 在席状況の機能だけが静かに無効化される（他の機能には影響しない）。

@@ -1461,7 +1461,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signOut, inMemoryPersistence, setPersistence } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  getFirestore, collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, setDoc,
+  initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
+  collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, setDoc,
   query, where, onSnapshot, orderBy, limit, Timestamp, arrayUnion, arrayRemove, deleteField,
   getCountFromServer, documentId
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -1470,7 +1471,11 @@ import { initStorageHelper, uploadFileToStorage, deleteFileFromStorage, fetchSto
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = getFirestore(app);
+// index.html側と同じ理由（開き直しのたびの全件読み直しを避けるため）で、
+// こちらもFirestoreのオフライン永続化（IndexedDB・マルチタブ対応）を有効にする。
+const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+});
 initStorageHelper(app);
 
 function toast(msg){
