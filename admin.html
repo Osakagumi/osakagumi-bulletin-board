@@ -1258,6 +1258,29 @@
             <div id="fs-diag-estimate-result" style="font-size:14px;font-weight:700;margin-top:6px;"></div>
           </div>
         </div>
+
+        <!-- admin.html（この管理画面）自身がログイン時に無条件で読み込んでいるコレクションの診断。
+             一般画面用の診断とは別に集計する（管理画面は権限管理用の小さなコレクションを多数読むため）。 -->
+        <div class="panel" style="margin:0;">
+          <h2>Firestore 読み取り数の診断（admin.html＝この管理画面自体）</h2>
+          <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
+            この管理画面もログインのたびに、以下のコレクションを丸ごと読み込みます（「予約状況（全体）」タブのreservationsのみ、タブを開いた時だけ読む作りのため対象外）。このほか、権限判定用のドキュメント読み取りが固定で約22件（データ量に関わらず一定）別途発生します。
+          </p>
+          <button class="btn btn-primary" id="admin-diag-run-btn">件数を確認する</button>
+          <div id="admin-diag-status" style="font-size:12.5px;color:var(--muted);margin-top:8px;"></div>
+          <table id="admin-diag-table" style="display:none;margin-top:12px;">
+            <thead><tr><th>コレクション</th><th style="text-align:right;">件数</th></tr></thead>
+            <tbody id="admin-diag-table-body"></tbody>
+            <tfoot><tr style="font-weight:700;"><td>合計（コレクション分のみ。上記の固定約22件は別途加算）</td><td id="admin-diag-total" style="text-align:right;"></td></tr></tfoot>
+          </table>
+          <div id="admin-diag-estimate" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--line);">
+            <div class="field" style="max-width:220px;">
+              <label>ログイン回数</label>
+              <input type="number" id="admin-diag-login-count" min="1" value="100">
+            </div>
+            <div id="admin-diag-estimate-result" style="font-size:14px;font-weight:700;margin-top:6px;"></div>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -3726,6 +3749,65 @@ function updateFsDiagEstimate(){
   resultEl.textContent = `開き直し ${reloadCount.toLocaleString()} 回 × 合計 ${total.toLocaleString()} 件 ＝ 約 ${(total*reloadCount).toLocaleString()} 読み取り`;
 }
 document.getElementById("fs-diag-reload-count")?.addEventListener("input", updateFsDiagEstimate);
+
+// ---- admin.html（この管理画面自体）が、ログインのたびに無条件で読み込んでいるコレクションの診断 ----
+// reservationsは前回の対策で「予約状況（全体）」タブを開いた時だけの遅延読み込みに変更済みのため、
+// ここには含めない。app_settingsやsystem_tab_defaults配下の単一ドキュメント読み取り（合計約22件、
+// データ量に関わらず固定）は、件数を数える意味がないためこの診断には含めていない。
+const ADMIN_LOGIN_COLLECTIONS = [
+  "equipment_categories", "equipment", "admins", "announcement_posters",
+  "notice_managers", "announcements", "departments", "wb_statuses",
+  "whereabouts_editors", "equipment_managers", "calendar_editors", "calendar_years",
+  "contract_editors", "safety_senders", "visitor_managers", "visitor_target_officers",
+  "business_info_items", "business_info_categories", "employees"
+];
+document.getElementById("admin-diag-run-btn")?.addEventListener("click", async ()=>{
+  const statusEl = document.getElementById("admin-diag-status");
+  const tableEl = document.getElementById("admin-diag-table");
+  const bodyEl = document.getElementById("admin-diag-table-body");
+  const totalEl = document.getElementById("admin-diag-total");
+  const estimateWrap = document.getElementById("admin-diag-estimate");
+  statusEl.textContent = "確認中…";
+  tableEl.style.display = "none";
+  estimateWrap.style.display = "none";
+  bodyEl.innerHTML = "";
+  let total = 0;
+  let failCount = 0;
+  for(const name of ADMIN_LOGIN_COLLECTIONS){
+    let countText = "―";
+    try{
+      const snap = await getCountFromServer(collection(db, name));
+      const n = snap.data().count;
+      total += n;
+      countText = `${n.toLocaleString()} 件`;
+    }catch(e){
+      failCount++;
+      countText = `取得失敗（${escapeHtml(e.code || e.message || "不明なエラー")}）`;
+      console.error(`[Firestore件数診断:admin] ${name} の取得に失敗:`, e);
+    }
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${escapeHtml(name)}</td><td style="text-align:right;">${countText}</td>`;
+    bodyEl.appendChild(tr);
+  }
+  totalEl.textContent = `${total.toLocaleString()} 件`;
+  tableEl.style.display = "";
+  estimateWrap.style.display = "";
+  statusEl.textContent = failCount>0
+    ? `確認しました（${failCount}件は取得できませんでした。理由は各行右側のエラーコードをご確認ください）。`
+    : `確認しました。この合計に加えて、固定約22件のドキュメント読み取りが毎回発生します。`;
+  updateAdminDiagEstimate();
+});
+function updateAdminDiagEstimate(){
+  const totalEl = document.getElementById("admin-diag-total");
+  const resultEl = document.getElementById("admin-diag-estimate-result");
+  const loginCountInput = document.getElementById("admin-diag-login-count");
+  const collectionTotal = parseInt((totalEl.textContent||"0").replace(/[^0-9]/g,""), 10) || 0;
+  const FIXED_DOC_READS = 22; // 権限判定・各種設定ドキュメントの固定読み取り数（データ量に関わらず一定）
+  const perLoginTotal = collectionTotal + FIXED_DOC_READS;
+  const loginCount = Math.max(0, parseInt(loginCountInput.value, 10) || 0);
+  resultEl.textContent = `1回のログインあたり 約${perLoginTotal.toLocaleString()}件（コレクション分${collectionTotal.toLocaleString()}件＋固定${FIXED_DOC_READS}件） × ログイン ${loginCount.toLocaleString()} 回 ＝ 約 ${(perLoginTotal*loginCount).toLocaleString()} 読み取り`;
+}
+document.getElementById("admin-diag-login-count")?.addEventListener("input", updateAdminDiagEstimate);
 
 function initChatCleanupSettingsListener(){
   onSnapshot(doc(db,"app_settings","chat_cleanup"), snap=>{
