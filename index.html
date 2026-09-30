@@ -2605,10 +2605,12 @@ onAuthStateChanged(auth, async (user)=>{
     initSteelPlateTxListener();
     initContractsListener();
     initVisitorSchedulesListener();
-    initVisitorTargetOfficersListener();
     cleanupOldVisitorSchedules();
-    initBizInfoListener();
-    initBizInfoCategoriesListener();
+    // 業務情報（business_info_categories/items）と、出入予定の「役員対象社員」設定
+    // （visitor_target_officers）は、いずれもダッシュボードの表示には使われず、
+    // それぞれ「業務情報」タブ／「出入予定」タブを実際に開いた時にしか参照されない。
+    // ログイン直後の読み取り数を減らすため、ここでは監視を開始せず、
+    // 該当タブを初めて開いたタイミングで初めて監視を始める（switchToTab側を参照）。
     initChatCleanupSettingsListener();
     initKioskLogoutShortcutListener();
     initChatListeners();
@@ -2779,6 +2781,7 @@ function applyMyHiddenTabs(){
     const firstVisible = Array.from(document.querySelectorAll("#main-tabs .tab-btn")).find(b=> b.style.display !== "none");
     if(firstVisible) switchToTab(firstVisible.dataset.view);
   } else if(document.getElementById("view-bizinfo").style.display !== "none"){
+    ensureBizInfoListeners();
     try{ renderBizInfoTab(); }catch(e){ /* ignore */ }
   }
 }
@@ -3249,6 +3252,7 @@ function switchToTab(viewName){
     try{ renderCheckoutTab(); }catch(e){ console.error("[貸出タブの表示エラー]", e); }
   }
   if(viewName==="visitors"){
+    ensureVisitorTargetOfficersListener();
     try{ renderActiveVisitorView(); }catch(e){ console.error("[出入予定タブの表示エラー]", e); }
   }
   if(viewName==="dashboard"){
@@ -3271,6 +3275,7 @@ function switchToTab(viewName){
     cleanupOldChatMessages();
   }
   if(viewName==="bizinfo"){
+    ensureBizInfoListeners();
     try{ renderBizInfoTab(); }catch(e){ console.error("[業務情報タブの表示エラー]", e); }
   }
 }
@@ -3984,6 +3989,14 @@ function initVisitorSchedulesListener(){
     }
     refreshDashboardIfActive();
   }, (err)=>{ console.error("[出入予定取得エラー]", err); });
+}
+// 出入予定タブを実際に開いた時にだけ、上記の監視をまとめて開始する（1度だけ）。
+// ダッシュボードには使われないため、ログイン直後には開始しない。
+let visitorTargetOfficersListenerStarted = false;
+function ensureVisitorTargetOfficersListener(){
+  if(visitorTargetOfficersListenerStarted) return;
+  visitorTargetOfficersListenerStarted = true;
+  initVisitorTargetOfficersListener();
 }
 // 出入予定：役員予定の対象にできる社員一覧（管理画面「出入予定管理」タブで設定）
 function initVisitorTargetOfficersListener(){
@@ -10824,6 +10837,15 @@ async function cleanupOldChatMessages(){
    業務情報（Googleドライブ上のファイルをピル切り替えで表示）
 ========================================================= */
 function bizInfoCatInfo(id){ return bizInfoCategoriesAll.find(c=>c.id===id) || { id:"uncategorized", label:"未分類", color:"#9CA3AF" }; }
+// 業務情報タブを実際に開いた時にだけ、上記2つの監視をまとめて開始する（1度だけ）。
+// ダッシュボードには使われないため、ログイン直後には開始しない。
+let bizInfoListenersStarted = false;
+function ensureBizInfoListeners(){
+  if(bizInfoListenersStarted) return;
+  bizInfoListenersStarted = true;
+  initBizInfoCategoriesListener();
+  initBizInfoListener();
+}
 function initBizInfoCategoriesListener(){
   onSnapshot(collection(db,"business_info_categories"), snap=>{
     bizInfoCategoriesAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
