@@ -2317,6 +2317,56 @@ function initPresence(){
 function isUserOnline(email){
   return !!presenceOnlineMap[email];
 }
+
+/* =========================================================
+   行き先ステータス（本人による自己編集分）の即時反映を、RTDBで行う。
+   理由：employeesコレクション全体を全員がonSnapshotで監視しているため、
+   もしstatus等をFirestoreのemployeesドキュメントへ書き込むと、誰か1人が
+   行き先を変えるたびに「今繋がっている全員分」の読み取りが課金されてしまう
+   （在席表示がFirestore版だった頃と同じ構造の問題）。
+   本人による自己編集はここ（RTDB）へ書き込み、他者設定権限者による代理設定・
+   事前設定の自動反映（頻度が低い）は、従来通りFirestoreのemployeesドキュメントへ
+   書き込む（ownerEmailベースの本人限定ルールだけでは、他者設定権限の判定を
+   RTDB側で再現できないため）。表示側は「RTDBにあればそれを優先、なければ
+   Firestore側の値にフォールバック」という形で両方を透過的に扱う（withLiveWbStatus）。
+========================================================= */
+let wbStatusRtdbMap = {}; // { email: {status, note, statusUpdatedAt, statusUpdatedBy, timeLeaveDate, timeLeaveStart, timeLeaveEnd, timeLeaveType} }
+let wbStatusListUnsub = null;
+function initWbStatusLive(){
+  if(!rtdb) return; // RTDB未設定の場合は何もしない（Firestore側の値のみで動作する＝従来通り）
+  if(wbStatusListUnsub) wbStatusListUnsub();
+  const wbStatusRootRef = rtdbRef(rtdb, "wbStatus");
+  wbStatusListUnsub = rtdbOnValue(wbStatusRootRef, (snap)=>{
+    const val = snap.val() || {};
+    const map = {};
+    Object.keys(val).forEach(key=>{
+      map[unsanitizeEmailFromRtdbKey(key)] = val[key];
+    });
+    wbStatusRtdbMap = map;
+    renderWhereabouts();
+    refreshDashboardIfActive();
+  }, (err)=>{ console.error("[行き先ステータス取得エラー]", err); });
+}
+// emp（Firestoreのemployeesドキュメント由来）に、RTDB側の値があれば上書きして返す。
+// ただし「RTDBにあれば常に優先」ではなく、statusUpdatedAtを比較してより新しい方を採用する。
+// 理由：本人の自己編集はRTDBへ、他者設定権限者による代理設定・事前設定の自動反映はFirestoreへ
+// 書き込まれる（上のコメント参照）。RTDBの値は日をまたいでも残り続けるため、単純にRTDB優先に
+// すると、例えば「数日前に自己編集した古いRTDBの値」が「今朝、事前設定から自動反映された
+// Firestore側の新しい値」より優先されてしまい、表示が古いまま・または事前設定が反映されて
+// いないように見える不具合になる。statusUpdatedAtの新しい方を採る形にすることで、
+// 書き込まれた順序に関わらず正しく最新の状態が表示される。
+// status系フィールドを直接参照する箇所は、必ずこれを通してからアクセスすること。
+function withLiveWbStatus(emp){
+  const live = emp && emp.email ? wbStatusRtdbMap[emp.email] : null;
+  if(!live) return emp;
+  const liveTime = live.statusUpdatedAt ? new Date(live.statusUpdatedAt).getTime() : 0;
+  const empTime = emp.statusUpdatedAt ? new Date(emp.statusUpdatedAt).getTime() : 0;
+  return liveTime >= empTime ? Object.assign({}, emp, live) : emp;
+}
+function writeMyWbStatusToRtdb(payload){
+  const myKey = sanitizeEmailForRtdbKey(currentUser.email);
+  return rtdbSet(rtdbRef(rtdb, `wbStatus/${myKey}`), Object.assign({ ownerEmail: currentUser.email }, payload));
+}
 function refreshOnlineMarksIfActive(){
   if(document.getElementById("chat-list-view")?.style.display !== "none"){
     renderChatConversationList();
@@ -2626,6 +2676,7 @@ onAuthStateChanged(auth, async (user)=>{
     initKioskLogoutShortcutListener();
     initChatListeners();
     initPresence();
+    initWbStatusLive();
     initOneSignalForCurrentUser();
     initContractSettingsListener();
     initUserPrefsListener();
@@ -6497,6 +6548,7 @@ function nextWorkingDayStr(){
 // 本人が今日その場で編集済みならその内容（時間休なしも含む）を最優先、
 // 編集していなければ今日分の事前設定の時間休を返す
 function getEffectiveTimeLeave(emp){
+  emp = withLiveWbStatus(emp);
   const updatedToday = emp.statusUpdatedAt && toLocalDateStr(emp.statusUpdatedAt) === todayStr();
   if(updatedToday){
     if(emp.timeLeaveType){
@@ -6533,6 +6585,7 @@ function isTimeLeaveActiveNow(emp){
 // ステータスの優先順位（今日その場での編集 > 当日の事前設定 > 初期状態）だけを見る。
 // 時間休・定時外による強制上書きは含まない（モーダルの初期値表示など、素の状態が欲しい場面で使う）
 function getEffectiveBaseStatus(emp){
+  emp = withLiveWbStatus(emp);
   const updatedToday = emp.statusUpdatedAt && toLocalDateStr(emp.statusUpdatedAt) === todayStr();
   if(updatedToday && emp.status){
     return emp.status;
@@ -6551,6 +6604,7 @@ function getEffectiveBaseStatus(emp){
 
 // 実際に表示するステータスIDを返す。定時外の場合は特別な文字列 "OFFHOURS" を返す。
 function getEffectiveWbStatus(emp){
+  emp = withLiveWbStatus(emp);
   if(!isNowInWorkWindow()){
     return "OFFHOURS";
   }
@@ -6584,6 +6638,7 @@ function renderWbNoteCell(tdNote, tlText, baseNote){
   }
 }
 function getWbNoteLines(emp){
+  emp = withLiveWbStatus(emp);
   if(!isNowInWorkWindow()){
     return { tlText: "", baseNote: "" };
   }
@@ -6603,6 +6658,7 @@ function getWbNoteLines(emp){
 }
 
 function getBaseWbNote(emp){
+  emp = withLiveWbStatus(emp);
   const updatedToday = emp.statusUpdatedAt && toLocalDateStr(emp.statusUpdatedAt) === todayStr();
   if(updatedToday){
     return emp.note || "";
@@ -7082,7 +7138,10 @@ async function consumeTodayWbPresets(dateStr){
     try{
       const empSnap = await getDoc(doc(db,"employees", email));
       if(!empSnap.exists()) continue;
-      const emp = empSnap.data();
+      // 本人の自己編集はRTDB側に書き込まれているため、ここでもwithLiveWbStatusで
+      // マージしてから判定する（Firestore側だけ見ると、自己編集済みなのに見落として
+      // 事前設定で上書きしてしまう）。
+      const emp = withLiveWbStatus({ email, ...empSnap.data() });
       // 本人が既に今日その場で編集済みなら、それを優先してこちらでは上書きしない
       const updatedToday = emp.statusUpdatedAt && toLocalDateStr(emp.statusUpdatedAt) === dateStr;
       if(updatedToday) continue;
@@ -7897,7 +7956,15 @@ document.getElementById("wb-save").addEventListener("click", async ()=>{
     timeLeaveType: tlChecked ? ((wbTimeLeaveRestricted ? wbOriginalTimeLeave.type : wbTimeLeaveType) || "custom") : ""
   };
   try{
-    await updateDoc(doc(db,"employees", wbEditingEmail), payload);
+    if(wbEditingEmail === currentUser.email && rtdb){
+      // 自分自身の行き先変更はRTDBへ書き込む（employeesコレクション全体を監視している
+      // 全員分の読み取りが、変更のたびに発生するのを避けるため。上のコメント参照）。
+      await writeMyWbStatusToRtdb(payload);
+    } else {
+      // 他者の行き先を代理で変更する場合（行き先の他者設定権限者）は頻度が低いため、
+      // 従来通りFirestore側（employeesドキュメント）を更新する。
+      await updateDoc(doc(db,"employees", wbEditingEmail), payload);
+    }
     wbModal.classList.remove("show");
     toast("行き先を更新しました。");
   }catch(e){
