@@ -10160,12 +10160,23 @@ function initChatListeners(){
   const myEmail = currentUser.email;
   chatSentUnsub = onSnapshot(
     query(collection(db,"direct_messages"), where("senderEmail","==",myEmail)),
-    snap=>{ chatSentMsgs = snap.docs.map(d=>({id:d.id, ...d.data()})); rebuildChatConversations(); },
+    snap=>{
+      chatSentMsgs = snap.docs.map(d=>({id:d.id, ...d.data()}));
+      rebuildChatConversations();
+      // チャットタブを開かない人がいても掃除が滞らないよう、このリスナー（ログイン直後の
+      // 初回発火・以後の変化のたびの発火）に便乗して自動削除を試みる。cleanupOldChatMessages内部の
+      // 1時間スロットルがあるため、ここで毎回呼んでも読み取りが増えすぎることはない。
+      cleanupOldChatMessages();
+    },
     (err)=>{ console.error("[チャット取得エラー：送信分]", err); }
   );
   chatReceivedUnsub = onSnapshot(
     query(collection(db,"direct_messages"), where("recipientEmail","==",myEmail)),
-    snap=>{ chatReceivedMsgs = snap.docs.map(d=>({id:d.id, ...d.data()})); rebuildChatConversations(); },
+    snap=>{
+      chatReceivedMsgs = snap.docs.map(d=>({id:d.id, ...d.data()}));
+      rebuildChatConversations();
+      cleanupOldChatMessages();
+    },
     (err)=>{ console.error("[チャット取得エラー：受信分]", err); }
   );
 }
@@ -10745,9 +10756,13 @@ let chatCleanupLastRun = 0;
 async function cleanupOldChatMessages(){
   const now0 = Date.now();
   // 1時間以内に実行済みなら再実行しない（Firestoreへの読み取りを抑えるため）。
-  // バックグラウンドでの定期実行はやめ、チャットタブを開いた時（switchToTab側の呼び出し）
-  // にだけ実行されるようにしたので、このガードは「同じ人が短時間に何度もタブを
-  // 開閉した場合に読み取りが増えすぎないようにする」ためのもの。
+  // バックグラウンドの定期タイマーは廃止し、代わりに次の2箇所から呼ばれる：
+  // ①チャットタブを開いた時（switchToTab側の呼び出し）
+  // ②ログイン中は常に張られているチャットの自動監視（initChatListenersのonSnapshot）が
+  //   発火するたび＝ログイン直後の初回受信時、および自分宛て・自分発のメッセージが
+  //   動くたび。これにより、チャットタブを一切開かない人がいても、Firestoreへの
+  //   追加読み取りを増やすことなく（＝既存の監視に便乗するだけで）定期的に掃除が働く。
+  // このガードは、上記が短時間に何度も発火しても実行しすぎないようにするためのもの。
   if(now0 - chatCleanupLastRun < 60*60*1000) return;
   chatCleanupLastRun = now0;
   try{
