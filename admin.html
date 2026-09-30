@@ -1872,7 +1872,11 @@ onAuthStateChanged(auth, async (user)=>{
   updateStickyNavOffset();
   seedCategoriesIfEmpty().then(initCategoriesListener);
   initEquipmentListener();
-  initReservationsListener();
+  // 予約状況（全体）は件数の見通しが立たない上、このタブでしか使われないため、
+  // ここでは監視を開始せず、タブを開いた時に遅延読み込みする（switchToAdminTab側を参照）。
+  // ただし、ログイン直後に最初に表示されるタブが「予約状況（全体）」自体だった場合は、
+  // switchToAdminTab呼び出し（上のfirstAccessibleSection判定）で既にensureReservationsListener()が
+  // 呼ばれているため、ここでは何もしなくてよい。
   initAdminsListener();
   initPostersListener();
   initNoticeManagersListener();
@@ -1951,6 +1955,7 @@ function switchToAdminTab(viewName){
     document.getElementById("view-"+v).style.display = (v===viewName) ? "block":"none";
   });
   if(viewName==="systemsettings") loadStorageInfo();
+  if(viewName==="reservations") ensureReservationsListener();
 }
 document.querySelectorAll(".tab-btn").forEach(btn=>{
   btn.addEventListener("click", ()=>{
@@ -2482,6 +2487,15 @@ function initReservationsListener(){
     allReservations.sort((a,b)=> (a.date+a.startTime).localeCompare(b.date+b.startTime));
     renderReservationsTable();
   });
+}
+let reservationsListenerStarted = false;
+// 「予約状況（全体）」タブは予約データを全件読み込むため、ログイン直後ではなく、
+// 実際にこのタブを開いた時にだけ監視を開始する（この画面は他のどのタブからも
+// allReservationsを参照していないため、遅延読み込みにしても安全と確認済み）。
+function ensureReservationsListener(){
+  if(reservationsListenerStarted) return;
+  reservationsListenerStarted = true;
+  initReservationsListener();
 }
 document.getElementById("res-filter-date").addEventListener("change", renderReservationsTable);
 document.getElementById("res-filter-category").addEventListener("change", renderReservationsTable);

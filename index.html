@@ -5350,8 +5350,28 @@ function initNoticesListener(){
 let noticeCleanupRunning = false;
 // 予約日が過去日になった予約を自動削除する（本人の予約は誰でも、それ以外はシステム管理者のみ削除できる）
 let reservationCleanupRunning = false;
+// 予約・お知らせの自動削除は、ログイン・再読み込みのたびに無条件でコレクション全体を
+// スキャンしていた（cleanupPastReservationsはreservations全件、cleanupOldNoticesは
+// announcements全件のうち期限切れ分）。チャットのお掃除と同様、頻繁な開き直し（検証時の
+// 複数端末での再読み込み等）のたびに実行すると読み取りが積み重なるため、ブラウザごとに
+// 前回実行時刻をlocalStorageへ記録し、一定時間以内の再実行はスキップする（cleanupOldNotices
+// 自体の頻度も同様の理由で抑える）。
+const RESERVATION_CLEANUP_INTERVAL_MS = 6*60*60*1000; // 6時間
+const NOTICE_CLEANUP_INTERVAL_MS = 6*60*60*1000; // 6時間
+function shouldRunLocalThrottledCleanup(storageKey, intervalMs){
+  try{
+    const lastRun = parseInt(localStorage.getItem(storageKey) || "0", 10);
+    if(Date.now() - lastRun < intervalMs) return false;
+    localStorage.setItem(storageKey, String(Date.now()));
+    return true;
+  }catch(e){
+    // localStorageが使えない場合は、安全側として毎回実行する
+    return true;
+  }
+}
 async function cleanupPastReservations(){
   if(reservationCleanupRunning) return;
+  if(!shouldRunLocalThrottledCleanup("rsvCleanupLastRun", RESERVATION_CLEANUP_INTERVAL_MS)) return;
   reservationCleanupRunning = true;
   try{
     const today = todayStr();
@@ -5373,6 +5393,7 @@ async function cleanupPastReservations(){
 
 async function cleanupOldNotices(){
   if(noticeCleanupRunning) return;
+  if(!shouldRunLocalThrottledCleanup("noticeCleanupLastRun", NOTICE_CLEANUP_INTERVAL_MS)) return;
   noticeCleanupRunning = true;
   try{
     let cleanupDays = 30;
@@ -8710,13 +8731,35 @@ document.getElementById("cal-publish-btn")?.addEventListener("click", async ()=>
   const originalLabel = publishBtn.textContent;
   publishBtn.disabled = true;
   try{
-    const startId = `${calFiscalYearStart}-04-01`;
-    const endId = `${calFiscalYearStart+1}-03-31`;
-    const q = query(collection(db,"calendar_days"), where(documentId(), ">=", startId), where(documentId(), "<=", endId));
-    const snap = await getDocs(q);
-    const docs = snap.docs;
+    const yearDocId = String(calFiscalYearStart);
+    const yearSnap = await getDoc(doc(db,"calendar_years", yearDocId));
+    const pendingDatesRaw = yearSnap.exists() ? yearSnap.data().pendingDates : null;
+    const pendingDates = (Array.isArray(pendingDatesRaw) && pendingDatesRaw.length>0)
+      ? [...new Set(pendingDatesRaw)]
+      : null;
+
+    const BATCH_SIZE = 25; // ある程度まとめて並列読み書きすることで、体感速度を上げつつ進捗も表示する
+    let docs;
+    if(pendingDates){
+      // 前回の公開以降に変更があった日付（pendingDates）だけを読み込んで再公開する。
+      // 365日分をまるごと読み書きしていた従来の方式に比べ、Firestoreの読み取り・書き込みを
+      // 大幅に減らせる（変更した日数分だけで済む）。
+      docs = [];
+      for(let i=0; i<pendingDates.length; i+=BATCH_SIZE){
+        const batchDates = pendingDates.slice(i, i+BATCH_SIZE);
+        const snaps = await Promise.all(batchDates.map(dateStr => getDoc(doc(db,"calendar_days", dateStr))));
+        snaps.forEach((s, idx)=>{ if(s.exists()) docs.push({ id: batchDates[idx], data: ()=>s.data() }); });
+      }
+    } else {
+      // pendingDatesが記録されていない「編集中」状態（この対策を入れる前からの古いデータ等）
+      // への後方互換のため、念のため年度全体を取得して公開する（従来通りの安全な挙動）。
+      const startId = `${calFiscalYearStart}-04-01`;
+      const endId = `${calFiscalYearStart+1}-03-31`;
+      const q = query(collection(db,"calendar_days"), where(documentId(), ">=", startId), where(documentId(), "<=", endId));
+      const snap = await getDocs(q);
+      docs = snap.docs;
+    }
     const total = docs.length;
-    const BATCH_SIZE = 25; // ある程度まとめて並列書き込みすることで、体感速度を上げつつ進捗も表示する
     let done = 0;
     publishBtn.textContent = `公開中… 0/${total}`;
     for(let i=0; i<docs.length; i+=BATCH_SIZE){
@@ -8725,8 +8768,8 @@ document.getElementById("cal-publish-btn")?.addEventListener("click", async ()=>
       done += batch.length;
       publishBtn.textContent = `公開中… ${done}/${total}`;
     }
-    await setDoc(doc(db,"calendar_years", String(calFiscalYearStart)), { status: "published" }, { merge:true });
-    toast("公開しました。");
+    await setDoc(doc(db,"calendar_years", yearDocId), { status: "published", pendingDates: [] }, { merge:true });
+    toast(total>0 ? `公開しました（${total}日分を更新）。` : "公開しました。");
   }catch(e){
     toast("公開に失敗しました。権限をご確認ください。");
   }finally{
@@ -8738,7 +8781,10 @@ document.getElementById("cal-publish-btn")?.addEventListener("click", async ()=>
 async function markCalYearAsDraft(dateStr){
   const year = fiscalYearOfDateStr(dateStr);
   try{
-    await setDoc(doc(db,"calendar_years", String(year)), { status: "draft" }, { merge:true });
+    // pendingDates：前回の公開以降に変更があった日付の一覧。「公開する」を押した時に
+    // 年度365日分をまるごと読み書きするのではなく、ここに記録された日付だけを
+    // 再公開すれば済むようにするための記録（Firestoreの読み取り・書き込み削減のため）。
+    await setDoc(doc(db,"calendar_years", String(year)), { status: "draft", pendingDates: arrayUnion(dateStr) }, { merge:true });
   }catch(e){ /* 失敗しても日付データ自体の更新は別途行われているので致命的ではない */ }
 }
 function loadCalendarYear(year){
@@ -8914,7 +8960,13 @@ document.getElementById("cal-label-save-btn").addEventListener("click", async ()
       // この日だけ、通常の「公開する」を待たずにその場で公開スナップショットへ反映する
       await setDoc(doc(db,"calendar_days_published", dateStr), dayData);
       // この日については下書きと公開版が一致した状態なので、「編集中」への変更は行わない
-      // （他に未公開の変更が残っている場合は、そちらの編集時に既に「編集中」になっているはず）
+      // （他に未公開の変更が残っている場合は、そちらの編集時に既に「編集中」になっているはず）。
+      // ただし、この日が既にpendingDates（未公開一覧）に入っていた場合は、公開済みになった
+      // ので取り除いておく（次回の「公開する」で再度読み書きしないようにするため）。
+      const yearForRemoval = fiscalYearOfDateStr(dateStr);
+      try{
+        await setDoc(doc(db,"calendar_years", String(yearForRemoval)), { pendingDates: arrayRemove(dateStr) }, { merge:true });
+      }catch(e){ /* 失敗しても致命的ではない（次回の公開時に無駄が1日分残るだけ） */ }
     } else {
       await markCalYearAsDraft(dateStr);
     }
