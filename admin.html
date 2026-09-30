@@ -1234,6 +1234,30 @@
           </div>
           <div id="theme-colors-save-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px;"></div>
         </div>
+
+        <!-- Firestore無料枠診断：ログイン時に読み込まれる各コレクションの件数を、count()集計クエリ
+             （何件あっても1読み取り扱い）でまとめて確認する。1回の「開き直し」で発生する
+             読み取り数の目安＝ここに出る合計件数、という前提で見積もりに使う。 -->
+        <div class="panel" style="margin:0;">
+          <h2>Firestore 読み取り数の診断（無料枠対策）</h2>
+          <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
+            一般画面はログイン・再読み込みのたびに、以下のコレクションを丸ごと読み込みます。ここでの件数確認自体はcount()集計クエリを使うため、件数がいくつあっても1コレクションにつき1読み取りしか消費しません。
+          </p>
+          <button class="btn btn-primary" id="fs-diag-run-btn">件数を確認する</button>
+          <div id="fs-diag-status" style="font-size:12.5px;color:var(--muted);margin-top:8px;"></div>
+          <table id="fs-diag-table" style="display:none;margin-top:12px;">
+            <thead><tr><th>コレクション</th><th style="text-align:right;">件数</th></tr></thead>
+            <tbody id="fs-diag-table-body"></tbody>
+            <tfoot><tr style="font-weight:700;"><td>合計（1回の開き直しあたりの目安）</td><td id="fs-diag-total" style="text-align:right;"></td></tr></tfoot>
+          </table>
+          <div id="fs-diag-estimate" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--line);">
+            <div class="field" style="max-width:220px;">
+              <label>開き直し回数</label>
+              <input type="number" id="fs-diag-reload-count" min="1" value="100">
+            </div>
+            <div id="fs-diag-estimate-result" style="font-size:14px;font-weight:700;margin-top:6px;"></div>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -1415,7 +1439,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/fireba
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signOut, inMemoryPersistence, setPersistence } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, setDoc,
-  query, where, onSnapshot, orderBy, limit, Timestamp, arrayUnion, arrayRemove, deleteField
+  query, where, onSnapshot, orderBy, limit, Timestamp, arrayUnion, arrayRemove, deleteField,
+  getCountFromServer
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig, CATEGORIES as SEED_CATEGORIES, EQUIPMENT_STATUSES } from "./firebase-config.js";
 import { initStorageHelper, uploadFileToStorage, deleteFileFromStorage, fetchStorageInfo } from "./storage-helper.js";
@@ -3589,6 +3614,60 @@ document.getElementById("theme-colors-save-btn")?.addEventListener("click", asyn
     msgEl.style.color = "var(--danger)";
   }
 });
+
+// ---- Firestore無料枠診断：一般画面がログイン時に丸ごと読み込んでいるコレクションの件数を、
+// count()集計クエリ（何件あっても1読み取りしか消費しない）でまとめて数える ----
+const FS_DIAG_COLLECTIONS = [
+  "employees", "departments", "wb_statuses", "wb_presets",
+  "equipment_categories", "equipment",
+  "visitor_schedules", "contracts", "announcements",
+  "steel_plate_transactions",
+  "calendar_years", "calendar_days", "calendar_days_published"
+];
+document.getElementById("fs-diag-run-btn")?.addEventListener("click", async ()=>{
+  const statusEl = document.getElementById("fs-diag-status");
+  const tableEl = document.getElementById("fs-diag-table");
+  const bodyEl = document.getElementById("fs-diag-table-body");
+  const totalEl = document.getElementById("fs-diag-total");
+  const estimateWrap = document.getElementById("fs-diag-estimate");
+  statusEl.textContent = "確認中…";
+  tableEl.style.display = "none";
+  estimateWrap.style.display = "none";
+  bodyEl.innerHTML = "";
+  let total = 0;
+  let failCount = 0;
+  for(const name of FS_DIAG_COLLECTIONS){
+    let countText = "―";
+    try{
+      const snap = await getCountFromServer(collection(db, name));
+      const n = snap.data().count;
+      total += n;
+      countText = `${n.toLocaleString()} 件`;
+    }catch(e){
+      failCount++;
+      countText = "取得失敗";
+    }
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${escapeHtml(name)}</td><td style="text-align:right;">${countText}</td>`;
+    bodyEl.appendChild(tr);
+  }
+  totalEl.textContent = `${total.toLocaleString()} 件`;
+  tableEl.style.display = "";
+  estimateWrap.style.display = "";
+  statusEl.textContent = failCount>0
+    ? `確認しました（${failCount}件は権限等の理由で取得できませんでした）。この診断自体の読み取り消費は約${FS_DIAG_COLLECTIONS.length}件です。`
+    : `確認しました。この診断自体の読み取り消費は約${FS_DIAG_COLLECTIONS.length}件です。`;
+  updateFsDiagEstimate();
+});
+function updateFsDiagEstimate(){
+  const totalEl = document.getElementById("fs-diag-total");
+  const resultEl = document.getElementById("fs-diag-estimate-result");
+  const reloadCountInput = document.getElementById("fs-diag-reload-count");
+  const total = parseInt((totalEl.textContent||"0").replace(/[^0-9]/g,""), 10) || 0;
+  const reloadCount = Math.max(0, parseInt(reloadCountInput.value, 10) || 0);
+  resultEl.textContent = `開き直し ${reloadCount.toLocaleString()} 回 × 合計 ${total.toLocaleString()} 件 ＝ 約 ${(total*reloadCount).toLocaleString()} 読み取り`;
+}
+document.getElementById("fs-diag-reload-count")?.addEventListener("input", updateFsDiagEstimate);
 
 function initChatCleanupSettingsListener(){
   onSnapshot(doc(db,"app_settings","chat_cleanup"), snap=>{
