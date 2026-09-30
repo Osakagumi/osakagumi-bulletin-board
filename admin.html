@@ -3645,7 +3645,9 @@ document.getElementById("fs-diag-run-btn")?.addEventListener("click", async ()=>
       countText = `${n.toLocaleString()} 件`;
     }catch(e){
       failCount++;
-      countText = "取得失敗";
+      // エラーの中身を隠さず表示する（無料枠超過の場合はcode: "resource-exhausted"になる）
+      countText = `取得失敗（${escapeHtml(e.code || e.message || "不明なエラー")}）`;
+      console.error(`[Firestore件数診断] ${name} の取得に失敗:`, e);
     }
     const tr = document.createElement("tr");
     tr.innerHTML = `<td>${escapeHtml(name)}</td><td style="text-align:right;">${countText}</td>`;
@@ -3655,7 +3657,7 @@ document.getElementById("fs-diag-run-btn")?.addEventListener("click", async ()=>
   tableEl.style.display = "";
   estimateWrap.style.display = "";
   statusEl.textContent = failCount>0
-    ? `確認しました（${failCount}件は権限等の理由で取得できませんでした）。この診断自体の読み取り消費は約${FS_DIAG_COLLECTIONS.length}件です。`
+    ? `確認しました（${failCount}件は取得できませんでした。理由は各行右側のエラーコードをご確認ください）。この診断自体の読み取り消費は、成功した分のみ約${FS_DIAG_COLLECTIONS.length - failCount}件です。`
     : `確認しました。この診断自体の読み取り消費は約${FS_DIAG_COLLECTIONS.length}件です。`;
   updateFsDiagEstimate();
 });
