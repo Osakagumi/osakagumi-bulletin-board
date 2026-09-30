@@ -17,6 +17,27 @@
         ".write": "auth != null && newData.child('ownerEmail').val() === auth.token.email",
         ".validate": "newData.hasChild('ownerEmail')"
       }
+    },
+
+    "messages": {
+      "$conversationId": {
+        ".read": "auth != null && ($conversationId.beginsWith(auth.token.email.replace('.', ',') + '__') || $conversationId.endsWith('__' + auth.token.email.replace('.', ',')))",
+        ".write": "auth != null && ($conversationId.beginsWith(auth.token.email.replace('.', ',') + '__') || $conversationId.endsWith('__' + auth.token.email.replace('.', ',')))",
+        ".indexOn": ["createdAt"],
+        "$messageId": {
+          ".validate": "newData.hasChildren(['senderEmail', 'recipientEmail', 'createdAt']) && (newData.child('senderEmail').val() === auth.token.email || newData.child('recipientEmail').val() === auth.token.email)"
+        }
+      }
+    },
+
+    "userChats": {
+      "$ownerKey": {
+        ".read": "auth != null && $ownerKey === auth.token.email.replace('.', ',')",
+        "$conversationId": {
+          ".write": "auth != null && ($conversationId.beginsWith(auth.token.email.replace('.', ',') + '__') || $conversationId.endsWith('__' + auth.token.email.replace('.', ','))) && ($conversationId.beginsWith($ownerKey + '__') || $conversationId.endsWith('__' + $ownerKey))",
+          ".validate": "newData.hasChildren(['otherEmail', 'lastAt'])"
+        }
+      }
     }
   }
 }

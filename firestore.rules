@@ -202,6 +202,10 @@ service cloud.firestore {
     // 在席状況（ポータルサイトを開いているかどうか）は Realtime Database に移行したため、
     // Firestoreの presence コレクションはもう使用しない（database.rules.json 側を参照）。
 
+    // チャット（1対1メッセージ）も2026年10月に Realtime Database へ移行したため、
+    // Firestoreの direct_messages コレクションはもう使用しない（database.rules.json 側の
+    // messages / userChats を参照）。
+
     // 設備管理者一覧（点検日の編集・貸出状態の管理ができる人）: 全員が読める。書き込みはシステム管理者のみ。
     match /equipment_managers/{email} {
       allow read: if isSignedIn();
@@ -234,17 +238,6 @@ service cloud.firestore {
     match /business_info_categories/{categoryId} {
       allow read: if isSignedIn();
       allow create, update, delete: if isAdmin();
-    }
-
-    // ダイレクトメッセージ（1対1）: 送信者・受信者本人のみ読み書き可能。1日経過後に自動削除される。
-    match /direct_messages/{messageId} {
-      allow read: if isSignedIn() &&
-        (resource.data.senderEmail == request.auth.token.email || resource.data.recipientEmail == request.auth.token.email);
-      allow create: if isSignedIn() && request.resource.data.senderEmail == request.auth.token.email;
-      allow update: if isSignedIn() &&
-        (resource.data.senderEmail == request.auth.token.email || resource.data.recipientEmail == request.auth.token.email);
-      allow delete: if isSignedIn() &&
-        (resource.data.senderEmail == request.auth.token.email || resource.data.recipientEmail == request.auth.token.email);
     }
 
     // 設備マスタ: ログインしていれば読める。

@@ -2007,7 +2007,8 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
   getDatabase, ref as rtdbRef, set as rtdbSet, onValue as rtdbOnValue, onDisconnect as rtdbOnDisconnect,
-  serverTimestamp as rtdbServerTimestamp
+  serverTimestamp as rtdbServerTimestamp, push as rtdbPush, update as rtdbUpdate, remove as rtdbRemove,
+  get as rtdbGet, query as rtdbQuery, orderByChild as rtdbOrderByChild, endAt as rtdbEndAt
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 import { firebaseConfig, BUSINESS_HOURS, EQUIPMENT_STATUSES, SAFETY_STATUSES, EMAILJS_CONFIG, resolveMailRecipients, isMailOverrideActive, MAIL_SEND_TARGET, NOTICE_BOARD_AUTO_LOGIN } from "./firebase-config.js";
 import { initStorageHelper, uploadFileToStorage, deleteFileFromStorage } from "./storage-helper.js";
@@ -10306,84 +10307,62 @@ document.getElementById("contract-delete-btn")?.addEventListener("click", async 
 
 /* =========================================================
    チャット（1対1・当日分のみ保持）
+   2026年10月、Firestoreの direct_messages コレクションから Realtime Database（RTDB）へ移行した。
+   理由：presence・wbStatusと同じ構造の問題（ログイン中ずっと張りっぱなしのリスナー・
+   書き込み頻度が高い・24時間で自動削除される短命データ）を抱えており、Firestoreの
+   読み取り課金と相性が悪かったため（RTDBは転送データ量での課金）。
+   データ構造：
+   - messages/{conversationId}/{messageId}：メッセージ本体（1対1の会話ごとにまとめる）
+   - userChats/{sanitizedEmail}/{conversationId}：本人の会話一覧用インデックス
+     （最後のメッセージ・未読フラグをキャッシュしておき、一覧表示のために会話ごとの
+     全メッセージを読み込まずに済むようにする。送信時に送信者・受信者の両方の
+     インデックスを同時に更新する。片方の更新だけ失敗する事故を避けるため、
+     メッセージ本体とあわせて1回のrtdbUpdateでまとめて書き込む＝多重パス更新）
+   conversationIdは、両者のメールアドレス（RTDBキー用にサニタイズ済み）を昇順ソートして
+   "__"で連結したもの。createdAtはRTDBのrtdbServerTimestamp()（サーバー側の時刻）で
+   記録するため、Firestore版で発生していた「送信者PCの時計ズレ」「型混在（文字列/
+   Timestamp）」の問題はそもそも起こらない。
 ========================================================= */
 function chatConversationId(emailA, emailB){
-  return [emailA.toLowerCase(), emailB.toLowerCase()].sort().join("__");
+  return [sanitizeEmailForRtdbKey(emailA.toLowerCase()), sanitizeEmailForRtdbKey(emailB.toLowerCase())].sort().join("__");
 }
-let chatSentUnsub = null, chatReceivedUnsub = null;
-let chatSentMsgs = [], chatReceivedMsgs = [];
+let chatListUnsub = null;
 function initChatListeners(){
-  const myEmail = currentUser.email;
-  chatSentUnsub = onSnapshot(
-    query(collection(db,"direct_messages"), where("senderEmail","==",myEmail)),
-    snap=>{
-      chatSentMsgs = snap.docs.map(d=>({id:d.id, ...d.data()}));
-      rebuildChatConversations();
-      // チャットタブを開かない人がいても掃除が滞らないよう、このリスナー（ログイン直後の
-      // 初回発火・以後の変化のたびの発火）に便乗して自動削除を試みる。cleanupOldChatMessages内部の
-      // 1時間スロットルがあるため、ここで毎回呼んでも読み取りが増えすぎることはない。
-      cleanupOldChatMessages();
-    },
-    (err)=>{ console.error("[チャット取得エラー：送信分]", err); }
-  );
-  chatReceivedUnsub = onSnapshot(
-    query(collection(db,"direct_messages"), where("recipientEmail","==",myEmail)),
-    snap=>{
-      chatReceivedMsgs = snap.docs.map(d=>({id:d.id, ...d.data()}));
-      rebuildChatConversations();
-      cleanupOldChatMessages();
-    },
-    (err)=>{ console.error("[チャット取得エラー：受信分]", err); }
-  );
-}
-function rebuildChatConversations(){
-  const myEmail = currentUser.email;
-  const all = [...chatSentMsgs, ...chatReceivedMsgs];
-  const map = new Map();
-  all.forEach(m=>{
-    const isMine = m.senderEmail===myEmail;
-    const otherEmail = isMine ? m.recipientEmail : m.senderEmail;
-    const otherName = isMine ? (m.recipientName||m.recipientEmail) : (m.senderName||m.senderEmail);
-    const convId = m.conversationId || chatConversationId(myEmail, otherEmail);
-    const existing = map.get(convId);
-    if(!existing || chatTimeMillis(m.createdAt) > chatTimeMillis(existing.lastAt)){
-      map.set(convId, {
-        conversationId: convId, otherEmail, otherName,
-        lastText: m.text || "", lastAt: m.createdAt || "",
-        lastSenderEmail: m.senderEmail,
-        unread: (!isMine && !m.read) || (existing?.unread && existing.conversationId===convId ? existing.unread : false)
-      });
+  if(!rtdb){
+    console.warn("[チャット] Realtime DatabaseのdatabaseURLが未設定のため、チャット機能は無効です。firebase-config.jsをご確認ください。");
+    return;
+  }
+  const myKey = sanitizeEmailForRtdbKey(currentUser.email);
+  if(chatListUnsub) chatListUnsub();
+  chatListUnsub = rtdbOnValue(rtdbRef(rtdb, `userChats/${myKey}`), snap=>{
+    const val = snap.val() || {};
+    chatConversations = Object.keys(val)
+      .map(convId=> Object.assign({ conversationId: convId }, val[convId]))
+      .sort((a,b)=> chatTimeMillis(b.lastAt) - chatTimeMillis(a.lastAt));
+    const badge = document.getElementById("chat-tab-badge");
+    const hasUnreadChat = chatConversations.some(c=>c.unread);
+    if(badge) badge.style.display = hasUnreadChat ? "inline-block" : "none";
+    if(document.getElementById("view-chat").style.display !== "none" && document.getElementById("chat-list-view").style.display !== "none"){
+      renderChatConversationList();
     }
-  });
-  // 未読は「相手からの、まだreadされていないメッセージが1件でもあるか」で判定し直す
-  map.forEach(conv=>{
-    conv.unread = chatReceivedMsgs.some(m=> (m.conversationId===conv.conversationId) && !m.read);
-  });
-  chatConversations = [...map.values()].sort((a,b)=> chatTimeMillis(b.lastAt) - chatTimeMillis(a.lastAt));
-  const badge = document.getElementById("chat-tab-badge");
-  const hasUnreadChat = chatConversations.some(c=>c.unread);
-  if(badge) badge.style.display = hasUnreadChat ? "inline-block" : "none";
-  if(document.getElementById("view-chat").style.display !== "none" && document.getElementById("chat-list-view").style.display !== "none"){
-    renderChatConversationList();
-  }
-  if(chatCurrentConversationId){
-    updateChatThreadTitleAndUnread();
-  }
-  refreshDashboardIfActive();
+    refreshDashboardIfActive();
+    // チャットタブを開かない人がいても掃除が滞らないよう、このリスナー（ログイン直後の
+    // 初回発火・以後の変化のたびの発火）に便乗して自動削除を試みる。cleanupOldChatMessages内部の
+    // 1時間スロットルがあるため、ここで毎回呼んでも負荷が増えすぎることはない。
+    cleanupOldChatMessages();
+  }, (err)=>{ console.error("[チャット一覧取得エラー]", err); });
 }
 // 一覧の「削除」ボタンから、その会話の全メッセージを削除する（相手側からも見えなくなる）
 async function deleteChatConversation(conv){
   if(!confirm(`${conv.otherName} さんとの会話を削除しますか？\nメッセージは相手からも見えなくなります。`)) return;
   try{
-    const myEmail = currentUser.email;
-    const [sentSnap, receivedSnap] = await Promise.all([
-      getDocs(query(collection(db,"direct_messages"), where("conversationId","==",conv.conversationId), where("senderEmail","==",myEmail))),
-      getDocs(query(collection(db,"direct_messages"), where("conversationId","==",conv.conversationId), where("recipientEmail","==",myEmail)))
-    ]);
-    const ids = new Set([...sentSnap.docs, ...receivedSnap.docs].map(d=>d.id));
-    for(const id of ids){
-      try{ await deleteDoc(doc(db,"direct_messages", id)); }catch(e){ /* 1件失敗しても続行 */ }
-    }
+    const myKey = sanitizeEmailForRtdbKey(currentUser.email);
+    const otherKey = sanitizeEmailForRtdbKey(conv.otherEmail);
+    await rtdbUpdate(rtdbRef(rtdb), {
+      [`messages/${conv.conversationId}`]: null,
+      [`userChats/${myKey}/${conv.conversationId}`]: null,
+      [`userChats/${otherKey}/${conv.conversationId}`]: null
+    });
     toast("削除しました。");
   }catch(e){
     toast("削除に失敗しました。");
@@ -10422,16 +10401,12 @@ function renderChatConversationList(){
     body.appendChild(row);
   });
 }
-// チャットのcreatedAtは、PCの時計のズレの影響を受けないよう送信者の端末時刻ではなく
-// Firestoreサーバー側の時刻（serverTimestamp()）で記録している。その結果、値の型が
-// ①Firestore Timestampオブジェクト（送信後、サーバーから反映された状態）
-// ②null（自分が送信した直後、まだサーバーの値が反映されていない一瞬の間。＝ほぼ「今」）
-// ③文字列のISO日時（本機能の導入前に送信された古いメッセージ。互換性のため残る）
-// の3通りありうるため、どれが来ても比較・表示できるようミリ秒に変換するヘルパーを用意する。
+// チャットのcreatedAt・lastAtは、RTDBのrtdbServerTimestamp()（サーバー側の時刻）で記録しており、
+// サーバーから反映された後は常に数値（ミリ秒エポック）になる。念のため、旧Firestore版の
+// データ（文字列のISO日時）が万一残っていた場合や、値が届く前の一瞬（null）にも対応しておく。
 function chatTimeMillis(v){
   if(!v) return Date.now();
-  if(typeof v.toMillis === "function") return v.toMillis();
-  if(typeof v.seconds === "number") return v.seconds*1000 + Math.floor((v.nanoseconds||0)/1e6);
+  if(typeof v === "number") return v;
   if(typeof v === "string"){ const t = new Date(v).getTime(); return isNaN(t) ? 0 : t; }
   return 0;
 }
@@ -10443,12 +10418,10 @@ function formatChatTime(ts){
   const sameDay = d.toDateString()===now.toDateString();
   return sameDay ? `${pad2(d.getHours())}:${pad2(d.getMinutes())}` : `${pad2(d.getMonth()+1)}/${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
-let chatThreadSentUnsub = null, chatThreadReceivedUnsub = null;
-let chatThreadSentMsgs = [], chatThreadReceivedMsgs = [];
+// chatThreadUnsub はグローバル変数として既に宣言済み（上部の宣言群を参照）
 let chatThreadLatestMsgs = []; // 直近に描画したスレッドのメッセージ一覧（画面が見えるようになった時に既読処理をやり直すため保持）
 function stopChatThreadListeners(){
-  if(chatThreadSentUnsub){ chatThreadSentUnsub(); chatThreadSentUnsub = null; }
-  if(chatThreadReceivedUnsub){ chatThreadReceivedUnsub(); chatThreadReceivedUnsub = null; }
+  if(chatThreadUnsub){ chatThreadUnsub(); chatThreadUnsub = null; }
 }
 // 「今まさにこの画面をユーザーが見ているか」の判定。
 // タブが裏に隠れている（document.hidden）だけでなく、最小化・他のウィンドウの裏に
@@ -10466,29 +10439,18 @@ function openChatThread(otherEmail, otherName){
   document.getElementById("chat-thread-view").style.display = "block";
   document.getElementById("chat-messages").innerHTML = "";
   stopChatThreadListeners();
-  chatThreadSentMsgs = [];
-  chatThreadReceivedMsgs = [];
-  const myEmail = currentUser.email;
-  const renderAndMark = ()=>{
-    const msgs = [...chatThreadSentMsgs, ...chatThreadReceivedMsgs]
-      .filter(m=> m.conversationId===chatCurrentConversationId)
+  // RTDBの.read権限は「conversationIdの参加者本人かどうか」だけで判定しているため、
+  // Firestore版のように送信分・受信分を別クエリに分ける必要はなく、会話ノード1本を
+  // そのまま監視すればよい（listenerが2本→1本に減っている）。
+  chatThreadUnsub = rtdbOnValue(rtdbRef(rtdb, `messages/${chatCurrentConversationId}`), snap=>{
+    const val = snap.val() || {};
+    const msgs = Object.keys(val)
+      .map(id=> Object.assign({ id }, val[id]))
       .sort((a,b)=> chatTimeMillis(a.createdAt) - chatTimeMillis(b.createdAt));
     chatThreadLatestMsgs = msgs;
     renderChatMessages(msgs);
     markChatMessagesRead(msgs);
-  };
-  // conversationIdだけで絞り込むクエリは、Firestoreのセキュリティルール（送信者/受信者チェック）と
-  // 一致しないため「list」操作として権限エラーになる。ルールに合わせて送信分・受信分を分けて取得する。
-  chatThreadSentUnsub = onSnapshot(
-    query(collection(db,"direct_messages"), where("conversationId","==",chatCurrentConversationId), where("senderEmail","==",myEmail)),
-    snap=>{ chatThreadSentMsgs = snap.docs.map(d=>({id:d.id, ...d.data()})); renderAndMark(); },
-    (err)=>{ console.error("[チャットスレッド取得エラー：送信分]", err); }
-  );
-  chatThreadReceivedUnsub = onSnapshot(
-    query(collection(db,"direct_messages"), where("conversationId","==",chatCurrentConversationId), where("recipientEmail","==",myEmail)),
-    snap=>{ chatThreadReceivedMsgs = snap.docs.map(d=>({id:d.id, ...d.data()})); renderAndMark(); },
-    (err)=>{ console.error("[チャットスレッド取得エラー：受信分]", err); }
-  );
+  }, (err)=>{ console.error("[チャットスレッド取得エラー]", err); });
   setTimeout(()=> document.getElementById("chat-input")?.focus(), 100);
 }
 function updateChatThreadOnlineMark(){
@@ -10549,9 +10511,13 @@ async function markChatMessagesRead(msgs){
   // （visibilitychange/focus のリスナー経由で）改めて呼び直される。
   if(!isWindowActuallyVisible()) return;
   const toMark = msgs.filter(m=> m.recipientEmail===currentUser.email && !m.read);
-  for(const m of toMark){
-    try{ await updateDoc(doc(db,"direct_messages", m.id), { read: true }); }catch(e){ /* 1件失敗しても続行 */ }
-  }
+  if(toMark.length===0) return;
+  const updates = {};
+  toMark.forEach(m=>{ updates[`messages/${chatCurrentConversationId}/${m.id}/read`] = true; });
+  // 自分の会話一覧インデックス（userChats）の未読フラグも、同じ更新でまとめて消す
+  const myKey = sanitizeEmailForRtdbKey(currentUser.email);
+  updates[`userChats/${myKey}/${chatCurrentConversationId}/unread`] = false;
+  try{ await rtdbUpdate(rtdbRef(rtdb), updates); }catch(e){ console.error("[チャット既読更新エラー]", e); }
 }
 // ウィンドウが最小化／裏に隠れた状態から、再び実際に見える状態に戻った時に呼ぶ。
 // チャットのスレッド画面を開いたままだった場合、見ていない間に届いていたメッセージを
@@ -10563,9 +10529,6 @@ function retryMarkChatReadIfVisible(){
 }
 document.addEventListener("visibilitychange", retryMarkChatReadIfVisible);
 window.addEventListener("focus", retryMarkChatReadIfVisible);
-function updateChatThreadTitleAndUnread(){
-  // 現在開いているスレッドの未読ドットを消すため、一覧の再描画は openChatThread 側のリアルタイム反映に任せる
-}
 document.getElementById("chat-back-btn")?.addEventListener("click", ()=>{
   stopChatThreadListeners();
   chatCurrentConversationId = null;
@@ -10729,6 +10692,40 @@ async function sendChatMessage(){
   input.style.height = "auto";
   clearPendingChatAttachment();
 
+  // 会話両者の会話一覧インデックス（userChats）・メッセージ本体を1回のrtdbUpdateでまとめて書き込む
+  // ための共通ヘルパー。msgFieldsにはtext・添付情報などメッセージ固有のフィールドを渡す。
+  const commitChatMessage = async (msgFields)=>{
+    const myEmail = currentUser.email;
+    const myKey = sanitizeEmailForRtdbKey(myEmail);
+    const otherKey = sanitizeEmailForRtdbKey(chatCurrentOtherEmail);
+    const otherEmp = employeesAll.find(e=>(e.email||"").toLowerCase()===chatCurrentOtherEmail.toLowerCase());
+    const otherName = otherEmp?.name || chatCurrentOtherEmail;
+    const newMsgRef = rtdbPush(rtdbRef(rtdb, `messages/${chatCurrentConversationId}`));
+    const messageId = newMsgRef.key;
+    const senderName = myDisplayName();
+    const updates = {};
+    updates[`messages/${chatCurrentConversationId}/${messageId}`] = Object.assign({
+      senderEmail: myEmail,
+      senderName,
+      recipientEmail: chatCurrentOtherEmail,
+      recipientName: otherName,
+      read: false,
+      createdAt: rtdbServerTimestamp()
+    }, msgFields);
+    updates[`userChats/${myKey}/${chatCurrentConversationId}`] = {
+      otherEmail: chatCurrentOtherEmail, otherName,
+      lastText: msgFields.text || "", lastAt: rtdbServerTimestamp(),
+      lastSenderEmail: myEmail, unread: false
+    };
+    updates[`userChats/${otherKey}/${chatCurrentConversationId}`] = {
+      otherEmail: myEmail, otherName: senderName,
+      lastText: msgFields.text || "", lastAt: rtdbServerTimestamp(),
+      lastSenderEmail: myEmail, unread: true
+    };
+    await rtdbUpdate(rtdbRef(rtdb), updates);
+    return messageId;
+  };
+
   if(pending){
     let file = pending.file;
     const kind = pending.kind;
@@ -10737,9 +10734,8 @@ async function sendChatMessage(){
       file = await compressImageForChat(file);
       console.log("[チャット添付送信] 圧縮後サイズ：", file.size, "bytes");
     }
-    // Firestoreからの反映を待たず、その場で自分の吹き出しを表示する
+    // アップロード完了を待たず、その場で自分の吹き出しを表示する
     const optimisticRow = appendOptimisticChatAttachmentBubble(file, kind, text);
-    const otherEmp = employeesAll.find(e=>(e.email||"").toLowerCase()===chatCurrentOtherEmail.toLowerCase());
     try{
       console.log("[チャット添付送信] アップロード開始");
       const { path: fileId } = await withTimeout(
@@ -10753,21 +10749,10 @@ async function sendChatMessage(){
       const attachmentUrl = (kind === "image" || kind === "pdf")
         ? `https://drive.google.com/thumbnail?id=${fileId}&sz=w1600`
         : "";
-      const msgRef = await addDoc(collection(db,"direct_messages"), {
-        conversationId: chatCurrentConversationId,
-        senderEmail: currentUser.email,
-        senderName: myDisplayName(),
-        recipientEmail: chatCurrentOtherEmail,
-        recipientName: otherEmp?.name || chatCurrentOtherEmail,
-        text,
-        attachmentUrl,
-        attachmentFileId: fileId,
-        attachmentFileName: file.name,
-        attachmentKind: kind,
-        read: false,
-        createdAt: serverTimestamp() // 送信者PCの時計ズレの影響を受けないよう、サーバー側の時刻を記録する
+      const messageId = await commitChatMessage({
+        text, attachmentUrl, attachmentFileId: fileId, attachmentFileName: file.name, attachmentKind: kind
       });
-      notifyChatRecipient(chatCurrentOtherEmail, myDisplayName(), currentUser.email, msgRef.id);
+      notifyChatRecipient(chatCurrentConversationId, chatCurrentOtherEmail, myDisplayName(), currentUser.email, messageId);
     }catch(e){
       console.error("[チャット添付送信エラー]", e);
       toast(`添付ファイルの送信に失敗しました：${e.message || e}`);
@@ -10778,19 +10763,9 @@ async function sendChatMessage(){
   } else {
     // 従来通り、テキストのみの送信
     appendOptimisticChatBubble(text);
-    const otherEmp = employeesAll.find(e=>(e.email||"").toLowerCase()===chatCurrentOtherEmail.toLowerCase());
     try{
-      const msgRef = await addDoc(collection(db,"direct_messages"), {
-        conversationId: chatCurrentConversationId,
-        senderEmail: currentUser.email,
-        senderName: myDisplayName(),
-        recipientEmail: chatCurrentOtherEmail,
-        recipientName: otherEmp?.name || chatCurrentOtherEmail,
-        text,
-        read: false,
-        createdAt: serverTimestamp() // 送信者PCの時計ズレの影響を受けないよう、サーバー側の時刻を記録する
-      });
-      notifyChatRecipient(chatCurrentOtherEmail, myDisplayName(), currentUser.email, msgRef.id);
+      const messageId = await commitChatMessage({ text });
+      notifyChatRecipient(chatCurrentConversationId, chatCurrentOtherEmail, myDisplayName(), currentUser.email, messageId);
     }catch(e){
       toast("送信に失敗しました。");
       input.value = text;
@@ -10830,7 +10805,7 @@ const CHAT_NOTIFY_SHARED_SECRET = "452003d668f70b5d0534f9f6d053cd6572f796522b0b5
 // ケースが起こり得た（チャット画面を開いて実際に会話しているのに通知が届いてしまう不具合の一因）。
 // onSnapshotでリアルタイムに監視し、既読になった瞬間に即座に反応する方式にすることで、
 // 待ち時間の長さに関わらず、既読が付き次第すぐに通知をキャンセルできるようにする。
-function waitForChatMessageReadOrTimeout(messageId, timeoutMs){
+function waitForChatMessageReadOrTimeout(conversationId, messageId, timeoutMs){
   return new Promise(resolve=>{
     let done = false;
     let unsub = null;
@@ -10843,8 +10818,8 @@ function waitForChatMessageReadOrTimeout(messageId, timeoutMs){
     };
     const timer = setTimeout(()=> finish(false), timeoutMs);
     try{
-      unsub = onSnapshot(doc(db,"direct_messages", messageId), snap=>{
-        if(snap.exists() && snap.data().read){
+      unsub = rtdbOnValue(rtdbRef(rtdb, `messages/${conversationId}/${messageId}/read`), snap=>{
+        if(snap.val() === true){
           finish(true);
         }
       }, (err)=>{
@@ -10861,10 +10836,10 @@ function waitForChatMessageReadOrTimeout(messageId, timeoutMs){
 // messageIdが渡された場合、しばらく既読状態をリアルタイム監視し、
 // 既に既読（＝相手がチャット画面を見ていた）であれば、通知を送らずに済ませる
 // （わざわざ画面を見ている人に通知を出す必要はないため）。
-async function notifyChatRecipient(recipientEmail, senderName, senderEmail, messageId){
+async function notifyChatRecipient(conversationId, recipientEmail, senderName, senderEmail, messageId){
   if(messageId){
     // 通信状況が悪い環境でも既読処理が間に合うよう、余裕をもって5秒まで待つ。
-    const alreadyRead = await waitForChatMessageReadOrTimeout(messageId, 5000);
+    const alreadyRead = await waitForChatMessageReadOrTimeout(conversationId, messageId, 5000);
     if(alreadyRead) return; // 既に既読なら、通知を送らない
   }
   // 2026年9月：一時的に通知からリンクを外す変更を試したが、リンクを渡さなくても
@@ -10906,18 +10881,17 @@ document.getElementById("chat-new-btn")?.addEventListener("click", async ()=>{
     toast("自分自身とはチャットできません。");
   }
 });
-// メッセージは24時間経過すると自動的に削除される（自分が送った分・受け取った分の両方を、
+// メッセージは24時間経過すると自動的に削除される（本人が参加している会話だけを、
 // 開いた本人が削除できる権限で処理する。お知らせなどと同じ「誰かが開いたときに実行」方式）
 let chatCleanupLastRun = 0;
 async function cleanupOldChatMessages(){
   const now0 = Date.now();
-  // 1時間以内に実行済みなら再実行しない（Firestoreへの読み取りを抑えるため）。
-  // バックグラウンドの定期タイマーは廃止し、代わりに次の2箇所から呼ばれる：
+  // 1時間以内に実行済みなら再実行しない。バックグラウンドの定期タイマーは設けず、
+  // 代わりに次の2箇所から呼ばれる：
   // ①チャットタブを開いた時（switchToTab側の呼び出し）
-  // ②ログイン中は常に張られているチャットの自動監視（initChatListenersのonSnapshot）が
-  //   発火するたび＝ログイン直後の初回受信時、および自分宛て・自分発のメッセージが
-  //   動くたび。これにより、チャットタブを一切開かない人がいても、Firestoreへの
-  //   追加読み取りを増やすことなく（＝既存の監視に便乗するだけで）定期的に掃除が働く。
+  // ②ログイン中は常に張られている会話一覧の監視（initChatListenersのrtdbOnValue）が
+  //   発火するたび＝ログイン直後の初回受信時、および自分の会話一覧が動くたび。
+  //   これにより、チャットタブを一切開かない人がいても定期的に掃除が働く。
   // このガードは、上記が短時間に何度も発火しても実行しすぎないようにするためのもの。
   if(now0 - chatCleanupLastRun < 60*60*1000) return;
   chatCleanupLastRun = now0;
@@ -10926,40 +10900,62 @@ async function cleanupOldChatMessages(){
     const attachmentCutoffMs = now - chatCleanupSettings.imageHours*60*60*1000;
     const textCutoffMs = now - chatCleanupSettings.textHours*60*60*1000;
     // 「1時間」「24時間」のうち短い方（多くの場合は添付側）より前のものを広めに候補として取得し、
-    // 添付付きかどうかで実際の削除基準（添付だけ消すか、メッセージごと消すか）を分ける
+    // 添付付きかどうかで実際の削除基準（添付だけ消すか、メッセージごと消すか）を分ける。
     // クエリで拾う範囲は、2つの基準時刻のうち「より新しい方（＝1時間前など、短い方の期間の基準時刻）」にする。
     // こうすることで「1時間は経ったが24時間はまだ経っていない」添付ファイルも、正しく候補に含まれる。
-    // （逆に「より古い方」を使ってしまうと、24時間経つまで添付が全く候補に入らないバグになる）
     const broadestCutoffMs = Math.max(attachmentCutoffMs, textCutoffMs);
-    // createdAtは、PCの時計ズレ対策（serverTimestamp()化）の前後で型が混在する過渡期がある
-    // （新しいメッセージ＝Firestore Timestamp型、導入前の古いメッセージ＝文字列型）。
-    // Firestoreの範囲クエリ（<）は同じ型同士でしか正しく比較できないため、両方の型で問い合わせて結果を合算する。
-    const broadestCutoffStr = new Date(broadestCutoffMs).toISOString();
-    const broadestCutoffTs = Timestamp.fromMillis(broadestCutoffMs);
-    console.log("[チャット自動削除] クエリに使う基準時刻（新しい方）：", broadestCutoffStr);
-    const myEmail = currentUser.email;
-    const [sentOldStr, receivedOldStr, sentOldTs, receivedOldTs] = await Promise.all([
-      getDocs(query(collection(db,"direct_messages"), where("senderEmail","==",myEmail), where("createdAt","<",broadestCutoffStr))),
-      getDocs(query(collection(db,"direct_messages"), where("recipientEmail","==",myEmail), where("createdAt","<",broadestCutoffStr))),
-      getDocs(query(collection(db,"direct_messages"), where("senderEmail","==",myEmail), where("createdAt","<",broadestCutoffTs))),
-      getDocs(query(collection(db,"direct_messages"), where("recipientEmail","==",myEmail), where("createdAt","<",broadestCutoffTs)))
-    ]);
-    const docsById = new Map([...sentOldStr.docs, ...receivedOldStr.docs, ...sentOldTs.docs, ...receivedOldTs.docs].map(d=>[d.id, d]));
-    for(const [id, docSnap] of docsById){
-      const data = docSnap.data();
-      const createdMs = chatTimeMillis(data.createdAt);
-      if(data.attachmentFileId && createdMs < attachmentCutoffMs){
-        // 添付を削除し、メッセージ本文自体は残す（アイコン表示に切り替わる）
-        try{ await deleteFileFromStorage(data.attachmentFileId); }catch(e){ /* 添付削除に失敗しても続行 */ }
-        try{
-          await updateDoc(doc(db,"direct_messages", id), { attachmentUrl: "", attachmentFileId: "", attachmentFileName: "", attachmentDeleted: true });
-        }catch(e){ /* 更新に失敗しても次回また試行される */ }
-        continue;
+    // RTDBのcreatedAtは常に数値（サーバー側のミリ秒エポック）なので、Firestore版で
+    // 必要だった「文字列/Timestampの型混在」対応（2クエリ×2型）はそもそも不要になった。
+    const myKey = sanitizeEmailForRtdbKey(currentUser.email);
+    // 自分が今参加している会話（userChatsのキー）だけを対象にする。メッセージ本体は
+    // 会話単位で参加者2人から見えるノードなので、どちらか一方が掃除すればもう片方にも反映される。
+    for(const conv of chatConversations){
+      const convId = conv.conversationId;
+      let snap;
+      try{
+        snap = await rtdbGet(rtdbQuery(rtdbRef(rtdb, `messages/${convId}`), rtdbOrderByChild("createdAt"), rtdbEndAt(broadestCutoffMs)));
+      }catch(e){ console.error("[チャット自動削除エラー：取得]", convId, e); continue; }
+      const val = snap.val() || {};
+      const oldIds = Object.keys(val);
+      if(oldIds.length===0) continue;
+      for(const id of oldIds){
+        const data = val[id];
+        const createdMs = chatTimeMillis(data.createdAt);
+        if(data.attachmentFileId && createdMs < attachmentCutoffMs){
+          // 添付を削除し、メッセージ本文自体は残す（アイコン表示に切り替わる）
+          try{ await deleteFileFromStorage(data.attachmentFileId); }catch(e){ /* 添付削除に失敗しても続行 */ }
+          try{
+            await rtdbUpdate(rtdbRef(rtdb, `messages/${convId}/${id}`), { attachmentUrl: "", attachmentFileId: "", attachmentFileName: "", attachmentDeleted: true });
+          }catch(e){ /* 更新に失敗しても次回また試行される */ }
+          continue;
+        }
+        // 添付を含まない（または既に添付削除済みの）メッセージは、テキストの削除時間が経過していればメッセージごと削除
+        if(createdMs < textCutoffMs){
+          try{ await rtdbRemove(rtdbRef(rtdb, `messages/${convId}/${id}`)); }catch(e){ /* 1件失敗しても続行 */ }
+        }
       }
-      // 添付を含まない（または既に添付削除済みの）メッセージは、テキストの削除時間が経過していればメッセージごと削除
-      if(createdMs < textCutoffMs){
-        try{ await deleteDoc(doc(db,"direct_messages", id)); }catch(e){ /* 1件失敗しても続行 */ }
-      }
+      // 会話に残っているメッセージがあるか確認し、①なければ一覧（userChats）からもこの会話を消す、
+      // ②あれば、直近の1件でプレビュー（lastText/lastAt等）を最新の状態に更新し直す
+      // （自動削除で最後のメッセージ自体が消えた場合、一覧のプレビューが消えたメッセージの
+      // ままにならないようにするため）。
+      try{
+        const remainSnap = await rtdbGet(rtdbRef(rtdb, `messages/${convId}`));
+        const remainVal = remainSnap.val() || {};
+        const remainIds = Object.keys(remainVal);
+        const otherKey = sanitizeEmailForRtdbKey(conv.otherEmail);
+        if(remainIds.length===0){
+          await rtdbUpdate(rtdbRef(rtdb), {
+            [`userChats/${myKey}/${convId}`]: null,
+            [`userChats/${otherKey}/${convId}`]: null
+          });
+        } else {
+          const lastMsg = remainIds.map(id=>remainVal[id]).sort((a,b)=> chatTimeMillis(b.createdAt) - chatTimeMillis(a.createdAt))[0];
+          await Promise.all([
+            rtdbUpdate(rtdbRef(rtdb, `userChats/${myKey}/${convId}`), { lastText: lastMsg.text || "", lastAt: lastMsg.createdAt, lastSenderEmail: lastMsg.senderEmail }),
+            rtdbUpdate(rtdbRef(rtdb, `userChats/${otherKey}/${convId}`), { lastText: lastMsg.text || "", lastAt: lastMsg.createdAt, lastSenderEmail: lastMsg.senderEmail })
+          ]);
+        }
+      }catch(e){ console.error("[チャット自動削除エラー：一覧更新]", convId, e); }
     }
   }catch(e){ console.error("[チャット自動削除エラー]", e); }
 }
