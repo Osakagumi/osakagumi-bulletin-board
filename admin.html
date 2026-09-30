@@ -1241,7 +1241,7 @@
         <div class="panel" style="margin:0;">
           <h2>Firestore 読み取り数の診断（無料枠対策）</h2>
           <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-            一般画面はログイン・再読み込みのたびに、以下のコレクションを丸ごと読み込みます。ここでの件数確認自体はcount()集計クエリを使うため、件数がいくつあっても1コレクションにつき1読み取りしか消費しません。
+            一般画面はログイン・再読み込みのたびに、以下のコレクションを丸ごと読み込みます（カレンダー関連の2コレクションのみ、今年度分に絞って読み込む作りのため、その分だけ絞って集計します）。ここでの件数確認自体はcount()集計クエリを使うため、件数がいくつあっても1クエリにつき1読み取りしか消費しません。
           </p>
           <button class="btn btn-primary" id="fs-diag-run-btn">件数を確認する</button>
           <div id="fs-diag-status" style="font-size:12.5px;color:var(--muted);margin-top:8px;"></div>
@@ -1440,7 +1440,7 @@ import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signOut, i
 import {
   getFirestore, collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, setDoc,
   query, where, onSnapshot, orderBy, limit, Timestamp, arrayUnion, arrayRemove, deleteField,
-  getCountFromServer
+  getCountFromServer, documentId
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig, CATEGORIES as SEED_CATEGORIES, EQUIPMENT_STATUSES } from "./firebase-config.js";
 import { initStorageHelper, uploadFileToStorage, deleteFileFromStorage, fetchStorageInfo } from "./storage-helper.js";
@@ -3617,13 +3617,25 @@ document.getElementById("theme-colors-save-btn")?.addEventListener("click", asyn
 
 // ---- Firestore無料枠診断：一般画面がログイン時に丸ごと読み込んでいるコレクションの件数を、
 // count()集計クエリ（何件あっても1読み取りしか消費しない）でまとめて数える ----
+// 注：calendar_days / calendar_days_published の2つだけは、一般画面側（index.html）が
+// 「今年度分（約365日）のみ」「編集権限の有無でどちらか片方のみ」を読む作りになっているため、
+// コレクション全件（複数年度分）をそのまま数えると1回の読み込みコストを過大評価してしまう。
+// そのため、この2つだけは今年度の日付範囲に絞ったcount()クエリで数える。
 const FS_DIAG_COLLECTIONS = [
   "employees", "departments", "wb_statuses", "wb_presets",
   "equipment_categories", "equipment",
   "visitor_schedules", "contracts", "announcements",
   "steel_plate_transactions",
-  "calendar_years", "calendar_days", "calendar_days_published"
+  "calendar_years"
 ];
+function currentFiscalYearRange(){
+  // index.html の defaultFiscalYearStart() と同じ考え方（4月始まり）
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth() + 1;
+  const fy = (m >= 4) ? y : (y - 1);
+  return { fy, startId: `${fy}-04-01`, endId: `${fy + 1}-03-31` };
+}
 document.getElementById("fs-diag-run-btn")?.addEventListener("click", async ()=>{
   const statusEl = document.getElementById("fs-diag-status");
   const tableEl = document.getElementById("fs-diag-table");
@@ -3653,12 +3665,42 @@ document.getElementById("fs-diag-run-btn")?.addEventListener("click", async ()=>
     tr.innerHTML = `<td>${escapeHtml(name)}</td><td style="text-align:right;">${countText}</td>`;
     bodyEl.appendChild(tr);
   }
+  // calendar_days / calendar_days_published：今年度分のみに絞って数える。
+  // 一般画面は「編集権限者はcalendar_daysのみ」「それ以外はcalendar_days_publishedのみ」を読み、
+  // 両方を同時に読むことはないため、1回の読み込み目安としてはcalendar_days_published
+  // （一般社員＝大多数が読む方）の件数だけを合計に加算する。calendar_daysは参考表示のみとし、
+  // 合計には含めない。
+  const { fy, startId, endId } = currentFiscalYearRange();
+  let calDaysCount = null, calPublishedCount = null;
+  try{
+    const q1 = query(collection(db,"calendar_days"), where(documentId(), ">=", startId), where(documentId(), "<=", endId));
+    const s1 = await getCountFromServer(q1);
+    calDaysCount = s1.data().count;
+  }catch(e){
+    failCount++;
+    console.error("[Firestore件数診断] calendar_days（今年度分）の取得に失敗:", e);
+  }
+  try{
+    const q2 = query(collection(db,"calendar_days_published"), where(documentId(), ">=", startId), where(documentId(), "<=", endId));
+    const s2 = await getCountFromServer(q2);
+    calPublishedCount = s2.data().count;
+  }catch(e){
+    failCount++;
+    console.error("[Firestore件数診断] calendar_days_published（今年度分）の取得に失敗:", e);
+  }
+  const trDays = document.createElement("tr");
+  trDays.innerHTML = `<td>calendar_days（${fy}年度分・編集権限者が読む方／参考）</td><td style="text-align:right;">${calDaysCount===null ? "取得失敗" : calDaysCount.toLocaleString()+" 件"}</td>`;
+  bodyEl.appendChild(trDays);
+  const trPub = document.createElement("tr");
+  trPub.innerHTML = `<td>calendar_days_published（${fy}年度分・一般社員が読む方／合計に算入）</td><td style="text-align:right;">${calPublishedCount===null ? "取得失敗" : calPublishedCount.toLocaleString()+" 件"}</td>`;
+  bodyEl.appendChild(trPub);
+  if(calPublishedCount!==null) total += calPublishedCount;
   totalEl.textContent = `${total.toLocaleString()} 件`;
   tableEl.style.display = "";
   estimateWrap.style.display = "";
   statusEl.textContent = failCount>0
-    ? `確認しました（${failCount}件は取得できませんでした。理由は各行右側のエラーコードをご確認ください）。この診断自体の読み取り消費は、成功した分のみ約${FS_DIAG_COLLECTIONS.length - failCount}件です。`
-    : `確認しました。この診断自体の読み取り消費は約${FS_DIAG_COLLECTIONS.length}件です。`;
+    ? `確認しました（${failCount}件は取得できませんでした。理由は各行右側のエラーコードをご確認ください）。`
+    : `確認しました。カレンダー2種は今年度分に絞って集計し、合計にはcalendar_days_published（一般社員が読む方）のみを算入しています。`;
   updateFsDiagEstimate();
 });
 function updateFsDiagEstimate(){
