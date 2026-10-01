@@ -2493,7 +2493,9 @@ let selectedCheckoutCategory = null;
 let selectedEquipment = null;
 let myResUnsub = null;
 let myReservationsAll = [];
-let calDaysData = {};          // "YYYY-MM-DD" -> {isHoliday, label}
+let calDaysData = {};          // "YYYY-MM-DD" -> {isHoliday, label}（カレンダー・出入予定タブを開くと年間ぶん読み込まれる）
+let calHolidayWindowData = {}; // 同上だが、ログイン時から常に読み込まれる直近期間のみの軽量版（下記initCalHolidayWindowListener参照）
+let calHolidayWindowUnsub = null;
 let spPlateTypesAll = [];
 let spAllInventoryTypes = [];
 const dashCalInitial = new Date();
@@ -2662,7 +2664,13 @@ onAuthStateChanged(auth, async (user)=>{
     initWbStatusesListener();
     initWbColumnsListener();
     initEmployeesListener();
-    initCalendarTab();
+    // カレンダー本体（年間最大366日ぶん）の購読は、ログイン時には行わず「カレンダー」
+    // 「出入予定」タブを実際に開いたタイミングまで遅延させる（ensureCalendarFullYearListener参照。
+    // 2026年10月、1回のログインで365件前後のFirestore読み取りが発生していた問題への対策）。
+    // ただし行き先の「休日なら自動的に休みにする」判定・次稼働日の算出は全社員が常に使う機能なので、
+    // そちらに必要な直近期間だけを別途、軽量な専用リスナー（initCalHolidayWindowListener）で読み込む。
+    if(calFiscalYearStart === null){ calFiscalYearStart = defaultFiscalYearStart(); }
+    initCalHolidayWindowListener();
     initWbPresetsListener();
     initSteelPlateTxListener();
     initContractsListener();
@@ -3316,6 +3324,7 @@ function switchToTab(viewName){
   }
   if(viewName==="visitors"){
     ensureVisitorTargetOfficersListener();
+    ensureCalendarFullYearListener(); // 出入予定カレンダーの休日ハイライトに年間データを使うため
     try{ renderActiveVisitorView(); }catch(e){ console.error("[出入予定タブの表示エラー]", e); }
   }
   if(viewName==="dashboard"){
@@ -3323,6 +3332,9 @@ function switchToTab(viewName){
   }
   if(viewName==="contracts"){
     try{ renderContractsTab(); }catch(e){ console.error("[契約タブの表示エラー]", e); }
+  }
+  if(viewName==="calendar"){
+    ensureCalendarFullYearListener();
   }
   if(viewName==="chat"){
     const canResume = chatLastConvEmail && (Date.now() - chatLastLeftAt < 30*60*1000);
@@ -6519,16 +6531,18 @@ function isNowInWorkWindow(){
   return nowMin >= win.windowStartMin && nowMin <= win.windowEndMin;
 }
 
-// 今日がカレンダー上で休日に設定されているか（calDaysDataはinitCalendarTab()で
-// 現在の年度分が読み込まれるため、通常は同期的に判定できる。未読み込み時はfalse扱い）
+// 今日がカレンダー上で休日に設定されているか。
+// calDaysData（カレンダー・出入予定タブを開くと読み込まれる年間データ）があればそちらを優先し、
+// 無ければ calHolidayWindowData（ログイン時から常に読み込まれている、直近期間だけの軽量データ。
+// 2026年10月、カレンダー本体の年間購読を遅延読み込み化した際に追加）にフォールバックする。
 function isTodayHoliday(){
-  const info = calDaysData[todayStr()];
+  const info = calDaysData[todayStr()] || calHolidayWindowData[todayStr()];
   return !!(info && info.isHoliday);
 }
 
 // 指定日がカレンダー上で休日に設定されているか（同期版。isTodayHolidayと同じ考え方）
 function isDateHolidaySync(dateStr){
-  const info = calDaysData[dateStr];
+  const info = calDaysData[dateStr] || calHolidayWindowData[dateStr];
   return !!(info && info.isHoliday);
 }
 
@@ -8720,6 +8734,37 @@ function initCalendarTab(){
     : "";
   loadCalendarYear(calFiscalYearStart);
 }
+// カレンダー本体（年間最大366日ぶん、loadCalendarYear）の購読は重いため、ログイン時には行わず
+// 「カレンダー」「出入予定」タブを実際に開いた最初の1回だけ開始する（2回目以降は既にリアルタイム
+// 購読中なので何もしない）。行き先の休日自動判定など、タブを開かなくても必要になる分は
+// initCalHolidayWindowListener（ログイン時から常時購読）で別途カバーしている。
+let calFullYearListenerStarted = false;
+function ensureCalendarFullYearListener(){
+  if(calFullYearListenerStarted) return;
+  calFullYearListenerStarted = true;
+  initCalendarTab();
+}
+// 行き先タブの「休日なら自動的に休みにする」判定・次稼働日（nextWorkingDayStr、最大14日先まで）の
+// 算出にだけ使う、軽量な期間限定の購読。ログイン時から常に動いている（全社員が使う機能のため）。
+// カレンダー・出入予定タブを開くと、別途ensureCalendarFullYearListener()が年間ぶんを購読し、
+// isTodayHoliday()・isDateHolidaySync()はそちらのデータ（calDaysData）があれば優先して使う。
+function initCalHolidayWindowListener(){
+  if(calHolidayWindowUnsub) calHolidayWindowUnsub();
+  const base = new Date(todayStr()+"T00:00:00");
+  // 「今月の1日」〜「来月の末日」をまるごとカバーする（ダッシュボードのミニカレンダーが
+  // 常にこの範囲を表示するため）。nextWorkingDayStr()の14日先までの判定もこれで十分収まる。
+  const start = new Date(base.getFullYear(), base.getMonth(), 1);
+  const end = new Date(base.getFullYear(), base.getMonth()+2, 0);
+  const toId = (d)=> `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+  const collectionName = isCalendarEditor ? "calendar_days" : "calendar_days_published";
+  const q = query(collection(db,collectionName), where(documentId(), ">=", toId(start)), where(documentId(), "<=", toId(end)));
+  calHolidayWindowUnsub = onSnapshot(q, snap=>{
+    const data = {};
+    snap.docs.forEach(d=>{ data[d.id] = d.data(); });
+    calHolidayWindowData = data;
+    refreshDashboardIfActive(); // ダッシュボードのミニカレンダーに休日ハイライトを反映する
+  }, (err)=>{ console.error("[休日判定用カレンダー取得エラー]", err); });
+}
 
 document.getElementById("cal-prev-year").addEventListener("click", ()=>{
   calFiscalYearStart--;
@@ -8956,7 +9001,10 @@ function buildCalMonthBlock(y, m){
         td.className = "cal-day-cell";
       } else {
         const dateStr = `${y}-${pad2(m)}-${pad2(dayNum)}`;
-        const info = calDaysData[dateStr] || {};
+        // calDaysData（カレンダー・出入予定タブを開くと読み込まれる年間データ）が無ければ、
+        // ログイン時から常時読み込まれている直近期間のcalHolidayWindowDataにフォールバックする
+        // （ダッシュボードのミニカレンダーは、タブを開かなくても最初から表示されるため）。
+        const info = calDaysData[dateStr] || calHolidayWindowData[dateStr] || {};
         const isSatHolidayNote = (col===6) && info.isHoliday && !!(info.label && info.label.trim());
         const isToday = dateStr === todayStr();
         td.className = "cal-day-cell" + (info.isHoliday ? " cal-holiday" : "") + (isSatHolidayNote ? " cal-sat-holiday-note" : "") + (isToday ? " cal-today" : "") + (isCalendarEditor ? " cal-clickable" : "");
