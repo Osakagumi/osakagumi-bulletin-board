@@ -1515,7 +1515,7 @@
           <div class="section-toolbar" id="chat-thread-toolbar">
             <div id="chat-thread-title" style="font-weight:700;font-size:14.5px;white-space:nowrap;display:flex;align-items:center;gap:6px;min-width:0;">
               <span id="chat-thread-title-text" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
-              <span id="chat-thread-online-label" class="online-badge" style="display:none;flex-shrink:0;">オンライン</span>
+              <span id="chat-thread-online-label" class="online-badge" style="display:none;flex-shrink:0;">アクティブ</span>
             </div>
             <button class="btn-ghost" id="chat-back-btn" style="border:1px solid var(--line);flex-shrink:0;">一覧へ</button>
           </div>
@@ -2008,7 +2008,8 @@ import {
 import {
   getDatabase, ref as rtdbRef, set as rtdbSet, onValue as rtdbOnValue, onDisconnect as rtdbOnDisconnect,
   serverTimestamp as rtdbServerTimestamp, push as rtdbPush, update as rtdbUpdate, remove as rtdbRemove,
-  get as rtdbGet, query as rtdbQuery, orderByChild as rtdbOrderByChild, endAt as rtdbEndAt
+  get as rtdbGet, query as rtdbQuery, orderByChild as rtdbOrderByChild, endAt as rtdbEndAt,
+  goOffline as rtdbGoOffline, goOnline as rtdbGoOnline
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 import { firebaseConfig, BUSINESS_HOURS, EQUIPMENT_STATUSES, SAFETY_STATUSES, EMAILJS_CONFIG, resolveMailRecipients, isMailOverrideActive, MAIL_SEND_TARGET, NOTICE_BOARD_AUTO_LOGIN } from "./firebase-config.js";
 import { initStorageHelper, uploadFileToStorage, deleteFileFromStorage } from "./storage-helper.js";
@@ -2026,7 +2027,7 @@ const auth = getAuth(app);
 const db = initializeFirestore(app, {
   localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
 });
-// 在席状況（オンライン表示）専用：Realtime Database。
+// 在席状況（「アクティブ」表示）専用：Realtime Database。
 // databaseURLが未設定（firebase-config.js参照）の場合はnullのままとなり、
 // 在席状況の機能だけが静かに無効化される（他の機能には影響しない）。
 const rtdb = firebaseConfig.databaseURL ? getDatabase(app) : null;
@@ -2288,7 +2289,7 @@ let presenceListUnsub = null;
 function initPresence(){
   if(!rtdb){
     // databaseURL未設定（firebase-config.js参照）。在席状況機能のみ無効化して他機能は継続する。
-    console.warn("[在席状況] Realtime DatabaseのdatabaseURLが未設定のため、オンライン表示は無効です。firebase-config.jsをご確認ください。");
+    console.warn("[在席状況] Realtime DatabaseのdatabaseURLが未設定のため、アクティブ表示は無効です。firebase-config.jsをご確認ください。");
     return;
   }
   const myKey = sanitizeEmailForRtdbKey(currentUser.email);
@@ -2317,6 +2318,42 @@ function initPresence(){
 }
 function isUserOnline(email){
   return !!presenceOnlineMap[email];
+}
+
+// Realtime Database（Sparkプラン無料枠）の同時接続数には100という上限があり、
+// 登録者数・利用が増えると「タブを開きっぱなしで他の作業をしている人」も含めて
+// 上限に近づいていく（2026年10月、クレジットカード決済が社内規定上使えずBlaze
+// プランへの切り替えができないことが判明したため、接続数そのものを抑える対策として実装）。
+// タブがバックグラウンド（非表示）になってから一定時間（5分）経っても戻ってこない場合は
+// 一時的にRTDB接続を切り（goOffline）、同時接続数としてカウントされないようにする。
+// 再びタブを見たタイミングでgoOnlineすると、presence・行き先ステータス・チャットの
+// 各onValueリスナーはSDK側で自動的に再同期される（何かを再購読し直す必要はない）。
+// ※チャットの新着通知はRTDBの接続とは別のOneSignal経由で届くため、この間も見逃さない。
+// ※挙動の変化点：タブを非表示にしている5分間は、在席状況の「アクティブ」表示が
+// 消える（従来は開いていれば常にアクティブ扱いだった）。
+let rtdbIdleTimer = null;
+let rtdbSuspendedByIdle = false;
+let rtdbAutoSuspendInited = false;
+const RTDB_IDLE_SUSPEND_MS = 5 * 60 * 1000; // 5分
+function initRtdbAutoSuspend(){
+  if(!rtdb || rtdbAutoSuspendInited) return;
+  rtdbAutoSuspendInited = true;
+  document.addEventListener("visibilitychange", ()=>{
+    if(document.hidden){
+      if(rtdbIdleTimer) clearTimeout(rtdbIdleTimer);
+      rtdbIdleTimer = setTimeout(()=>{
+        rtdbIdleTimer = null;
+        rtdbSuspendedByIdle = true;
+        rtdbGoOffline(rtdb);
+      }, RTDB_IDLE_SUSPEND_MS);
+    }else{
+      if(rtdbIdleTimer){ clearTimeout(rtdbIdleTimer); rtdbIdleTimer = null; }
+      if(rtdbSuspendedByIdle){
+        rtdbSuspendedByIdle = false;
+        rtdbGoOnline(rtdb);
+      }
+    }
+  });
 }
 
 /* =========================================================
@@ -2685,6 +2722,7 @@ onAuthStateChanged(auth, async (user)=>{
     initKioskLogoutShortcutListener();
     initChatListeners();
     initPresence();
+    initRtdbAutoSuspend();
     initWbStatusLive();
     initOneSignalForCurrentUser();
     initContractSettingsListener();
@@ -3103,7 +3141,7 @@ function renderDashboard(){
         const row = document.createElement("div");
         row.className = "dash-row";
         const timeLabel = conv.lastAt ? formatChatTime(conv.lastAt) : "";
-        const onlineLabelHtml = isUserOnline(conv.otherEmail) ? `<span class="online-badge">オンライン</span>` : "";
+        const onlineLabelHtml = isUserOnline(conv.otherEmail) ? `<span class="online-badge">アクティブ</span>` : "";
         row.innerHTML = `<span>${conv.unread ? "● " : ""}${escapeHtml(conv.otherName)}${onlineLabelHtml}</span><span class="dash-row-sub">${escapeHtml(timeLabel)}</span>`;
         row.addEventListener("click", ()=>{ switchToTab("chat"); openChatThread(conv.otherEmail, conv.otherName); });
         chatBody.appendChild(row);
@@ -6468,7 +6506,7 @@ function renderEmpPickerNameSelect(){
     const isSelected = empPickerMulti ? empPickerSelectedEmails.has(e.email) : e.email===empPickerSelectedEmail;
     row.className = "emp-picker-row" + (isSelected ? " selected" : "");
     const checkPrefix = empPickerMulti ? (isSelected ? "☑ " : "☐ ") : "";
-    const onlineBadgeHtml = isUserOnline(e.email) ? `<span class="online-badge">オンライン</span>` : "";
+    const onlineBadgeHtml = isUserOnline(e.email) ? `<span class="online-badge">アクティブ</span>` : "";
     row.innerHTML = `${escapeHtml(checkPrefix + (e.name || e.email))}${onlineBadgeHtml}`;
     row.addEventListener("click", ()=>{
       if(empPickerMulti){
@@ -10428,7 +10466,7 @@ function renderChatConversationList(){
     row.className = "chat-conv-row" + (conv.unread ? " chat-conv-unread" : "");
     const initial = (conv.otherName||"?").charAt(0);
     const timeLabel = conv.lastAt ? formatChatTime(conv.lastAt) : "";
-    const onlineDotHtml = isUserOnline(conv.otherEmail) ? `<span class="online-dot" title="オンライン"></span>` : "";
+    const onlineDotHtml = isUserOnline(conv.otherEmail) ? `<span class="online-dot" title="アクティブ"></span>` : "";
     row.innerHTML = `
       <div class="chat-conv-avatar">${escapeHtml(initial)}${onlineDotHtml}</div>
       <div class="chat-conv-main">
