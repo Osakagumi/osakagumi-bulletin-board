@@ -123,6 +123,14 @@
   }
   .field input, .field select, .field textarea{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:13.5px;}
   .field textarea{min-height:50px;resize:vertical;}
+  /* 任意項目（備考・メモ・絞り込み検索など）をワンクリックでクリアする✕（index.htmlと同じパターン） */
+  .field-with-clear{position:relative;display:flex;}
+  .field-with-clear > *:first-child{flex:1;padding-right:26px;box-sizing:border-box;}
+  .field-clear-x{
+    position:absolute;right:8px;top:50%;transform:translateY(-50%);
+    color:var(--muted);font-size:13px;line-height:1;cursor:pointer;padding:2px 3px;
+  }
+  .field-clear-x:hover{color:var(--danger);}
   /* type="time"・type="date"は、スマホのネイティブ入力UI（内部の時刻ホイール等）の都合で、
      width:100%だけでは他の入力欄と揃わず、はみ出して広く見えることがあるため明示的に抑える。
      max-width/box-sizingだけでは直らず、-webkit-appearance:noneでほぼ解消したが、
@@ -371,7 +379,10 @@
           </div>
           <div class="field full">
             <label>備考（保管場所・注意事項など）</label>
-            <textarea id="eq-note" placeholder="例）本社倉庫棚A／使用後は電源off"></textarea>
+            <div class="field-with-clear">
+              <textarea id="eq-note" placeholder="例）本社倉庫棚A／使用後は電源off"></textarea>
+              <span class="field-clear-x" id="eq-note-clear-x" title="クリア">✕</span>
+            </div>
           </div>
           <div class="field" id="eq-inventory-fields-1" style="display:none;">
             <label>総数</label>
@@ -509,11 +520,17 @@
         </div>
         <div class="field" id="res-edit-subject-field" style="display:none;">
           <label>件名</label>
-          <input type="text" id="res-edit-subject" placeholder="例）〇〇工事 打合せ">
+          <div class="field-with-clear">
+            <input type="text" id="res-edit-subject" placeholder="例）〇〇工事 打合せ">
+            <span class="field-clear-x" id="res-edit-subject-clear-x" title="クリア">✕</span>
+          </div>
         </div>
         <div class="field">
           <label>利用目的・使用機材・行き先など</label>
-          <textarea id="res-edit-purpose"></textarea>
+          <div class="field-with-clear">
+            <textarea id="res-edit-purpose"></textarea>
+            <span class="field-clear-x" id="res-edit-purpose-clear-x" title="クリア">✕</span>
+          </div>
         </div>
         <div id="res-edit-error" style="color:var(--danger);font-size:12.5px;margin-top:4px;"></div>
         <div class="row-btns">
@@ -574,7 +591,10 @@
           </div>
           <div class="field full">
             <label>備考</label>
-            <input type="text" id="single-emp-memo">
+            <div class="field-with-clear">
+              <input type="text" id="single-emp-memo">
+              <span class="field-clear-x" id="single-emp-memo-clear-x" title="クリア">✕</span>
+            </div>
           </div>
           <div class="field full">
             <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
@@ -620,7 +640,10 @@
         </div>
         <!-- <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">ログインすると自動的にここへ追加されます。CSV一括登録した場合は社員番号・電話番号・備考も反映されています。「編集」から詳細を変更できます。</p> -->
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
-          <input type="text" id="emp-search-input" placeholder="氏名で絞り込み（前方一致）" style="max-width:220px;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:13.5px;">
+          <div class="field-with-clear" style="max-width:220px;flex:none;">
+            <input type="text" id="emp-search-input" placeholder="氏名で絞り込み（前方一致）" style="padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:13.5px;">
+            <span class="field-clear-x" id="emp-search-clear-x" title="絞り込みを解除">✕</span>
+          </div>
           <button class="btn btn-ghost" id="userimport-open-btn" style="border:1px solid var(--line);">インポート</button>
           <button class="btn btn-ghost" id="user-export-btn" style="border:1px solid var(--line);">エクスポート</button>
           <input type="file" id="userimport-file" accept=".csv,text/csv" style="display:none;">
@@ -708,7 +731,10 @@
         </div>
         <div class="field">
           <label>備考</label>
-          <input type="text" id="emp-edit-memo-input">
+          <div class="field-with-clear">
+            <input type="text" id="emp-edit-memo-input">
+            <span class="field-clear-x" id="emp-edit-memo-clear-x" title="クリア">✕</span>
+          </div>
         </div>
         <div class="row-btns" style="justify-content:space-between;flex-wrap:wrap;gap:8px;">
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -1294,7 +1320,10 @@
         </div>
         <div class="field">
           <label>氏名で絞り込み（前方一致）</label>
-          <input type="text" id="emp-picker-search-input" placeholder="例：山田">
+          <div class="field-with-clear">
+            <input type="text" id="emp-picker-search-input" placeholder="例：山田">
+            <span class="field-clear-x" id="emp-picker-search-clear-x" title="絞り込みを解除">✕</span>
+          </div>
         </div>
         <div class="field">
           <label>氏名</label>
@@ -1768,6 +1797,12 @@ function renderEmpPickerNameSelect(){
   });
 }
 document.getElementById("emp-picker-search-input")?.addEventListener("input", renderEmpPickerNameSelect);
+document.getElementById("emp-picker-search-clear-x")?.addEventListener("click", ()=>{
+  const el = document.getElementById("emp-picker-search-input");
+  el.value = "";
+  el.focus();
+  renderEmpPickerNameSelect();
+});
 document.getElementById("emp-picker-dept-select")?.addEventListener("change", renderEmpPickerNameSelect);
 document.getElementById("emp-picker-cancel-btn")?.addEventListener("click", ()=>{
   document.getElementById("employee-picker-modal").classList.remove("show");
@@ -2233,6 +2268,11 @@ function startEditEquipment(eq){
 }
 
 document.getElementById("eq-cancel-edit").addEventListener("click", resetEquipmentForm);
+document.getElementById("eq-note-clear-x").addEventListener("click", ()=>{
+  const el = document.getElementById("eq-note");
+  el.value = "";
+  el.focus();
+});
 function resetEquipmentForm(){
   editingEquipmentId = null;
   document.getElementById("eq-form-title").textContent = "設備を追加";
@@ -2594,6 +2634,16 @@ function openResEditModal(r){
 }
 document.getElementById("res-edit-cancel-btn")?.addEventListener("click", ()=>{
   document.getElementById("res-edit-modal").classList.remove("show");
+});
+document.getElementById("res-edit-subject-clear-x")?.addEventListener("click", ()=>{
+  const el = document.getElementById("res-edit-subject");
+  el.value = "";
+  el.focus();
+});
+document.getElementById("res-edit-purpose-clear-x")?.addEventListener("click", ()=>{
+  const el = document.getElementById("res-edit-purpose");
+  el.value = "";
+  el.focus();
 });
 document.getElementById("res-edit-save-btn")?.addEventListener("click", async ()=>{
   const errEl = document.getElementById("res-edit-error");
@@ -5039,6 +5089,12 @@ function renderEmployees(){
   });
 }
 document.getElementById("emp-search-input")?.addEventListener("input", renderEmployees);
+document.getElementById("emp-search-clear-x")?.addEventListener("click", ()=>{
+  const el = document.getElementById("emp-search-input");
+  el.value = "";
+  el.focus();
+  renderEmployees();
+});
 
 let editingEmpEmail = null;
 function openEmpEditModal(emp){
@@ -5165,6 +5221,11 @@ document.getElementById("user-delete-guide-close-btn")?.addEventListener("click"
 });
 document.getElementById("emp-edit-cancel-btn")?.addEventListener("click", ()=>{
   document.getElementById("emp-edit-modal").classList.remove("show");
+});
+document.getElementById("emp-edit-memo-clear-x")?.addEventListener("click", ()=>{
+  const el = document.getElementById("emp-edit-memo-input");
+  el.value = "";
+  el.focus();
 });
 document.getElementById("emp-edit-save-btn")?.addEventListener("click", async ()=>{
   if(!editingEmpEmail) return;
@@ -5582,6 +5643,11 @@ document.getElementById("single-emp-register-btn")?.addEventListener("click", as
     statusEl.textContent = accountResult + " ただし社員情報の登録に失敗しました：" + (e.code || e.message);
     statusEl.style.color = "var(--danger)";
   }
+});
+document.getElementById("single-emp-memo-clear-x")?.addEventListener("click", ()=>{
+  const el = document.getElementById("single-emp-memo");
+  el.value = "";
+  el.focus();
 });
 
 document.getElementById("userimport-execute-btn").addEventListener("click", async ()=>{

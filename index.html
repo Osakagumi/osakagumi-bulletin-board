@@ -1229,7 +1229,10 @@
           </div>
           <div class="field">
             <label>氏名で絞り込み（前方一致）</label>
-            <input type="text" id="emp-picker-search-input" placeholder="例：山田">
+            <div class="field-with-clear">
+              <input type="text" id="emp-picker-search-input" placeholder="例：山田">
+              <span class="field-clear-x" id="emp-picker-search-clear-x" title="絞り込みを解除">✕</span>
+            </div>
           </div>
           <div class="field">
             <label>氏名</label>
@@ -1461,7 +1464,10 @@
           <h3 id="cal-label-modal-title">この日の名称・備考</h3>
           <div class="field">
             <label>名称・備考（Enterキーで改行できます）</label>
-            <textarea id="cal-label-input" style="width:100%;min-height:90px;border:1px solid var(--line);border-radius:8px;padding:9px 10px;font-size:13.5px;font-family:inherit;resize:vertical;"></textarea>
+            <div class="field-with-clear">
+              <textarea id="cal-label-input" style="width:100%;min-height:90px;border:1px solid var(--line);border-radius:8px;padding:9px 10px;font-size:13.5px;font-family:inherit;resize:vertical;"></textarea>
+              <span class="field-clear-x" id="cal-label-clear-x" title="クリア">✕</span>
+            </div>
           </div>
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:8px;">
             <input type="checkbox" id="cal-label-publish-now" style="width:auto;">
@@ -1619,7 +1625,10 @@
       </div>
       <div class="field">
         <label>備考</label>
-        <textarea id="contract-note-input" placeholder="任意"></textarea>
+        <div class="field-with-clear">
+          <textarea id="contract-note-input" placeholder="任意"></textarea>
+          <span class="field-clear-x" id="contract-note-clear-x" title="クリア">✕</span>
+        </div>
       </div>
       <div id="contract-error" style="color:var(--danger);font-size:12.5px;margin-top:4px;"></div>
       <div class="modal-actions">
@@ -1836,7 +1845,10 @@
       </div>
       <div class="field">
         <label>備考（任意）</label>
-        <textarea id="wb-preset-note"></textarea>
+        <div class="field-with-clear">
+          <textarea id="wb-preset-note"></textarea>
+          <span class="field-clear-x" id="wb-preset-note-clear-x" title="クリア">✕</span>
+        </div>
       </div>
       <div class="field" style="border-top:1px solid var(--line);padding-top:12px;">
         <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text);margin-bottom:8px;">
@@ -1946,7 +1958,10 @@
       </div>
       <div class="field">
         <label id="visitor-purpose-label">備考（任意）</label>
-        <textarea id="visitor-purpose-input" rows="2" maxlength="200"></textarea>
+        <div class="field-with-clear">
+          <textarea id="visitor-purpose-input" rows="2" maxlength="200"></textarea>
+          <span class="field-clear-x" id="visitor-purpose-clear-x" title="クリア">✕</span>
+        </div>
       </div>
       <div class="modal-err" id="visitor-modal-error"></div>
       <div class="row-btns">
@@ -1979,11 +1994,17 @@
       <div class="sub" id="modal-summary"></div>
       <div class="field" id="modal-subject-field" style="display:none;">
         <label>件名</label>
-        <input type="text" id="modal-subject" placeholder="例）〇〇工事 打合せ">
+        <div class="field-with-clear">
+          <input type="text" id="modal-subject" placeholder="例）〇〇工事 打合せ">
+          <span class="field-clear-x" id="modal-subject-clear-x" title="クリア">✕</span>
+        </div>
       </div>
       <div class="field">
         <label>利用目的・使用機材・行き先など</label>
-        <textarea id="modal-purpose" placeholder="例）◯◯現場／Zoom+スピーカーマイク使用"></textarea>
+        <div class="field-with-clear">
+          <textarea id="modal-purpose" placeholder="例）◯◯現場／Zoom+スピーカーマイク使用"></textarea>
+          <span class="field-clear-x" id="modal-purpose-clear-x" title="クリア">✕</span>
+        </div>
       </div>
       <div class="modal-err" id="modal-error"></div>
       <div class="row-btns">
@@ -4587,6 +4608,11 @@ document.getElementById("visitor-endtime-clear-x").addEventListener("click", (e)
 document.getElementById("visitor-modal-cancel").addEventListener("click", ()=>{
   document.getElementById("visitor-modal").classList.remove("show");
 });
+document.getElementById("visitor-purpose-clear-x").addEventListener("click", ()=>{
+  const el = document.getElementById("visitor-purpose-input");
+  el.value = "";
+  el.focus();
+});
 document.getElementById("visitor-modal-save").addEventListener("click", async ()=>{
   const errEl = document.getElementById("visitor-modal-error");
   errEl.textContent = "";
@@ -5307,6 +5333,16 @@ function openReserveModalFor(dateStr){
 }
 document.getElementById("modal-cancel").addEventListener("click", ()=> reserveModal.classList.remove("show"));
 document.getElementById("modal-confirm").addEventListener("click", confirmReservation);
+document.getElementById("modal-subject-clear-x").addEventListener("click", ()=>{
+  const el = document.getElementById("modal-subject");
+  el.value = "";
+  el.focus();
+});
+document.getElementById("modal-purpose-clear-x").addEventListener("click", ()=>{
+  const el = document.getElementById("modal-purpose");
+  el.value = "";
+  el.focus();
+});
 
 async function confirmReservation(){
   const errEl = document.getElementById("modal-error");
@@ -6527,6 +6563,12 @@ function renderEmpPickerNameSelect(){
 }
 document.getElementById("emp-picker-search-input")?.addEventListener("input", renderEmpPickerNameSelect);
 document.getElementById("emp-picker-dept-select")?.addEventListener("change", renderEmpPickerNameSelect);
+document.getElementById("emp-picker-search-clear-x")?.addEventListener("click", ()=>{
+  const el = document.getElementById("emp-picker-search-input");
+  el.value = "";
+  el.focus();
+  renderEmpPickerNameSelect();
+});
 document.getElementById("emp-picker-cancel-btn")?.addEventListener("click", ()=>{
   document.getElementById("employee-picker-modal").classList.remove("show");
   if(empPickerResolve) empPickerResolve(null);
@@ -7537,6 +7579,11 @@ document.getElementById("wb-preset-tl-end").addEventListener("click", (e)=>{
 document.getElementById("wb-preset-modal-cancel").addEventListener("click", ()=>{
   document.getElementById("wb-preset-modal").classList.remove("show");
 });
+document.getElementById("wb-preset-note-clear-x").addEventListener("click", ()=>{
+  const el = document.getElementById("wb-preset-note");
+  el.value = "";
+  el.focus();
+});
 document.getElementById("wb-preset-modal-save").addEventListener("click", ()=>{
   // このボタンは画面上の内容を保留（未保存）状態にするだけで、Firestoreへの書き込みは
   // 画面右上の「保存」ボタン（saveWbPresetPendingEdits）を押した時にまとめて行う。
@@ -8494,10 +8541,18 @@ function renderSafetyResponse(){
   commentField.className = "field";
   commentField.innerHTML = `
     <label>コメント（任意）</label>
-    <textarea id="safety-comment" placeholder="例）自宅は無事です／会社に向かいます" style="width:100%;min-height:60px;border:1px solid var(--line);border-radius:8px;padding:9px 10px;font-size:13.5px;font-family:inherit;"></textarea>
+    <div class="field-with-clear">
+      <textarea id="safety-comment" placeholder="例）自宅は無事です／会社に向かいます" style="width:100%;min-height:60px;border:1px solid var(--line);border-radius:8px;padding:9px 10px;font-size:13.5px;font-family:inherit;"></textarea>
+      <span class="field-clear-x" id="safety-comment-clear-x" title="クリア">✕</span>
+    </div>
   `;
   form.appendChild(commentField);
   form.querySelector("#safety-comment").value = mySafetyResponse?.comment || "";
+  form.querySelector("#safety-comment-clear-x").addEventListener("click", ()=>{
+    const el = form.querySelector("#safety-comment");
+    el.value = "";
+    el.focus();
+  });
 
   const errDiv = document.createElement("div");
   errDiv.className = "modal-err";
@@ -9125,6 +9180,11 @@ function editCalLabel(dateStr){
 }
 document.getElementById("cal-label-cancel-btn").addEventListener("click", ()=>{
   document.getElementById("cal-label-modal").classList.remove("show");
+});
+document.getElementById("cal-label-clear-x").addEventListener("click", ()=>{
+  const el = document.getElementById("cal-label-input");
+  el.value = "";
+  el.focus();
 });
 document.getElementById("cal-label-save-btn").addEventListener("click", async ()=>{
   const dateStr = calLabelEditingDateStr;
@@ -10345,6 +10405,11 @@ document.getElementById("contract-show-resolved-check")?.addEventListener("chang
 });
 document.getElementById("contract-cancel-btn")?.addEventListener("click", ()=>{
   document.getElementById("contract-modal").classList.remove("show");
+});
+document.getElementById("contract-note-clear-x")?.addEventListener("click", ()=>{
+  const el = document.getElementById("contract-note-input");
+  el.value = "";
+  el.focus();
 });
 document.getElementById("contract-save-btn")?.addEventListener("click", async ()=>{
   const errEl = document.getElementById("contract-error");
