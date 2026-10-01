@@ -1448,7 +1448,7 @@
             <button id="cal-today-btn" class="btn-primary">今日</button>
           </div>
           <div id="cal-edit-hint" style="font-size:11.5px;color:var(--muted);"></div>
-          <span id="cal-status-badge" style="display:none;font-size:14px;font-weight:700;padding:4px 12px;border-radius:12px;margin-right:8px;"></span>
+          <span id="cal-status-badge" style="display:none;font-size:14px;font-weight:700;padding:4px 12px;border-radius:12px;margin-right:8px;min-width:58px;text-align:center;box-sizing:border-box;"></span>
           <button id="cal-publish-btn" class="btn-primary" style="display:none;background:var(--danger);">公開する</button>
           <button id="cal-export-btn" class="btn-primary">Excel出力</button>
         </div>
@@ -1794,7 +1794,10 @@
       </div>
       <div class="field">
         <label>備考（行き先名など）</label>
-        <textarea id="wb-note" placeholder="例）◯◯現場"></textarea>
+        <div class="field-with-clear">
+          <textarea id="wb-note" placeholder="例）◯◯現場"></textarea>
+          <span class="field-clear-x" id="wb-note-clear-x" title="備考をクリア">✕</span>
+        </div>
       </div>
       <div class="field" id="wb-timeleave-section" style="border-top:1px solid var(--line);padding-top:12px;">
         <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text);margin-bottom:8px;">
@@ -7877,6 +7880,10 @@ document.querySelectorAll("#wb-view-toggle .seg-btn").forEach(btn=>{
 const wbModal = document.getElementById("wb-modal");
 document.getElementById("wb-edit-my-btn").addEventListener("click", ()=> openWbModal(currentUser.email));
 document.getElementById("wb-cancel").addEventListener("click", ()=> wbModal.classList.remove("show"));
+document.getElementById("wb-note-clear-x").addEventListener("click", ()=>{
+  document.getElementById("wb-note").value = "";
+  document.getElementById("wb-note").focus();
+});
 
 function openWbModal(email){
   wbEditingEmail = email;
@@ -7891,9 +7898,18 @@ function openWbModal(email){
   const selectableStatuses = isSelfWithoutPermission
     ? wbStatusesAll.filter(s => !s.selfSetDisabled)
     : wbStatusesAll;
+  // 「未設定」は常に選べるようにしておく（先頭に追加）。これを選んで保存すると、
+  // 当日その場の指定を明示的に取り消したことになり、表示側（getEffectiveBaseStatus）は
+  // 自動的に「本日の事前設定 → 初期状態」の順でフォールバックする
+  // （就業時間外・休日であれば、その判定がさらに優先される。getEffectiveWbStatus参照）。
+  // どちらも無ければ「未設定」のまま表示される。
+  const unsetOpt = document.createElement("option");
+  unsetOpt.value = ""; unsetOpt.textContent = "未設定";
+  sel.appendChild(unsetOpt);
   if(selectableStatuses.length===0){
     const opt = document.createElement("option");
-    opt.value = ""; opt.textContent = "（管理画面でステータス未登録）";
+    opt.value = "__none__"; opt.textContent = "（管理画面でステータス未登録）";
+    opt.disabled = true;
     sel.appendChild(opt);
   } else {
     selectableStatuses.forEach(s=>{
@@ -7902,8 +7918,9 @@ function openWbModal(email){
       sel.appendChild(opt);
     });
   }
-  // 事前設定・初期状態も含めた「実際に有効な内容」を初期値として表示する
-  sel.value = getEffectiveBaseStatus(emp) || (wbStatusesAll[0]?.id || "");
+  // 事前設定・初期状態も含めた「実際に有効な内容」を初期値として表示する。
+  // 何も無ければ（これまでのように先頭のステータスへフォールバックさせず）「未設定」を選択状態にする。
+  sel.value = getEffectiveBaseStatus(emp) || "";
   document.getElementById("wb-note").value = getBaseWbNote(emp);
   document.getElementById("wb-error").textContent = "";
 
