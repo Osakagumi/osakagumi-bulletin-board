@@ -10641,7 +10641,18 @@ function renderChatMessages(msgs){
     const hasGenericFile = !isAttachmentDeleted && !hasPreview && !!m.attachmentFileName; // プレビューできない通常ファイル
     const hasText = !!m.text;
     let bubbleInner = "";
-    if(hasPreview){
+    if(hasPreview && m.attachmentKind==="pdf"){
+      // PDFはGoogleドライブのサムネイル画像（ページ1の見た目）をプレビューとして表示できるが、
+      // そのサムネイルURL自体は画像であって本体のPDFではないため、クリックしても
+      // 「保存」すると画像が保存されてしまい、PDFとして保存できなかった（2026年10月、要望により対応）。
+      // プレビューはそのまま残しつつ、実ファイルをダウンロードできるリンクを下に添える。
+      bubbleInner += `<div style="${hasText ? "margin-bottom:6px;" : ""}">
+        <img src="${escapeHtml(m.attachmentUrl)}" alt="PDFプレビュー" style="max-width:200px;max-height:200px;border-radius:8px;display:block;cursor:pointer;margin-bottom:4px;" onclick="window.open('${escapeHtml(m.attachmentUrl)}','_blank')">
+        <a href="https://drive.google.com/uc?export=download&id=${escapeHtml(m.attachmentFileId)}" style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:8px;background:rgba(0,0,0,0.08);color:inherit;text-decoration:none;max-width:200px;font-size:12px;">
+          <span style="font-size:15px;flex-shrink:0;">⬇️</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(m.attachmentFileName || "PDFを保存")}</span>
+        </a>
+      </div>`;
+    } else if(hasPreview){
       bubbleInner += `<img src="${escapeHtml(m.attachmentUrl)}" alt="添付" style="max-width:200px;max-height:200px;border-radius:8px;display:block;cursor:pointer;${hasText ? "margin-bottom:6px;" : ""}" onclick="window.open('${escapeHtml(m.attachmentUrl)}','_blank')">`;
     } else if(hasGenericFile){
       bubbleInner += `<a href="https://drive.google.com/uc?export=download&id=${escapeHtml(m.attachmentFileId)}" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;background:rgba(0,0,0,0.08);color:inherit;text-decoration:none;max-width:200px;${hasText ? "margin-bottom:6px;" : ""}">
