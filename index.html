@@ -2777,7 +2777,7 @@ onAuthStateChanged(auth, async (user)=>{
     initWbPresetBgColorListener();
     initDashCardDragDrop();
     // cleanupResolvedContracts(); // 入札機能の凍結に伴い停止（上のコメント参照）
-    ensureSteelPlateCategoryAndMigrate();
+    // ensureSteelPlateCategoryAndMigrate(); // 敷鉄板機能の凍結に伴い停止（詳細は関数定義側のコメント参照。2026年10月）
 
     if(urlPreselect.campaign){
       history.replaceState(null, "", location.pathname);
@@ -2849,7 +2849,8 @@ const DASH_CARD_BY_VIEW = {
 let systemTabDefaults = null;
 let hasPersonalTabOrderFlag = null; // null=未判定、true=個人設定あり、false=個人設定なし
 let hasPersonalDashCardOrderFlag = null; // null=未判定、true=個人設定あり、false=個人設定なし（ダッシュボードカード用）
-const GENERAL_HIDEABLE_TAB_IDS = ["notices","calendar","whereabouts","chat","reserve","checkout","visitors","contracts","bizinfo"];
+// 入札("contracts")は常時非表示にしたため、表示タブ設定の対象からも外した（2026年10月。復活時はここにも戻すこと）。
+const GENERAL_HIDEABLE_TAB_IDS = ["notices","calendar","whereabouts","chat","reserve","checkout","visitors","bizinfo"];
 // 特定のタブが、システム管理画面の「既定で有効にするタブ」設定で有効になっているかどうかを判定する
 // （未設定（system_tab_defaultsドキュメント自体が無い、またはenabledTabsが未設定）の場合は既定で有効として扱う）
 function isGeneralTabSystemEnabled(tabId){
@@ -3753,7 +3754,7 @@ function renderCheckoutTab(){
   try{ renderMyResourcesSummary(); }catch(e){ console.error("[マイ機材情報の表示エラー]", e); }
   if(isSteelPlates){
     try{
-      ensureSteelPlateCategoryAndMigrate();
+      // ensureSteelPlateCategoryAndMigrate(); // 敷鉄板機能の凍結に伴い停止（詳細は関数定義側のコメント参照。2026年10月）
       recomputeSpPlateTypes();
       renderSteelPlateSummary();
       renderSpHoldingsList();
@@ -9364,6 +9365,17 @@ function initSteelPlateTxListener(){
 //   （typeIdで6m・3mを参照している過去の記録）はそのまま動き続ける。
 // ③旧データも無い全くの新規導入であれば、6m・3mの初期値を作成する。
 let spMigrationChecked = false;
+// 敷鉄板の出入管理はExcel管理に一本化され、アプリ内の機能は凍結された（開発ノート参照。2026年10月）。
+// この関数自体は、旧データ構造（steel_plate_types）からの一回限りの移行＋初期データ投入を意図した
+// 処理だったが、「敷鉄板カテゴリに設備が1件も無ければ6m/3mを自動的に作り直す」という下の分岐が、
+// 管理者がログイン・機材タブで敷鉄板カテゴリを開くたびに毎回評価される作りだったため、ヒネが
+// 敷鉄板の設備を削除しても次のログイン等で自動的に復活してしまい、「カテゴリ使用中」で
+// equipment_categoriesのそのカテゴリを削除できない、という不具合の原因になっていた。
+// 呼び出し元（ログイン時／機材タブの敷鉄板カテゴリ表示時の2箇所）をコメントアウトして停止済み。
+// 将来、敷鉄板機能をアプリ内で再開することになった場合は、呼び出し元のコメントを外す前に、
+// 下の「カテゴリが空なら6m/3mを自動生成する」分岐を、一度きりの移行フラグ方式（例：
+// app_settingsに移行済みフラグを持たせる等）に直してから復活させること。でないと今回と同じ
+// 不具合が再発する。
 async function ensureSteelPlateCategoryAndMigrate(){
   if(spMigrationChecked || !isAdmin) return;
   spMigrationChecked = true;

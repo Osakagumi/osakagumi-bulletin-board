@@ -1880,7 +1880,8 @@ function applySectionAccessToNav(){
   });
 }
 let myHiddenTabsForAdmin = [];
-const GENERAL_HIDEABLE_TAB_IDS_FOR_ADMIN = ["notices","calendar","whereabouts","chat","reserve","checkout","visitors","contracts","bizinfo"];
+// 入札("contracts")は常時非表示にしたため、表示タブ設定の対象からも外した（2026年10月。復活時はここにも戻すこと）。
+const GENERAL_HIDEABLE_TAB_IDS_FOR_ADMIN = ["notices","calendar","whereabouts","chat","reserve","checkout","visitors","bizinfo"];
 onAuthStateChanged(auth, async (user)=>{
   if(!user){
     document.getElementById("gate").style.display = "flex";
@@ -3339,7 +3340,7 @@ const GENERAL_TAB_ORDER_DEFS = [
   { id:"whereabouts", label:"行き先" },
   { id:"chat", label:"チャット" },
   { id:"reserve", label:"予約" },
-  { id:"contracts", label:"入札" },
+  // { id:"contracts", label:"入札" }, // 入札機能の凍結に伴い、タブ並び順設定の対象から除外（2026年10月）
   { id:"bizinfo", label:"業務情報" },
   { id:"checkout", label:"機材" },
   { id:"visitors", label:"出入予定" },
@@ -3354,7 +3355,7 @@ const ADMIN_TAB_ORDER_DEFS = [
   { id:"notices", label:"お知らせ管理" },
   { id:"whereabouts", label:"行き先管理" },
   { id:"calendar", label:"カレンダー管理" },
-  { id:"contracts", label:"入札管理" },
+  // { id:"contracts", label:"入札管理" }, // 入札機能の凍結に伴い、タブ並び順設定の対象から除外（2026年10月）
   { id:"bizinfo", label:"業務情報管理" },
   { id:"chatsettings", label:"チャット管理" },
   { id:"visitorsettings", label:"出入予定管理" },
@@ -4793,7 +4794,9 @@ const PERMISSION_DEFS = [
   { collection: "notice_managers", label: "お知らせ管理権限", getList: ()=> lastNoticeManagerEmails },
   { collection: "whereabouts_editors", label: "行き先の他者設定権限", getList: ()=> lastWbEditorEmails },
   { collection: "equipment_managers", label: "設備管理者", getList: ()=> lastEqManagerEmails },
-  { collection: "contract_editors", label: "入札編集権限", getList: ()=> lastContractEditorEmails },
+  // 入札機能の凍結に伴い、社員ごとの権限チェックボックス一覧（ユーザー管理タブ）からは除外（2026年10月）。
+  // CSV一括登録・エクスポートの列構成（入札編集権限フラグ）は既存テンプレートとの互換性維持のため、こちらは変更していない。
+  // { collection: "contract_editors", label: "入札編集権限", getList: ()=> lastContractEditorEmails },
   { collection: "calendar_editors", label: "カレンダー編集権限", getList: ()=> lastCalEditorEmails },
   { collection: "safety_senders", label: "安否確認発信権限", getList: ()=> lastSafetySenderEmails },
   { collection: "visitor_managers", label: "出入予定管理権限", getList: ()=> lastVisitorManagerEmails }
@@ -4911,7 +4914,7 @@ const HIDEABLE_TABS = [
   { id:"reserve", label:"予約" },
   { id:"checkout", label:"機材" },
   { id:"visitors", label:"出入予定" },
-  { id:"contracts", label:"入札" },
+  // { id:"contracts", label:"入札" }, // 入札機能の凍結に伴い、個人ごとの表示タブ設定の対象から除外（2026年10月）
   { id:"bizinfo", label:"業務情報" }
 ];
 // タブ本体に加えて、「業務情報」の中の各ピル（登録済みの各業務情報）も個別にON/OFFできるようにする
