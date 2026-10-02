@@ -2732,7 +2732,18 @@ onAuthStateChanged(auth, async (user)=>{
     // そちらに必要な直近期間だけを別途、軽量な専用リスナー（initCalHolidayWindowListener）で読み込む。
     if(calFiscalYearStart === null){ calFiscalYearStart = defaultFiscalYearStart(); }
     initCalHolidayWindowListener();
-    initWbPresetsListener();
+    // 行き先事前設定（wb_presets）は「翌日以降」の事前設定の仕組みで、将来7日分＋初期設定を
+    // 保持しているが、実際にダッシュボード表示（getEffectiveBaseStatus／getBaseWbNote）に
+    // 必要なのは「初期設定」と「今日分」だけで、将来日程そのものは「事前設定」タブを開ける
+    // 権限者（管理者・行き先編集権限者）しか見ない。従来は全社員がコレクション全体を常時購読
+    // していたため、事前設定タブを一切使わない一般社員にとって不要な読み取りが発生していた
+    // （2026年10月、ヒネからの指摘により対策）。権限の無い一般社員は軽量版（初期設定＋今日分のみ）
+    // を購読し、将来日程を含むフル購読は権限者だけが行う。
+    if(isAdmin || isWhereaboutsEditor){
+      initWbPresetsListener();
+    } else {
+      initWbPresetsTodayListener();
+    }
     initSteelPlateTxListener();
     initContractsListener();
     initVisitorSchedulesListener();
@@ -6882,6 +6893,13 @@ setInterval(()=>{
   if(wbView && wbView.style.display !== "none" && wbCurrentView !== "preset"){
     renderWhereabouts();
   }
+  // 軽量版の事前設定購読（initWbPresetsTodayListener）は「今日の日付」で絞り込んだクエリのため、
+  // 購読したままセッションが日付をまたいで開きっぱなしになる（表示モード端末など）と、
+  // クエリの日付が古いまま更新されなくなる。1分ごとのこのタイマーで日付変化を検知し、
+  // 変わっていればクエリを張り直す（2026年10月、軽量版の新設に合わせて対応）。
+  if(wbPresetsLightModeActive && todayStr() !== wbPresetsTodayDateCached){
+    subscribeWbPresetsToday();
+  }
 }, 60000);
 
 // 所属セルは幅を全角4文字分に固定しているため、それより長い所属名は折り返さず、
@@ -7216,6 +7234,40 @@ function initWbPresetsListener(){
     renderWhereabouts();
     if(wbCurrentView==="preset"){ renderWbPresetTable(); }
   }, (err)=>{ console.error("[行き先事前設定取得エラー]", err); });
+}
+
+// 事前設定タブを開けない（＝将来日程を見る必要が無い）一般社員向けの軽量版。
+// 「初期設定」ドキュメント1件と、「今日の日付」で絞り込んだクエリの2つだけを購読する。
+// 将来日程（最大7日分）は一切購読しないため、事前設定の保存・変更があっても
+// 一般社員側の読み取りは発生しない。
+let wbPresetsTodayUnsub = null;
+let wbPresetsTodayDateCached = null;
+let wbPresetsLightModeActive = false;
+function initWbPresetsTodayListener(){
+  wbPresetsLightModeActive = true;
+  onSnapshot(doc(db,"wb_presets","_defaults"), snap=>{
+    wbPresetDefaults = (snap.exists() && snap.data().states) ? snap.data().states : {};
+    renderWhereabouts();
+  }, (err)=>{ console.error("[行き先初期設定取得エラー]", err); });
+  subscribeWbPresetsToday();
+}
+function subscribeWbPresetsToday(){
+  if(wbPresetsTodayUnsub){ wbPresetsTodayUnsub(); wbPresetsTodayUnsub = null; }
+  const dateNow = todayStr();
+  wbPresetsTodayDateCached = dateNow;
+  wbPresetsTodayUnsub = onSnapshot(query(collection(db,"wb_presets"), where("date","==", dateNow)), snap=>{
+    const todayMap = {};
+    snap.docs.forEach(d=>{
+      const data = d.data();
+      if(!data.email) return;
+      todayMap[data.email] = {
+        status: data.status||"", note: data.note||"",
+        timeLeaveType: data.timeLeaveType||"", timeLeaveStart: data.timeLeaveStart||"", timeLeaveEnd: data.timeLeaveEnd||""
+      };
+    });
+    wbPresetsByDate[dateNow] = todayMap;
+    renderWhereabouts();
+  }, (err)=>{ console.error("[行き先当日分事前設定取得エラー]", err); });
 }
 
 function wbPresetStoredDates(){
