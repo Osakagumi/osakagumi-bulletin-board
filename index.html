@@ -1041,7 +1041,8 @@
       <button class="tab-btn" data-view="whereabouts">行き先</button>
       <button class="tab-btn" data-view="chat">チャット<span id="chat-tab-badge" class="chat-conv-dot" style="display:none;margin-left:5px;vertical-align:middle;"></span></button>
       <button class="tab-btn" data-view="reserve">予約</button>
-      <button class="tab-btn" data-view="contracts">入札</button>
+      <!-- 入札情報はExcel管理＋業務情報タブ経由の運用に移行したため、このタブは常時非表示にしている（2026年10月）。 -->
+      <button class="tab-btn" data-view="contracts" style="display:none;">入札</button>
       <button class="tab-btn" data-view="bizinfo">業務情報</button>
       <button class="tab-btn" data-view="checkout">機材</button>
       <button class="tab-btn" data-view="visitors">出入予定</button>
@@ -1319,7 +1320,8 @@
               </div>
               <div id="dash-reserve-body"></div>
             </div>
-            <div class="dash-card" id="dash-card-contracts">
+            <!-- 入札情報はExcel管理＋業務情報タブ経由の運用に移行したため、このダッシュボードカードは常時非表示にしている（2026年10月）。 -->
+            <div class="dash-card" id="dash-card-contracts" style="display:none;">
               <div class="dash-card-head">
                 <span class="dash-drag-handle" title="ドラッグして並び替え">⠿</span>
                 <h3>入札</h3>
@@ -2749,7 +2751,12 @@ onAuthStateChanged(auth, async (user)=>{
     // 時にしか参照されない）ため、ensureVisitorTargetOfficersListener等と同じ遅延購読に変更
     // （2026年10月、読み取り数の見直しにより対応。initSteelPlateTxListener自体は下に残し、
     // ensureSteelPlateTxListener経由でrenderCheckoutTab内から初回だけ呼び出す）。
-    initContractsListener();
+    // 入札（契約）情報は、業務上の方針変更によりExcel管理に一本化され、業務情報タブ経由で
+    // 閲覧・更新する運用になった（敷鉄板の出入管理と同じ経緯。2026年10月）。アプリ内の
+    // 「入札」タブ・ダッシュボードカードは非表示にし、関連するFirestore購読・自動削除処理も
+    // 停止した（下記3行＋initContractSettingsListener・cleanupResolvedContracts呼び出し）。
+    // 実装自体は削除せず残してあるので、方針が再度変わった場合はコメントを外すだけで復活できる。
+    // initContractsListener();
     initVisitorSchedulesListener();
     cleanupOldVisitorSchedules();
     // 業務情報（business_info_categories/items）と、出入予定の「役員対象社員」設定
@@ -2764,12 +2771,12 @@ onAuthStateChanged(auth, async (user)=>{
     initRtdbAutoSuspend();
     initWbStatusLive();
     initOneSignalForCurrentUser();
-    initContractSettingsListener();
+    // initContractSettingsListener(); // 入札機能の凍結に伴い停止（上のコメント参照）
     initUserPrefsListener();
     initSystemTabDefaultsListener();
     initWbPresetBgColorListener();
     initDashCardDragDrop();
-    cleanupResolvedContracts();
+    // cleanupResolvedContracts(); // 入札機能の凍結に伴い停止（上のコメント参照）
     ensureSteelPlateCategoryAndMigrate();
 
     if(urlPreselect.campaign){
@@ -3568,12 +3575,13 @@ async function ensureEmployeeRecord(){
         order: 0,
         status: "",
         note: "",
-        statusUpdatedAt: new Date().toISOString(),
-        lastLogin: new Date().toISOString()
+        statusUpdatedAt: new Date().toISOString()
       });
-    } else {
-      await updateDoc(ref, { lastLogin: new Date().toISOString() });
     }
+    // 以前はここで毎回 lastLogin をupdateDocしていたが、どこにも表示・使用されておらず、
+    // employeesコレクション全体を全社員が常時購読しているため、ログイン・リロードのたびに
+    // 「今ログイン中の全員」への読み取りが波及するだけの無駄な書き込みだった。
+    // ヒネに確認の上、未使用と判明したため削除した（2026年10月）。
   }catch(e){ /* ロールの読み書き権限がまだ整っていない場合は静かに無視 */ }
 }
 
@@ -4160,9 +4168,16 @@ function initVisitorTargetOfficersListener(){
   }, (err)=>{ console.error("[出入予定：対象役員取得エラー]", err); });
 }
 let visitorCleanupRunning = false;
+const VISITOR_CLEANUP_INTERVAL_MS = 6*60*60*1000; // 6時間（予約・お知らせの自動削除と同じ間隔）
 // 過去の日付になった出入予定を自動削除する（本人が対象の予定は誰でも、それ以外は出入予定管理権限者のみ削除できる）
+// 予約・お知らせの自動削除（cleanupPastReservations／cleanupOldNotices）は、検証時の複数端末での
+// 再読み込み等で読み取りが積み重なるのを防ぐため、ブラウザごとにlocalStorageで前回実行時刻を記録し、
+// 一定時間以内の再実行をスキップするスロットリングが入っていたが、この出入予定の自動削除だけ
+// 同様の対策が漏れており、ログイン・リロードのたびに毎回visitor_schedules全件スキャンが発生していた
+// （2026年10月、読み取り数の見直しにより、他の2つと揃える形で対応）。
 async function cleanupOldVisitorSchedules(){
   if(visitorCleanupRunning) return;
+  if(!shouldRunLocalThrottledCleanup("visitorCleanupLastRun", VISITOR_CLEANUP_INTERVAL_MS)) return;
   visitorCleanupRunning = true;
   try{
     let cleanupDays = 14;

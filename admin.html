@@ -313,7 +313,8 @@
     <button class="tab-btn" data-view="userimport">ユーザー管理</button>
     <button class="tab-btn" data-view="notices">お知らせ管理</button>
     <button class="tab-btn" data-view="whereabouts">行き先管理</button>
-    <button class="tab-btn" data-view="contracts">入札管理</button>
+    <!-- 入札情報はExcel管理＋業務情報タブ経由の運用に移行したため、このタブは常時非表示にしている（2026年10月）。 -->
+    <button class="tab-btn" data-view="contracts" style="display:none;">入札管理</button>
     <button class="tab-btn" data-view="bizinfo">業務情報管理</button>
     <button class="tab-btn" data-view="chatsettings">チャット管理</button>
     <button class="tab-btn" data-view="visitorsettings">出入予定管理</button>
@@ -1843,7 +1844,10 @@ const ADMIN_SECTION_PERMISSIONS = {
   notices:       { permission: "isPoster", generalTab: "notices" },
   whereabouts:   { permission: "isWhereaboutsEditor", generalTab: "whereabouts" },
   calendar:      { permission: "isCalendarEditor", generalTab: "calendar" },
-  contracts:     { permission: "isContractEditor", generalTab: "contracts" },
+  // 入札情報はExcel管理＋業務情報タブ経由の運用に移行したため、「入札管理」タブ自体を常時非表示にしている
+  // （2026年10月）。ここから外すことでapplySectionAccessToNav()の対象から外れ、下のtab-btnに直接
+  // 付けたstyle="display:none"がそのまま効く（復活させる場合はこの行のコメントを外すだけでよい）。
+  // contracts:     { permission: "isContractEditor", generalTab: "contracts" },
   bizinfo:       { permission: null, generalTab: "bizinfo" },
   chatsettings:  { permission: null, generalTab: "chat" },
   visitorsettings:{ permission: "isVisitorManager", generalTab: "visitors" },
@@ -1957,7 +1961,7 @@ onAuthStateChanged(auth, async (user)=>{
   initEquipmentManagersListener();
   initCalendarEditorsListener();
   initCalendarYearsListener();
-  initContractEditorsListener();
+  initContractEditorsListener(); // 権限一覧（contract_editors）は一括権限設定等でも使う小さな一覧のため、凍結後も維持
   initSafetySendersListener();
   initVisitorManagersListener();
   initVisitorTargetOfficersAdminListener();
@@ -1970,9 +1974,12 @@ onAuthStateChanged(auth, async (user)=>{
   initThemeColorsListener();
   initGeneralTabDefaultsListener();
   initAdminTabDefaultsListener();
-  initContractSettingsListener();
-  initContractHighlightSettingsListener();
-  initContractCleanupListener();
+  // 入札情報はExcel管理＋業務情報タブ経由の運用に移行し、「入札管理」タブ自体を非表示にしたため、
+  // その設定（対応部門初期値・ハイライト日数・自動削除ルール）の購読も停止した（index.html側の
+  // 入札凍結と同じ経緯。2026年10月）。実装は残してあるので、復活時はコメントを外すだけでよい。
+  // initContractSettingsListener();
+  // initContractHighlightSettingsListener();
+  // initContractCleanupListener();
   initEmployeesListener();
 });
 
