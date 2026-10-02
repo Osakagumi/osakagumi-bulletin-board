@@ -6757,20 +6757,27 @@ function getWbNoteLines(emp){
 
 function getBaseWbNote(emp){
   emp = withLiveWbStatus(emp);
-  const updatedToday = emp.statusUpdatedAt && toLocalDateStr(emp.statusUpdatedAt) === todayStr();
-  if(updatedToday){
+  // getEffectiveBaseStatus と同じ優先順位（今日その場の編集 > 当日の事前設定 > 初期設定）に揃える。
+  // 「未設定」（status==""）を選んで保存した場合、ステータス側は status が空なら
+  // 事前設定・初期設定まで遡って表示するのに、備考側は updatedToday だけで判定すると
+  // 今日の（空の）emp.note を返して止まってしまい、初期設定の備考が出ない不具合があった
+  // （2026年10月、ヒネからの報告により修正）。status の有無で判定を揃えることで解消する。
+  if(updatedToday_(emp) && emp.status){
     return emp.note || "";
   }
   const todayPresets = wbPresetsByDate[todayStr()] || {};
   const preset = todayPresets[emp.email];
-  if(preset){
+  if(preset && preset.status){
     return preset.note || "";
   }
   const def = wbPresetDefaults[emp.email];
-  if(def){
+  if(def && def.status){
     return def.note || "";
   }
-  return emp.note || "";
+  return "";
+}
+function updatedToday_(emp){
+  return !!(emp.statusUpdatedAt && toLocalDateStr(emp.statusUpdatedAt) === todayStr());
 }
 function departmentSortIndex(id){
   const idx = departmentsAll.findIndex(x=>x.id===id);
@@ -7405,11 +7412,13 @@ function renderWbPresetTable(){
       const hasPending = Object.prototype.hasOwnProperty.call(wbPresetPendingEdits, emp.email);
       const preset = hasPending ? wbPresetPendingEdits[emp.email] : (editingDefaults ? (wbPresetDefaults[emp.email] || null) : (dayPresets[emp.email] || null));
       const fallback = editingDefaults ? null : (wbPresetDefaults[emp.email] || null);
-      // presetオブジェクト自体が存在する（＝その日について何らかの選択が既に保存・入力されている）場合は、
-      // statusが空文字（＝モーダルで「未設定」を明示的に選んだ）であってもそれを優先する。
-      // ここを preset.status の真偽値で判定してしまうと、「未設定」を選んだつもりでも
-      // 初期状態の内容にフォールバックしてしまい、見た目上「未設定」にならない不具合になる。
-      const effective = preset ? preset : ((fallback && fallback.status) ? fallback : null);
+      // 実際の行き先一覧側（getEffectiveBaseStatus／getBaseWbNote）と同じ優先順位に揃える：
+      // 事前設定のstatusが空文字（＝モーダルで「未設定」を明示的に選んで保存）の場合は、
+      // 初期設定へフォールバックして表示する（初期設定も無ければ「未設定」表示）。
+      // 以前は preset オブジェクトの有無だけで「未設定」を優先表示していたが、保存時に
+      // 確認メッセージ（何が適用されるか）を出す形に変更したため、その対策は不要になった
+      // （2026年10月、ヒネからの要望により変更）。
+      const effective = (preset && preset.status) ? preset : ((fallback && fallback.status) ? fallback : null);
       const st = effective ? wbStatusInfo(effective.status) : null;
       const tr = document.createElement("tr");
       tr.dataset.email = emp.email;
@@ -7613,6 +7622,17 @@ document.getElementById("wb-preset-modal-save").addEventListener("click", ()=>{
       errEl.textContent = "時間休の終了時刻は開始時刻より後にしてください。";
       return;
     }
+  }
+  // 「未設定」を選んで保存すると、実際には初期設定（または初期設定も無ければ「未設定」）に
+  // フォールバックして表示される仕様のため、保存前にその結果を説明して確認する
+  // （2026年10月、ヒネからの要望により追加）。
+  if(!status){
+    const def = wbPresetDefaults[wbPresetEditingEmail];
+    const defStatusInfo = (def && def.status) ? wbStatusInfo(def.status) : null;
+    const confirmMsg = defStatusInfo
+      ? `「未設定」で保存すると、この日は初期設定の内容（状態：${defStatusInfo.name}${def.note ? "／備考：" + def.note : ""}）が適用されます。よろしいですか？`
+      : `「未設定」で保存すると、この日は初期設定も登録されていないため「未設定」として表示されます。よろしいですか？`;
+    if(!confirm(confirmMsg)) return;
   }
   wbPresetPendingEdits[wbPresetEditingEmail] = {
     status, note,
