@@ -2744,7 +2744,11 @@ onAuthStateChanged(auth, async (user)=>{
     } else {
       initWbPresetsTodayListener();
     }
-    initSteelPlateTxListener();
+    // 敷鉄板・機材の貸出/返却履歴（steel_plate_transactions）は、記録が溜まり続ける一方で
+    // 自動削除の仕組みが無く、ダッシュボードの表示にも使われない（「機材」タブを実際に開いた
+    // 時にしか参照されない）ため、ensureVisitorTargetOfficersListener等と同じ遅延購読に変更
+    // （2026年10月、読み取り数の見直しにより対応。initSteelPlateTxListener自体は下に残し、
+    // ensureSteelPlateTxListener経由でrenderCheckoutTab内から初回だけ呼び出す）。
     initContractsListener();
     initVisitorSchedulesListener();
     cleanupOldVisitorSchedules();
@@ -3729,6 +3733,9 @@ function populateCheckoutManagingDeptFilter(){
 }
 document.getElementById("checkout-managing-dept-filter")?.addEventListener("change", ()=> renderCheckoutTab());
 function renderCheckoutTab(){
+  // renderMyResourcesSummary（敷鉄板の貸出中数量を含む）がカテゴリに関わらず常に呼ばれるため、
+  // 敷鉄板カテゴリ選択時に限らず、このタブを開いた時点で購読を始めておく（初回のみ）。
+  ensureSteelPlateTxListener();
   const selCat = categoriesAll.find(c=>c.id===selectedCheckoutCategory);
   const isSteelPlates = selCat && selCat.mode==="inventory";
   const equipPanel = document.getElementById("checkout-equipment-panel");
@@ -9314,6 +9321,16 @@ function recomputeSpPlateTypes(){
   // ダッシュボード・「自分の機材」集計用：在庫数管理カテゴリ全部をまとめたもの
   const allInvCatIds = categoriesAll.filter(c=>c.mode==="inventory").map(c=>c.id);
   spAllInventoryTypes = equipmentAll.filter(e=> allInvCatIds.includes(e.category));
+}
+// 「機材」タブ（renderCheckoutTab）を実際に開いた時にだけ、初回に1度だけ購読を始める。
+// ダッシュボードでは使われず、かつ記録が溜まり続ける一方で自動削除も無いコレクションのため、
+// ensureVisitorTargetOfficersListener等と同じ遅延購読パターンにしている
+// （2026年10月、読み取り数の見直しにより対応）。
+let spTxListenerStarted = false;
+function ensureSteelPlateTxListener(){
+  if(spTxListenerStarted) return;
+  spTxListenerStarted = true;
+  initSteelPlateTxListener();
 }
 function initSteelPlateTxListener(){
   const q = query(collection(db,"steel_plate_transactions"), orderBy("date","desc"));

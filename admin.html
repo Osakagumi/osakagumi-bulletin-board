@@ -1944,7 +1944,12 @@ onAuthStateChanged(auth, async (user)=>{
   initPostersListener();
   initNoticeManagersListener();
   initNoticeCleanupSettingsListener();
-  initNoticesAdminListener();
+  // お知らせ（announcements）全件は、記録が溜まり続ける一方で自動削除の例外（削除しない設定）
+  // もあり得るコレクションで、かつ「お知らせ管理」タブでしか使われないため、予約状況（全体）と
+  // 同じ遅延読み込みパターンに変更（2026年10月、読み取り数の見直しにより対応。
+  // ログイン直後に最初に表示されるタブが「お知らせ管理」自体だった場合は、
+  // switchToAdminTab呼び出し（上のfirstAccessibleSection判定）で既にensureNoticesAdminListener()が
+  // 呼ばれているため、ここでは何もしなくてよい）。
   initDepartmentsListener();
   initWbColumnsListener();
   initWbStatusesListener();
@@ -2019,6 +2024,7 @@ function switchToAdminTab(viewName){
   });
   if(viewName==="systemsettings") loadStorageInfo();
   if(viewName==="reservations") ensureReservationsListener();
+  if(viewName==="notices") ensureNoticesAdminListener();
 }
 document.querySelectorAll(".tab-btn").forEach(btn=>{
   btn.addEventListener("click", ()=>{
@@ -2752,6 +2758,16 @@ function initNoticeManagersListener(){
   });
 }
 
+let noticesAdminListenerStarted = false;
+// 「お知らせ管理」タブは全件読み込むため、ログイン直後ではなく、実際にこのタブを開いた時にだけ
+// 監視を開始する（noticesAllAdminを参照しているのはこのタブ内の処理のみと確認済み。
+// employeesリスナー経由でrenderNoticesAdminTable(noticesAllAdmin)が呼ばれることがあるが、
+// タブ未使用時はnoticesAllAdminが空配列のまま非表示のテーブルに反映されるだけで無害）。
+function ensureNoticesAdminListener(){
+  if(noticesAdminListenerStarted) return;
+  noticesAdminListenerStarted = true;
+  initNoticesAdminListener();
+}
 function initNoticesAdminListener(){
   const q = query(collection(db,"announcements"), orderBy("createdAt","desc"));
   onSnapshot(q, snap=>{
