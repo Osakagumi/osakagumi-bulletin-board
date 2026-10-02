@@ -2777,7 +2777,9 @@ function ensureNoticesAdminListener(){
   initNoticesAdminListener();
 }
 function initNoticesAdminListener(){
-  const q = query(collection(db,"announcements"), orderBy("createdAt","desc"));
+  // 2026年10月：index.html側と同様、自動削除処理が止まった場合等への安全弁としてlimitを設定。
+  // 管理画面側は過去分の管理も行うため、一般画面より広めの上限にしている。
+  const q = query(collection(db,"announcements"), orderBy("createdAt","desc"), limit(300));
   onSnapshot(q, snap=>{
     const notices = snap.docs.map(d=>({id:d.id, ...d.data()}));
     renderNoticesAdminTable(notices);

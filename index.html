@@ -3095,8 +3095,8 @@ function renderDashboardVisitorsCard(){
   visitorsBody.innerHTML = "";
   const todayStrForVisitors = todayStr();
   const visibleVisitors = isVisitorManager
-    ? visitorSchedulesAll
-    : visitorSchedulesAll.filter(v=> getVisitorHostEmails(v).includes(currentUser.email));
+    ? getVisitorSchedulesAll()
+    : getVisitorSchedulesAll().filter(v=> getVisitorHostEmails(v).includes(currentUser.email));
   const targetVisitors = dashVisitorsRange==="today"
     ? visibleVisitors
         .filter(v=> visitorEntryCoversDate(v, todayStrForVisitors))
@@ -3409,6 +3409,7 @@ function switchToTab(viewName){
   }
   if(viewName==="visitors"){
     ensureVisitorTargetOfficersListener();
+    ensureVisitorSchedulesFullListener(); // 出入予定タブを開いた時だけ、過去分も含む全件購読に切り替える
     ensureCalendarFullYearListener(); // 出入予定カレンダーの休日ハイライトに年間データを使うため
     try{ renderActiveVisitorView(); }catch(e){ console.error("[出入予定タブの表示エラー]", e); }
   }
@@ -4081,7 +4082,6 @@ document.getElementById("checkout-modal-confirm").addEventListener("click", asyn
 /* =========================================================
    出入予定（来客・役員）
 ========================================================= */
-let visitorSchedulesAll = [];
 let editingVisitorId = null;
 let visitorHostEmails = []; // 対象社員（複数対応）のメールアドレス一覧
 let visitorHostNames = [];  // 上記に対応する表示名の一覧（同じ並び順）
@@ -4144,15 +4144,44 @@ function formatVisitorDateTimeRange(v){
   const { start, end } = getVisitorDateTimeParts(v);
   return end ? `${start}${end}` : start;
 }
+// 出入予定：ダッシュボードの「出入予定カード」用の軽量購読（ログイン時から常時購読）。
+// ダッシュボードは「本日分」「今日以降」しか表示しないが、複数日にまたがる予定（開始日が
+// 過去でも終了日が今日以降）を取りこぼさないよう、余裕を持って直近30日より新しいものを対象に
+// している（自動削除は既定14日のため、通常はこれで十分）。出入予定タブを実際に開いた時だけ、
+// 過去分も含む全件購読（visitorSchedulesFull）に切り替わる（ensureVisitorSchedulesFullListener参照。
+// カレンダー・wb_presetsと同じ「軽量＋タブ起動時フル」の二段構えパターン。2026年10月、
+// ログイン時に全件を無条件購読していたのを対策）。
+let visitorSchedulesLight = [];
+let visitorSchedulesFull = null; // 出入予定タブを一度でも開くまではnullのまま（開いたら以後は全件を保持）
+function getVisitorSchedulesAll(){
+  return visitorSchedulesFull || visitorSchedulesLight;
+}
 function initVisitorSchedulesListener(){
-  onSnapshot(collection(db,"visitor_schedules"), snap=>{
-    visitorSchedulesAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  const cutoff = new Date(Date.now() - 30*24*60*60*1000);
+  const cutoffStr = `${cutoff.getFullYear()}-${pad2(cutoff.getMonth()+1)}-${pad2(cutoff.getDate())}`;
+  const q = query(collection(db,"visitor_schedules"), where("date",">=", cutoffStr));
+  onSnapshot(q, snap=>{
+    visitorSchedulesLight = snap.docs.map(d=>({id:d.id, ...d.data()}));
     populateVisitorFilterSelects();
     if(document.getElementById("view-visitors").style.display !== "none"){
       renderActiveVisitorView();
     }
     refreshDashboardIfActive();
-  }, (err)=>{ console.error("[出入予定取得エラー]", err); });
+  }, (err)=>{ console.error("[出入予定取得エラー（軽量購読）]", err); });
+}
+let visitorSchedulesFullListenerStarted = false;
+// 出入予定タブを実際に開いた時にだけ、過去分も含む全件購読を開始する（1度だけ）。
+function ensureVisitorSchedulesFullListener(){
+  if(visitorSchedulesFullListenerStarted) return;
+  visitorSchedulesFullListenerStarted = true;
+  onSnapshot(collection(db,"visitor_schedules"), snap=>{
+    visitorSchedulesFull = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    populateVisitorFilterSelects();
+    if(document.getElementById("view-visitors").style.display !== "none"){
+      renderActiveVisitorView();
+    }
+    refreshDashboardIfActive();
+  }, (err)=>{ console.error("[出入予定取得エラー（全件購読）]", err); });
 }
 // 出入予定タブを実際に開いた時にだけ、上記の監視をまとめて開始する（1度だけ）。
 // ダッシュボードには使われないため、ログイン直後には開始しない。
@@ -4215,8 +4244,8 @@ function populateVisitorFilterSelects(){
   const dateSel = document.getElementById("visitor-date-filter-select");
   if(!hostSel || !dateSel) return;
   const visible = isVisitorManager
-    ? visitorSchedulesAll
-    : visitorSchedulesAll.filter(v=> getVisitorHostEmails(v).includes(currentUser.email));
+    ? getVisitorSchedulesAll()
+    : getVisitorSchedulesAll().filter(v=> getVisitorHostEmails(v).includes(currentUser.email));
 
   const hostMap = new Map(); // email -> name
   visible.forEach(v=>{
@@ -4352,8 +4381,8 @@ function renderVisitorCalendar(){
   const today = todayStr();
 
   const visible = isVisitorManager
-    ? visitorSchedulesAll
-    : visitorSchedulesAll.filter(v=> getVisitorHostEmails(v).includes(currentUser.email));
+    ? getVisitorSchedulesAll()
+    : getVisitorSchedulesAll().filter(v=> getVisitorHostEmails(v).includes(currentUser.email));
   let filtered = visible;
   if(visitorTypeFilter) filtered = filtered.filter(v=> (v.type||"visitor")===visitorTypeFilter);
   if(visitorHostFilterEmail) filtered = filtered.filter(v=> getVisitorHostEmails(v).includes(visitorHostFilterEmail));
@@ -4434,8 +4463,8 @@ function renderVisitorsTab(){
   body.innerHTML = "";
   // 対象社員は自分の出入予定のみ、出入予定管理権限者は全件を表示する
   const visible = isVisitorManager
-    ? visitorSchedulesAll
-    : visitorSchedulesAll.filter(v=> getVisitorHostEmails(v).includes(currentUser.email));
+    ? getVisitorSchedulesAll()
+    : getVisitorSchedulesAll().filter(v=> getVisitorHostEmails(v).includes(currentUser.email));
   let filtered = visitorDateFilter ? visible.filter(v=> v.date===visitorDateFilter) : visible;
   if(visitorTypeFilter) filtered = filtered.filter(v=> (v.type||"visitor")===visitorTypeFilter);
   if(visitorHostFilterEmail) filtered = filtered.filter(v=> getVisitorHostEmails(v).includes(visitorHostFilterEmail));
@@ -5524,7 +5553,9 @@ function tsToStr(ts){
 }
 
 function initNoticesListener(){
-  const q = query(collection(db,"announcements"), orderBy("createdAt","desc"));
+  // 2026年10月：自動削除（30日）はあるが、処理が止まった場合や投稿頻度が増えた場合の
+  // 歯止めとして、念のためlimitを設定（通常運用では件数に影響しない安全弁）。
+  const q = query(collection(db,"announcements"), orderBy("createdAt","desc"), limit(200));
   onSnapshot(q, snap=>{
     noticesAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
     renderNotices();
