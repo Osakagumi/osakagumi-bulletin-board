@@ -2130,6 +2130,7 @@ if(urlPreselect.email){
 let swPreselectChatEmail = null;
 function openChatFromSwMessageIfNeeded(){
   if(!swPreselectChatEmail || !currentUser) return;
+  ensureEmployeesFullListener(); // 2026年10月：名前解決のため社員名簿の全件購読を開始する（未開始時のみ）
   const otherEmail = swPreselectChatEmail;
   swPreselectChatEmail = null;
   const otherEmp = employeesAll.find(e=>(e.email||"").toLowerCase()===otherEmail.toLowerCase());
@@ -2594,7 +2595,8 @@ let dashCalYear = dashCalInitial.getFullYear();
 let dashCalMonth = dashCalInitial.getMonth()+1;
 let spTransactionsAll = [];
 
-let employeesAll = [];
+let employeesAll = []; // 全社員分（2026年10月：ensureEmployeesFullListener()経由でタブを開いた時だけ購読）
+let myEmployeeDoc = null; // 自分自身の社員レコードのみ（ログイン時から常時購読。initMyEmployeeDocListener参照）
 let departmentsAll = [];
 let wbStatusesAll = [];
 let wbListColumns = 2;
@@ -2745,7 +2747,12 @@ onAuthStateChanged(auth, async (user)=>{
     initCalendarYearsListenerGeneral();
     if(isSafetySender){ initSafetyCampaignsAdminListener(); }
     initCategoriesListener();
-    initEquipmentListener();
+    // 2026年10月：設備本体（equipment）の購読は、カレンダー・出入予定と同じ理由
+    // （全社員が毎回ログインするだけで全件購読していたコストの削減）により、ログイン時には
+    // 行わず「機材」「予約」タブを実際に開いたタイミングまで遅延させる
+    // （ensureEquipmentFullListener参照。ダッシュボードの予約一覧クリックやキオスク予約表示でも、
+    // 使う直前に同関数を呼ぶことで対応している）。
+    if(urlPreselect.chat){ ensureEmployeesFullListener(); } // 通知からのチャット直接オープンに備え、社員名簿の購読を早めに開始する
     initMyReservationsListener();
     cleanupPastReservations();
     initNoticesListener();
@@ -2754,7 +2761,13 @@ onAuthStateChanged(auth, async (user)=>{
     initDepartmentsListener();
     initWbStatusesListener();
     initWbColumnsListener();
-    initEmployeesListener();
+    // 2026年10月：社員名簿（employees、全件）の購読は、6章「Firestore読み取り件数の棚卸し」で
+    // 判明した通り、行き先・お知らせ・チャット・機材（貸出先選択）など本人以外の社員情報が
+    // 必要なタブを実際に開いた時だけ行う（ensureEmployeesFullListener参照）。
+    // ログイン時から常に必要な「自分自身の」社員レコード（ヘッダーの表示名、行き先の自分の
+    // バッジ、タブの個人非表示設定など）は、全件より遥かに軽い1件だけの購読
+    // （initMyEmployeeDocListener、myEmployeeDoc）で別途カバーする。
+    initMyEmployeeDocListener();
     // カレンダー本体（年間最大366日ぶん）の購読は、ログイン時には行わず「カレンダー」
     // 「出入予定」タブを実際に開いたタイミングまで遅延させる（ensureCalendarFullYearListener参照。
     // 2026年10月、1回のログインで365件前後のFirestore読み取りが発生していた問題への対策）。
@@ -2942,7 +2955,7 @@ function initWbPresetBgColorListener(){
   }, (err)=>{ console.error("[行き先事前設定パネルの背景色取得エラー]", err); });
 }
 function applyMyHiddenTabs(){
-  const me = employeesAll.find(e=>(e.email||"").toLowerCase()===(currentUser?.email||"").toLowerCase());
+  const me = myEmployeeDoc; // 2026年10月：自分の社員レコードのみ（全件購読ではなくmyEmployeeDocを使う）
   // 個人設定・システム設定のどちらかが「非表示」なら非表示にする（両方が「表示」の場合のみ表示する）
   const personalHidden = (me && Array.isArray(me.hiddenTabs)) ? me.hiddenTabs : [];
   const systemHidden = (systemTabDefaults && Array.isArray(systemTabDefaults.enabledTabs))
@@ -3179,7 +3192,7 @@ function renderDashboard(){
 
   // ---- お知らせ（未読上位） ----
   const noticesBody = document.getElementById("dash-notices-body");
-  const dashMe = employeesAll.find(e=>(e.email||"").toLowerCase()===(currentUser?.email||"").toLowerCase());
+  const dashMe = myEmployeeDoc; // 2026年10月：自分の社員レコードのみ（全件購読ではなくmyEmployeeDocを使う）
   const unread = noticesAll.filter(n=>{
     if(myReadNoticeIds.includes(n.id)) return false;
     if(n.authorEmail === currentUser?.email) return true;
@@ -3235,7 +3248,7 @@ function renderDashboard(){
   // ---- 自分の行き先（バッジをクリックでその場で修正） ----
   const wbBody = document.getElementById("dash-wb-body");
   wbBody.innerHTML = "";
-  const me = employeesAll.find(e=>(e.email||"").toLowerCase()===(currentUser.email||"").toLowerCase()) || { email: currentUser.email };
+  const me = myEmployeeDoc || { email: currentUser.email }; // 2026年10月：自分の社員レコードのみ（全件購読ではなくmyEmployeeDocを使う）
   const myEffStatus = getEffectiveWbStatus(me);
   if(myEffStatus==="OFFHOURS"){
     wbBody.innerHTML = `<div class="dash-empty">現在は就業時間外です。</div>`;
@@ -3269,6 +3282,10 @@ function renderDashboard(){
   const resBody = document.getElementById("dash-reserve-body");
   const today = todayStr();
   const upcoming = myReservationsAll.filter(r => (r.date + r.startTime) >= (today + "00:00"));
+  // 2026年10月：この一覧の行をクリックすると予約タブへジャンプし設備情報（equipmentAll）を
+  // 参照するため、表示する予約が実際にある場合だけ先行して全件購読を開始しておく
+  // （無ければ機材タブ・予約タブを開くまで購読しない＝読み取り削減の効果を保つ）。
+  if(upcoming.length>0) ensureEquipmentFullListener();
   if(upcoming.length===0){
     resBody.innerHTML = `<div class="dash-empty">今後の予約はありません。</div>`;
   } else {
@@ -3435,10 +3452,20 @@ function switchToTab(viewName){
   if(viewName==="checkout"){
     try{ renderCheckoutTab(); }catch(e){ console.error("[貸出タブの表示エラー]", e); }
   }
+  if(viewName==="reserve"){
+    ensureEquipmentFullListener(); // 2026年10月：予約タブを開いた時だけ設備本体を全件購読する
+  }
   if(viewName==="visitors"){
     ensureVisitorTargetOfficersListener();
-    ensureVisitorSchedulesFullListener(); // 出入予定タブを開いた時だけ、過去分も含む全件購読に切り替える
-    ensureCalendarFullYearListener(); // 出入予定カレンダーの休日ハイライトに年間データを使うため
+    // 2026年10月：出入予定・カレンダーの「全件（年間/全履歴）」購読は、出入予定管理者
+    // （isVisitorManager）だけに絞った。一般社員は自分がhostの予定しか表示しない仕様
+    // （isVisitorManagerでの絞り込み、本関数下部参照）であり、直近30日＋将来分の軽量購読
+    // （visitorSchedulesLight）・休日判定用の軽量カレンダー窓（calHolidayWindowData、直近2ヶ月分）
+    // で実用上十分なため、全社員に全件購読のコストを負わせない（読み取り数削減、2026年10月）。
+    if(isVisitorManager){
+      ensureVisitorSchedulesFullListener(); // 出入予定タブを開いた時だけ、過去分も含む全件購読に切り替える
+      ensureCalendarFullYearListener(); // 出入予定カレンダーの休日ハイライトに年間データを使うため
+    }
     try{ renderActiveVisitorView(); }catch(e){ console.error("[出入予定タブの表示エラー]", e); }
   }
   if(viewName==="dashboard"){
@@ -3449,6 +3476,13 @@ function switchToTab(viewName){
   }
   if(viewName==="calendar"){
     ensureCalendarFullYearListener();
+  }
+  if(viewName==="whereabouts" || viewName==="notices" || viewName==="chat" || viewName==="safety"){
+    // 2026年10月：社員名簿（employeesAll、全件）は、これらのタブ（本人以外の名前・一覧が
+    // 必要な画面）を実際に開いた時だけ購読を開始する（ensureEmployeesFullListener参照）。
+    // ダッシュボード・業務情報タブなど「自分の情報」だけで足りる画面は、ログイン時から常に
+    // 保持しているmyEmployeeDoc（自分1件のみ）で対応し、全社員分の購読は行わない。
+    ensureEmployeesFullListener();
   }
   if(viewName==="chat"){
     const canResume = chatLastConvEmail && (Date.now() - chatLastLeftAt < 30*60*1000);
@@ -3645,7 +3679,11 @@ function renderCheckoutCategoryRow(){
   const row = document.getElementById("checkout-cat-row");
   if(!row) return;
   row.innerHTML = "";
-  const cats = categoriesAll.filter(cat=> (cat.mode==="checkout" || cat.mode==="inventory") && equipmentAll.some(e=>e.category===cat.id));
+  // 2026年10月：敷鉄板（在庫数管理方式＝mode:"inventory"）はExcel管理に一本化され、
+  // アプリ内の機能は不要と判断されたため、カテゴリのピル自体を表示対象から外す
+  // （開発ノート「敷鉄板の出入管理機能」参照）。将来inventory方式を別用途で復活させる場合は、
+  // こことensureSteelPlateTxListener呼び出し（renderCheckoutTab内）の両方を見直すこと。
+  const cats = categoriesAll.filter(cat=> cat.mode==="checkout" && equipmentAll.some(e=>e.category===cat.id));
   if(selectedCheckoutCategory===null || !cats.some(c=>c.id===selectedCheckoutCategory)){
     selectedCheckoutCategory = cats[0]?.id || null;
   }
@@ -3678,6 +3716,16 @@ function initCategoriesListener(){
   });
 }
 
+// 機材・予約タブを実際に開いた時だけ全件購読を開始する（1度だけ）。カレンダー・出入予定と
+// 同じ「ログイン時には読み込まない」パターン（2026年10月）。ダッシュボードの「今後の自分の予約」
+// 一覧から機材詳細へジャンプする場合（jumpToReservationForView/Edit）やキオスク予約表示
+// （reserveSignageEquipmentId、switchToTab("reserve")経由）でも、使う直前にこの関数を呼ぶ。
+let equipmentFullListenerStarted = false;
+function ensureEquipmentFullListener(){
+  if(equipmentFullListenerStarted) return;
+  equipmentFullListenerStarted = true;
+  initEquipmentListener();
+}
 function initEquipmentListener(){
   const q = query(collection(db,"equipment"), where("active","==",true));
   onSnapshot(q, snap=>{
@@ -3771,9 +3819,12 @@ function populateCheckoutManagingDeptFilter(){
 }
 document.getElementById("checkout-managing-dept-filter")?.addEventListener("change", ()=> renderCheckoutTab());
 function renderCheckoutTab(){
-  // renderMyResourcesSummary（敷鉄板の貸出中数量を含む）がカテゴリに関わらず常に呼ばれるため、
-  // 敷鉄板カテゴリ選択時に限らず、このタブを開いた時点で購読を始めておく（初回のみ）。
-  ensureSteelPlateTxListener();
+  // 2026年10月：敷鉄板機能は不要と判断され凍結（Excel管理に一本化。開発ノート参照）。
+  // ensureSteelPlateTxListener()はコメントアウト済みで呼び出しを停止し、steel_plate_transactions
+  // コレクションの読み取りが機材タブを開くたびに発生しないようにした（Firestore無料枠対策）。
+  // ensureSteelPlateTxListener();
+  ensureEquipmentFullListener(); // 2026年10月：機材タブを開いた時だけ設備本体を全件購読する
+  ensureEmployeesFullListener(); // 2026年10月：貸出先選択（社員選択ダイアログ）に社員名簿が必要なため
   const selCat = categoriesAll.find(c=>c.id===selectedCheckoutCategory);
   const isSteelPlates = selCat && selCat.mode==="inventory";
   const equipPanel = document.getElementById("checkout-equipment-panel");
@@ -5543,6 +5594,7 @@ function renderMyReservations(list){
 let editingReservationId = null;
 let editingReservationDate = null;
 function jumpToReservationForEdit(r){
+  ensureEquipmentFullListener(); // 2026年10月：機材タブ・予約タブを未だ開いていない場合に備えて先行購読を開始
   const eq = equipmentAll.find(e=>e.id===r.equipmentId);
   if(!eq){ toast("対象の設備が見つかりませんでした。"); return; }
   editingReservationId = r.id;
@@ -5560,6 +5612,7 @@ function jumpToReservationForEdit(r){
 // ダッシュボードの「予約済の設備」から、該当日付・カテゴリ・設備を表示するだけのジャンプ（編集モードにはしない）
 let pendingReserveScrollDate = null;
 function jumpToReservationForView(r){
+  ensureEquipmentFullListener(); // 2026年10月：機材タブ・予約タブを未だ開いていない場合に備えて先行購読を開始
   const eq = equipmentAll.find(e=>e.id===r.equipmentId);
   if(!eq){ toast("対象の設備が見つかりませんでした。"); return; }
   selectedCategory = r.category;
@@ -5727,7 +5780,7 @@ function renderNoticeBoardCards(){
   const cardsEl = document.getElementById("notice-board-cards");
   if(!cardsEl) return;
   cardsEl.innerHTML = "";
-  const me = employeesAll.find(e=>(e.email||"").toLowerCase()===(currentUser?.email||"").toLowerCase());
+  const me = myEmployeeDoc; // 2026年10月：自分の社員レコードのみ（全件購読ではなくmyEmployeeDocを使う）
   // 発信先が「全社」、または自分（共用アカウント）の所属部署宛て、かつ除外リストに入っていないものだけを表示する
   const list = noticesAll.filter(n=> isNoticeTargetedTo(n, me)); // 既にcreatedAt降順（新しい順）
   if(list.length===0){
@@ -5777,7 +5830,7 @@ function renderNotices(){
   const el = document.getElementById("notice-list");
   el.innerHTML = "";
   document.getElementById("notice-hide-read-btn").style.display = myKeepVisibleNoticeIds.length > 0 ? "inline-block" : "none";
-  const me = employeesAll.find(e=>(e.email||"").toLowerCase()===(currentUser?.email||"").toLowerCase());
+  const me = myEmployeeDoc; // 2026年10月：自分の社員レコードのみ（全件購読ではなくmyEmployeeDocを使う）
   const visibleNotices = noticesAll.filter(n=>{
     if(n.authorEmail === currentUser?.email) return true; // 自分の投稿は発信先に関わらず見える
     return isNoticeTargetedTo(n, me);
@@ -6462,27 +6515,51 @@ function initWbColumnsListener(){
     renderWhereabouts();
   }, (err)=>{ console.error("[行き先列数設定取得エラー]", err); });
 }
+// 2026年10月：自分自身の社員レコードだけを常時購読する軽量版。ログイン時から常に必要な
+// 「自分の」情報（ヘッダー表示名、行き先の自分のバッジ、タブの個人非表示設定、お知らせ掲示板
+// モードの対象者判定）はこちらで足り、全社員分（employeesAll）の購読は不要にできる。
+function initMyEmployeeDocListener(){
+  onSnapshot(doc(db,"employees", currentUser.email), snap=>{
+    myEmployeeDoc = snap.exists() ? { email: currentUser.email, ...snap.data() } : { email: currentUser.email };
+    updateHeaderUserLabel();
+    refreshDashboardIfActive();
+    applyMyHiddenTabs();
+    // お知らせ（掲示板モード）の対象者判定には自分自身の社員レコードが必要なため、
+    // こちらが後から届いた場合に備えて再描画する（掲示板モード中でなければ内部で何もしない）
+    renderNoticeBoardCards();
+  }, (err)=>{ console.error("[自分の社員レコード取得エラー]", err); });
+}
+
+// 行き先・お知らせ・チャット・機材（貸出先選択）など、本人以外の社員の名前・一覧が必要な
+// タブを実際に開いた時だけ、社員名簿（employees）全件の購読を開始する（1度だけ。2026年10月、
+// ログイン時に全社員へ無条件で全件購読していたコストの削減。switchToTab/openEmployeePicker等から呼ぶ）。
+let employeesFullListenerStarted = false;
+function ensureEmployeesFullListener(){
+  if(employeesFullListenerStarted) return;
+  employeesFullListenerStarted = true;
+  initEmployeesListener();
+}
 function initEmployeesListener(){
   onSnapshot(collection(db,"employees"), snap=>{
     employeesAll = snap.docs.map(d=>({ email:d.id, ...d.data() }));
     renderWhereabouts();
     renderNotices();
-    updateHeaderUserLabel();
-    refreshDashboardIfActive();
-    applyMyHiddenTabs();
     openChatFromUrlIfNeeded();
     openChatFromSwMessageIfNeeded();
-    // お知らせ（掲示板モード）の対象者判定には自分自身の社員レコードが必要なため、
-    // こちらが後から届いた場合に備えて再描画する（掲示板モード中でなければ内部で何もしない）
-    renderNoticeBoardCards();
+    // 社員選択ダイアログ（共通部品）が既に開いている状態で全件購読が完了した場合に備えて、
+    // 一覧を再描画する（開いていなければ内部で何もしない）
+    if(document.getElementById("employee-picker-modal")?.classList.contains("show")){
+      renderEmpPickerNameSelect();
+    }
   }, (err)=>{ console.error("[社員名簿取得エラー]", err); });
 }
 
 // チャットのプッシュ通知をタップして開いた場合（?chat=送信者のメールアドレス）、
 // そのままログイン後に該当のチャット画面を自動的に開く。
-// 社員名簿（employeesAll）が読み込まれるまで名前が引けないため、initEmployeesListener()側から呼ぶ。
+// 社員名簿（employeesAll）が読み込まれるまで名前が引けないため、initEmployeesListener()側からも呼ぶ。
 function openChatFromUrlIfNeeded(){
   if(!urlPreselect.chat || !currentUser) return;
+  ensureEmployeesFullListener(); // 2026年10月：名前解決のため社員名簿の全件購読を開始する（未開始時のみ）
   const otherEmail = urlPreselect.chat;
   urlPreselect.chat = null; // 社員名簿が更新されるたびに再実行されないよう、1回だけ実行する
   history.replaceState(null, "", location.pathname);
@@ -6493,9 +6570,7 @@ function openChatFromUrlIfNeeded(){
 }
 
 function myDisplayName(){
-  const meEmail = (currentUser.email||"").toLowerCase();
-  const me = employeesAll.find(e=>(e.email||"").toLowerCase()===meEmail);
-  return (me && me.name) || currentUser.displayName || currentUser.email;
+  return (myEmployeeDoc && myEmployeeDoc.name) || currentUser.displayName || currentUser.email;
 }
 
 function updateHeaderUserLabel(){
@@ -6555,6 +6630,7 @@ let empPickerSelectedEmails = new Set();
 let empPickerRestrictToDeptIds = null; // 指定した場合、この部署に所属する社員だけを候補にする（nullまたは空配列は制限なし＝全社）
 let empPickerRestrictToEmails = null; // 指定した場合、このメールアドレスの社員だけを候補にする（nullまたは空配列は制限なし＝全社）
 function openEmployeePicker(opts){
+  ensureEmployeesFullListener(); // 2026年10月：この共通部品を使う画面のために社員名簿の全件購読を開始する（未開始時のみ）
   return new Promise((resolve)=>{
     empPickerResolve = resolve;
     empPickerMulti = !!opts?.multi;
@@ -11347,7 +11423,7 @@ function initBizInfoListener(){
 }
 // 自分に対して非表示に設定されていない、かつ有効な業務情報だけを対象にする
 function visibleBizInfoItems(){
-  const me = employeesAll.find(e=>(e.email||"").toLowerCase()===(currentUser?.email||"").toLowerCase());
+  const me = myEmployeeDoc; // 2026年10月：自分の社員レコードのみ（全件購読ではなくmyEmployeeDocを使う）
   const hidden = (me && Array.isArray(me.hiddenTabs)) ? me.hiddenTabs : [];
   return bizInfoItemsAll.filter(item=> item.enabled!==false && !hidden.includes("bizinfo:"+item.id));
 }
