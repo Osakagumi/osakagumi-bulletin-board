@@ -2375,6 +2375,38 @@ function isUserOnline(email){
   return (Date.now() - info.lastChangedAt) < PRESENCE_STALE_MS;
 }
 
+// 2026年10月：RTDB同時接続数（無料枠100、作業員を含め社員97名）対策として、同一メールアドレスでの
+// 同時ログインを1セッションに制限する（PC＋スマホの同時利用等を禁止し、接続数の膨張を防ぐ）。
+// 共用アカウント（isSharedAccount、休憩所キオスク等）は対象外とし、複数台の同時ログインを許可する
+// （ヒネさんの指示：「作業員はキオスクでログイン」する運用のため）。
+// 仕組み：ログイン時に自分のセッションIDをactive_sessions/{自分}へ書き込む（新しいログインが
+// 常に上書きする＝後勝ち）。以後そのパスを監視し、自分以外のセッションIDに上書きされたら
+// （＝別の端末・タブで同じメールが新たにログインした）、このセッションを強制的にログアウトする。
+// database.rules.json側にactive_sessionsの読み書き権限を追加済み（presenceと同じパターン）。
+let mySessionId = null;
+let singleSessionGuardUnsub = null;
+function initSingleSessionGuard(){
+  if(!rtdb || isSharedAccount) return; // RTDB未設定時・共用アカウントは対象外
+  mySessionId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const myKey = sanitizeEmailForRtdbKey(currentUser.email);
+  const sessionRef = rtdbRef(rtdb, `active_sessions/${myKey}`);
+  rtdbSet(sessionRef, {
+    sessionId: mySessionId,
+    ownerEmail: currentUser.email,
+    deviceLabel: (navigator.userAgent||"").slice(0,200),
+    connectedAt: rtdbServerTimestamp()
+  });
+  if(singleSessionGuardUnsub) singleSessionGuardUnsub();
+  singleSessionGuardUnsub = rtdbOnValue(sessionRef, (snap)=>{
+    const data = snap.val();
+    if(data && data.sessionId && data.sessionId !== mySessionId){
+      if(singleSessionGuardUnsub){ singleSessionGuardUnsub(); singleSessionGuardUnsub = null; }
+      document.getElementById("login-error").textContent = "別の端末・ブラウザでログインされたため、このセッションは終了しました。";
+      signOut(auth);
+    }
+  }, (err)=>{ console.error("[セッション監視エラー]", err); });
+}
+
 // Realtime Database（Sparkプラン無料枠）の同時接続数には100という上限があり、
 // 登録者数・利用が増えると「タブを開きっぱなしで他の作業をしている人」も含めて
 // 上限に近づいていく（2026年10月、クレジットカード決済が社内規定上使えずBlaze
@@ -2809,6 +2841,7 @@ onAuthStateChanged(auth, async (user)=>{
     initKioskLogoutShortcutListener();
     initChatListeners();
     initPresence();
+    initSingleSessionGuard(); // 2026年10月：同一メールの同時ログインを1セッションに制限（共用アカウントは対象外）
     initRtdbAutoSuspend();
     initWbStatusLive();
     initOneSignalForCurrentUser();
