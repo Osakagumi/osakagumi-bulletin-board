@@ -2283,7 +2283,10 @@ function sanitizeEmailForRtdbKey(email){
 function unsanitizeEmailFromRtdbKey(key){
   return (key || "").replace(/,/g, ".");
 }
-let presenceOnlineMap = {}; // { email: true/false }
+let presenceOnlineMap = {}; // { email: { online, lastChangedAt } }（2026年10月：鮮度チェックのためlastChangedAtも保持）
+const PRESENCE_HEARTBEAT_MS = 2 * 60 * 1000; // 2分ごとにハートビート
+const PRESENCE_STALE_MS = 10 * 60 * 1000; // 10分以上更新が無ければオフライン扱い（残留アクティブ対策）
+let presenceHeartbeatInited = false;
 
 /* =========================================================
    OneSignal（チャット新着通知）
@@ -2336,14 +2339,39 @@ function initPresence(){
     const val = snap.val() || {};
     const map = {};
     Object.keys(val).forEach(key=>{
-      map[unsanitizeEmailFromRtdbKey(key)] = !!(val[key] && val[key].online);
+      // 2026年10月：online単体のbool値だけでなく、最終更新時刻も保持する。
+      // onDisconnect()がまれに発火せず「アクティブ」のまま残留するケースがあるため、
+      // isUserOnline()側で「一定時間更新が無ければオフライン扱い」という鮮度チェックを行うための情報。
+      map[unsanitizeEmailFromRtdbKey(key)] = {
+        online: !!(val[key] && val[key].online),
+        lastChangedAt: (val[key] && typeof val[key].lastChangedAt === "number") ? val[key].lastChangedAt : null
+      };
     });
     presenceOnlineMap = map;
     refreshOnlineMarksIfActive();
   }, (err)=>{ console.error("[在席状況取得エラー]", err); });
+
+  // 残留アクティブ対策①：定期的に自分のlastChangedAtを更新し続ける（ハートビート）。
+  // RTDBのonDisconnect()は、接続がクリーンに切れなかった場合（通信瞬断・強制終了等）に
+  // 発火しないことがあり、その場合online:trueのまま無期限に残ってしまう（2026年10月判明）。
+  // ハートビートで時刻を更新し続けることで、②の鮮度チェックと組み合わせて、
+  // 万一onDisconnect()が発火しなくても一定時間で自動的に「オフライン」表示に戻せるようにする。
+  if(!presenceHeartbeatInited){
+    presenceHeartbeatInited = true;
+    setInterval(()=>{
+      // タブが5分以上非表示でgoOffline中（意図的なオフライン）の間はハートビートを送らない
+      if(rtdbSuspendedByIdle) return;
+      if(!rtdb || !currentUser) return;
+      const myKey2 = sanitizeEmailForRtdbKey(currentUser.email);
+      rtdbSet(rtdbRef(rtdb, `presence/${myKey2}`), { online: true, ownerEmail: currentUser.email, lastChangedAt: rtdbServerTimestamp() });
+    }, PRESENCE_HEARTBEAT_MS);
+  }
 }
 function isUserOnline(email){
-  return !!presenceOnlineMap[email];
+  const info = presenceOnlineMap[email];
+  if(!info || !info.online) return false;
+  if(typeof info.lastChangedAt !== "number") return true; // 旧形式データ等、時刻が無い場合は従来通り
+  return (Date.now() - info.lastChangedAt) < PRESENCE_STALE_MS;
 }
 
 // Realtime Database（Sparkプラン無料枠）の同時接続数には100という上限があり、
@@ -6943,6 +6971,9 @@ window.addEventListener("resize", ()=>{
 // 対象外にする。時間休は当日の一覧・ボード表示にのみ関わり、事前設定には関係が無いうえ、
 // 定期的な再描画そのものが不要に見えてしまうため）
 setInterval(()=>{
+  // 残留アクティブ対策②：ハートビートが途絶えて鮮度チェックに引っかかった在席状況を、
+  // 新しい書き込みが無くても画面に反映させる（isUserOnline()は時刻比較のみで動くため）。
+  refreshOnlineMarksIfActive();
   const wbView = document.getElementById("view-whereabouts");
   if(wbView && wbView.style.display !== "none" && wbCurrentView !== "preset"){
     renderWhereabouts();
