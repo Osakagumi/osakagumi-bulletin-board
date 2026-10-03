@@ -1236,6 +1236,20 @@
           <div id="kiosk-shortcut-save-msg" style="font-size:12.5px;color:var(--muted);"></div>
         </div>
 
+        <!-- 同一アカウントの同時ログイン制限（RTDB無料枠の同時接続数100対策。2026年10月） -->
+        <div class="panel" style="margin:0;">
+          <h2>同一アカウントの同時ログイン制限</h2>
+          <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
+            有効にすると、同じメールアドレスで別の端末・ブラウザから新たにログインした場合、先にログインしていた方は自動的にログアウトされます（PC・スマホの同時使用を防ぎ、Realtime Databaseの同時接続数上限＝無料枠100を節約するための設定）。共用アカウント（休憩所キオスク等）はこの制限の対象外で、常に複数台から同時ログインできます。OFFにすると、共用アカウント以外も含めて全員、複数台からの同時ログインを許可します。
+          </p>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-bottom:14px;">
+            <input type="checkbox" id="single-session-guard-enabled" style="width:auto;">
+            有効にする
+          </label>
+          <button class="btn btn-primary" id="single-session-guard-save-btn">保存</button>
+          <div id="single-session-guard-save-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px;"></div>
+        </div>
+
         <!-- 画面の背景色 -->
         <div class="panel" style="margin:0;">
           <h2>画面の背景色</h2>
@@ -1291,14 +1305,14 @@
         <div class="panel" style="margin:0;">
           <h2>Firestore 読み取り数の診断（admin.html＝この管理画面自体）</h2>
           <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-            この管理画面もログインのたびに、以下のコレクションを丸ごと読み込みます（「予約状況（全体）」タブのreservationsのみ、タブを開いた時だけ読む作りのため対象外）。このほか、権限判定用のドキュメント読み取りが固定で約22件（データ量に関わらず一定）別途発生します。
+            この管理画面もログインのたびに、以下のコレクションを丸ごと読み込みます（「予約状況（全体）」タブのreservationsのみ、タブを開いた時だけ読む作りのため対象外）。このほか、権限判定用のドキュメント読み取りが固定で約23件（データ量に関わらず一定）別途発生します。
           </p>
           <button class="btn btn-primary" id="admin-diag-run-btn">件数を確認する</button>
           <div id="admin-diag-status" style="font-size:12.5px;color:var(--muted);margin-top:8px;"></div>
           <table id="admin-diag-table" style="display:none;margin-top:12px;">
             <thead><tr><th>コレクション</th><th style="text-align:right;">件数</th></tr></thead>
             <tbody id="admin-diag-table-body"></tbody>
-            <tfoot><tr style="font-weight:700;"><td>合計（コレクション分のみ。上記の固定約22件は別途加算）</td><td id="admin-diag-total" style="text-align:right;"></td></tr></tfoot>
+            <tfoot><tr style="font-weight:700;"><td>合計（コレクション分のみ。上記の固定約23件は別途加算）</td><td id="admin-diag-total" style="text-align:right;"></td></tr></tfoot>
           </table>
           <div id="admin-diag-estimate" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--line);">
             <div class="field" style="max-width:220px;">
@@ -1972,6 +1986,7 @@ onAuthStateChanged(auth, async (user)=>{
   initBizInfoCategoriesListener();
   initChatCleanupSettingsListener();
   initKioskLogoutShortcutListener();
+  initSingleSessionGuardSettingListener(); // 2026年10月：同一アカウントの同時ログイン制限のON/OFF設定（RTDB同時接続数対策）
   initThemeColorsListener();
   initGeneralTabDefaultsListener();
   initAdminTabDefaultsListener();
@@ -3662,6 +3677,31 @@ document.getElementById("kiosk-shortcut-save-btn")?.addEventListener("click", as
 });
 
 /* =========================================================
+   同一アカウントの同時ログイン制限 ON/OFF（RTDB同時接続数対策。2026年10月）
+   index.html側のinitSingleSessionGuard()が、このapp_settings/single_session_guard
+   ドキュメントをリアルタイムに監視して、ON/OFFを即時反映する（再ログイン不要）。
+========================================================= */
+function initSingleSessionGuardSettingListener(){
+  onSnapshot(doc(db,"app_settings","single_session_guard"), snap=>{
+    const data = snap.exists() ? snap.data() : {};
+    const enabledInput = document.getElementById("single-session-guard-enabled");
+    if(enabledInput) enabledInput.checked = data.enabled !== false; // 未設定時は既定で有効
+  }, (err)=>{ console.error("[同時ログイン制限設定取得エラー]", err); });
+}
+document.getElementById("single-session-guard-save-btn")?.addEventListener("click", async ()=>{
+  const msgEl = document.getElementById("single-session-guard-save-msg");
+  const enabled = document.getElementById("single-session-guard-enabled").checked;
+  try{
+    await setDoc(doc(db,"app_settings","single_session_guard"), { enabled }, { merge:true });
+    msgEl.textContent = "保存しました。";
+    msgEl.style.color = "var(--muted)";
+  }catch(e){
+    msgEl.textContent = "保存に失敗しました。権限をご確認ください。";
+    msgEl.style.color = "var(--danger)";
+  }
+});
+
+/* =========================================================
    画面の背景色（管理画面全体・一般画面の行き先「事前設定」パネル）
    システム全体の既定値なので、既存の「既定で有効にするタブ」等と同じ
    system_tab_defaults コレクション（書き込みはシステム管理者のみ）に保存する。
@@ -3833,8 +3873,9 @@ document.getElementById("fs-diag-reload-count")?.addEventListener("input", updat
 
 // ---- admin.html（この管理画面自体）が、ログインのたびに無条件で読み込んでいるコレクションの診断 ----
 // reservationsは前回の対策で「予約状況（全体）」タブを開いた時だけの遅延読み込みに変更済みのため、
-// ここには含めない。app_settingsやsystem_tab_defaults配下の単一ドキュメント読み取り（合計約22件、
-// データ量に関わらず固定）は、件数を数える意味がないためこの診断には含めていない。
+// ここには含めない。app_settingsやsystem_tab_defaults配下の単一ドキュメント読み取り（合計約23件、
+// データ量に関わらず固定。2026年10月：同時ログイン制限の設定（single_session_guard）分で+1）は、
+// 件数を数える意味がないためこの診断には含めていない。
 const ADMIN_LOGIN_COLLECTIONS = [
   "equipment_categories", "equipment", "admins", "announcement_posters",
   "notice_managers", "announcements", "departments", "wb_statuses",
@@ -3875,7 +3916,7 @@ document.getElementById("admin-diag-run-btn")?.addEventListener("click", async (
   estimateWrap.style.display = "";
   statusEl.textContent = failCount>0
     ? `確認しました（${failCount}件は取得できませんでした。理由は各行右側のエラーコードをご確認ください）。`
-    : `確認しました。この合計に加えて、固定約22件のドキュメント読み取りが毎回発生します。`;
+    : `確認しました。この合計に加えて、固定約23件のドキュメント読み取りが毎回発生します。`;
   updateAdminDiagEstimate();
 });
 function updateAdminDiagEstimate(){
@@ -3883,7 +3924,7 @@ function updateAdminDiagEstimate(){
   const resultEl = document.getElementById("admin-diag-estimate-result");
   const loginCountInput = document.getElementById("admin-diag-login-count");
   const collectionTotal = parseInt((totalEl.textContent||"0").replace(/[^0-9]/g,""), 10) || 0;
-  const FIXED_DOC_READS = 22; // 権限判定・各種設定ドキュメントの固定読み取り数（データ量に関わらず一定）
+  const FIXED_DOC_READS = 23; // 権限判定・各種設定ドキュメントの固定読み取り数（データ量に関わらず一定）
   const perLoginTotal = collectionTotal + FIXED_DOC_READS;
   const loginCount = Math.max(0, parseInt(loginCountInput.value, 10) || 0);
   resultEl.textContent = `1回のログインあたり 約${perLoginTotal.toLocaleString()}件（コレクション分${collectionTotal.toLocaleString()}件＋固定${FIXED_DOC_READS}件） × ログイン ${loginCount.toLocaleString()} 回 ＝ 約 ${(perLoginTotal*loginCount).toLocaleString()} 読み取り`;
