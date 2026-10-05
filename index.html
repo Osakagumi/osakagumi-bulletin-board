@@ -2383,10 +2383,25 @@ function isUserOnline(email){
 // 常に上書きする＝後勝ち）。以後そのパスを監視し、自分以外のセッションIDに上書きされたら
 // （＝別の端末・タブで同じメールが新たにログインした）、このセッションを強制的にログアウトする。
 // database.rules.json側にactive_sessionsの読み書き権限を追加済み（presenceと同じパターン）。
+// 管理画面（admin.html「システム管理」タブ）にON/OFFスイッチを設け、app_settings/single_session_guard
+// を常時監視して即時に開始・停止する（ドキュメントが存在しない場合は既定で有効＝従来通りの挙動）。
 let mySessionId = null;
 let singleSessionGuardUnsub = null;
+let singleSessionGuardSettingUnsub = null;
 function initSingleSessionGuard(){
   if(!rtdb || isSharedAccount) return; // RTDB未設定時・共用アカウントは対象外
+  if(singleSessionGuardSettingUnsub) return; // 既に監視中なら何もしない
+  singleSessionGuardSettingUnsub = onSnapshot(doc(db,"app_settings","single_session_guard"), snap=>{
+    const enabled = snap.exists() ? (snap.data().enabled !== false) : true; // 未設定時は既定で有効
+    if(enabled){
+      startSingleSessionGuard();
+    }else{
+      stopSingleSessionGuard();
+    }
+  }, (err)=>{ console.error("[同時ログイン制限設定取得エラー]", err); });
+}
+function startSingleSessionGuard(){
+  if(mySessionId) return; // 既に開始済み
   mySessionId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const myKey = sanitizeEmailForRtdbKey(currentUser.email);
   const sessionRef = rtdbRef(rtdb, `active_sessions/${myKey}`);
@@ -2405,6 +2420,16 @@ function initSingleSessionGuard(){
       signOut(auth);
     }
   }, (err)=>{ console.error("[セッション監視エラー]", err); });
+}
+function stopSingleSessionGuard(){
+  // OFFにした場合：監視を止め、自分のactive_sessionsエントリも削除する
+  // （残したままだと、次に有効化した時に「古い自分のエントリ」を他端末ログインと誤検知する可能性があるため）
+  if(singleSessionGuardUnsub){ singleSessionGuardUnsub(); singleSessionGuardUnsub = null; }
+  if(mySessionId){
+    const myKey = sanitizeEmailForRtdbKey(currentUser.email);
+    rtdbRemove(rtdbRef(rtdb, `active_sessions/${myKey}`)).catch(()=>{});
+  }
+  mySessionId = null;
 }
 
 // Realtime Database（Sparkプラン無料枠）の同時接続数には100という上限があり、
@@ -9268,7 +9293,9 @@ document.getElementById("cal-publish-btn")?.addEventListener("click", async ()=>
       done += batch.length;
       publishBtn.textContent = `公開中… ${done}/${total}`;
     }
-    await setDoc(doc(db,"calendar_years", yearDocId), { status: "published", pendingDates: [] }, { merge:true });
+    // lastPublishedAt：公開操作のたびに更新する版数マーカー。一般社員側のローカルキャッシュ
+    // （loadCalendarYearFromCacheOrFetch）は、この値が変わった時だけ公開データを再取得する。
+    await setDoc(doc(db,"calendar_years", yearDocId), { status: "published", pendingDates: [], lastPublishedAt: serverTimestamp() }, { merge:true });
     toast(total>0 ? `公開しました（${total}日分を更新）。` : "公開しました。");
   }catch(e){
     toast("公開に失敗しました。権限をご確認ください。");
@@ -9293,16 +9320,64 @@ function loadCalendarYear(year){
   updateCalStatusUI();
   const startId = `${year}-04-01`;
   const endId = `${year+1}-03-31`;
-  // 編集権限者は編集中(ライブ)のデータを見る。それ以外の社員は、最後に公開されたスナップショットを見る
-  // （編集中でも、直前に公開されていた内容がそのまま表示され続ける）。
-  const collectionName = isCalendarEditor ? "calendar_days" : "calendar_days_published";
-  const q = query(collection(db,collectionName), where(documentId(), ">=", startId), where(documentId(), "<=", endId));
-  calDaysUnsub = onSnapshot(q, snap=>{
+  // 編集権限者は編集中(ライブ)のデータを見る（リアルタイム購読のまま）。
+  if(isCalendarEditor){
+    const q = query(collection(db,"calendar_days"), where(documentId(), ">=", startId), where(documentId(), "<=", endId));
+    calDaysUnsub = onSnapshot(q, snap=>{
+      calDaysData = {};
+      snap.docs.forEach(d=>{ calDaysData[d.id] = d.data(); });
+      renderCalendar();
+      refreshDashboardIfActive();
+    }, (err)=>{ console.error("[カレンダー取得エラー]", err); });
+    return;
+  }
+  // 編集権限が無い一般社員は、最後に公開されたスナップショット（calendar_days_published）を見る
+  // （編集中でも、直前に公開されていた内容がそのまま表示され続ける）。ここをFirestoreの
+  // ライブ購読（onSnapshot）のまま年度まるごと（最大366件）購読すると、ログイン・タブ切替の
+  // たびに読み取りが発生してしまうため、ローカル保存（localStorage）＋版数マーカーによる
+  // キャッシュを使い、実際に公開操作があった時だけ再取得する（loadCalendarYearFromCacheOrFetch）。
+  loadCalendarYearFromCacheOrFetch(year, startId, endId);
+}
+// calendar_years/{year}.lastPublishedAt：公開操作のたびに更新される版数マーカー。
+// calendar_yearsは軽量（2件のみ）でログイン時から全員が常時購読済み（initCalendarYearsListenerGeneral）
+// のため、この値を読むこと自体に追加のFirestore読み取りは発生しない。
+function calYearLastPublishedMillis(year){
+  const rec = calYearsAll.find(y=>y.year===String(year));
+  const ts = rec && rec.lastPublishedAt;
+  return (ts && typeof ts.toMillis === "function") ? ts.toMillis() : null;
+}
+async function loadCalendarYearFromCacheOrFetch(year, startId, endId){
+  const cacheKey = `calPublishedCache_${year}`;
+  const currentVersion = calYearLastPublishedMillis(year);
+  // lastPublishedAtがまだ記録されていない年度（この機能追加より前からある年度など）は、
+  // 版数で比較できないため安全側に倒してキャッシュを使わず毎回取得する。
+  if(currentVersion !== null){
+    try{
+      const cachedRaw = localStorage.getItem(cacheKey);
+      if(cachedRaw){
+        const cached = JSON.parse(cachedRaw);
+        if(cached && cached.version === currentVersion){
+          calDaysData = cached.data || {};
+          renderCalendar();
+          refreshDashboardIfActive();
+          return;
+        }
+      }
+    }catch(e){ /* localStorageが使えない・壊れている場合はキャッシュを無視して通常取得する */ }
+  }
+  try{
+    const q = query(collection(db,"calendar_days_published"), where(documentId(), ">=", startId), where(documentId(), "<=", endId));
+    const snap = await getDocs(q);
     calDaysData = {};
     snap.docs.forEach(d=>{ calDaysData[d.id] = d.data(); });
     renderCalendar();
     refreshDashboardIfActive();
-  }, (err)=>{ console.error("[カレンダー取得エラー]", err); });
+    if(currentVersion !== null){
+      try{
+        localStorage.setItem(cacheKey, JSON.stringify({ version: currentVersion, data: calDaysData }));
+      }catch(e){ /* 保存容量超過等は無視（次回も通常取得されるだけで実害なし） */ }
+    }
+  }catch(e){ console.error("[カレンダー取得エラー]", e); }
 }
 
 function calMonthList(year){
@@ -9473,7 +9548,9 @@ document.getElementById("cal-label-save-btn").addEventListener("click", async ()
       // ので取り除いておく（次回の「公開する」で再度読み書きしないようにするため）。
       const yearForRemoval = fiscalYearOfDateStr(dateStr);
       try{
-        await setDoc(doc(db,"calendar_years", String(yearForRemoval)), { pendingDates: arrayRemove(dateStr) }, { merge:true });
+        // lastPublishedAtも更新する（この即時公開1日分についても、一般社員側のローカル
+        // キャッシュを無効化して再取得させる必要があるため）。
+        await setDoc(doc(db,"calendar_years", String(yearForRemoval)), { pendingDates: arrayRemove(dateStr), lastPublishedAt: serverTimestamp() }, { merge:true });
       }catch(e){ /* 失敗しても致命的ではない（次回の公開時に無駄が1日分残るだけ） */ }
     } else {
       await markCalYearAsDraft(dateStr);
