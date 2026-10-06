@@ -9379,6 +9379,12 @@ async function backfillLastPublishedAtIfMissing(year){
   if(!isCalendarEditor) return;
   const yearKey = String(year);
   if(calBackfillTriedYears.has(yearKey)) return;
+  // 2026年10月6日：既に存在する年度（calendar_yearsにドキュメントがある年度）だけを補完対象にする。
+  // この補完は「この機能追加より前から存在する年度」の版数マーカーを後付けするためのもので、
+  // データの無い年度（前後の年度をカレンダーで表示しただけの年度）にドキュメントを新規作成して
+  // はいけない（管理画面の年度一覧・年度数の上限CAL_MAX_YEARSに影響する）。
+  // calYearsAllがまだ届いていない間は何もしない（届いた時点でlistenerからloadCalendarYearが再度呼ばれる）。
+  if(!calYearsAll.some(y=> y.year === yearKey)) return;
   if(calYearStatus(year) === "draft") return;
   if(calYearLastPublishedMillis(year) !== null) return;
   calBackfillTriedYears.add(yearKey); // 書き込みを試みる前に記録する（失敗しても再試行しない）
