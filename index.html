@@ -2799,84 +2799,94 @@ onAuthStateChanged(auth, async (user)=>{
     document.getElementById("wb-preset-tab-btn").style.display = (!isDisplayMode && (isAdmin || isWhereaboutsEditor)) ? "inline-block" : "none";
     // 安否確認のメールリンクから来た場合に画面が出るまでを速くするため、
     // 表示に必須ではない社員レコード作成はawaitせずバックグラウンドで行う
-    ensureEmployeeRecord();
-    initSafetyCampaignListener();
-    initCalendarYearsListenerGeneral();
-    if(isSafetySender){ initSafetyCampaignsAdminListener(); }
-    initCategoriesListener();
-    // 2026年10月：設備本体（equipment）の購読は、カレンダー・出入予定と同じ理由
-    // （全社員が毎回ログインするだけで全件購読していたコストの削減）により、ログイン時には
-    // 行わず「機材」「予約」タブを実際に開いたタイミングまで遅延させる
-    // （ensureEquipmentFullListener参照。ダッシュボードの予約一覧クリックやキオスク予約表示でも、
-    // 使う直前に同関数を呼ぶことで対応している）。
-    if(urlPreselect.chat){ ensureEmployeesFullListener(); } // 通知からのチャット直接オープンに備え、社員名簿の購読を早めに開始する
-    initMyReservationsListener();
-    cleanupPastReservations();
+    ensureEmployeeRecord(meDoc);
+    // 以下、共用アカウント（notice-board-mode。休憩所キオスクPC・QRコード経由のスマホ）と
+    // 一般社員とで、ログイン時に開始する購読を分けている。
+    // 2026年10月、共用アカウントのログイン処理を監査した結果、notice-board-modeはCSSで
+    // 画面（お知らせ以外）を非表示にしているだけで、実際には一般社員と全く同じ初期化が
+    // 毎回フルで走っていたことが判明した（カレンダー休日判定用の最大61日分クエリ・行き先
+    // 事前設定・出入予定・部署/ステータスマスタ・設備カテゴリ・権限チェック関連の軽量購読等）。
+    // 特にQRコード経由のスマホは「スキャンするたびに新しいログインセッション」になるため、
+    // この無駄がスキャンの回数ぶんそのまま積み重なっていた。共用アカウントが実際に表示する
+    // のはお知らせ掲示板（お知らせ本文＋自分の所属部署による絞り込み）だけなので、それに
+    // 必要な最小限（お知らせ本体・自分の社員レコード・キオスクログアウト用ショートカット）
+    // だけを購読する。
+    initMyEmployeeDocListener(); // お知らせの宛先判定（自分の所属部署）に必要。ヘッダー表示名等にも使う
     initNoticesListener();
     cleanupOldNotices();
-    initNoticeReadsListener();
-    initDepartmentsListener();
-    initWbStatusesListener();
-    initWbColumnsListener();
-    // 2026年10月：社員名簿（employees、全件）の購読は、6章「Firestore読み取り件数の棚卸し」で
-    // 判明した通り、行き先・お知らせ・チャット・機材（貸出先選択）など本人以外の社員情報が
-    // 必要なタブを実際に開いた時だけ行う（ensureEmployeesFullListener参照）。
-    // ログイン時から常に必要な「自分自身の」社員レコード（ヘッダーの表示名、行き先の自分の
-    // バッジ、タブの個人非表示設定など）は、全件より遥かに軽い1件だけの購読
-    // （initMyEmployeeDocListener、myEmployeeDoc）で別途カバーする。
-    initMyEmployeeDocListener();
-    // カレンダー本体（年間最大366日ぶん）の購読は、ログイン時には行わず「カレンダー」
-    // 「出入予定」タブを実際に開いたタイミングまで遅延させる（ensureCalendarFullYearListener参照。
-    // 2026年10月、1回のログインで365件前後のFirestore読み取りが発生していた問題への対策）。
-    // ただし行き先の「休日なら自動的に休みにする」判定・次稼働日の算出は全社員が常に使う機能なので、
-    // そちらに必要な直近期間だけを別途、軽量な専用リスナー（initCalHolidayWindowListener）で読み込む。
-    if(calFiscalYearStart === null){ calFiscalYearStart = defaultFiscalYearStart(); }
-    initCalHolidayWindowListener();
-    // 行き先事前設定（wb_presets）は「翌日以降」の事前設定の仕組みで、将来7日分＋初期設定を
-    // 保持しているが、実際にダッシュボード表示（getEffectiveBaseStatus／getBaseWbNote）に
-    // 必要なのは「初期設定」と「今日分」だけで、将来日程そのものは「事前設定」タブを開ける
-    // 権限者（管理者・行き先編集権限者）しか見ない。従来は全社員がコレクション全体を常時購読
-    // していたため、事前設定タブを一切使わない一般社員にとって不要な読み取りが発生していた
-    // （2026年10月、ヒネからの指摘により対策）。権限の無い一般社員は軽量版（初期設定＋今日分のみ）
-    // を購読し、将来日程を含むフル購読は権限者だけが行う。
-    if(isAdmin || isWhereaboutsEditor){
-      initWbPresetsListener();
-    } else {
-      initWbPresetsTodayListener();
-    }
-    // 敷鉄板・機材の貸出/返却履歴（steel_plate_transactions）は、記録が溜まり続ける一方で
-    // 自動削除の仕組みが無く、ダッシュボードの表示にも使われない（「機材」タブを実際に開いた
-    // 時にしか参照されない）ため、ensureVisitorTargetOfficersListener等と同じ遅延購読に変更
-    // （2026年10月、読み取り数の見直しにより対応。initSteelPlateTxListener自体は下に残し、
-    // ensureSteelPlateTxListener経由でrenderCheckoutTab内から初回だけ呼び出す）。
-    // 入札（契約）情報は、業務上の方針変更によりExcel管理に一本化され、業務情報タブ経由で
-    // 閲覧・更新する運用になった（敷鉄板の出入管理と同じ経緯。2026年10月）。アプリ内の
-    // 「入札」タブ・ダッシュボードカードは非表示にし、関連するFirestore購読・自動削除処理も
-    // 停止した（下記3行＋initContractSettingsListener・cleanupResolvedContracts呼び出し）。
-    // 実装自体は削除せず残してあるので、方針が再度変わった場合はコメントを外すだけで復活できる。
-    // initContractsListener();
-    initVisitorSchedulesListener();
-    cleanupOldVisitorSchedules();
-    // 業務情報（business_info_categories/items）と、出入予定の「役員対象社員」設定
-    // （visitor_target_officers）は、いずれもダッシュボードの表示には使われず、
-    // それぞれ「業務情報」タブ／「出入予定」タブを実際に開いた時にしか参照されない。
-    // ログイン直後の読み取り数を減らすため、ここでは監視を開始せず、
-    // 該当タブを初めて開いたタイミングで初めて監視を始める（switchToTab側を参照）。
-    initChatCleanupSettingsListener();
-    initKioskLogoutShortcutListener();
+    initKioskLogoutShortcutListener(); // 共用アカウントのログアウト用ショートカット（notice-board-modeのときだけ働く）。従来は一般社員にも無条件で購読させていたが、一般社員には不要なため共用アカウント側に寄せた
     initChatListeners();
     initPresence();
-    initSingleSessionGuard(); // 2026年10月：同一メールの同時ログインを1セッションに制限（共用アカウントは対象外）
+    initSingleSessionGuard(); // 共用アカウントは関数内で即returnするため実質no-op（2026年10月：同一メールの同時ログインを1セッションに制限、共用アカウントは対象外）
     initRtdbAutoSuspend();
     initWbStatusLive();
     initOneSignalForCurrentUser();
-    // initContractSettingsListener(); // 入札機能の凍結に伴い停止（上のコメント参照）
-    initUserPrefsListener();
-    initSystemTabDefaultsListener();
-    initWbPresetBgColorListener();
-    initDashCardDragDrop();
-    // cleanupResolvedContracts(); // 入札機能の凍結に伴い停止（上のコメント参照）
-    // ensureSteelPlateCategoryAndMigrate(); // 敷鉄板機能の凍結に伴い停止（詳細は関数定義側のコメント参照。2026年10月）
+    if(!isSharedAccount){
+      initSafetyCampaignListener();
+      initCalendarYearsListenerGeneral();
+      if(isSafetySender){ initSafetyCampaignsAdminListener(); }
+      initCategoriesListener();
+      // 2026年10月：設備本体（equipment）の購読は、カレンダー・出入予定と同じ理由
+      // （全社員が毎回ログインするだけで全件購読していたコストの削減）により、ログイン時には
+      // 行わず「機材」「予約」タブを実際に開いたタイミングまで遅延させる
+      // （ensureEquipmentFullListener参照。ダッシュボードの予約一覧クリックやキオスク予約表示でも、
+      // 使う直前に同関数を呼ぶことで対応している）。
+      if(urlPreselect.chat){ ensureEmployeesFullListener(); } // 通知からのチャット直接オープンに備え、社員名簿の購読を早めに開始する
+      initMyReservationsListener();
+      cleanupPastReservations();
+      initNoticeReadsListener();
+      initDepartmentsListener();
+      initWbStatusesListener();
+      initWbColumnsListener();
+      // 2026年10月：社員名簿（employees、全件）の購読は、6章「Firestore読み取り件数の棚卸し」で
+      // 判明した通り、行き先・お知らせ・チャット・機材（貸出先選択）など本人以外の社員情報が
+      // 必要なタブを実際に開いた時だけ行う（ensureEmployeesFullListener参照）。
+      // カレンダー本体（年間最大366日ぶん）の購読は、ログイン時には行わず「カレンダー」
+      // 「出入予定」タブを実際に開いたタイミングまで遅延させる（ensureCalendarFullYearListener参照。
+      // 2026年10月、1回のログインで365件前後のFirestore読み取りが発生していた問題への対策）。
+      // ただし行き先の「休日なら自動的に休みにする」判定・次稼働日の算出は全社員が常に使う機能なので、
+      // そちらに必要な直近期間だけを別途、軽量な専用リスナー（initCalHolidayWindowListener）で読み込む。
+      if(calFiscalYearStart === null){ calFiscalYearStart = defaultFiscalYearStart(); }
+      initCalHolidayWindowListener();
+      // 行き先事前設定（wb_presets）は「翌日以降」の事前設定の仕組みで、将来7日分＋初期設定を
+      // 保持しているが、実際にダッシュボード表示（getEffectiveBaseStatus／getBaseWbNote）に
+      // 必要なのは「初期設定」と「今日分」だけで、将来日程そのものは「事前設定」タブを開ける
+      // 権限者（管理者・行き先編集権限者）しか見ない。従来は全社員がコレクション全体を常時購読
+      // していたため、事前設定タブを一切使わない一般社員にとって不要な読み取りが発生していた
+      // （2026年10月、ヒネからの指摘により対策）。権限の無い一般社員は軽量版（初期設定＋今日分のみ）
+      // を購読し、将来日程を含むフル購読は権限者だけが行う。
+      if(isAdmin || isWhereaboutsEditor){
+        initWbPresetsListener();
+      } else {
+        initWbPresetsTodayListener();
+      }
+      // 敷鉄板・機材の貸出/返却履歴（steel_plate_transactions）は、記録が溜まり続ける一方で
+      // 自動削除の仕組みが無く、ダッシュボードの表示にも使われない（「機材」タブを実際に開いた
+      // 時にしか参照されない）ため、ensureVisitorTargetOfficersListener等と同じ遅延購読に変更
+      // （2026年10月、読み取り数の見直しにより対応。initSteelPlateTxListener自体は下に残し、
+      // ensureSteelPlateTxListener経由でrenderCheckoutTab内から初回だけ呼び出す）。
+      // 入札（契約）情報は、業務上の方針変更によりExcel管理に一本化され、業務情報タブ経由で
+      // 閲覧・更新する運用になった（敷鉄板の出入管理と同じ経緯。2026年10月）。アプリ内の
+      // 「入札」タブ・ダッシュボードカードは非表示にし、関連するFirestore購読・自動削除処理も
+      // 停止した（下記3行＋initContractSettingsListener・cleanupResolvedContracts呼び出し）。
+      // 実装自体は削除せず残してあるので、方針が再度変わった場合はコメントを外すだけで復活できる。
+      // initContractsListener();
+      initVisitorSchedulesListener();
+      cleanupOldVisitorSchedules();
+      // 業務情報（business_info_categories/items）と、出入予定の「役員対象社員」設定
+      // （visitor_target_officers）は、いずれもダッシュボードの表示には使われず、
+      // それぞれ「業務情報」タブ／「出入予定」タブを実際に開いた時にしか参照されない。
+      // ログイン直後の読み取り数を減らすため、ここでは監視を開始せず、
+      // 該当タブを初めて開いたタイミングで初めて監視を始める（switchToTab側を参照）。
+      initChatCleanupSettingsListener();
+      // initContractSettingsListener(); // 入札機能の凍結に伴い停止（上のコメント参照）
+      initUserPrefsListener();
+      initSystemTabDefaultsListener();
+      initWbPresetBgColorListener();
+      initDashCardDragDrop();
+      // cleanupResolvedContracts(); // 入札機能の凍結に伴い停止（上のコメント参照）
+      // ensureSteelPlateCategoryAndMigrate(); // 敷鉄板機能の凍結に伴い停止（詳細は関数定義側のコメント参照。2026年10月）
+    }
 
     if(urlPreselect.campaign){
       history.replaceState(null, "", location.pathname);
@@ -3685,10 +3695,14 @@ document.getElementById("tab-reorder-toggle").addEventListener("click", ()=>{
 applySavedTabOrder();
 
 /* ---------- 社員名簿（行き先ボード兼用） ---------- */
-async function ensureEmployeeRecord(){
+// meDocSnap：ログイン時の権限チェック（Promise.all）で、ちょうど同じドキュメント
+// （employees/自分のメール）を既に取得済みの場合、それをそのまま渡すことで二重読み取りを防ぐ
+// （2026年10月、読み取り監査により判明：従来はこの関数が毎回自前でgetDocし直しており、
+// ログインのたびに同じ1件を2回連続で読んでいた）。渡されなかった場合は従来通り自前で取得する。
+async function ensureEmployeeRecord(meDocSnap){
   try{
     const ref = doc(db, "employees", currentUser.email);
-    const snap = await getDoc(ref);
+    const snap = meDocSnap || await getDoc(ref);
     if(!snap.exists()){
       await setDoc(ref, {
         name: currentUser.displayName || currentUser.email.split("@")[0],
