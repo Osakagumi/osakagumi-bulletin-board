@@ -2732,8 +2732,10 @@ function renderAdminsTable(list){
       } else {
         if(!confirm(`${email} をシステム管理者から外しますか？`)) return;
       }
-      await setPermission("admins", email, false);
-      toast("システム管理者を削除しました。");
+      try{
+        await setPermission("admins", email, false);
+        toast("システム管理者を削除しました。");
+      }catch(e){ toast("削除に失敗しました。権限をご確認ください。"); }
     });
     tr.querySelector(".actions").appendChild(btn);
     body.appendChild(tr);
@@ -2990,8 +2992,10 @@ function renderPosters(list){
     btn.className = "btn btn-danger"; btn.textContent = "削除";
     btn.addEventListener("click", async ()=>{
       if(!confirm(`${email} の投稿権限を削除しますか？`)) return;
-      await setPermission("announcement_posters", email, false);
-      toast("投稿権限を削除しました。");
+      try{
+        await setPermission("announcement_posters", email, false);
+        toast("投稿権限を削除しました。");
+      }catch(e){ toast("削除に失敗しました。権限をご確認ください。"); }
     });
     tr.querySelector(".actions").appendChild(btn);
     body.appendChild(tr);
@@ -3292,8 +3296,10 @@ function renderWbEditors(list){
     btn.className = "btn btn-danger"; btn.textContent = "削除";
     btn.addEventListener("click", async ()=>{
       if(!confirm(`${email} の権限を削除しますか？`)) return;
-      await setPermission("whereabouts_editors", email, false);
-      toast("権限を削除しました。");
+      try{
+        await setPermission("whereabouts_editors", email, false);
+        toast("権限を削除しました。");
+      }catch(e){ toast("削除に失敗しました。権限をご確認ください。"); }
     });
     tr.querySelector(".actions").appendChild(btn);
     body.appendChild(tr);
@@ -3325,8 +3331,10 @@ function renderEquipmentManagers(list){
     btn.className = "btn btn-danger"; btn.textContent = "削除";
     btn.addEventListener("click", async ()=>{
       if(!confirm(`${email} の権限を削除しますか？`)) return;
-      await setPermission("equipment_managers", email, false);
-      toast("権限を削除しました。");
+      try{
+        await setPermission("equipment_managers", email, false);
+        toast("権限を削除しました。");
+      }catch(e){ toast("削除に失敗しました。権限をご確認ください。"); }
     });
     tr.querySelector(".actions").appendChild(btn);
     body.appendChild(tr);
@@ -4565,8 +4573,10 @@ function renderContractEditors(list){
     btn.className = "btn btn-danger"; btn.textContent = "削除";
     btn.addEventListener("click", async ()=>{
       if(!confirm(`${email} の権限を削除しますか？`)) return;
-      await setPermission("contract_editors", email, false);
-      toast("権限を削除しました。");
+      try{
+        await setPermission("contract_editors", email, false);
+        toast("権限を削除しました。");
+      }catch(e){ toast("削除に失敗しました。権限をご確認ください。"); }
     });
     tr.querySelector(".actions").appendChild(btn);
     body.appendChild(tr);
@@ -4599,8 +4609,10 @@ function renderCalendarEditors(list){
     btn.className = "btn btn-danger"; btn.textContent = "削除";
     btn.addEventListener("click", async ()=>{
       if(!confirm(`${email} の権限を削除しますか？`)) return;
-      await setPermission("calendar_editors", email, false);
-      toast("権限を削除しました。");
+      try{
+        await setPermission("calendar_editors", email, false);
+        toast("権限を削除しました。");
+      }catch(e){ toast("削除に失敗しました。権限をご確認ください。"); }
     });
     tr.querySelector(".actions").appendChild(btn);
     body.appendChild(tr);
@@ -4848,10 +4860,17 @@ const PERMISSION_FIELD_MAP = {
 // 権限コレクションへの付与・削除と、employeesドキュメントへのミラー書き込みをまとめて行う。
 // 以後、権限の付与・削除はこの関数を経由すること（直接setDoc/deleteDocしない）。
 async function setPermission(collection, email, granted){
+  // 2026年10月のセルフテストで判明：deleteDocをtry/catchで握りつぶしたまま下のミラー書き込みに
+  // 進んでしまうと、本当は削除権限が無くて実際の削除が失敗していたケースでも、employees側だけ
+  // 「権限なし」に書き換わってしまい、表示と実態（正データである元コレクション側）がズレる
+  // 恐れがあった（Firestoreは存在しないドキュメントのdeleteDocではエラーにならないため、
+  // ここで実際に例外が飛ぶのは権限エラー等の“本物のエラー”のときだけ）。付与側と同様、
+  // 例外はここで握りつぶさずそのまま呼び出し元（togglePermMatrixCell等）に伝播させ、
+  // 失敗時はミラー書き込みも行わないようにした。
   if(granted){
     await setDoc(doc(db, collection, email), { addedBy: currentUser.email, addedAt: new Date().toISOString() }, { merge:true });
   } else {
-    try{ await deleteDoc(doc(db, collection, email)); }catch(e){ /* 元々権限が無い場合は何もしない */ }
+    await deleteDoc(doc(db, collection, email));
   }
   const field = PERMISSION_FIELD_MAP[collection];
   if(field){
