@@ -9368,12 +9368,22 @@ function calYearLastPublishedMillis(year){
 // この機能追加より前から存在する年度（lastPublishedAt未設定）を、編集権限者が開いたタイミングで
 // 一度だけ補完する。「編集中（draft）」の間は、まだ公開していない変更が残っている状態なので触らない
 // （次に実際の「公開する」操作が行われた時に、通常通りlastPublishedAtが設定される）。
+// 2026年10月6日：再入防止ガードを追加。このページを開いている間、同じ年度について補完の書き込みは
+// 最大1回だけにする。理由：calendar_years を購読するリスナー（initCalendarYearsListenerGeneral）が
+// 書き込みのたびに loadCalendarYear を呼び直すため、serverTimestamp が確定する前（ローカルでは
+// null に見える間）は、この関数が繰り返し書き込み→リスナー発火→再度書き込み…と自己再帰し得た
+// （同日の読み取り約8.8万件・書き込み約3500件の急増の有力な原因と推測している。
+// calendar_years/2026 の lastPublishedAt が急増の終了時刻と一致していたことが手がかり。未確定）。
+const calBackfillTriedYears = new Set();
 async function backfillLastPublishedAtIfMissing(year){
   if(!isCalendarEditor) return;
+  const yearKey = String(year);
+  if(calBackfillTriedYears.has(yearKey)) return;
   if(calYearStatus(year) === "draft") return;
   if(calYearLastPublishedMillis(year) !== null) return;
+  calBackfillTriedYears.add(yearKey); // 書き込みを試みる前に記録する（失敗しても再試行しない）
   try{
-    await setDoc(doc(db,"calendar_years", String(year)), { lastPublishedAt: serverTimestamp() }, { merge:true });
+    await setDoc(doc(db,"calendar_years", yearKey), { lastPublishedAt: serverTimestamp() }, { merge:true });
   }catch(e){ /* 失敗しても、次回の「公開する」操作時に通常通り設定されるため致命的ではない */ }
 }
 async function loadCalendarYearFromCacheOrFetch(year, startId, endId){
