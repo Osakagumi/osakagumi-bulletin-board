@@ -2767,79 +2767,30 @@ onAuthStateChanged(auth, async (user)=>{
     updateHeaderUserLabel();
     // 権限チェックは直列でawaitすると往復通信が5回分積み重なり、
     // 回線が遅いと数秒〜十数秒のロスになる。並列で一度に取得する。
-    // 2026年10月：ログイン時の権限チェックを、9個の別コレクションへの個別getDocから、
-    // employees/{email}ドキュメント自身に埋め込まれたフラグの参照に変更した（読み取りコスト削減）。
-    // 権限の正はあくまで各コレクション（admins等）自身であり、admin.html側で権限を付与・削除する
-    // たびに、employeesドキュメントへも同じ内容をミラーしている（setPermission参照）。
-    // まだミラーされていない社員（permsMigratedが立っていない。過去からの既存アカウント、または
-    // CSV一括登録で一部の権限しか付与されなかった直後など）は、初回ログイン時だけ従来通り
-    // 9コレクションを読みに行き、その結果をemployeesドキュメントへ書き戻す
-    // （以降のログインではこのフォールバックは不要になる）。
-    const [bizInfoManagerSnap, meDocInitial] = await Promise.all([
+    const [adminDoc, posterDoc, noticeManagerDoc, wbEditorDoc, eqManagerDoc, calEditorDoc, contractEditorDoc, safetySenderDoc, visitorManagerDoc, bizInfoManagerSnap, meDoc] = await Promise.all([
+      getDoc(doc(db, "admins", user.email)).catch(()=>null),
+      getDoc(doc(db, "announcement_posters", user.email)).catch(()=>null),
+      getDoc(doc(db, "notice_managers", user.email)).catch(()=>null),
+      getDoc(doc(db, "whereabouts_editors", user.email)).catch(()=>null),
+      getDoc(doc(db, "equipment_managers", user.email)).catch(()=>null),
+      getDoc(doc(db, "calendar_editors", user.email)).catch(()=>null),
+      getDoc(doc(db, "contract_editors", user.email)).catch(()=>null),
+      getDoc(doc(db, "safety_senders", user.email)).catch(()=>null),
+      getDoc(doc(db, "visitor_managers", user.email)).catch(()=>null),
       getDocs(query(collection(db, "business_info_items"), where("infoManagers", "array-contains", user.email.toLowerCase()))).catch(()=>null),
       getDoc(doc(db, "employees", user.email)).catch(()=>null)
     ]);
-    const meDoc = meDocInitial;
-    const meData = (meDoc && meDoc.exists()) ? meDoc.data() : null;
-    if(meData && meData.permsMigrated === true){
-      isAdmin = !!meData.permAdmin;
-      isNoticeManager = isAdmin || !!meData.permNoticeManager;
-      isPoster = isNoticeManager || !!meData.permPoster;
-      isWhereaboutsEditor = isAdmin || !!meData.permWbEditor;
-      isEquipmentManager = isAdmin || !!meData.permEquipmentManager;
-      isCalendarEditor = isAdmin || !!meData.permCalendarEditor;
-      isContractEditor = isAdmin || !!meData.permContractEditor;
-      isSafetySender = isAdmin || !!meData.permSafetySender;
-      isVisitorManager = isAdmin || !!meData.permVisitorManager;
-    } else {
-      const [adminDoc, posterDoc, noticeManagerDoc, wbEditorDoc, eqManagerDoc, calEditorDoc, contractEditorDoc, safetySenderDoc, visitorManagerDoc] = await Promise.all([
-        getDoc(doc(db, "admins", user.email)).catch(()=>null),
-        getDoc(doc(db, "announcement_posters", user.email)).catch(()=>null),
-        getDoc(doc(db, "notice_managers", user.email)).catch(()=>null),
-        getDoc(doc(db, "whereabouts_editors", user.email)).catch(()=>null),
-        getDoc(doc(db, "equipment_managers", user.email)).catch(()=>null),
-        getDoc(doc(db, "calendar_editors", user.email)).catch(()=>null),
-        getDoc(doc(db, "contract_editors", user.email)).catch(()=>null),
-        getDoc(doc(db, "safety_senders", user.email)).catch(()=>null),
-        getDoc(doc(db, "visitor_managers", user.email)).catch(()=>null)
-      ]);
-      const rawAdmin = !!(adminDoc && adminDoc.exists());
-      const rawPoster = !!(posterDoc && posterDoc.exists());
-      const rawNoticeManager = !!(noticeManagerDoc && noticeManagerDoc.exists());
-      const rawWbEditor = !!(wbEditorDoc && wbEditorDoc.exists());
-      const rawEqManager = !!(eqManagerDoc && eqManagerDoc.exists());
-      const rawCalEditor = !!(calEditorDoc && calEditorDoc.exists());
-      const rawContractEditor = !!(contractEditorDoc && contractEditorDoc.exists());
-      const rawSafetySender = !!(safetySenderDoc && safetySenderDoc.exists());
-      const rawVisitorManager = !!(visitorManagerDoc && visitorManagerDoc.exists());
-      isAdmin = rawAdmin;
-      isNoticeManager = isAdmin || rawNoticeManager;
-      isPoster = isNoticeManager || rawPoster;
-      isWhereaboutsEditor = isAdmin || rawWbEditor;
-      isEquipmentManager = isAdmin || rawEqManager;
-      isCalendarEditor = isAdmin || rawCalEditor;
-      isContractEditor = isAdmin || rawContractEditor;
-      isSafetySender = isAdmin || rawSafetySender;
-      isVisitorManager = isAdmin || rawVisitorManager;
-      // 次回以降のログインで9コレクションを読まずに済むよう、結果をemployeesドキュメントへ書き戻す
-      // （失敗しても今回のログイン自体には影響しない。次回また同じフォールバックが走るだけ）
-      try{
-        await setDoc(doc(db,"employees", user.email), {
-          permAdmin: rawAdmin,
-          permPoster: rawPoster,
-          permNoticeManager: rawNoticeManager,
-          permWbEditor: rawWbEditor,
-          permEquipmentManager: rawEqManager,
-          permCalendarEditor: rawCalEditor,
-          permContractEditor: rawContractEditor,
-          permSafetySender: rawSafetySender,
-          permVisitorManager: rawVisitorManager,
-          permsMigrated: true
-        }, { merge:true });
-      }catch(e){ /* 書き戻しに失敗しても次回ログイン時に同じフォールバックが走るだけなので致命的ではない */ }
-    }
+    isAdmin = !!(adminDoc && adminDoc.exists());
+    isNoticeManager = isAdmin || !!(noticeManagerDoc && noticeManagerDoc.exists());
+    isPoster = isNoticeManager || !!(posterDoc && posterDoc.exists());
+    isWhereaboutsEditor = isAdmin || !!(wbEditorDoc && wbEditorDoc.exists());
+    isEquipmentManager = isAdmin || !!(eqManagerDoc && eqManagerDoc.exists());
+    isCalendarEditor = isAdmin || !!(calEditorDoc && calEditorDoc.exists());
+    isContractEditor = isAdmin || !!(contractEditorDoc && contractEditorDoc.exists());
+    isSafetySender = isAdmin || !!(safetySenderDoc && safetySenderDoc.exists());
+    isVisitorManager = isAdmin || !!(visitorManagerDoc && visitorManagerDoc.exists());
     isBizInfoManager = !!(bizInfoManagerSnap && !bizInfoManagerSnap.empty);
-    isSharedAccount = !!meData?.isSharedAccount;
+    isSharedAccount = !!(meDoc && meDoc.exists() && meDoc.data().isSharedAccount);
     document.getElementById("admin-link").style.display =
       (isAdmin || isPoster || isWhereaboutsEditor || isEquipmentManager || isCalendarEditor || isContractEditor || isBizInfoManager)
         ? "inline-block" : "none";
@@ -3753,9 +3704,6 @@ async function ensureEmployeeRecord(meDocSnap){
     const ref = doc(db, "employees", currentUser.email);
     const snap = meDocSnap || await getDoc(ref);
     if(!snap.exists()){
-      // 2026年10月：mergeを付けずに作成すると、同じログイン処理内で並行して走る権限チェックの
-      // 書き戻し（permsMigrated等、ensureEmployeeRecordと非同期で競合し得る）を上書き消去して
-      // しまう恐れがあったため、merge:trueに変更した（新規作成時の挙動自体は変わらない）
       await setDoc(ref, {
         name: currentUser.displayName || currentUser.email.split("@")[0],
         email: currentUser.email,
@@ -3764,7 +3712,7 @@ async function ensureEmployeeRecord(meDocSnap){
         status: "",
         note: "",
         statusUpdatedAt: new Date().toISOString()
-      }, { merge: true });
+      });
     }
     // 以前はここで毎回 lastLogin をupdateDocしていたが、どこにも表示・使用されておらず、
     // employeesコレクション全体を全社員が常時購読しているため、ログイン・リロードのたびに
