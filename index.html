@@ -1670,6 +1670,10 @@
           <input type="checkbox" id="notice-send-email" checked style="width:auto;">
           <label id="notice-send-email-label" style="margin:0;font-size:12.5px;color:var(--text);">Eメールでも送信する（自分のメールソフトが起動します）</label>
         </div>
+        <div id="notice-send-push-row" style="display:flex;align-items:center;gap:6px;margin-top:8px;">
+          <input type="checkbox" id="notice-send-push" checked style="width:auto;">
+          <label id="notice-send-push-label" style="margin:0;font-size:12.5px;color:var(--text);">プッシュ通知も送る（通知を許可している端末に届きます）</label>
+        </div>
         <div id="notice-reset-read-row" style="display:flex;align-items:center;gap:6px;margin-top:8px;">
           <input type="checkbox" id="notice-reset-read" style="width:auto;">
           <label style="margin:0;font-size:12.5px;color:var(--text);">更新通知を行い、全て未読に戻す</label>
@@ -2114,8 +2118,22 @@ const urlPreselect = {
   campaign: urlParams.get("campaign"),
   status: urlParams.get("status"),
   email: urlParams.get("email"),
-  chat: urlParams.get("chat") // チャット通知のクリックから来た場合：送信者のメールアドレス
+  chat: urlParams.get("chat"), // チャット通知のクリックから来た場合：送信者のメールアドレス
+  tab: urlParams.get("tab") // お知らせ通知のクリックから来た場合：tab=notices（2026年10月）
 };
+// お知らせ通知をタップして開いた場合、ログイン後にお知らせタブへ切り替える（ログイン前に届いた
+// 「お知らせタブを開いて」の依頼を覚えておくフラグ。ログイン後・または既にログイン済みなら即座に実行する）
+let pendingOpenNotices = (urlPreselect.tab === "notices");
+function openNoticesFromRequestIfNeeded(){
+  if(!pendingOpenNotices || !currentUser) return;
+  if(isSharedAccount) { pendingOpenNotices = false; return; } // 共用アカウントは掲示板モード専用のため対象外
+  pendingOpenNotices = false;
+  if(urlPreselect.tab){
+    urlPreselect.tab = null;
+    history.replaceState(null, "", location.pathname);
+  }
+  try{ switchToTab("notices"); }catch(e){ /* 切り替えに失敗しても他の動作には影響させない */ }
+}
 if(urlPreselect.email){
   const emailInput = document.getElementById("login-email");
   if(emailInput) emailInput.value = urlPreselect.email;
@@ -2144,6 +2162,11 @@ if(navigator.serviceWorker){
     if(data && data.type === "OSAKAGUMI_OPEN_CHAT" && data.email){
       swPreselectChatEmail = data.email;
       openChatFromSwMessageIfNeeded(); // 社員名簿・ログインが既に済んでいれば、即座に反映される
+    }
+    // お知らせ通知をタップした場合（既に画面が開いているとき）：お知らせタブへ切り替える（2026年10月）
+    if(data && data.type === "OSAKAGUMI_OPEN_NOTICES"){
+      pendingOpenNotices = true;
+      openNoticesFromRequestIfNeeded();
     }
   });
 }
@@ -2897,6 +2920,7 @@ onAuthStateChanged(auth, async (user)=>{
     if(reserveSignageEquipmentId){
       switchToTab("reserve");
     }
+    openNoticesFromRequestIfNeeded(); // お知らせ通知のタップで開いた場合（?tab=notices）：お知らせタブへ（2026年10月）
     // toggleで明示的にON/OFFする（前回、共用アカウントでログインしていた場合の
     // クラスの残留を防ぐため。addだけだと、共用アカウント→ログアウト→通常アカウントと
     // ログインし直した際に、notice-board-modeが外れずキオスク画面が残ってしまう）
@@ -6174,6 +6198,8 @@ document.getElementById("notice-new-btn").addEventListener("click", ()=>{
   document.getElementById("notice-send-email-row").style.display = "flex";
   document.getElementById("notice-send-email").checked = true;
   document.getElementById("notice-send-email-label").textContent = "Eメールでも送信する";
+  document.getElementById("notice-send-push").checked = true; // 新規投稿は、既定でプッシュ通知も送る
+  document.getElementById("notice-send-push-label").textContent = noticePushLabelText();
   document.getElementById("notice-title").value = "";
   document.getElementById("notice-body").value = "";
   document.getElementById("notice-target-all").checked = true;
@@ -6207,6 +6233,8 @@ function openNoticeEditModal(n){
   document.getElementById("notice-send-email-row").style.display = "flex";
   document.getElementById("notice-send-email").checked = false;
   document.getElementById("notice-send-email-label").textContent = "Eメールでも送信する";
+  document.getElementById("notice-send-push").checked = false; // 編集時は既定でOFF（軽微な修正のたびに通知しないため）
+  document.getElementById("notice-send-push-label").textContent = noticePushLabelText();
   document.getElementById("notice-title").value = n.title || "";
   document.getElementById("notice-body").value = n.body || "";
   const targetDepts = Array.isArray(n.targetDepartments) ? n.targetDepartments : [];
@@ -6288,6 +6316,7 @@ document.getElementById("notice-submit").addEventListener("click", async ()=>{
   statusEl.textContent = "";
 
   const sendEmail = document.getElementById("notice-send-email").checked;
+  const sendPush = document.getElementById("notice-send-push").checked;
   const neverAutoDelete = document.getElementById("notice-never-auto-delete").checked;
   let recipients = [];
   if(sendEmail){
@@ -6333,6 +6362,9 @@ document.getElementById("notice-submit").addEventListener("click", async ()=>{
       }
       toast("お知らせを更新しました。");
       noticeModal.classList.remove("show");
+      if(sendPush){
+        sendNoticePush({ kind:"update", targetDepartments, excludedEmails: noticeExcludedEmails.slice() }); // 画面の動作は待たない
+      }
       if(sendEmail){
         openNoticeMailtoModal(recipients, title, body, attachmentUrl);
       }
@@ -6355,6 +6387,9 @@ document.getElementById("notice-submit").addEventListener("click", async ()=>{
     toast("お知らせを投稿しました。");
     cleanupOldNotices();
     noticeModal.classList.remove("show");
+    if(sendPush){
+      sendNoticePush({ kind:"new", targetDepartments, excludedEmails: noticeExcludedEmails.slice() }); // 画面の動作は待たない
+    }
     if(sendEmail){
       openNoticeMailtoModal(recipients, title, body, attachmentUrl);
     }
@@ -11451,6 +11486,75 @@ async function notifyChatRecipient(conversationId, recipientEmail, senderName, s
     })
   })
     .catch(()=>{});
+}
+/* ---------- お知らせ新着のプッシュ通知（2026年10月） ----------
+   お知らせを投稿・更新したとき、チャット通知と同じ仕組み（OneSignal＋Cloudflare Worker）で、
+   宛先の社員に「新しいお知らせがあります」と知らせる。通知の文面・遷移先はWorker側で固定のため、
+   お知らせのタイトル・本文は通知サービスには一切渡らない（プライバシー上、チャットと同じ方針）。
+   宛先は、メール送信と同じ絞り込み（発信先の部署・個別除外）に加えて、
+   firebase-config.jsのMAIL_SEND_TARGET（"#"なら投稿者本人のみ＝テスト用）にも従う。
+   通知を許可していない端末・iPhoneの通常ブラウザなどには届かないため、ダッシュボードの
+   お知らせカードや「お知らせ」タブで確認できる仕組みはそのまま残している。 */
+const NOTICE_PUSH_CHUNK = 200; // Worker側の上限（500人）より小さく、200人ずつに分けて送る
+function noticePushLabelText(){
+  return isMailOverrideActive()
+    ? "プッシュ通知も送る（現在はテスト設定のため、投稿者本人にのみ届きます）"
+    : "プッシュ通知も送る（通知を許可している端末に届きます）";
+}
+async function sendNoticePush({ kind, targetDepartments, excludedEmails }){
+  try{
+    let emps = employeesAll;
+    if(!emps || emps.length===0){
+      const snap = await getDocs(collection(db,"employees"));
+      emps = snap.docs.map(d=>({ email:d.id, ...d.data() }));
+    }
+    let list = resolveMailRecipients(emps, currentUser.email);
+    if(targetDepartments && targetDepartments.length>0){
+      list = list.filter(r=>{
+        const emp = emps.find(e=>e.email===r.email);
+        return emp && empDepartments(emp).some(d=>targetDepartments.includes(d));
+      });
+    }
+    if(excludedEmails && excludedEmails.length>0){
+      list = list.filter(r=> !excludedEmails.includes(r.email));
+    }
+    // 共用アカウント（休憩所のキオスク端末など）には個人向けの通知は不要
+    list = list.filter(r=>{
+      const emp = emps.find(e=>e.email===r.email);
+      return !(emp && emp.isSharedAccount);
+    });
+    // 本番（全員宛て）のときは投稿者本人を除く。テスト設定のときは、確認のため本人にも送る
+    if(!isMailOverrideActive()){
+      list = list.filter(r=> r.email !== currentUser.email);
+    }
+    const emails = list.map(r=>r.email);
+    if(emails.length===0){
+      toast("プッシュ通知の宛先がありませんでした。");
+      return;
+    }
+    let okCount = 0, failCount = 0;
+    for(let i=0; i<emails.length; i+=NOTICE_PUSH_CHUNK){
+      const chunk = emails.slice(i, i+NOTICE_PUSH_CHUNK);
+      try{
+        const res = await fetch(CHAT_NOTIFY_WORKER_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ secret: CHAT_NOTIFY_SHARED_SECRET, type:"notice", kind, recipientEmails: chunk })
+        });
+        if(res.ok) okCount += chunk.length; else failCount += chunk.length;
+      }catch(e){
+        failCount += chunk.length;
+      }
+    }
+    if(failCount===0){
+      toast(`プッシュ通知を${okCount}名宛てに送信しました（通知を許可していない端末には届きません）。`);
+    } else {
+      toast(`プッシュ通知の送信に一部失敗しました（成功${okCount}名・失敗${failCount}名）。お知らせ自体は投稿済みです。`);
+    }
+  }catch(e){
+    console.error("[お知らせ通知エラー]", e);
+    toast("プッシュ通知の送信に失敗しました。お知らせ自体は投稿済みです。");
+  }
 }
 document.getElementById("chat-send-btn")?.addEventListener("click", sendChatMessage);
 document.getElementById("chat-input")?.addEventListener("keydown", (e)=>{

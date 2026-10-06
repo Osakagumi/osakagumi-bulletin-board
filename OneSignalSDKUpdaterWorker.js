@@ -23,6 +23,11 @@
  * ?chat=<相手のメールアドレス> 付きのURLを開く（index.html既存の
  * openChatFromUrlIfNeeded()の仕組みで、ページ読み込み後に自動でそのチャットが開く）。
  *
+ * 2026年10月（追加）：お知らせ新着通知にも対応した。通知のdataに type:"notice" が入っている
+ * 場合は、チャットではなくお知らせタブを開く。既に画面が開いていれば前面に出して
+ * postMessage({type:"OSAKAGUMI_OPEN_NOTICES"})で伝え（index.html側が受け取ってお知らせタブへ切り替える）、
+ * 開いていなければ ?tab=notices 付きのURLを新規に開く。チャット通知の動作は変えていない。
+ *
  * 補足：Service Workerは、既に画面を制御している古いバージョンが残っている間は
  * 新しいバージョンに自動で切り替わらない（アプリを閉じて再度開き直すまで待機状態の
  * まま、という仕様）。skipWaiting()とclients.claim()で、更新をダウンロードでき次第
@@ -57,15 +62,31 @@ function extractSenderEmail(notification) {
   return null;
 }
 
+// お知らせ新着通知かどうか（dataの type が "notice"）。置き場所のバリエーションは上と同じ理由で複数確認する。
+function isNoticeNotification(notification) {
+  const data = notification && notification.data;
+  if (!data) return false;
+  const candidates = [
+    data.type,
+    data.data && data.data.type,
+    data.custom && data.custom.a && data.custom.a.type,
+    data.additionalData && data.additionalData.type,
+  ];
+  return candidates.some(function (c) { return c === "notice"; });
+}
+
 self.addEventListener("notificationclick", function (event) {
   // OneSignal標準の「無条件で新規ウィンドウを開く」処理を止める
   event.stopImmediatePropagation();
   event.notification.close();
 
-  const senderEmail = extractSenderEmail(event.notification);
-  const openUrl = senderEmail
-    ? `${PORTAL_APP_URL}?chat=${encodeURIComponent(senderEmail)}`
-    : PORTAL_APP_URL;
+  const isNotice = isNoticeNotification(event.notification);
+  const senderEmail = isNotice ? null : extractSenderEmail(event.notification);
+  const openUrl = isNotice
+    ? `${PORTAL_APP_URL}?tab=notices`
+    : senderEmail
+      ? `${PORTAL_APP_URL}?chat=${encodeURIComponent(senderEmail)}`
+      : PORTAL_APP_URL;
 
   event.waitUntil(
     clients
@@ -77,7 +98,10 @@ self.addEventListener("notificationclick", function (event) {
             return client.focus().then(function (focusedClient) {
               // 送信者が分かっていれば、既に開いている画面にそのままチャット相手を伝える
               // （ページの再読み込みは起きないため、URLの?chatパラメータ方式では反応できない）
-              if (senderEmail && focusedClient && "postMessage" in focusedClient) {
+              if (isNotice && focusedClient && "postMessage" in focusedClient) {
+                // お知らせ通知：既に開いている画面に、お知らせタブへ切り替えてもらう
+                focusedClient.postMessage({ type: "OSAKAGUMI_OPEN_NOTICES" });
+              } else if (senderEmail && focusedClient && "postMessage" in focusedClient) {
                 focusedClient.postMessage({ type: "OSAKAGUMI_OPEN_CHAT", email: senderEmail });
               }
               return focusedClient;
