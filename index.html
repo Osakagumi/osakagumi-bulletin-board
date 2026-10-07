@@ -443,6 +443,9 @@
   .chat-conv-preview{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
   .chat-conv-time{font-size:11px;color:var(--muted);white-space:nowrap;flex-shrink:0;}
   .chat-conv-dot{width:9px;height:9px;border-radius:50%;background:var(--brand);flex-shrink:0;}
+  /* 2026年10月：お知らせの「新着あり」ピル（タブ・ダッシュボード共通） */
+  .new-pill{display:inline-block;padding:1px 8px;border-radius:999px;background:var(--danger);color:#fff;font-size:10.5px;font-weight:700;line-height:1.5;letter-spacing:.02em;white-space:nowrap;vertical-align:middle;}
+  .tab-btn .new-pill{margin-left:6px;}
   .chat-messages{display:flex;flex-direction:column;gap:8px;padding:10px 4px;min-height:300px;max-height:55vh;overflow-y:auto;}
   #chat-thread-toolbar{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
   #chat-thread-title{ min-width:0; overflow:hidden; }
@@ -1036,7 +1039,7 @@
 
     <nav class="tabs" id="main-tabs">
       <button class="tab-btn active" data-view="dashboard">ダッシュボード</button>
-      <button class="tab-btn" data-view="notices">お知らせ</button>
+      <button class="tab-btn" data-view="notices">お知らせ<span id="notice-tab-pill" class="new-pill" style="display:none;">新着あり</span></button>
       <button class="tab-btn" data-view="calendar">カレンダー</button>
       <button class="tab-btn" data-view="whereabouts">行き先</button>
       <button class="tab-btn" data-view="chat">チャット<span id="chat-tab-badge" class="chat-conv-dot" style="display:none;margin-left:5px;vertical-align:middle;"></span></button>
@@ -2681,6 +2684,19 @@ let departmentsAll = [];
 let wbStatusesAll = [];
 let wbListColumns = 2;
 let noticesAll = [];
+// 2026年10月：お知らせ本体（announcements）の常時購読をやめ、一般社員は「新着マーカー」
+// （app_settings/notices_meta の lastPostedAt）だけを購読する。本体は「お知らせ」タブを開いた時だけ取得する。
+// （共用アカウントの掲示板モードだけは、掲示板の自動更新が目的なので従来通り常時購読）
+let noticesLoaded = false;          // announcementsを一度でも取得したか
+let noticesFetching = false;
+let noticesRefetchQueued = false;
+let noticesFetchedAt = 0;           // 最後に取得した時刻（ms）
+let noticesFetchedForMeta = -1;     // 取得した時点のマーカー値（ms。マーカー未作成ならnull）
+let noticesMetaReady = false;       // マーカーの初回スナップショットを受信済みか
+let noticesMetaMillis = null;       // マーカー（最終投稿・更新時刻、ms）。未作成ならnull
+let noticeReadsReady = false;       // notice_readsの初回スナップショットを受信済みか
+let myNoticesOpenedMillis = null;   // 自分が「お知らせ」タブを最後に開いた時刻（ms）
+let noticesOpenedMarking = false;
 let myReadNoticeIds = [];
 let myKeepVisibleNoticeIds = [];
 let editingNoticeId = null;
@@ -2885,7 +2901,7 @@ onAuthStateChanged(auth, async (user)=>{
     // 必要な最小限（お知らせ本体・自分の社員レコード・キオスクログアウト用ショートカット）
     // だけを購読する。
     initMyEmployeeDocListener(); // お知らせの宛先判定（自分の所属部署）に必要。ヘッダー表示名等にも使う
-    initNoticesListener();
+    if(isSharedAccount){ initNoticesListener(); } // 掲示板モードのみ常時購読。一般社員は新着マーカーのみ（下のinitNoticesMetaListener）
     cleanupOldNotices();
     initKioskLogoutShortcutListener(); // 共用アカウントのログアウト用ショートカット（notice-board-modeのときだけ働く）。従来は一般社員にも無条件で購読させていたが、一般社員には不要なため共用アカウント側に寄せた
     initChatListeners();
@@ -2908,6 +2924,7 @@ onAuthStateChanged(auth, async (user)=>{
       initMyReservationsListener();
       cleanupPastReservations();
       initNoticeReadsListener();
+      initNoticesMetaListener();
       initDepartmentsListener();
       initWbStatusesListener();
       initWbColumnsListener();
@@ -3337,22 +3354,17 @@ function renderDashboard(){
   // ---- お知らせ（未読上位） ----
   const noticesBody = document.getElementById("dash-notices-body");
   const dashMe = myEmployeeDoc; // 2026年10月：自分の社員レコードのみ（全件購読ではなくmyEmployeeDocを使う）
-  const unread = noticesAll.filter(n=>{
-    if(myReadNoticeIds.includes(n.id)) return false;
-    if(n.authorEmail === currentUser?.email) return true;
-    return isNoticeTargetedTo(n, dashMe);
-  });
-  if(unread.length===0){
-    noticesBody.innerHTML = `<div class="dash-empty">未読のお知らせはありません。</div>`;
+  // 2026年10月：お知らせ本体を常時購読しなくなったため、一覧ではなく「新着あり」ピルだけを表示する
+  // （詳細は「お知らせ」タブを開くと取得される）。
+  noticesBody.innerHTML = "";
+  if(noticesHaveNewArrival()){
+    const row = document.createElement("div");
+    row.className = "dash-row";
+    row.innerHTML = `<span><span class="new-pill">新着あり</span>　お知らせが投稿・更新されました</span><span class="dash-row-sub">開く ▶</span>`;
+    row.addEventListener("click", ()=> switchToTab("notices"));
+    noticesBody.appendChild(row);
   } else {
-    noticesBody.innerHTML = `<div style="font-size:12.5px;color:var(--muted);margin-bottom:6px;">未読 ${unread.length}件</div>`;
-    unread.slice(0,4).forEach(n=>{
-      const row = document.createElement("div");
-      row.className = "dash-row";
-      row.innerHTML = `<span>${escapeHtml(n.title)}</span><span class="dash-row-sub">${escapeHtml(tsToStr(n.createdAt))}</span>`;
-      row.addEventListener("click", ()=>{ switchToTab("notices"); openNoticeDetailModal(n); });
-      noticesBody.appendChild(row);
-    });
+    noticesBody.innerHTML = `<div class="dash-empty">新着のお知らせはありません。</div>`;
   }
 
   // ---- チャット（最近の会話、未読を優先表示） ----
@@ -3595,6 +3607,9 @@ function switchToTab(viewName){
   }
   if(viewName==="checkout"){
     try{ renderCheckoutTab(); }catch(e){ console.error("[貸出タブの表示エラー]", e); }
+  }
+  if(viewName==="notices"){
+    ensureNoticesFresh(); // 2026年10月：お知らせ本体は、このタブを開いた時だけ取得する（新着マーカーが変わった時のみ再取得）
   }
   if(viewName==="reserve"){
     ensureEquipmentFullListener(); // 2026年10月：予約タブを開いた時だけ設備本体を全件購読する
@@ -4447,11 +4462,18 @@ async function cleanupOldVisitorSchedules(){
     }catch(e){ /* 設定取得に失敗した場合は既定値のまま続行 */ }
     const cutoff = new Date(Date.now() - cleanupDays*24*60*60*1000);
     const cutoffStr = `${cutoff.getFullYear()}-${String(cutoff.getMonth()+1).padStart(2,"0")}-${String(cutoff.getDate()).padStart(2,"0")}`;
-    const snap = await getDocs(query(collection(db,"visitor_schedules"), where("date","<", cutoffStr)));
+    // 2026年10月：削除日数の意味を「予定の最終日（複数日の予定は終了日）から、何日経過した日に削除するか」に変更した。
+    // 例：1＝最終日の翌日に削除、14＝最終日の14日後に削除。以前は開始日だけを見て「日数を超えたら」削除していたため、
+    // 複数日の予定が終了前に消えうる点と、「1」の意味が分かりにくい点を直した。
+    // 開始日 <= 基準日 で取得（終了日は開始日以上のため、必要な候補は必ず含まれる。新しいインデックスは不要）し、
+    // 終了日（無ければ開始日）<= 基準日 のものだけを削除対象にする。
+    const snap = await getDocs(query(collection(db,"visitor_schedules"), where("date","<=", cutoffStr)));
     if(snap.empty) return;
+    const expired = snap.docs.filter(d=>{ const v = d.data(); return (v.endDate || v.date) <= cutoffStr; });
+    if(expired.length===0) return;
     const targets = isVisitorManager
-      ? snap.docs
-      : snap.docs.filter(d => getVisitorHostEmails(d.data()).includes(currentUser.email));
+      ? expired
+      : expired.filter(d => getVisitorHostEmails(d.data()).includes(currentUser.email));
     if(targets.length===0) return;
     for(const d of targets){
       try{ await deleteDoc(doc(db,"visitor_schedules", d.id)); }catch(e){ /* 1件失敗しても他の削除は続行 */ }
@@ -5790,10 +5812,90 @@ function initNoticesListener(){
   const q = query(collection(db,"announcements"), orderBy("createdAt","desc"), limit(200));
   onSnapshot(q, snap=>{
     noticesAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    noticesLoaded = true;
     renderNotices();
     refreshDashboardIfActive();
     renderNoticeBoardCards(); // 掲示板モード中でなければ内部で何もしない
   }, (err)=>{ console.error("[お知らせ取得エラー]", err); });
+}
+
+/* ---------- 2026年10月：お知らせの「新着あり」マーカー方式（一般社員） ----------
+   ・投稿／「全て未読に戻す」更新のたびに app_settings/notices_meta.lastPostedAt を更新する（bumpNoticesMeta）。
+   ・全員がこの1ドキュメントだけを購読する（件数は1件、変更は投稿のたびに1回）。
+   ・自分が最後に「お知らせ」タブを開いた時刻（notice_reads/{email}.lastNoticesOpenedAt）より
+     マーカーが新しければ、タブとダッシュボードに「新着あり」ピルを出す。
+   ・announcements本体はタブを開いた時だけ取得し、マーカーが変わらない限り再取得しない。 */
+function msOf(v){
+  try{ if(!v) return null; if(typeof v.toMillis==="function") return v.toMillis(); const t=new Date(v).getTime(); return isNaN(t)?null:t; }catch(e){ return null; }
+}
+function noticesHaveNewArrival(){
+  if(isSharedAccount) return false;
+  if(!noticesMetaReady || !noticeReadsReady) return false;
+  if(noticesMetaMillis===null) return false;                  // まだ一度も投稿されていない（マーカー未作成）
+  if(myNoticesOpenedMillis===null) return true;               // 一度もタブを開いていない
+  return noticesMetaMillis > myNoticesOpenedMillis;
+}
+function updateNoticePill(){
+  const show = noticesHaveNewArrival();
+  const pill = document.getElementById("notice-tab-pill");
+  if(pill) pill.style.display = show ? "inline-block" : "none";
+  refreshDashboardIfActive();
+}
+function initNoticesMetaListener(){
+  onSnapshot(doc(db,"app_settings","notices_meta"), snap=>{
+    // serverTimestampが未確定の間（自分の書き込み直後）は推定値を使う（nullのままだと一瞬「未作成」に見える）
+    const d = snap.exists() ? snap.data({ serverTimestamps:"estimate" }) : null;
+    noticesMetaMillis = d ? msOf(d.lastPostedAt) : null;
+    noticesMetaReady = true;
+    updateNoticePill();
+    // 「お知らせ」タブを見ている最中に新着が来た場合は、その場で取得し直す
+    if(document.querySelector(".tab-btn.active")?.dataset.view==="notices"){ ensureNoticesFresh(); }
+  }, (err)=>{ console.error("[お知らせ新着マーカー取得エラー]", err); });
+}
+async function fetchNoticesOnce(){
+  if(noticesFetching){ noticesRefetchQueued = true; return; }
+  noticesFetching = true;
+  const metaAtStart = noticesMetaMillis;
+  try{
+    const snap = await getDocs(query(collection(db,"announcements"), orderBy("createdAt","desc"), limit(200)));
+    noticesAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    noticesLoaded = true;
+    noticesFetchedAt = Date.now();
+    noticesFetchedForMeta = metaAtStart;
+    renderNotices();
+    refreshDashboardIfActive();
+  }catch(e){
+    console.error("[お知らせ取得エラー]", e);
+    renderNotices();
+  }finally{
+    noticesFetching = false;
+    if(noticesRefetchQueued){ noticesRefetchQueued = false; fetchNoticesOnce(); }
+  }
+}
+// 新着ピルを消すため、「お知らせ」タブを開いた時刻を記録する（新着がある時だけ書き込む＝書き込みは新着1件につき1人1回）
+async function markNoticesOpenedIfNeeded(){
+  if(isSharedAccount || noticesOpenedMarking || !noticesHaveNewArrival()) return;
+  noticesOpenedMarking = true;
+  try{
+    await setDoc(doc(db,"notice_reads", currentUser.email), { lastNoticesOpenedAt: serverTimestamp() }, { merge:true });
+  }catch(e){ console.error("[お知らせ閲覧時刻の記録エラー]", e); }
+  finally{ setTimeout(()=>{ noticesOpenedMarking = false; }, 5000); }
+}
+async function ensureNoticesFresh(force){
+  if(isSharedAccount) return;
+  const metaChanged = noticesMetaMillis !== noticesFetchedForMeta;
+  // 投稿者・管理者は既読人数（n/m）を見るため、マーカーが変わらなくても10分以上経っていれば取得し直す
+  const staleForManager = (isPoster || isAdmin || isNoticeManager) && (Date.now() - noticesFetchedAt > 10*60*1000);
+  if(force || !noticesLoaded || metaChanged || staleForManager){ await fetchNoticesOnce(); }
+  markNoticesOpenedIfNeeded();
+}
+// 投稿・「全て未読に戻す」更新の直後に呼ぶ。他の人の新着ピルを出し、自分の一覧も取得し直す。失敗しても投稿自体は成功扱い。
+async function bumpNoticesMeta(){
+  try{
+    await setDoc(doc(db,"app_settings","notices_meta"), { lastPostedAt: serverTimestamp() }, { merge:true });
+    await setDoc(doc(db,"notice_reads", currentUser.email), { lastNoticesOpenedAt: serverTimestamp() }, { merge:true }); // 投稿者本人には新着ピルを出さない
+  }catch(e){ console.error("[お知らせ新着マーカー更新エラー]", e); }
+  if(!isSharedAccount){ ensureNoticesFresh(true); }
 }
 
 let noticeCleanupRunning = false;
@@ -5884,7 +5986,10 @@ function initNoticeReadsListener(){
   onSnapshot(doc(db,"notice_reads", currentUser.email), snap=>{
     myReadNoticeIds = (snap.exists() && snap.data().readIds) || [];
     myKeepVisibleNoticeIds = (snap.exists() && snap.data().keepVisibleIds) || [];
+    myNoticesOpenedMillis = snap.exists() ? msOf(snap.data({ serverTimestamps:"estimate" }).lastNoticesOpenedAt) : null;
+    noticeReadsReady = true;
     renderNotices();
+    updateNoticePill();
   }, (err)=>{ console.error("[お知らせ既読状態取得エラー]", err); });
 }
 
@@ -5981,6 +6086,10 @@ function renderNotices(){
   const el = document.getElementById("notice-list");
   el.innerHTML = "";
   document.getElementById("notice-hide-read-btn").style.display = myKeepVisibleNoticeIds.length > 0 ? "inline-block" : "none";
+  if(!noticesLoaded){
+    el.innerHTML = `<tr><td colspan="6" class="empty-state">読み込み中…</td></tr>`;
+    return;
+  }
   const me = myEmployeeDoc; // 2026年10月：自分の社員レコードのみ（全件購読ではなくmyEmployeeDocを使う）
   const visibleNotices = noticesAll.filter(n=>{
     if(n.authorEmail === currentUser?.email) return true; // 自分の投稿は発信先に関わらず見える
@@ -6159,6 +6268,7 @@ document.getElementById("notice-detail-read-hide-btn").addEventListener("click",
       keepVisibleIds: arrayRemove(n.id)
     }, { merge:true });
     await setDoc(doc(db,"announcements", n.id), { readByAt: { [currentUser.email]: new Date().toISOString() } }, { merge: true });
+    if(!isSharedAccount){ n.readByAt = { ...(n.readByAt||{}), [currentUser.email]: new Date().toISOString() }; renderNotices(); } // 常時購読をやめたため、手元の一覧にも反映する
     document.getElementById("notice-detail-modal").classList.remove("show");
   }catch(e){
     console.error("[既読処理エラー：非表示]", e);
@@ -6174,6 +6284,7 @@ document.getElementById("notice-detail-read-keep-btn").addEventListener("click",
       keepVisibleIds: arrayUnion(n.id)
     }, { merge:true });
     await setDoc(doc(db,"announcements", n.id), { readByAt: { [currentUser.email]: new Date().toISOString() } }, { merge: true });
+    if(!isSharedAccount){ n.readByAt = { ...(n.readByAt||{}), [currentUser.email]: new Date().toISOString() }; renderNotices(); } // 常時購読をやめたため、手元の一覧にも反映する
     document.getElementById("notice-detail-modal").classList.remove("show");
   }catch(e){
     console.error("[既読処理エラー：一覧に残す]", e);
@@ -6194,6 +6305,7 @@ document.getElementById("notice-detail-delete-btn").addEventListener("click", as
     try{ await deleteFileFromStorage(n.attachmentStoragePath); }catch(e){ /* 削除に失敗しても致命的ではない */ }
   }
   toast("お知らせを削除しました。");
+  if(!isSharedAccount){ noticesAll = noticesAll.filter(x=> x.id !== n.id); renderNotices(); } // 常時購読をやめたため、手元の一覧から外す
   document.getElementById("notice-detail-modal").classList.remove("show");
 });
 
@@ -6417,6 +6529,7 @@ document.getElementById("notice-submit").addEventListener("click", async ()=>{
       }
       toast("お知らせを更新しました。");
       noticeModal.classList.remove("show");
+      if(resetRead){ bumpNoticesMeta(); } else if(!isSharedAccount){ ensureNoticesFresh(true); } // 全て未読に戻す更新だけ「新着あり」を出す。軽微な修正は自分の一覧だけ取得し直す
       if(sendPush){
         sendNoticePush({ kind:"update", targetDepartments, excludedEmails: noticeExcludedEmails.slice() }); // 画面の動作は待たない
       }
@@ -6440,6 +6553,7 @@ document.getElementById("notice-submit").addEventListener("click", async ()=>{
       createdAt: Timestamp.now()
     });
     toast("お知らせを投稿しました。");
+    bumpNoticesMeta();
     cleanupOldNotices();
     noticeModal.classList.remove("show");
     if(sendPush){
