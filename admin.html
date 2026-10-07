@@ -1140,12 +1140,12 @@
       <div class="panel">
         <h2>予定削除までの日数</h2>
         <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-          出入予定（来客・役員）は、日付が過ぎてからここで設定した日数が経過すると、自動的に削除されます。
+          出入予定（来客・役員）は、予定の最終日（複数日にわたる予定は終了日）から、ここで設定した日数が経過した日に自動的に削除されます。例：「1」＝最終日の翌日に削除、「14」＝最終日の14日後に削除。1以上の整数で指定してください。
         </p>
         <div style="display:flex;align-items:center;gap:10px;">
           <div class="field" style="margin:0;">
             <label>削除までの日数</label>
-            <input type="number" id="visitor-cleanup-days-input" min="1" style="width:100px;">
+            <input type="number" id="visitor-cleanup-days-input" min="1" step="1" style="width:100px;">
           </div>
           <button class="btn btn-primary" id="visitor-cleanup-days-save-btn">保存</button>
         </div>
@@ -4477,10 +4477,18 @@ function initVisitorCleanupSettingsListener(){
 }
 document.getElementById("visitor-cleanup-days-save-btn")?.addEventListener("click", async ()=>{
   const msgEl = document.getElementById("visitor-cleanup-days-save-msg");
-  const days = Math.max(1, Number(document.getElementById("visitor-cleanup-days-input").value) || 14);
+  // 2026年10月：以前は不正な値（0・空欄など）を黙って14に置き換えたうえで「保存しました」と表示していたため、
+  // 実際の保存値と画面の表示が食い違っていた。1以上の整数以外は保存せず、エラーを表示する。
+  const rawDays = document.getElementById("visitor-cleanup-days-input").value.trim();
+  const days = Number(rawDays);
+  if(rawDays === "" || !Number.isInteger(days) || days < 1){
+    msgEl.textContent = "1以上の整数を入力してください（1＝予定の最終日の翌日に削除）。保存していません。";
+    msgEl.style.color = "var(--danger)";
+    return;
+  }
   try{
     await setDoc(doc(db,"app_settings","visitor_cleanup"), { days }, { merge:true });
-    msgEl.textContent = "保存しました。";
+    msgEl.textContent = `保存しました（${days}日）。`;
     msgEl.style.color = "var(--muted)";
   }catch(e){
     msgEl.textContent = "保存に失敗しました。権限をご確認ください。";
