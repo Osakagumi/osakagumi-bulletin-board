@@ -2732,8 +2732,10 @@ function renderAdminsTable(list){
       } else {
         if(!confirm(`${email} をシステム管理者から外しますか？`)) return;
       }
-      await deleteDoc(doc(db,"admins", email));
-      toast("システム管理者を削除しました。");
+      try{
+        await setPermission("admins", email, false);
+        toast("システム管理者を削除しました。");
+      }catch(e){ toast("削除に失敗しました。権限をご確認ください。"); }
     });
     tr.querySelector(".actions").appendChild(btn);
     body.appendChild(tr);
@@ -2990,8 +2992,10 @@ function renderPosters(list){
     btn.className = "btn btn-danger"; btn.textContent = "削除";
     btn.addEventListener("click", async ()=>{
       if(!confirm(`${email} の投稿権限を削除しますか？`)) return;
-      await deleteDoc(doc(db,"announcement_posters", email));
-      toast("投稿権限を削除しました。");
+      try{
+        await setPermission("announcement_posters", email, false);
+        toast("投稿権限を削除しました。");
+      }catch(e){ toast("削除に失敗しました。権限をご確認ください。"); }
     });
     tr.querySelector(".actions").appendChild(btn);
     body.appendChild(tr);
@@ -3292,8 +3296,10 @@ function renderWbEditors(list){
     btn.className = "btn btn-danger"; btn.textContent = "削除";
     btn.addEventListener("click", async ()=>{
       if(!confirm(`${email} の権限を削除しますか？`)) return;
-      await deleteDoc(doc(db,"whereabouts_editors", email));
-      toast("権限を削除しました。");
+      try{
+        await setPermission("whereabouts_editors", email, false);
+        toast("権限を削除しました。");
+      }catch(e){ toast("削除に失敗しました。権限をご確認ください。"); }
     });
     tr.querySelector(".actions").appendChild(btn);
     body.appendChild(tr);
@@ -3325,8 +3331,10 @@ function renderEquipmentManagers(list){
     btn.className = "btn btn-danger"; btn.textContent = "削除";
     btn.addEventListener("click", async ()=>{
       if(!confirm(`${email} の権限を削除しますか？`)) return;
-      await deleteDoc(doc(db,"equipment_managers", email));
-      toast("権限を削除しました。");
+      try{
+        await setPermission("equipment_managers", email, false);
+        toast("権限を削除しました。");
+      }catch(e){ toast("削除に失敗しました。権限をご確認ください。"); }
     });
     tr.querySelector(".actions").appendChild(btn);
     body.appendChild(tr);
@@ -4565,8 +4573,10 @@ function renderContractEditors(list){
     btn.className = "btn btn-danger"; btn.textContent = "削除";
     btn.addEventListener("click", async ()=>{
       if(!confirm(`${email} の権限を削除しますか？`)) return;
-      await deleteDoc(doc(db,"contract_editors", email));
-      toast("権限を削除しました。");
+      try{
+        await setPermission("contract_editors", email, false);
+        toast("権限を削除しました。");
+      }catch(e){ toast("削除に失敗しました。権限をご確認ください。"); }
     });
     tr.querySelector(".actions").appendChild(btn);
     body.appendChild(tr);
@@ -4599,8 +4609,10 @@ function renderCalendarEditors(list){
     btn.className = "btn btn-danger"; btn.textContent = "削除";
     btn.addEventListener("click", async ()=>{
       if(!confirm(`${email} の権限を削除しますか？`)) return;
-      await deleteDoc(doc(db,"calendar_editors", email));
-      toast("権限を削除しました。");
+      try{
+        await setPermission("calendar_editors", email, false);
+        toast("権限を削除しました。");
+      }catch(e){ toast("削除に失敗しました。権限をご確認ください。"); }
     });
     tr.querySelector(".actions").appendChild(btn);
     body.appendChild(tr);
@@ -4830,6 +4842,44 @@ function sortEmailsByEmployeeNo(emails){
     return a.localeCompare(b, "ja"); // 社員データがまだ無い場合（読み込み中など）のフォールバック
   });
 }
+// 2026年10月：ログイン時の権限チェック高速化のため、権限コレクション（admins等）への付与・削除の
+// たびに、employees/{email}ドキュメントにも同じ内容をミラーしたフラグを書き込む。
+// 権限の正はあくまで各コレクション自身であり、このフラグはindex.html側のログイン時読み取りを
+// 減らすための複製に過ぎない（index.html側のpermsMigratedV2関連の処理を参照）。
+const PERMISSION_FIELD_MAP = {
+  admins: "permAdmin",
+  announcement_posters: "permPoster",
+  notice_managers: "permNoticeManager",
+  whereabouts_editors: "permWbEditor",
+  equipment_managers: "permEquipmentManager",
+  calendar_editors: "permCalendarEditor",
+  contract_editors: "permContractEditor",
+  safety_senders: "permSafetySender",
+  visitor_managers: "permVisitorManager"
+};
+// 権限コレクションへの付与・削除と、employeesドキュメントへのミラー書き込みをまとめて行う。
+// 以後、権限の付与・削除はこの関数を経由すること（直接setDoc/deleteDocしない）。
+async function setPermission(collection, email, granted){
+  // 2026年10月のセルフテストで判明：deleteDocをtry/catchで握りつぶしたまま下のミラー書き込みに
+  // 進んでしまうと、本当は削除権限が無くて実際の削除が失敗していたケースでも、employees側だけ
+  // 「権限なし」に書き換わってしまい、表示と実態（正データである元コレクション側）がズレる
+  // 恐れがあった（Firestoreは存在しないドキュメントのdeleteDocではエラーにならないため、
+  // ここで実際に例外が飛ぶのは権限エラー等の“本物のエラー”のときだけ）。付与側と同様、
+  // 例外はここで握りつぶさずそのまま呼び出し元（togglePermMatrixCell等）に伝播させ、
+  // 失敗時はミラー書き込みも行わないようにした。
+  if(granted){
+    await setDoc(doc(db, collection, email), { addedBy: currentUser.email, addedAt: new Date().toISOString() }, { merge:true });
+  } else {
+    await deleteDoc(doc(db, collection, email));
+  }
+  const field = PERMISSION_FIELD_MAP[collection];
+  if(field){
+    // ミラー書き込みが失敗しても、権限コレクション自体（正データ）は既に更新済みなので致命的ではない。
+    // 次回そのユーザーがログインした際、permsMigratedV2が立っていなければ従来通り9コレクションを
+    // 読みに行くフォールバックがindex.html側にあるため、最終的には整合する。
+    try{ await setDoc(doc(db,"employees", email), { [field]: granted }, { merge:true }); }catch(e){ /* 上記コメント参照 */ }
+  }
+}
 // 各種権限の一覧（コレクション名・チェックボックスのラベル・現在の付与者一覧を取得する関数）
 const PERMISSION_DEFS = [
   { collection: "admins", label: "システム管理者", getList: ()=> lastAdminEmails },
@@ -4927,17 +4977,13 @@ async function togglePermMatrixCell(cb, emp, def){
         await updateDoc(doc(db,"business_info_items", def.itemId), { infoManagers: arrayRemove(emp.email) });
       }
     } else {
-      if(cb.checked){
-        await setDoc(doc(db, def.collection, emp.email), { addedBy: currentUser.email, addedAt: new Date().toISOString() }, { merge:true });
-      } else {
-        if(def.collection==="admins" && emp.email===currentUser.email){
-          if(!confirm("自分自身をシステム管理者から外します。よろしいですか？")){
-            cb.checked = true;
-            return;
-          }
+      if(!cb.checked && def.collection==="admins" && emp.email===currentUser.email){
+        if(!confirm("自分自身をシステム管理者から外します。よろしいですか？")){
+          cb.checked = true;
+          return;
         }
-        try{ await deleteDoc(doc(db, def.collection, emp.email)); }catch(e){ /* 元々権限が無い場合は何もしない */ }
       }
+      await setPermission(def.collection, emp.email, cb.checked);
     }
     toast("更新しました。");
   }catch(e){
@@ -5774,7 +5820,22 @@ document.getElementById("userimport-execute-btn").addEventListener("click", asyn
         memo: row.memo,
         order: existingEmp ? (existingEmp.order ?? 0) : 0,
         createdBy: currentUser.email,
-        importedAt: new Date().toISOString()
+        importedAt: new Date().toISOString(),
+        // 2026年10月：ログイン時の権限チェック高速化のため、CSVで付与する権限をemployees
+        // ドキュメントにもミラーする（CSV一括登録は権限の「付与」のみを行い「削除」はしない
+        // 既存仕様のため、ここもtrueのときだけ書き込む。permsMigratedV2はここでは立てない
+        // ——このユーザーが別の経路（admin.html手動操作等）で既に持っている他の権限まで
+        // このCSV行だけで把握しきれないため、次回ログイン時の9コレクション照合フォールバックに
+        // 委ね、そこで確実にpermsMigratedV2を立てる）
+        ...(row.isAdmin ? { permAdmin: true } : {}),
+        ...(row.isPoster ? { permPoster: true } : {}),
+        ...(row.isNoticeManager ? { permNoticeManager: true } : {}),
+        ...(row.isWbEditor ? { permWbEditor: true } : {}),
+        ...(row.isEqManager ? { permEquipmentManager: true } : {}),
+        ...(row.isContractEditor ? { permContractEditor: true } : {}),
+        ...(row.isCalEditor ? { permCalendarEditor: true } : {}),
+        ...(row.isSafetySender ? { permSafetySender: true } : {}),
+        ...(row.isVisitorManager ? { permVisitorManager: true } : {})
       }, { merge: true });
       if(row.isAdmin){
         await setDoc(doc(db,"admins", targetEmail), { addedBy: currentUser.email, addedAt: new Date().toISOString() });
