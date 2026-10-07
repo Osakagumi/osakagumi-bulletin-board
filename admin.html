@@ -1894,6 +1894,8 @@ function applySectionAccessToNav(){
   });
 }
 let myHiddenTabsForAdmin = [];
+// システム管理で「有効」とされているタブID一覧（未設定ならnull＝すべて有効）。個人のタブ設定の選択肢を絞るために使う
+let systemEnabledTabsForPicker = null;
 // 入札("contracts")は常時非表示にしたため、表示タブ設定の対象からも外した（2026年10月。復活時はここにも戻すこと）。
 const GENERAL_HIDEABLE_TAB_IDS_FOR_ADMIN = ["notices","calendar","whereabouts","chat","reserve","checkout","visitors","bizinfo"];
 onAuthStateChanged(auth, async (user)=>{
@@ -1932,6 +1934,7 @@ onAuthStateChanged(auth, async (user)=>{
   const personalHiddenTabs = (myEmpDoc && myEmpDoc.exists() && Array.isArray(myEmpDoc.data().hiddenTabs)) ? myEmpDoc.data().hiddenTabs : [];
   const generalDefaults = (generalDefaultsDoc && generalDefaultsDoc.exists()) ? generalDefaultsDoc.data() : {};
   const enabledTabs = Array.isArray(generalDefaults.enabledTabs) ? generalDefaults.enabledTabs : null;
+  systemEnabledTabsForPicker = enabledTabs;
   const systemHiddenTabs = enabledTabs
     ? GENERAL_HIDEABLE_TAB_IDS_FOR_ADMIN.filter(id => !enabledTabs.includes(id))
     : [];
@@ -3458,6 +3461,7 @@ function initGeneralTabDefaultsListener(){
     buildDragOrderList("general-tab-order-list", GENERAL_TAB_ORDER_DEFS, data.tabOrder);
     const generalToggleableTabs = [...HIDEABLE_TABS, ...SAFETY_SYSTEM_TOGGLE_TABS];
     const enabledTabs = Array.isArray(data.enabledTabs) ? data.enabledTabs : generalToggleableTabs.map(t=>t.id);
+    systemEnabledTabsForPicker = Array.isArray(data.enabledTabs) ? data.enabledTabs : null;
     const checksEl = document.getElementById("general-enabled-tabs-checks");
     if(checksEl){
       checksEl.innerHTML = "";
@@ -5008,11 +5012,22 @@ const HIDEABLE_TABS = [
 ];
 // タブ本体に加えて、「業務情報」の中の各ピル（登録済みの各業務情報）も個別にON/OFFできるようにする
 function getFullHideableList(){
-  const bizInfoSubItems = bizInfoItemsAll.map(item=>({
+  // システム管理で無効にされたタブは、個人のタブ設定の選択肢（編集ダイアログ・表形式）に出さない。
+  // 「業務情報」自体が無効なら、その配下の各項目も出さない。
+  const isSysEnabled = id => !Array.isArray(systemEnabledTabsForPicker) || systemEnabledTabsForPicker.includes(id);
+  const bizInfoSubItems = isSysEnabled("bizinfo") ? bizInfoItemsAll.map(item=>({
     id: "bizinfo:" + item.id,
     label: "業務情報 - " + (item.name || "")
-  }));
-  return [...HIDEABLE_TABS, ...bizInfoSubItems];
+  })) : [];
+  return [...HIDEABLE_TABS.filter(t=> isSysEnabled(t.id)), ...bizInfoSubItems];
+}
+// 選択肢に出していないID（システム側で無効なタブ、凍結中の入札など）が個人のhiddenTabsに入っている場合、
+// 保存時に消えてしまわないよう引き継ぐ（消えると、システム側で後から有効に戻した際や、入札のような
+// 常時非表示のタブが、意図せず表示されてしまう）。
+function keepUnlistedHiddenTabs(currentHidden, newListedHidden){
+  const listed = new Set(getFullHideableList().map(t=>t.id));
+  const kept = (Array.isArray(currentHidden) ? currentHidden : []).filter(id=> !listed.has(id));
+  return [...new Set([...kept, ...newListedHidden])];
 }
 // システム管理画面（既定で有効にするタブ）でのみON/OFFできるタブ。個人ごとの非表示設定（HIDEABLE_TABS）には
 // あえて含めない（緊急時に個人設定でうっかり非表示にしてしまうのを防ぐため）が、運用しない組織向けに、
@@ -5140,7 +5155,7 @@ async function toggleTabMatrixRow(emp){
   if(tabDefs.length===0) return;
   const currentHidden = Array.isArray(emp.hiddenTabs) ? emp.hiddenTabs : [];
   const allVisible = tabDefs.every(t=> !currentHidden.includes(t.id));
-  const newHidden = allVisible ? tabDefs.map(t=>t.id) : [];
+  const newHidden = keepUnlistedHiddenTabs(currentHidden, allVisible ? tabDefs.map(t=>t.id) : []);
   const wrap = document.getElementById("tab-matrix-wrap");
   if(wrap){ wrap.style.opacity = "0.5"; wrap.style.pointerEvents = "none"; }
   try{
@@ -5212,8 +5227,10 @@ document.getElementById("emp-search-clear-x")?.addEventListener("click", ()=>{
 });
 
 let editingEmpEmail = null;
+let editingEmpOriginalHiddenTabs = []; // 編集ダイアログを開いた時点の個人hiddenTabs（選択肢に出さないIDを保存時に引き継ぐため）
 function openEmpEditModal(emp){
   editingEmpEmail = emp.email;
+  editingEmpOriginalHiddenTabs = Array.isArray(emp.hiddenTabs) ? emp.hiddenTabs.slice() : [];
   document.getElementById("emp-edit-modal-title").textContent = "社員情報を編集：" + (emp.name || emp.email);
   document.getElementById("emp-edit-name-input").value = emp.name || "";
   document.getElementById("emp-edit-email-display").textContent = emp.email;
@@ -5363,7 +5380,7 @@ document.getElementById("emp-edit-save-btn")?.addEventListener("click", async ()
       name: name || editingEmpEmail,
       departments: selectedDepts,
       department: selectedDepts[0] || "", // 旧バージョン互換用（先頭の所属を単一値としても保持）
-      hiddenTabs: selectedHiddenTabs,
+      hiddenTabs: keepUnlistedHiddenTabs(editingEmpOriginalHiddenTabs, selectedHiddenTabs),
       phone: document.getElementById("emp-edit-phone-input").value.trim(),
       memo: document.getElementById("emp-edit-memo-input").value.trim(),
       isSharedAccount: document.getElementById("emp-edit-shared-account-check").checked
