@@ -5405,10 +5405,14 @@ document.getElementById("emp-edit-save-btn")?.addEventListener("click", async ()
         continue;
       }
       const col = cb.dataset.collection;
+      // 2026年10月：以前はここで権限コレクションを直接setDoc/deleteDocしており、employeesドキュメントへの
+      // ミラー（permXxxフラグ）が更新されず、ログイン時の権限判定（index.html。フラグ参照）とズレる不具合があった。
+      // 権限の付与・削除は必ずsetPermission経由で行う。変更の有無に関わらず毎回書くのは、保存のたびに
+      // フラグを実態に揃え直す（過去のズレを自然に直す）ため。
       if(cb.checked){
-        await setDoc(doc(db, col, editingEmpEmail), { addedBy: currentUser.email, addedAt: new Date().toISOString() }, { merge: true });
+        await setPermission(col, editingEmpEmail, true);
       } else {
-        try{ await deleteDoc(doc(db, col, editingEmpEmail)); }catch(e){ /* 元々権限が無い場合は何もしない */ }
+        try{ await setPermission(col, editingEmpEmail, false); }catch(e){ /* 削除権限が無い等。従来通り他の項目の処理は続行する（この場合、employees側のミラーも更新されない） */ }
       }
     }
     if(cappedItems.length>0){
