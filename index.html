@@ -3103,7 +3103,9 @@ function applyMyHiddenTabs(){
   const systemHidden = (systemTabDefaults && Array.isArray(systemTabDefaults.enabledTabs))
     ? GENERAL_HIDEABLE_TAB_IDS.filter(id => !systemTabDefaults.enabledTabs.includes(id))
     : [];
-  const hidden = [...new Set([...personalHidden, ...systemHidden])];
+  // 入札(contracts)は常時非表示の方針（2026年10月）。表示タブ設定の対象外にしたため、編集ダイアログで保存すると
+  // hiddenTabsから"contracts"が消え、タブ・ダッシュボードカードが再び現れてしまっていた。ここで常に非表示扱いにする。
+  const hidden = [...new Set([...personalHidden, ...systemHidden, "contracts"])];
   document.querySelectorAll("#main-tabs .tab-btn[data-view]").forEach(btn=>{
     const view = btn.dataset.view;
     if(view==="dashboard" || view==="safety" || view==="safetyresponse") return; // 常時表示
