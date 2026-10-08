@@ -1263,6 +1263,24 @@
           <button class="btn btn-primary" id="activity-log-save-btn">保存</button>
           <div id="activity-log-save-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px;"></div>
           <div id="activity-log-config-note" style="font-size:12px;color:var(--muted);margin-top:6px;"></div>
+
+          <!-- 記録の保存日数（蓄積量）。ログ用スプレッドシート側（Apps Script）に保存され、古い行は自動削除される -->
+          <div style="border-top:1px solid var(--line);margin-top:14px;padding-top:12px;">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+              <label for="activity-log-keepdays" style="font-size:13px;font-weight:600;">記録の保存日数</label>
+              <button type="button" class="icon-help-btn" id="activity-log-stat-refresh-btn" title="現在の状況を更新" aria-label="現在の状況を更新">⟳</button>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              <input type="number" id="activity-log-keepdays" min="1" max="365" step="1" style="width:90px;">
+              <span style="font-size:13px;">日分</span>
+              <button class="btn btn-primary" id="activity-log-keepdays-save-btn">保存</button>
+            </div>
+            <p style="font-size:12px;color:var(--muted);margin:6px 0 0;">
+              1以上365以下の整数で指定します。指定した日数より古い記録は、ログを受信したときに1日1回自動で削除され、保存を押した時にも、その場で削除されます（削除した記録は元に戻せません）。
+            </p>
+            <div id="activity-log-keepdays-msg" style="font-size:12.5px;color:var(--muted);margin-top:6px;"></div>
+            <div id="activity-log-stat" style="font-size:12px;color:var(--muted);margin-top:4px;"></div>
+          </div>
         </div>
 
         <!-- 画面の背景色 -->
@@ -3747,8 +3765,65 @@ function initActivityLogSettingListener(){
     const ok = !!(c && c.webAppUrl && !String(c.webAppUrl).startsWith("YOUR_") && c.secret && !String(c.secret).startsWith("YOUR_"));
     const note = document.getElementById("activity-log-config-note");
     if(note) note.textContent = ok ? "送信先：設定済み（firebase-config.js）" : "送信先が未設定です（firebase-config.js の ACTIVITY_LOG_CONFIG）。ONにしても、設定されるまでは何も送信されません。";
+    if(ok) refreshActivityLogStat(); // 保存日数・現在の行数を表示
   }).catch(()=>{});
 }
+// ログ用スプレッドシート側のApps Script（firebase-config.js の ACTIVITY_LOG_CONFIG）に問い合わせる。
+// text/plain で送るのは、Apps Scriptがプリフライトに応答できないため（添付ファイル機能と同じ方式）。
+async function callActivityLogGas(payload){
+  const m = await import("./firebase-config.js");
+  const c = m && m.ACTIVITY_LOG_CONFIG;
+  if(!c || !c.webAppUrl || String(c.webAppUrl).startsWith("YOUR_") || !c.secret || String(c.secret).startsWith("YOUR_")){
+    throw new Error("送信先が未設定です（firebase-config.js の ACTIVITY_LOG_CONFIG）。");
+  }
+  const res = await fetch(c.webAppUrl, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify(Object.assign({ secret: c.secret }, payload))
+  });
+  if(!res.ok) throw new Error(`通信に失敗しました（${res.status}）。`);
+  const json = await res.json();
+  if(json.error) throw new Error(json.error === "unauthorized" ? "SECRETが一致しません（firebase-config.js と activity-log.gs の値を確認してください）。" : String(json.error));
+  return json;
+}
+async function refreshActivityLogStat(){
+  const statEl = document.getElementById("activity-log-stat");
+  const input = document.getElementById("activity-log-keepdays");
+  if(!statEl || !input) return;
+  statEl.textContent = "状況を確認中…";
+  try{
+    const r = await callActivityLogGas({ action: "getSettings" });
+    if(document.activeElement !== input) input.value = r.keepDays;
+    statEl.textContent = `現在：${r.keepDays}日分を保存${r.isDefault ? `（未設定のため既定の${r.defaultDays}日）` : ""} ／ 記録 ${Number(r.rows).toLocaleString()}行` +
+      (r.oldest ? ` ／ 最も古い記録：${r.oldest}` : "");
+  }catch(e){
+    statEl.textContent = "状況を取得できませんでした：" + (e && e.message ? e.message : e);
+  }
+}
+document.getElementById("activity-log-stat-refresh-btn")?.addEventListener("click", refreshActivityLogStat);
+document.getElementById("activity-log-keepdays-save-btn")?.addEventListener("click", async ()=>{
+  const msgEl = document.getElementById("activity-log-keepdays-msg");
+  const raw = document.getElementById("activity-log-keepdays").value.trim();
+  const days = Number(raw);
+  if(raw === "" || !Number.isInteger(days) || days < 1 || days > 365){
+    msgEl.textContent = "保存日数は、1以上365以下の整数で指定してください。";
+    msgEl.style.color = "var(--danger)";
+    return;
+  }
+  if(!confirm(`${days}日より古い記録を削除して、以後${days}日分だけを保存します。よろしいですか？（削除した記録は元に戻せません）`)) return;
+  msgEl.textContent = "保存中…";
+  msgEl.style.color = "var(--muted)";
+  try{
+    const r = await callActivityLogGas({ action: "setKeepDays", days });
+    msgEl.textContent = `保存しました（${r.keepDays}日分）。古い記録を${r.deleted}行削除しました。`;
+    msgEl.style.color = "var(--muted)";
+    refreshActivityLogStat();
+  }catch(e){
+    msgEl.textContent = "保存に失敗しました：" + (e && e.message ? e.message : e);
+    msgEl.style.color = "var(--danger)";
+  }
+});
+
 document.getElementById("activity-log-save-btn")?.addEventListener("click", async ()=>{
   const msgEl = document.getElementById("activity-log-save-msg");
   const enabled = document.getElementById("activity-log-enabled").checked;
