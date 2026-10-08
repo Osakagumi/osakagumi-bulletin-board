@@ -81,6 +81,17 @@ export const GAS_STORAGE_CONFIG = {
   secret: "pIJHkljhwfeohdskksdglkj9887sgdlksssss"                  // apps-script-storage.gs の SECRET と同じ値にする
 };
 
+// 操作ログ送信（トライアル期間の診断用・2026年10月8日追加）。
+// activity-log.gs を、ログ用のGoogleスプレッドシートに紐づけた別のApps Scriptとして公開し、
+// 発行されたWebアプリのURLと、自分で決めたSECRETをここに設定する。
+// webAppUrl が空、または "YOUR_" で始まる場合、ログ送信は完全に無効（何も送らない）。
+// 止めたいときは webAppUrl を "" にして再デプロイするだけでよい。
+// ※ 注意：このファイルの値はページのソースから誰でも読み取れるため、SECRETは「目安」の防御にしかならない。
+export const ACTIVITY_LOG_CONFIG = {
+  webAppUrl: "https://script.google.com/macros/s/AKfycbwA6Ov2kPUJJAfOqslqvBOaC9l2TEhUT5-VGoDI6GsfMIh7bJvXDF9W1EyY0ws9kAfsxw/exec",
+  secret: "kjkaenvhakfkklklksdfgsdfgawert45623sdfgxfv2r55"
+};
+
 // お知らせ掲示板モード（休憩所の共用PC・isSharedAccount）のQRコードから、
 // 社給スマホを持たない作業員が個人のスマホで自動ログインするための認証情報。
 // 共用アカウントには「お知らせの閲覧」以外の権限を持たせないこと

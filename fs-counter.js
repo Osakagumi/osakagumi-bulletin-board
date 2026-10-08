@@ -30,6 +30,16 @@
    ・Firestoreセキュリティルール内の exists()/get() による読み取りは、
      ブラウザ側からは見えないので、このカウンタには含まれない。
      → Firebaseコンソールの使用状況と差が出る場合、その差が候補。
+
+   【2026年10月8日追加：操作ログ送信（トライアル期間の診断用）】
+   firebase-config.js の ACTIVITY_LOG_CONFIG.webAppUrl が設定されているときだけ、
+   「誰が・どのタブで・どのコレクションに何回読み書きしたか」「書き込みの呼び出し元」を
+   Googleスプレッドシート（Apps Script経由）に、5分おき＋ページを閉じるときにまとめて送る。
+   ・URLが空 / "YOUR_" で始まる場合は何もしない（完全に無効）。
+   ・送るのは、メールアドレス・ページ名・タブ名・コレクション名・ドキュメントパス・件数・呼び出し元の関数名のみ。
+     お知らせ本文・チャット本文・ドキュメントの中身は送らない。
+   ・送信の失敗は握りつぶす（アプリの動作には一切影響しない）。
+   ・止める時は ACTIVITY_LOG_CONFIG.webAppUrl を "" にするだけ。
    ========================================================= */
 import * as FS from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 export * from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -60,7 +70,7 @@ function labelOf(ref){
 }
 function addRead(label, n){ try{ bucket(label).reads += n; }catch(e){} }
 function addLocal(label, n){ try{ bucket(label).local += n; }catch(e){} }
-function addWrite(label){
+function addWrite(label, op, ref){
   try{
     bucket(label).writes += 1;
     const now = Date.now();
@@ -72,6 +82,7 @@ function addWrite(label){
       console.warn(`[FS-BURST] "${label}" への書き込みが10秒で${arr.length}件。呼び出し元：`, new Error("burst-origin").stack);
     }
   }catch(e){}
+  try{ logWrite(label, op, ref); }catch(e){}
 }
 
 /* ---------- 読み取り系 ---------- */
@@ -133,10 +144,10 @@ export function onSnapshot(ref, ...args){
 }
 
 /* ---------- 書き込み系 ---------- */
-export async function setDoc(ref, ...rest){ addWrite(labelOf(ref)); return FS.setDoc(ref, ...rest); }
-export async function updateDoc(ref, ...rest){ addWrite(labelOf(ref)); return FS.updateDoc(ref, ...rest); }
-export async function addDoc(ref, ...rest){ addWrite(labelOf(ref)); return FS.addDoc(ref, ...rest); }
-export async function deleteDoc(ref, ...rest){ addWrite(labelOf(ref)); return FS.deleteDoc(ref, ...rest); }
+export async function setDoc(ref, ...rest){ addWrite(labelOf(ref), "set", ref); return FS.setDoc(ref, ...rest); }
+export async function updateDoc(ref, ...rest){ addWrite(labelOf(ref), "update", ref); return FS.updateDoc(ref, ...rest); }
+export async function addDoc(ref, ...rest){ addWrite(labelOf(ref), "add", ref); return FS.addDoc(ref, ...rest); }
+export async function deleteDoc(ref, ...rest){ addWrite(labelOf(ref), "delete", ref); return FS.deleteDoc(ref, ...rest); }
 
 /* ---------- query()：結果にラベルを付けて、onSnapshot/getDocs側でコレクション名が分かるようにする ---------- */
 export function query(ref, ...rest){
@@ -186,3 +197,136 @@ try{
     if(document.body) mount(); else document.addEventListener("DOMContentLoaded", mount);
   }
 }catch(e){}
+
+
+/* =========================================================
+   操作ログ送信（2026年10月8日追加）― トライアル期間の診断用
+   ・firebase-config.js の ACTIVITY_LOG_CONFIG.webAppUrl が未設定なら何もしない。
+   ・失敗しても握りつぶす。アプリの動作・Firestoreの読み書きには影響しない
+     （送信先は Google Apps Script であり、Firestoreは使わない）。
+   ========================================================= */
+const LOG_FLUSH_MS = 5 * 60 * 1000;   // 通常の送信間隔（初回のみ0〜60秒のばらつきを足す）
+const LOG_MAX_WRITES_PER_FLUSH = 100; // 1回の送信に載せる「書き込み1件ごとの記録」の上限（超過分は件数のみ）
+const LOG_MAX_BUFFER = 300;           // 送信できないまま溜め込む上限（超えたら古いものから捨てる）
+const LOG_SID = Math.random().toString(36).slice(2, 10); // このページ読み込み単位の識別子
+
+let logCfg = null;            // { webAppUrl, secret }（有効なときだけ入る）
+let logBuf = [];              // 送信待ちイベント
+let logWriteOverflow = 0;     // 上限超過で個別記録を省いた書き込み件数
+let logPrev = {};             // 前回送信時点の累計（差分計算用）
+let logCurTab = "";
+let logEmailCache = "";
+let logTimer = null;
+
+function logCurrentTab(){
+  try{
+    const b = document.querySelector(".tab-btn.active");
+    return (b && (b.dataset.view || b.textContent || "").trim()) || "";
+  }catch(e){ return ""; }
+}
+async function logResolveEmail(){
+  if(logEmailCache) return logEmailCache;
+  try{
+    const A = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js");
+    const u = A.getAuth().currentUser;
+    if(u && u.email) logEmailCache = u.email;
+  }catch(e){}
+  return logEmailCache;
+}
+// 呼び出し元：スタックの先頭から fs-counter.js 以外の最初の行を、「関数名@ファイル:行」に整形
+function logCaller(){
+  try{
+    const lines = String(new Error().stack || "").split("\n").slice(1);
+    for(const ln of lines){
+      if(ln.indexOf("fs-counter.js") >= 0) continue;
+      let m = ln.match(/at\s+(?:async\s+)?([^\s(]+)\s+\(.*?([^\/\s]+):(\d+):\d+\)/);   // Chrome: at fn (url/file.html:12:3)
+      if(m) return `${m[1]}@${m[2]}:${m[3]}`.slice(0, 80);
+      m = ln.match(/^\s*([^@\s]*)@.*?([^\/\s]+):(\d+):\d+/);                              // Firefox/Safari: fn@url/file.html:12:3
+      if(m) return `${m[1] || "(anon)"}@${m[2]}:${m[3]}`.slice(0, 80);
+      m = ln.match(/at\s+.*?([^\/\s]+):(\d+):\d+/);                                        // Chrome: at url/file.html:12:3（無名）
+      if(m) return `(anon)@${m[1]}:${m[2]}`.slice(0, 80);
+    }
+  }catch(e){}
+  return "";
+}
+function logPush(ev){
+  logBuf.push(ev);
+  if(logBuf.length > LOG_MAX_BUFFER) logBuf.splice(0, logBuf.length - LOG_MAX_BUFFER);
+}
+function logWrite(label, op, ref){
+  if(!logCfg) return;
+  let nWrites = 0;
+  for(const e of logBuf) if(e.type === "write") nWrites++;
+  if(nWrites >= LOG_MAX_WRITES_PER_FLUSH){ logWriteOverflow++; return; }
+  let path = "";
+  try{ path = (ref && typeof ref.path === "string") ? ref.path : label; }catch(e){ path = label; }
+  logPush({ t: Date.now(), type: "write", tab: logCurrentTab(), coll: label, path: String(path).slice(0, 120), op, caller: logCaller() });
+}
+function logBuildPayload(){
+  // コレクション別の差分（前回送信からの増分）
+  const now = Date.now();
+  for(const [label, s] of Object.entries(stats)){
+    const prev = logPrev[label] || { reads:0, writes:0, local:0 };
+    const d = { reads: s.reads - prev.reads, writes: s.writes - prev.writes, local: s.local - prev.local };
+    if(d.reads || d.writes || d.local){
+      logPush({ t: now, type: "count", tab: logCurTab, coll: label, reads: d.reads, writes: d.writes, local: d.local });
+    }
+    logPrev[label] = { reads: s.reads, writes: s.writes, local: s.local };
+  }
+  if(logWriteOverflow){
+    logPush({ t: now, type: "write-overflow", tab: logCurTab, writes: logWriteOverflow });
+    logWriteOverflow = 0;
+  }
+  const events = logBuf; logBuf = [];
+  return events;
+}
+async function logFlush(useBeacon){
+  if(!logCfg) return;
+  try{
+    const events = logBuildPayload();
+    if(!events.length) return;
+    const email = await logResolveEmail();
+    const body = JSON.stringify({
+      secret: logCfg.secret, action: "log",
+      email: email || "(unknown)",
+      page: (location.pathname.split("/").pop() || "index"),
+      sid: LOG_SID, events
+    });
+    if(useBeacon && navigator.sendBeacon){
+      const ok = navigator.sendBeacon(logCfg.webAppUrl, new Blob([body], { type: "text/plain;charset=UTF-8" }));
+      if(!ok){ logBuf = events.concat(logBuf).slice(-LOG_MAX_BUFFER); }
+      return;
+    }
+    // text/plain＋no-cors：Apps Scriptはプリフライトに応答できないため。レスポンスは読まない。
+    await fetch(logCfg.webAppUrl, { method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain;charset=UTF-8" }, body, keepalive: true });
+  }catch(e){
+    // 失敗しても何もしない（次回の送信で、溜まった分は再送されない＝取りこぼしを許容）
+  }
+}
+function logScheduleNext(first){
+  const wait = first ? (Math.random() * 60000 + 30000) : LOG_FLUSH_MS;
+  logTimer = setTimeout(async ()=>{ await logFlush(false); logScheduleNext(false); }, wait);
+}
+(async function logInit(){
+  try{
+    const cfgMod = await import("./firebase-config.js");
+    const c = cfgMod && cfgMod.ACTIVITY_LOG_CONFIG;
+    if(!c || !c.webAppUrl || String(c.webAppUrl).startsWith("YOUR_") || !c.secret || String(c.secret).startsWith("YOUR_")) return;
+    logCfg = { webAppUrl: c.webAppUrl, secret: c.secret };
+  }catch(e){ return; }
+  try{
+    // タブ切替の記録（現在の表示タブを2秒おきに見て、変わったときだけ記録する）
+    setInterval(()=>{
+      if(document.visibilityState === "hidden") return;
+      const t = logCurrentTab();
+      if(t && t !== logCurTab){
+        logPush({ t: Date.now(), type: "tab", tab: t, from: logCurTab });
+        logCurTab = t;
+      }
+    }, 2000);
+    // ページを閉じる・隠すときに、残りをまとめて送る
+    document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState === "hidden") logFlush(true); });
+    window.addEventListener("pagehide", ()=>{ logFlush(true); });
+    logScheduleNext(true);
+  }catch(e){}
+})();
