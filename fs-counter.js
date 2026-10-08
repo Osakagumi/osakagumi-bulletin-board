@@ -217,6 +217,8 @@ let logPrev = {};             // 前回送信時点の累計（差分計算用�
 let logCurTab = "";
 let logEmailCache = "";
 let logTimer = null;
+let logEnabled = false;       // 管理画面（app_settings/activity_log.enabled）のON/OFF。ドキュメントが無いときは OFF（明示的にONにするまで記録しない）
+let logSettingSubscribed = false;
 
 function logCurrentTab(){
   try{
@@ -225,13 +227,12 @@ function logCurrentTab(){
   }catch(e){ return ""; }
 }
 async function logResolveEmail(){
-  if(logEmailCache) return logEmailCache;
   try{
     const A = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js");
     const u = A.getAuth().currentUser;
-    if(u && u.email) logEmailCache = u.email;
+    if(u && u.email){ logEmailCache = u.email; return u.email; }
   }catch(e){}
-  return logEmailCache;
+  return "";
 }
 // 呼び出し元：スタックの先頭から fs-counter.js 以外の最初の行を、「関数名@ファイル:行」に整形
 function logCaller(){
@@ -254,7 +255,7 @@ function logPush(ev){
   if(logBuf.length > LOG_MAX_BUFFER) logBuf.splice(0, logBuf.length - LOG_MAX_BUFFER);
 }
 function logWrite(label, op, ref){
-  if(!logCfg) return;
+  if(!logCfg || !logEnabled) return;
   let nWrites = 0;
   for(const e of logBuf) if(e.type === "write") nWrites++;
   if(nWrites >= LOG_MAX_WRITES_PER_FLUSH){ logWriteOverflow++; return; }
@@ -265,6 +266,12 @@ function logWrite(label, op, ref){
 function logBuildPayload(){
   // コレクション別の差分（前回送信からの増分）
   const now = Date.now();
+  if(!logEnabled){
+    // OFFの間は何も送らない。ONにした時点から数え始めるよう、基準値だけ最新にしておく。
+    for(const [label, s] of Object.entries(stats)) logPrev[label] = { reads: s.reads, writes: s.writes, local: s.local };
+    logBuf = []; logWriteOverflow = 0;
+    return [];
+  }
   for(const [label, s] of Object.entries(stats)){
     const prev = logPrev[label] || { reads:0, writes:0, local:0 };
     const d = { reads: s.reads - prev.reads, writes: s.writes - prev.writes, local: s.local - prev.local };
@@ -320,7 +327,7 @@ function logScheduleNext(first){
       if(document.visibilityState === "hidden") return;
       const t = logCurrentTab();
       if(t && t !== logCurTab){
-        logPush({ t: Date.now(), type: "tab", tab: t, from: logCurTab });
+        if(logEnabled) logPush({ t: Date.now(), type: "tab", tab: t, from: logCurTab });
         logCurTab = t;
       }
     }, 2000);
@@ -328,5 +335,35 @@ function logScheduleNext(first){
     document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState === "hidden") logFlush(true); });
     window.addEventListener("pagehide", ()=>{ logFlush(true); });
     logScheduleNext(true);
+    logWatchSetting();
   }catch(e){}
 })();
+
+// 管理画面のON/OFF（app_settings/activity_log）を監視する。
+// セキュリティルール上、ログイン後でないと読めないため、ログイン済みになるまで3秒おきに待ってから購読する。
+// ※この購読は、カウンタ（stats）には含めない（本物のFS.onSnapshotを直接呼ぶ）。コストは「ログイン1回につき読み取り1件＋設定を切り替えるたびに在席人数分」。
+function logWatchSetting(){
+  let busy = false;
+  const tryOnce = async ()=>{
+    if(logSettingSubscribed || busy) return;
+    busy = true;
+    const email = await logResolveEmail();
+    busy = false;
+    if(!email || logSettingSubscribed) return;
+    try{
+      logSettingSubscribed = true;
+      clearInterval(waitTimer);
+      FS.onSnapshot(FS.doc(FS.getFirestore(), "app_settings", "activity_log"), (snap)=>{
+        const was = logEnabled;
+        logEnabled = !!(snap.exists() && snap.data().enabled === true);
+        if(logEnabled && !was) logCurTab = ""; // ONにした直後に、現在のタブも1回記録する
+      }, (err)=>{
+        // ログアウト等で権限エラーになったら、OFFにして、次のログインを待つ
+        logEnabled = false; logSettingSubscribed = false;
+        waitTimer = setInterval(tryOnce, 3000);
+      });
+    }catch(e){ logSettingSubscribed = false; }
+  };
+  let waitTimer = setInterval(tryOnce, 3000);
+  tryOnce();
+}

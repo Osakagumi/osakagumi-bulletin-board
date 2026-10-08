@@ -1250,6 +1250,21 @@
           <div id="single-session-guard-save-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px;"></div>
         </div>
 
+        <!-- 操作ログ（トライアル期間の診断用。2026年10月） -->
+        <div class="panel" style="margin:0;">
+          <h2>操作ログ（トライアル用）</h2>
+          <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
+            有効にすると、各社員の端末から、メールアドレス・表示中のタブ・Firestoreの読み取り／書き込み件数（書き込みは対象のパスと呼び出し元の関数名）を、ログ用のGoogleスプレッドシートに、約5分おきとページを閉じるときに送信します。お知らせ・チャット・業務情報などの本文は送りません。変更はその場で全員の画面に反映されます（再ログイン不要）。記録を始める前に、社員への周知をお願いします。
+          </p>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-bottom:10px;">
+            <input type="checkbox" id="activity-log-enabled" style="width:auto;">
+            ログを記録する
+          </label>
+          <button class="btn btn-primary" id="activity-log-save-btn">保存</button>
+          <div id="activity-log-save-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px;"></div>
+          <div id="activity-log-config-note" style="font-size:12px;color:var(--muted);margin-top:6px;"></div>
+        </div>
+
         <!-- 画面の背景色 -->
         <div class="panel" style="margin:0;">
           <h2>画面の背景色</h2>
@@ -1990,6 +2005,7 @@ onAuthStateChanged(auth, async (user)=>{
   initChatCleanupSettingsListener();
   initKioskLogoutShortcutListener();
   initSingleSessionGuardSettingListener(); // 2026年10月：同一アカウントの同時ログイン制限のON/OFF設定（RTDB同時接続数対策）
+  initActivityLogSettingListener(); // 2026年10月：操作ログのON/OFF設定
   initThemeColorsListener();
   initGeneralTabDefaultsListener();
   initAdminTabDefaultsListener();
@@ -3706,6 +3722,39 @@ document.getElementById("single-session-guard-save-btn")?.addEventListener("clic
   try{
     await setDoc(doc(db,"app_settings","single_session_guard"), { enabled }, { merge:true });
     msgEl.textContent = "保存しました。";
+    msgEl.style.color = "var(--muted)";
+  }catch(e){
+    msgEl.textContent = "保存に失敗しました。権限をご確認ください。";
+    msgEl.style.color = "var(--danger)";
+  }
+});
+
+/* =========================================================
+   操作ログ ON/OFF（トライアル期間の診断用。2026年10月）
+   fs-counter.js が、このapp_settings/activity_logドキュメントをリアルタイムに監視して、
+   ON/OFFを即時反映する（再ログイン不要）。ドキュメントが無いときはOFF（明示的にONにするまで記録しない）。
+   送信先のURL等は firebase-config.js の ACTIVITY_LOG_CONFIG（未設定なら、ONにしても何も送られない）。
+========================================================= */
+function initActivityLogSettingListener(){
+  onSnapshot(doc(db,"app_settings","activity_log"), snap=>{
+    const data = snap.exists() ? snap.data() : {};
+    const input = document.getElementById("activity-log-enabled");
+    if(input) input.checked = data.enabled === true;
+  }, (err)=>{ console.error("[操作ログ設定取得エラー]", err); });
+  // 送信先が未設定かどうかの注記（firebase-config.js に ACTIVITY_LOG_CONFIG が無い古い構成でも、画面が壊れないよう動的に読み込む）
+  import("./firebase-config.js").then(m=>{
+    const c = m && m.ACTIVITY_LOG_CONFIG;
+    const ok = !!(c && c.webAppUrl && !String(c.webAppUrl).startsWith("YOUR_") && c.secret && !String(c.secret).startsWith("YOUR_"));
+    const note = document.getElementById("activity-log-config-note");
+    if(note) note.textContent = ok ? "送信先：設定済み（firebase-config.js）" : "送信先が未設定です（firebase-config.js の ACTIVITY_LOG_CONFIG）。ONにしても、設定されるまでは何も送信されません。";
+  }).catch(()=>{});
+}
+document.getElementById("activity-log-save-btn")?.addEventListener("click", async ()=>{
+  const msgEl = document.getElementById("activity-log-save-msg");
+  const enabled = document.getElementById("activity-log-enabled").checked;
+  try{
+    await setDoc(doc(db,"app_settings","activity_log"), { enabled }, { merge:true });
+    msgEl.textContent = enabled ? "保存しました（記録を開始します）。" : "保存しました（記録を停止します）。";
     msgEl.style.color = "var(--muted)";
   }catch(e){
     msgEl.textContent = "保存に失敗しました。権限をご確認ください。";
