@@ -40,17 +40,35 @@
      お知らせ本文・チャット本文・ドキュメントの中身は送らない。
    ・送信の失敗は握りつぶす（アプリの動作には一切影響しない）。
    ・止める時は ACTIVITY_LOG_CONFIG.webAppUrl を "" にするだけ。
+
+   【2026年10月9日 v2：隠れ読み取り（課金とカウンタの差）の切り分け用に強化】
+   ・「removed」（リスナーから消えた文書の通知）は読み取りに数えない。別枠 removed に分ける。
+     ※v1のログとは「読」の意味が少し変わる（v1は removed も読に含めていた）。
+   ・新しいログ行の種類（スプシの「種別」列。既存の列だけ使う＝Apps Script変更不要）
+       listen  … リスナー開始後、サーバーから最初に届いたスナップショット。
+                 コレクション列=ラベル / 読=クエリ全体の件数（課金される再送の上限の目安）/
+                 ローカル反映=差分(docChanges)件数 / 呼び出し元="size=N changes=M"
+                 ※この行の「読」は集計に足さない（count行と二重になる）。種別で除外すること。
+       removed … removed 通知の件数（読列に件数。これも読の合計には足さない）
+       env     … 端末情報。コレクション列=カウンタ版 / パス="OS/ブラウザ/standalone|browser/SW有|無" /
+                 呼び出し元="w幅xh高 online=.."（セッション初回の送信時に1行）
+       conn    … 接続・表示状態の変化。操作=hidden/visible/online/offline/freeze/resume/pageshow-bfcache/
+                 sdk-offline/sdk-online、パス="前の状態が続いた秒数"
+   ・sdk-offline/sdk-online は、既存の設定監視(app_settings/activity_log)のメタデータ変化から検出する。
+     追加の読み取りは発生しない。
+   ・ログが OFF の間は、これらの行も一切送らない（従来どおり）。
    ========================================================= */
+const FS_COUNTER_VERSION = "v2 2026-10-09";
 import * as FS from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 export * from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-const stats = {};            // label -> { reads, writes, local, snapCalls }
+const stats = {};            // label -> { reads, writes, local, removed, snapCalls }
 const writeTimes = {};       // label -> [timestamps]
 const lastWarnAt = {};       // label -> timestamp
 const startedAt = Date.now();
 
 function bucket(label){
-  return stats[label] || (stats[label] = { reads:0, writes:0, local:0, snapCalls:0 });
+  return stats[label] || (stats[label] = { reads:0, writes:0, local:0, removed:0, snapCalls:0 });
 }
 // 参照（doc / collection / query）から「コレクション名」のラベルを作る
 function labelOf(ref){
@@ -111,6 +129,7 @@ function countSnapshot(label, snap){
       // クエリ／コレクションのスナップショット
       const fromCache = !!(snap.metadata && snap.metadata.fromCache);
       snap.docChanges().forEach(ch=>{
+        if(ch.type === "removed"){ b.removed += 1; return; }   // v2: removed は読み取りに数えない
         const pending = !!(ch.doc && ch.doc.metadata && ch.doc.metadata.hasPendingWrites);
         if(fromCache || pending) b.local += 1; else b.reads += 1;
       });
@@ -123,21 +142,39 @@ function countSnapshot(label, snap){
     }
   }catch(e){}
 }
+// v2: リスナーごとに「最初のサーバー配信」を記録する（課金される再送の上限の目安）
+function makeCb(label, orig, ref){
+  let firstDone = false;
+  return (snap, ...r)=>{
+    try{
+      countSnapshot(label, snap);
+      if(!firstDone){
+        const fromCache = !!(snap.metadata && snap.metadata.fromCache);
+        const pending = !!(snap.metadata && snap.metadata.hasPendingWrites);
+        if(!fromCache && !pending){
+          firstDone = true;
+          logListen(label, snap);
+        }
+      }
+    }catch(e){}
+    return orig(snap, ...r);
+  };
+}
 export function onSnapshot(ref, ...args){
   const label = labelOf(ref);
   const a = args.slice();
   try{
     if(typeof a[0] === "function"){
-      const orig = a[0]; a[0] = (snap, ...r)=>{ countSnapshot(label, snap); return orig(snap, ...r); };
+      a[0] = makeCb(label, a[0], ref);
     } else if(a[0] && typeof a[0].next === "function"){
-      const obs = a[0]; const origNext = obs.next.bind(obs);
-      a[0] = Object.assign({}, obs, { next: (snap, ...r)=>{ countSnapshot(label, snap); return origNext(snap, ...r); } });
+      const obs = a[0]; const cb = makeCb(label, obs.next.bind(obs), ref);
+      a[0] = Object.assign({}, obs, { next: cb });
     } else if(typeof a[1] === "function"){
       // onSnapshot(ref, options, onNext, onError)
-      const orig = a[1]; a[1] = (snap, ...r)=>{ countSnapshot(label, snap); return orig(snap, ...r); };
+      a[1] = makeCb(label, a[1], ref);
     } else if(a[1] && typeof a[1].next === "function"){
-      const obs = a[1]; const origNext = obs.next.bind(obs);
-      a[1] = Object.assign({}, obs, { next: (snap, ...r)=>{ countSnapshot(label, snap); return origNext(snap, ...r); } });
+      const obs = a[1]; const cb = makeCb(label, obs.next.bind(obs), ref);
+      a[1] = Object.assign({}, obs, { next: cb });
     }
   }catch(e){ /* ラップに失敗したら、元の引数のまま本物を呼ぶ */ return FS.onSnapshot(ref, ...args); }
   return FS.onSnapshot(ref, ...a);
@@ -219,6 +256,10 @@ let logEmailCache = "";
 let logTimer = null;
 let logEnabled = false;       // 管理画面（app_settings/activity_log.enabled）のON/OFF。ドキュメントが無いときは OFF（明示的にONにするまで記録しない）
 let logSettingSubscribed = false;
+let logConnSince = Date.now();   // 直近の接続・表示状態変化の時刻
+let logEnvSent = false;
+let logSdkOffline = null;        // SDKが「キャッシュのみ＝サーバーに繋がっていない」状態か
+const LOG_MAX_CONN_PER_FLUSH = 60;
 
 function logCurrentTab(){
   try{
@@ -263,27 +304,59 @@ function logWrite(label, op, ref){
   try{ path = (ref && typeof ref.path === "string") ? ref.path : label; }catch(e){ path = label; }
   logPush({ t: Date.now(), type: "write", tab: logCurrentTab(), coll: label, path: String(path).slice(0, 120), op, caller: logCaller() });
 }
+function logListen(label, snap){
+  if(!logCfg || !logEnabled) return;
+  let size, changes;
+  if(typeof snap.docChanges === "function"){ size = snap.size; changes = snap.docChanges().length; }
+  else { size = snap.exists() ? 1 : 0; changes = size; }
+  logPush({ t: Date.now(), type: "listen", tab: logCurrentTab(), coll: label, reads: size, local: changes, caller: `size=${size} changes=${changes}` });
+}
+function logConn(op, extra){
+  if(!logCfg || !logEnabled) return;
+  const now = Date.now();
+  const secs = Math.round((now - logConnSince) / 1000);
+  logConnSince = now;
+  let n = 0; for(const e of logBuf) if(e.type === "conn") n++;
+  if(n >= LOG_MAX_CONN_PER_FLUSH) return;
+  logPush({ t: now, type: "conn", tab: logCurrentTab(), op, path: `${secs}秒`, caller: extra || "" });
+}
+function logEnvInfo(){
+  const ua = (navigator && navigator.userAgent) || "";
+  const os = /Windows/i.test(ua) ? "Windows" : /Android/i.test(ua) ? "Android" : /iPhone|iPad|iPod/i.test(ua) ? "iOS" : /Mac OS X|Macintosh/i.test(ua) ? "Mac" : /Linux/i.test(ua) ? "Linux" : "other";
+  const br = /Edg\//.test(ua) ? "Edge" : /Firefox\//.test(ua) ? "Firefox" : /(Chrome|CriOS)\//.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : "other";
+  let standalone = false;
+  try{ standalone = !!((window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || navigator.standalone); }catch(e){}
+  let sw = false;
+  try{ sw = !!(navigator.serviceWorker && navigator.serviceWorker.controller); }catch(e){}
+  return { t: Date.now(), type: "env", tab: logCurrentTab(), coll: FS_COUNTER_VERSION,
+    path: `${os}/${br}/${standalone ? "standalone" : "browser"}/${sw ? "SW有" : "SW無"}`,
+    caller: `w${window.innerWidth}x${window.innerHeight} online=${navigator.onLine}` };
+}
 function logBuildPayload(){
   // コレクション別の差分（前回送信からの増分）
   const now = Date.now();
   if(!logEnabled){
     // OFFの間は何も送らない。ONにした時点から数え始めるよう、基準値だけ最新にしておく。
-    for(const [label, s] of Object.entries(stats)) logPrev[label] = { reads: s.reads, writes: s.writes, local: s.local };
+    for(const [label, s] of Object.entries(stats)) logPrev[label] = { reads: s.reads, writes: s.writes, local: s.local, removed: s.removed };
     logBuf = []; logWriteOverflow = 0;
     return [];
   }
   for(const [label, s] of Object.entries(stats)){
-    const prev = logPrev[label] || { reads:0, writes:0, local:0 };
-    const d = { reads: s.reads - prev.reads, writes: s.writes - prev.writes, local: s.local - prev.local };
+    const prev = logPrev[label] || { reads:0, writes:0, local:0, removed:0 };
+    const d = { reads: s.reads - prev.reads, writes: s.writes - prev.writes, local: s.local - prev.local, removed: s.removed - (prev.removed || 0) };
     if(d.reads || d.writes || d.local){
       logPush({ t: now, type: "count", tab: logCurTab, coll: label, reads: d.reads, writes: d.writes, local: d.local });
     }
-    logPrev[label] = { reads: s.reads, writes: s.writes, local: s.local };
+    if(d.removed){
+      logPush({ t: now, type: "removed", tab: logCurTab, coll: label, reads: d.removed });
+    }
+    logPrev[label] = { reads: s.reads, writes: s.writes, local: s.local, removed: s.removed };
   }
   if(logWriteOverflow){
     logPush({ t: now, type: "write-overflow", tab: logCurTab, writes: logWriteOverflow });
     logWriteOverflow = 0;
   }
+  if(!logEnvSent){ logEnvSent = true; try{ logPush(logEnvInfo()); }catch(e){} }
   const events = logBuf; logBuf = [];
   return events;
 }
@@ -332,7 +405,17 @@ function logScheduleNext(first){
       }
     }, 2000);
     // ページを閉じる・隠すときに、残りをまとめて送る
-    document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState === "hidden") logFlush(true); });
+    document.addEventListener("visibilitychange", ()=>{
+      try{ logConn(document.visibilityState === "hidden" ? "hidden" : "visible"); }catch(e){}
+      if(document.visibilityState === "hidden") logFlush(true);
+    });
+    try{
+      window.addEventListener("online",  ()=>logConn("online"));
+      window.addEventListener("offline", ()=>logConn("offline"));
+      document.addEventListener("freeze", ()=>logConn("freeze"));
+      document.addEventListener("resume", ()=>logConn("resume"));
+      window.addEventListener("pageshow", (e)=>{ if(e && e.persisted) logConn("pageshow-bfcache"); });
+    }catch(e){}
     window.addEventListener("pagehide", ()=>{ logFlush(true); });
     logScheduleNext(true);
     logWatchSetting();
@@ -353,7 +436,10 @@ function logWatchSetting(){
     try{
       logSettingSubscribed = true;
       clearInterval(waitTimer);
-      FS.onSnapshot(FS.doc(FS.getFirestore(), "app_settings", "activity_log"), (snap)=>{
+      FS.onSnapshot(FS.doc(FS.getFirestore(), "app_settings", "activity_log"), { includeMetadataChanges: true }, (snap)=>{
+        const off = !!(snap.metadata && snap.metadata.fromCache);
+        if(logSdkOffline !== null && off !== logSdkOffline){ logConn(off ? "sdk-offline" : "sdk-online"); }
+        logSdkOffline = off;
         const was = logEnabled;
         logEnabled = !!(snap.exists() && snap.data().enabled === true);
         if(logEnabled && !was) logCurTab = ""; // ONにした直後に、現在のタブも1回記録する
