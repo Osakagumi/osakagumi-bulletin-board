@@ -57,8 +57,20 @@
    ・sdk-offline/sdk-online は、既存の設定監視(app_settings/activity_log)のメタデータ変化から検出する。
      追加の読み取りは発生しない。
    ・ログが OFF の間は、これらの行も一切送らない（従来どおり）。
+
+   【2026年10月12日 v2.1：異常急増の自動停止（ブレーカー）と、v2の既知の不具合2件の修正】
+   ・ブレーカー：サーバーから届いた読み取りが「1分で2,000件超」または「10分で6,000件超」、
+     書き込みが「1分で800件超」になったら、自動で
+       ①全てのonSnapshot購読を解除 ②以後の読み書き・新しい購読を拒否 ③画面上部に赤い帯を表示
+       ④ログに conn 行（操作=BREAKER、パス=理由）を送る（ログがOFFでも1回だけ送る）
+     する。10/6の約8.8万件の急増（自己再帰）の再発を、数分で食い止めるための安全装置。
+     画面を再読み込みすれば解除される（状態はメモリ上のみ）。
+     無効化：URLに ?fsbreaker=0 を付けて開く（そのブラウザでは以後も無効。戻す時は ?fsbreaker=1）。
+     ※通常の使い方（管理者が年度カレンダーを開く＝約366件、カレンダー公開＝書き込み約365件）は閾値の範囲内。
+   ・修正1：ログON判定が届く前に来る「起動直後のlisten行」が失われていた → 判定が届くまで保留し、ONなら送る。
+   ・修正2：__fs.reset() が logPrev を消さないため、ログに負の差分行が出た → logPrev も初期化する。
    ========================================================= */
-const FS_COUNTER_VERSION = "v2 2026-10-09";
+const FS_COUNTER_VERSION = "v2.1 2026-10-12";
 import * as FS from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 export * from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
@@ -86,9 +98,78 @@ function labelOf(ref){
   }catch(e){ /* 観測用なので失敗しても無視 */ }
   return "(unknown)";
 }
-function addRead(label, n){ try{ bucket(label).reads += n; }catch(e){} }
+/* ---------- 異常急増の自動停止（ブレーカー。v2.1） ---------- */
+const BREAKER = { readsPerMin: 2000, readsPer10Min: 6000, writesPerMin: 800 };
+let breakerTripped = false;
+let breakerDisabled = false;
+const breakerReadTimes = [];    // [時刻, 件数]
+const breakerWriteTimes = [];
+const liveUnsubs = new Set();   // onSnapshot の購読解除関数（トリップ時に全て解除する）
+try{
+  const bq = new URLSearchParams(location.search).get("fsbreaker");
+  if(bq === "0") localStorage.setItem("fsbreaker_off", "1");
+  if(bq === "1") localStorage.removeItem("fsbreaker_off");
+  breakerDisabled = localStorage.getItem("fsbreaker_off") === "1";
+}catch(e){}
+function breakerNote(kind, n){
+  if(breakerDisabled || breakerTripped || !(n > 0)) return;
+  try{
+    const now = Date.now();
+    const arr = kind === "r" ? breakerReadTimes : breakerWriteTimes;
+    arr.push([now, n]);
+    while(arr.length && now - arr[0][0] > 600000) arr.shift();
+    let m1 = 0, m10 = 0;
+    for(const [t, c] of arr){ m10 += c; if(now - t <= 60000) m1 += c; }
+    if(kind === "r" && (m1 > BREAKER.readsPerMin || m10 > BREAKER.readsPer10Min)) breakerTrip(`読み取り 1分${m1}件/10分${m10}件`);
+    else if(kind === "w" && m1 > BREAKER.writesPerMin) breakerTrip(`書き込み 1分${m1}件`);
+  }catch(e){}
+}
+function breakerTrip(reason){
+  if(breakerTripped) return;
+  breakerTripped = true;
+  try{ console.error("[FS-BREAKER] 異常な急増を検知したため、読み書きと購読を自動停止しました：", reason, new Error("breaker-origin").stack); }catch(e){}
+  try{ const us = Array.from(liveUnsubs); liveUnsubs.clear(); us.forEach(u=>{ try{ u(); }catch(e){} }); }catch(e){}
+  try{ breakerShowBanner(reason); }catch(e){}
+  try{ breakerReport(reason); }catch(e){}
+}
+function breakerShowBanner(reason){
+  const mount = ()=>{
+    if(document.getElementById("fs-breaker-banner")) return;
+    const el = document.createElement("div");
+    el.id = "fs-breaker-banner";
+    el.style.cssText = "position:fixed;left:0;right:0;top:0;z-index:2147483647;background:#B00020;color:#fff;font:14px/1.5 sans-serif;padding:10px 14px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.4);";
+    const msg = document.createElement("span");
+    msg.textContent = "【自動停止】短時間にデータの読み書きが異常に増えたため、安全のため更新を止めました。この画面を再読み込み（F5）してください。（" + reason + "）";
+    const btn = document.createElement("button");
+    btn.textContent = "再読み込み";
+    btn.style.cssText = "margin-left:12px;padding:3px 10px;border:0;border-radius:4px;cursor:pointer;";
+    btn.addEventListener("click", ()=> location.reload());
+    el.appendChild(msg); el.appendChild(btn);
+    document.body.appendChild(el);
+  };
+  if(document.body) mount(); else document.addEventListener("DOMContentLoaded", mount);
+}
+// ログがOFFでも、トリップは1回だけ送る（conn 行の形式＝既存の列だけ使う）
+async function breakerReport(reason){
+  try{
+    if(!logCfg) return;
+    const email = await logResolveEmail();
+    const body = JSON.stringify({
+      secret: logCfg.secret, action: "log", email: email || "(unknown)",
+      page: (location.pathname.split("/").pop() || "index"), sid: LOG_SID,
+      events: [{ t: Date.now(), type: "conn", tab: logCurrentTab(), op: "BREAKER", path: String(reason).slice(0, 100), caller: FS_COUNTER_VERSION }]
+    });
+    await fetch(logCfg.webAppUrl, { method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain;charset=UTF-8" }, body, keepalive: true });
+  }catch(e){}
+}
+function breakerGuard(){
+  if(breakerTripped) throw new Error("FS-BREAKER: 異常な読み書きの急増を検知したため、自動停止中です。画面を再読み込みしてください。");
+}
+
+function addRead(label, n){ try{ bucket(label).reads += n; }catch(e){} breakerNote("r", n); }
 function addLocal(label, n){ try{ bucket(label).local += n; }catch(e){} }
 function addWrite(label, op, ref){
+  breakerNote("w", 1);
   try{
     bucket(label).writes += 1;
     const now = Date.now();
@@ -105,6 +186,7 @@ function addWrite(label, op, ref){
 
 /* ---------- 読み取り系 ---------- */
 export async function getDoc(ref, ...rest){
+  breakerGuard();
   const snap = await FS.getDoc(ref, ...rest);
   try{
     if(snap.metadata && snap.metadata.fromCache) addLocal(labelOf(ref), 1);
@@ -113,6 +195,7 @@ export async function getDoc(ref, ...rest){
   return snap;
 }
 export async function getDocs(q, ...rest){
+  breakerGuard();
   const snap = await FS.getDocs(q, ...rest);
   try{
     const label = labelOf(q);
@@ -122,6 +205,7 @@ export async function getDocs(q, ...rest){
   return snap;
 }
 function countSnapshot(label, snap){
+  let srv = 0; // このスナップショットで「サーバーから届いた」と数えた件数（ブレーカー用）
   try{
     const b = bucket(label);
     b.snapCalls += 1;
@@ -131,16 +215,17 @@ function countSnapshot(label, snap){
       snap.docChanges().forEach(ch=>{
         if(ch.type === "removed"){ b.removed += 1; return; }   // v2: removed は読み取りに数えない
         const pending = !!(ch.doc && ch.doc.metadata && ch.doc.metadata.hasPendingWrites);
-        if(fromCache || pending) b.local += 1; else b.reads += 1;
+        if(fromCache || pending) b.local += 1; else { b.reads += 1; srv += 1; }
       });
-      if(snap.empty && !fromCache && snap.docChanges().length === 0 && b.snapCalls === 1) b.reads += 1;
+      if(snap.empty && !fromCache && snap.docChanges().length === 0 && b.snapCalls === 1){ b.reads += 1; srv += 1; }
     } else {
       // ドキュメントのスナップショット
       const fromCache = !!(snap.metadata && snap.metadata.fromCache);
       const pending = !!(snap.metadata && snap.metadata.hasPendingWrites);
-      if(fromCache || pending) b.local += 1; else b.reads += 1;
+      if(fromCache || pending) b.local += 1; else { b.reads += 1; srv += 1; }
     }
   }catch(e){}
+  breakerNote("r", srv);
 }
 // v2: リスナーごとに「最初のサーバー配信」を記録する（課金される再送の上限の目安）
 function makeCb(label, orig, ref){
@@ -161,6 +246,7 @@ function makeCb(label, orig, ref){
   };
 }
 export function onSnapshot(ref, ...args){
+  if(breakerTripped) return ()=>{};   // v2.1：自動停止中は新しい購読を開始しない
   const label = labelOf(ref);
   const a = args.slice();
   try{
@@ -177,14 +263,17 @@ export function onSnapshot(ref, ...args){
       a[1] = Object.assign({}, obs, { next: cb });
     }
   }catch(e){ /* ラップに失敗したら、元の引数のまま本物を呼ぶ */ return FS.onSnapshot(ref, ...args); }
-  return FS.onSnapshot(ref, ...a);
+  const unsub = FS.onSnapshot(ref, ...a);
+  const wrapped = ()=>{ liveUnsubs.delete(wrapped); unsub(); };
+  liveUnsubs.add(wrapped);
+  return wrapped;
 }
 
 /* ---------- 書き込み系 ---------- */
-export async function setDoc(ref, ...rest){ addWrite(labelOf(ref), "set", ref); return FS.setDoc(ref, ...rest); }
-export async function updateDoc(ref, ...rest){ addWrite(labelOf(ref), "update", ref); return FS.updateDoc(ref, ...rest); }
-export async function addDoc(ref, ...rest){ addWrite(labelOf(ref), "add", ref); return FS.addDoc(ref, ...rest); }
-export async function deleteDoc(ref, ...rest){ addWrite(labelOf(ref), "delete", ref); return FS.deleteDoc(ref, ...rest); }
+export async function setDoc(ref, ...rest){ breakerGuard(); addWrite(labelOf(ref), "set", ref); return FS.setDoc(ref, ...rest); }
+export async function updateDoc(ref, ...rest){ breakerGuard(); addWrite(labelOf(ref), "update", ref); return FS.updateDoc(ref, ...rest); }
+export async function addDoc(ref, ...rest){ breakerGuard(); addWrite(labelOf(ref), "add", ref); return FS.addDoc(ref, ...rest); }
+export async function deleteDoc(ref, ...rest){ breakerGuard(); addWrite(labelOf(ref), "delete", ref); return FS.deleteDoc(ref, ...rest); }
 
 /* ---------- query()：結果にラベルを付けて、onSnapshot/getDocs側でコレクション名が分かるようにする ---------- */
 export function query(ref, ...rest){
@@ -211,7 +300,7 @@ const api = {
     rows().slice(0, 25).forEach(r=> lines.push(`${r.collection}: 読${r.reads} 書${r.writes} local${r.local} 配信${r.snapshots}回`));
     const text = lines.join("\n"); console.log(text); return text;
   },
-  reset(){ Object.keys(stats).forEach(k=> delete stats[k]); Object.keys(writeTimes).forEach(k=> delete writeTimes[k]); },
+  reset(){ Object.keys(stats).forEach(k=> delete stats[k]); Object.keys(writeTimes).forEach(k=> delete writeTimes[k]); logPrev = {}; }, // v2.1：logPrev も初期化（負の差分行を防ぐ）
   stats
 };
 try{ window.__fs = api; }catch(e){}
@@ -259,6 +348,8 @@ let logSettingSubscribed = false;
 let logConnSince = Date.now();   // 直近の接続・表示状態変化の時刻
 let logEnvSent = false;
 let logSdkOffline = null;        // SDKが「キャッシュのみ＝サーバーに繋がっていない」状態か
+let logSettingKnown = false;     // v2.1：ログON/OFFの判定が届いたか（届くまで listen 行を保留する）
+let logPendingListen = [];       // v2.1：判定が届く前に来た listen 行（最大60件）
 const LOG_MAX_CONN_PER_FLUSH = 60;
 
 function logCurrentTab(){
@@ -305,11 +396,13 @@ function logWrite(label, op, ref){
   logPush({ t: Date.now(), type: "write", tab: logCurrentTab(), coll: label, path: String(path).slice(0, 120), op, caller: logCaller() });
 }
 function logListen(label, snap){
-  if(!logCfg || !logEnabled) return;
   let size, changes;
   if(typeof snap.docChanges === "function"){ size = snap.size; changes = snap.docChanges().length; }
   else { size = snap.exists() ? 1 : 0; changes = size; }
-  logPush({ t: Date.now(), type: "listen", tab: logCurrentTab(), coll: label, reads: size, local: changes, caller: `size=${size} changes=${changes}` });
+  const ev = { t: Date.now(), type: "listen", tab: logCurrentTab(), coll: label, reads: size, local: changes, caller: `size=${size} changes=${changes}` };
+  if(!logSettingKnown){ if(logPendingListen.length < 60) logPendingListen.push(ev); return; } // v2.1：判定待ち（設定の読み込み前でも取りこぼさない）
+  if(!logCfg || !logEnabled) return;
+  logPush(ev);
 }
 function logConn(op, extra){
   if(!logCfg || !logEnabled) return;
@@ -442,6 +535,11 @@ function logWatchSetting(){
         logSdkOffline = off;
         const was = logEnabled;
         logEnabled = !!(snap.exists() && snap.data().enabled === true);
+        if(!logSettingKnown){
+          logSettingKnown = true;   // v2.1：判定が届いたので、保留していた listen 行を処理する（ONなら送信キューへ）
+          if(logEnabled && logCfg){ logPendingListen.forEach(ev=> logPush(ev)); }
+          logPendingListen = [];
+        }
         if(logEnabled && !was) logCurTab = ""; // ONにした直後に、現在のタブも1回記録する
       }, (err)=>{
         // ログアウト等で権限エラーになったら、OFFにして、次のログインを待つ

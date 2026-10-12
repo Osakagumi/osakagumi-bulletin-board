@@ -2663,6 +2663,21 @@ let selectedBizInfoCategoryId = null;
 let selectedBizInfoId = null;
 let editingContractId = null;
 let equipmentAll = [];
+// ------------------------------------------------------------------
+// 2026-10-12 読み取り削減スイッチ（トライアル中の一斉適用。false にするとその対策だけ従来動作に戻る）
+//  calWindowCache : 一般社員の「休日判定用カレンダー窓（今月〜来月、約61件）」を、onSnapshotではなく
+//                   版数マーカー＋localStorageキャッシュで読む（公開操作があった時だけ再取得）
+//  equipmentLazy  : ダッシュボードの「自分の機材」は自分が借用中の分だけの軽い購読にし、設備の全件購読は
+//                   機材・予約タブを開く／予約へジャンプする時まで開始しない
+//  wbPresetsLazy  : 管理者・行き先編集権限者の事前設定「全件購読」を、事前設定画面を開く時まで遅延する
+//                   （朝の自動反映・過去分の削除は、軽量購読＋過去分だけの1回クエリで従来どおり実行）
+// URLに ?diet=0 を付けて開くと、その画面だけ全対策がOFF（従来動作）になる（A/B確認・緊急時用）
+// ------------------------------------------------------------------
+const DIET = (()=>{
+  let off = false;
+  try{ off = new URLSearchParams(location.search).get("diet") === "0"; }catch(e){}
+  return { calWindowCache: !off, equipmentLazy: !off, wbPresetsLazy: !off };
+})();
 let selectedCategory = null;
 let selectedCheckoutCategory = null;
 let selectedEquipment = null;
@@ -2915,6 +2930,7 @@ onAuthStateChanged(auth, async (user)=>{
       initCalendarYearsListenerGeneral();
       if(isSafetySender){ initSafetyCampaignsAdminListener(); }
       initCategoriesListener();
+      if(DIET.equipmentLazy){ initMyEquipmentLightListener(); } // 2026-10-12：ダッシュボード「自分の機材」用（自分が借用中の分だけ）
       // 2026年10月：設備本体（equipment）の購読は、カレンダー・出入予定と同じ理由
       // （全社員が毎回ログインするだけで全件購読していたコストの削減）により、ログイン時には
       // 行わず「機材」「予約」タブを実際に開いたタイミングまで遅延させる
@@ -2945,9 +2961,12 @@ onAuthStateChanged(auth, async (user)=>{
       // していたため、事前設定タブを一切使わない一般社員にとって不要な読み取りが発生していた
       // （2026年10月、ヒネからの指摘により対策）。権限の無い一般社員は軽量版（初期設定＋今日分のみ）
       // を購読し、将来日程を含むフル購読は権限者だけが行う。
-      if(isAdmin || isWhereaboutsEditor){
+      if((isAdmin || isWhereaboutsEditor) && !DIET.wbPresetsLazy){
+        wbPresetsFullListenerStarted = true;
         initWbPresetsListener();
       } else {
+        // 2026-10-12：管理者・編集権限者も、事前設定画面を開くまでは軽量版（初期設定＋今日分）だけ購読する。
+        // 朝の自動反映・過去分の削除は軽量版の最初の配信後に runWbPresetMaintenanceLight が行う。
         initWbPresetsTodayListener();
       }
       // 敷鉄板・機材の貸出/返却履歴（steel_plate_transactions）は、記録が溜まり続ける一方で
@@ -3441,7 +3460,8 @@ function renderDashboard(){
   // 2026年10月：この一覧の行をクリックすると予約タブへジャンプし設備情報（equipmentAll）を
   // 参照するため、表示する予約が実際にある場合だけ先行して全件購読を開始しておく
   // （無ければ機材タブ・予約タブを開くまで購読しない＝読み取り削減の効果を保つ）。
-  if(upcoming.length>0) ensureEquipmentFullListener();
+  // 2026-10-12：この先行購読は廃止（equipmentLazy）。ジャンプ時に jumpToReservationFor* が読み込みを待つ。
+  if(upcoming.length>0 && !DIET.equipmentLazy) ensureEquipmentFullListener();
   if(upcoming.length===0){
     resBody.innerHTML = `<div class="dash-empty">今後の予約はありません。</div>`;
   } else {
@@ -3484,7 +3504,7 @@ function renderDashboard(){
   // ---- 自分の機材（借用中の測量機器/ドローン＋自分が注文者の敷鉄板） ----
   const checkoutBody = document.getElementById("dash-checkout-body");
   checkoutBody.innerHTML = "";
-  const myEquip = equipmentAll.filter(eq=>
+  const myEquip = dashMyEquipmentSource().filter(eq=>
     (eq.status==="checked_out" || eq.status==="inspecting") && eq.holderEmail===currentUser.email
   );
   const myName = myDisplayName();
@@ -3606,6 +3626,7 @@ function switchToTab(viewName){
     try{ renderWhereabouts(); }catch(e){ console.error("[行き先の表示エラー]", e); }
   }
   if(viewName==="checkout"){
+    if(DIET.equipmentLazy){ ensureEquipmentFullListener(); ensureEmployeesFullListener(); } // 2026-10-12：機材タブを開く時に開始（renderCheckoutTab側のガードと対）
     try{ renderCheckoutTab(); }catch(e){ console.error("[貸出タブの表示エラー]", e); }
   }
   if(viewName==="notices"){
@@ -3870,6 +3891,34 @@ function renderCheckoutCategoryRow(){
   populateCheckoutManagingDeptFilter();
 }
 
+// 2026-10-12：ダッシュボードの「自分の機材」用の軽量購読。設備全件（約48件）ではなく、自分が借用者
+// （holderEmail）になっている設備だけを購読する。全件購読（ensureEquipmentFullListener）が済んだ後は
+// そちらのデータ（equipmentAll）を優先して使う（dashMyEquipmentSource参照）。
+let equipmentMine = [];
+let equipmentFullLoaded = false;
+let equipmentLoadWaiters = [];
+function initMyEquipmentLightListener(){
+  if(!currentUser) return;
+  const q = query(collection(db,"equipment"), where("holderEmail","==", currentUser.email));
+  onSnapshot(q, snap=>{
+    equipmentMine = snap.docs.map(d=>({id:d.id, ...d.data()})).filter(e=> e.active === true);
+    refreshDashboardIfActive();
+  }, (err)=>{ console.error("[自分の借用機材取得エラー]", err); });
+}
+function dashMyEquipmentSource(){
+  return (DIET.equipmentLazy && !equipmentFullLoaded) ? equipmentMine : equipmentAll;
+}
+// 設備の全件購読を開始し、最初の配信が届くまで待つ（ダッシュボードからの予約ジャンプ用。最長8秒で諦める）
+function waitEquipmentLoaded(){
+  ensureEquipmentFullListener();
+  if(equipmentFullLoaded) return Promise.resolve();
+  return new Promise(resolve=>{
+    let done = false;
+    const fin = ()=>{ if(!done){ done = true; resolve(); } };
+    equipmentLoadWaiters.push(fin);
+    setTimeout(fin, 8000);
+  });
+}
 function initCategoriesListener(){
   onSnapshot(collection(db,"equipment_categories"), snap=>{
     categoriesAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
@@ -3897,6 +3946,8 @@ function initEquipmentListener(){
   onSnapshot(q, snap=>{
     equipmentAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
     equipmentAll.sort((a,b)=> (a.order??0)-(b.order??0) || a.name.localeCompare(b.name,"ja"));
+    equipmentFullLoaded = true;
+    if(equipmentLoadWaiters.length){ const w = equipmentLoadWaiters; equipmentLoadWaiters = []; w.forEach(f=>{ try{ f(); }catch(e){} }); }
     recomputeSpPlateTypes();
     if(reserveSignageEquipmentId){
       initReserveSignageMode();
@@ -3989,8 +4040,14 @@ function renderCheckoutTab(){
   // ensureSteelPlateTxListener()はコメントアウト済みで呼び出しを停止し、steel_plate_transactions
   // コレクションの読み取りが機材タブを開くたびに発生しないようにした（Firestore無料枠対策）。
   // ensureSteelPlateTxListener();
-  ensureEquipmentFullListener(); // 2026年10月：機材タブを開いた時だけ設備本体を全件購読する
-  ensureEmployeesFullListener(); // 2026年10月：貸出先選択（社員選択ダイアログ）に社員名簿が必要なため
+  // 2026-10-12：この関数は、設備・設備カテゴリの購読コールバックからも（機材タブが非表示でも）呼ばれるため、
+  // 無条件で下の2つを呼ぶと、ログイン直後に設備全件（約48件）・社員名簿全件（約59件）の購読が必ず始まり、
+  // 「タブを開いた時だけ」の遅延化が効いていなかった。機材タブが実際に表示されている時だけ呼ぶ。
+  // （機材タブを開く時は switchToTab("checkout") が先に購読を開始する。下のswitchToTab側を参照）
+  if(!DIET.equipmentLazy || document.querySelector(".tab-btn.active")?.dataset.view === "checkout"){
+    ensureEquipmentFullListener(); // 2026年10月：機材タブを開いた時だけ設備本体を全件購読する
+    ensureEmployeesFullListener(); // 2026年10月：貸出先選択（社員選択ダイアログ）に社員名簿が必要なため
+  }
   const selCat = categoriesAll.find(c=>c.id===selectedCheckoutCategory);
   const isSteelPlates = selCat && selCat.mode==="inventory";
   const equipPanel = document.getElementById("checkout-equipment-panel");
@@ -5766,8 +5823,8 @@ function renderMyReservations(list){
 
 let editingReservationId = null;
 let editingReservationDate = null;
-function jumpToReservationForEdit(r){
-  ensureEquipmentFullListener(); // 2026年10月：機材タブ・予約タブを未だ開いていない場合に備えて先行購読を開始
+async function jumpToReservationForEdit(r){
+  await waitEquipmentLoaded(); // 2026-10-12：全件購読を開始し、最初の配信が届くまで待つ（先行購読の廃止に伴う）
   const eq = equipmentAll.find(e=>e.id===r.equipmentId);
   if(!eq){ toast("対象の設備が見つかりませんでした。"); return; }
   editingReservationId = r.id;
@@ -5784,8 +5841,8 @@ function jumpToReservationForEdit(r){
 
 // ダッシュボードの「予約済の設備」から、該当日付・カテゴリ・設備を表示するだけのジャンプ（編集モードにはしない）
 let pendingReserveScrollDate = null;
-function jumpToReservationForView(r){
-  ensureEquipmentFullListener(); // 2026年10月：機材タブ・予約タブを未だ開いていない場合に備えて先行購読を開始
+async function jumpToReservationForView(r){
+  await waitEquipmentLoaded(); // 2026-10-12：全件購読を開始し、最初の配信が届くまで待つ（先行購読の廃止に伴う）
   const eq = equipmentAll.find(e=>e.id===r.equipmentId);
   if(!eq){ toast("対象の設備が見つかりませんでした。"); return; }
   selectedCategory = r.category;
@@ -7640,6 +7697,27 @@ function renderWbBoard(){
    行き先：事前設定（日付指定・最大7日分）・初期状態
 ========================================================= */
 let wbPresetCleanupDone = false;
+// 2026-10-12：事前設定の全件購読は、事前設定画面を開く時まで開始しない（権限者のみ。ensureWbPresetsFullListener）
+let wbPresetsFullListenerStarted = false;
+function ensureWbPresetsFullListener(){
+  if(wbPresetsFullListenerStarted) return;
+  if(!(isAdmin || isWhereaboutsEditor)) return;
+  wbPresetsFullListenerStarted = true;
+  initWbPresetsListener();
+}
+// 全件購読の代わりに、権限者のログイン時に1回だけ行う日次メンテナンス：
+//  ・今日より前の日付の事前設定を削除（その分だけを1回のクエリで取得。通常は0件＝読み取り1件）
+//  ・今日分を各社員の実データへ反映して削除（consumeTodayWbPresets。軽量購読が持つ今日分を使う）
+async function runWbPresetMaintenanceLight(){
+  try{
+    const today = todayStr();
+    const snap = await getDocs(query(collection(db,"wb_presets"), where("date","<", today)));
+    for(const d of snap.docs){
+      try{ await deleteDoc(d.ref); }catch(e){ /* 無視して続行 */ }
+    }
+    await consumeTodayWbPresets(today);
+  }catch(e){ console.error("[事前設定の日次メンテナンスエラー]", e); }
+}
 
 function initWbPresetsListener(){
   onSnapshot(collection(db,"wb_presets"), snap=>{
@@ -7703,6 +7781,10 @@ function subscribeWbPresetsToday(){
       };
     });
     wbPresetsByDate[dateNow] = todayMap;
+    if(DIET.wbPresetsLazy && (isAdmin || isWhereaboutsEditor) && !wbPresetCleanupDone){
+      wbPresetCleanupDone = true;   // 従来の全件購読側のゲートと共通（どちらか一方が1回だけ実行する）
+      runWbPresetMaintenanceLight();
+    }
     renderWhereabouts();
   }, (err)=>{ console.error("[行き先当日分事前設定取得エラー]", err); });
 }
@@ -8415,6 +8497,7 @@ document.querySelectorAll("#wb-view-toggle .seg-btn").forEach(btn=>{
     document.querySelectorAll("#wb-view-toggle .seg-btn").forEach(b=>b.classList.remove("active"));
     btn.classList.add("active");
     wbCurrentView = btn.dataset.wbview;
+    if(wbCurrentView==="preset"){ ensureWbPresetsFullListener(); } // 2026-10-12：事前設定画面を開く時に全件購読を開始
     document.getElementById("wb-list-view").style.display = wbCurrentView==="list" ? "block":"none";
     document.getElementById("wb-board-view").style.display = wbCurrentView==="board" ? "block":"none";
     document.getElementById("wb-preset-view").style.display = wbCurrentView==="preset" ? "block":"none";
@@ -9367,6 +9450,62 @@ function ensureCalendarFullYearListener(){
 // 算出にだけ使う、軽量な期間限定の購読。ログイン時から常に動いている（全社員が使う機能のため）。
 // カレンダー・出入予定タブを開くと、別途ensureCalendarFullYearListener()が年間ぶんを購読し、
 // isTodayHoliday()・isDateHolidaySync()はそちらのデータ（calDaysData）があれば優先して使う。
+let calWindowCacheMode = false;     // 2026-10-12：一般社員の窓を版数キャッシュで読んでいる間 true
+let calWindowRange = null;          // { startId, endId }
+let calYearsFirstLoaded = false;    // calendar_years の最初の配信を受け取ったか（版数が分かるまで待つため）
+let calWindowFetchToken = null;     // 同じ版数での重複取得を防ぐ
+// 窓の期間が属する年度の lastPublishedAt（版数マーカー）が全て分かっていて、前回保存した版数と一致すれば
+// Firestoreを読まずに保存済みデータを使う。不一致・未保存・版数不明（lastPublishedAt未設定の年度）の時は
+// getDocs で1回だけ取得し直す（ライブ購読ではない）。calendar_years は常時購読済みなので、公開操作があれば
+// initCalendarYearsListenerGeneral から再度この関数が呼ばれて自動的に取り直される。
+async function refreshCalHolidayWindowCached(){
+  if(!calWindowCacheMode || !calWindowRange || !calYearsFirstLoaded) return;
+  const { startId, endId } = calWindowRange;
+  const years = [...new Set([fiscalYearOfDateStr(startId), fiscalYearOfDateStr(endId)])];
+  const versions = years.map(y=>{
+    const rec = calYearsAll.find(r=> r.year === String(y));
+    if(!rec) return "none";                       // 年度ドキュメントが無い＝公開データも無い
+    const v = calYearLastPublishedMillis(y);
+    return v === null ? null : String(v);
+  });
+  const canCache = versions.every(v=> v !== null);
+  const ver = versions.join("|");
+  const cacheKey = `calWindowCache_${startId}_${endId}`;
+  if(canCache){
+    try{
+      const raw = localStorage.getItem(cacheKey);
+      if(raw){
+        const cached = JSON.parse(raw);
+        if(cached && cached.version === ver){
+          calHolidayWindowData = cached.data || {};
+          refreshDashboardIfActive();
+          return;
+        }
+      }
+    }catch(e){ /* 壊れている・使えない場合は無視して取得する */ }
+  }
+  const token = cacheKey + "@" + ver;
+  if(calWindowFetchToken === token) return;
+  calWindowFetchToken = token;
+  try{
+    const q = query(collection(db,"calendar_days_published"), where(documentId(), ">=", startId), where(documentId(), "<=", endId));
+    const snap = await getDocs(q);
+    const data = {};
+    snap.docs.forEach(d=>{ data[d.id] = d.data(); });
+    calHolidayWindowData = data;
+    refreshDashboardIfActive();
+    if(canCache){
+      try{
+        // 古い窓のキャッシュ（別の月）を掃除してから保存する
+        Object.keys(localStorage).filter(k=> k.startsWith("calWindowCache_") && k !== cacheKey).forEach(k=> localStorage.removeItem(k));
+        localStorage.setItem(cacheKey, JSON.stringify({ version: ver, data }));
+      }catch(e){ /* 保存できなくても、次回また取得されるだけ */ }
+    }
+  }catch(e){
+    calWindowFetchToken = null;
+    console.error("[休日判定用カレンダー取得エラー]", e);
+  }
+}
 function initCalHolidayWindowListener(){
   if(calHolidayWindowUnsub) calHolidayWindowUnsub();
   const base = new Date(todayStr()+"T00:00:00");
@@ -9376,6 +9515,14 @@ function initCalHolidayWindowListener(){
   const end = new Date(base.getFullYear(), base.getMonth()+2, 0);
   const toId = (d)=> `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
   const collectionName = isCalendarEditor ? "calendar_days" : "calendar_days_published";
+  // 2026-10-12：編集権限者以外は、ライブ購読（毎回約61件読み取り）をやめ、版数マーカー＋localStorage
+  // キャッシュで読む（公開操作があった時だけ再取得）。編集権限者は編集中データを見る必要があるため従来どおり。
+  if(!isCalendarEditor && DIET.calWindowCache){
+    calWindowCacheMode = true;
+    calWindowRange = { startId: toId(start), endId: toId(end) };
+    refreshCalHolidayWindowCached();
+    return;
+  }
   const q = query(collection(db,collectionName), where(documentId(), ">=", toId(start)), where(documentId(), "<=", toId(end)));
   calHolidayWindowUnsub = onSnapshot(q, snap=>{
     const data = {};
@@ -9425,6 +9572,8 @@ function initCalendarYearsListenerGeneral(){
   if(calYearsUnsub){ calYearsUnsub(); calYearsUnsub = null; }
   calYearsUnsub = onSnapshot(collection(db,"calendar_years"), snap=>{
     calYearsAll = snap.docs.map(d=>({ year:d.id, ...d.data() }));
+    calYearsFirstLoaded = true;
+    if(calWindowCacheMode){ refreshCalHolidayWindowCached(); } // 2026-10-12：公開操作（版数の変化）に追従して窓を取り直す
     updateCalStatusUI();
     if(calFiscalYearStart !== null && document.getElementById("view-calendar").style.display !== "none"){
       loadCalendarYear(calFiscalYearStart);
