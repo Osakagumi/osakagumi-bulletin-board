@@ -2669,6 +2669,7 @@ let equipmentAll = [];
 //                   版数マーカー＋localStorageキャッシュで読む（公開操作があった時だけ再取得）
 //  equipmentLazy  : ダッシュボードの「自分の機材」は自分が借用中の分だけの軽い購読にし、設備の全件購読は
 //                   機材・予約タブを開く／予約へジャンプする時まで開始しない
+//  rosterBundle   : 社員名簿（employees全件購読）を wb_presets/_roster の1ドキュメント購読に置き換える（2026-10-13）
 //  wbPresetsLazy  : 管理者・行き先編集権限者の事前設定「全件購読」を、事前設定画面を開く時まで遅延する
 //                   （朝の自動反映・過去分の削除は、軽量購読＋過去分だけの1回クエリで従来どおり実行）
 // URLに ?diet=0 を付けて開くと、その画面だけ全対策がOFF（従来動作）になる（A/B確認・緊急時用）
@@ -2676,7 +2677,7 @@ let equipmentAll = [];
 const DIET = (()=>{
   let off = false;
   try{ off = new URLSearchParams(location.search).get("diet") === "0"; }catch(e){}
-  return { calWindowCache: !off, equipmentLazy: !off, wbPresetsLazy: !off };
+  return { calWindowCache: !off, equipmentLazy: !off, wbPresetsLazy: !off, calBundle: !off, presetBundle: !off, rosterBundle: !off };
 })();
 let selectedCategory = null;
 let selectedCheckoutCategory = null;
@@ -6857,6 +6858,11 @@ function initMyEmployeeDocListener(){
     updateHeaderUserLabel();
     refreshDashboardIfActive();
     applyMyHiddenTabs();
+    // 名簿まとめに自分が載っていない場合の補完（rebuildEmployeesAllFromRoster）を、自分の社員レコードが届いた後にやり直す
+    if(rosterUsable() && myEmployeeDoc && myEmployeeDoc.name && !employeesAll.some(m=>m.email === currentUser.email)){
+      rebuildEmployeesAllFromRoster();
+      onEmployeesAllUpdated();
+    }
     // お知らせ（掲示板モード）の対象者判定には自分自身の社員レコードが必要なため、
     // こちらが後から届いた場合に備えて再描画する（掲示板モード中でなければ内部で何もしない）
     renderNoticeBoardCards();
@@ -6872,19 +6878,144 @@ function ensureEmployeesFullListener(){
   employeesFullListenerStarted = true;
   initEmployeesListener();
 }
+
+// ---------------------------------------------------------------------------------------------
+// 2026-10-13：社員名簿の「まとめドキュメント」 wb_presets/_roster
+//   従来は employees コレクション全件（約57〜59件）を購読していたため、行き先・お知らせ・チャット・
+//   機材を開く社員が1人増えるごとに約57読み取り、朝の事前設定自動反映（社員57人ぶんの更新）のたびに
+//   接続中の全員が約57読み取り、が発生していた。
+//   ここでは、画面表示に必要な項目だけ（名前・所属・並び順・非表示・共用・行き先状態）を
+//   wb_presets/_roster の1ドキュメント（members: { メール(.は%2E): {...} }）にまとめて持ち、
+//   それを購読する（読み取り1件。朝の自動反映も書き込み1回＝接続中の全員が1読み取り）。
+//   ・作成・更新：管理画面（admin.html）が employees を監視して自動で作り直す／代理設定・事前設定の
+//     自動反映・表示順の保存は、本ドキュメントも同時に更新する／まとめが無い時に権限者が全件購読した場合も作成する。
+//   ・まとめが無い／壊れている／権限エラーの時は、従来どおり employees 全件購読に自動で切り替わる。
+//   ・?diet=0 を付けて開くと、常に従来どおり（employees 全件購読）。
+//   ・置き場所を wb_presets にしたのは、既存ルール（読み取り：ログイン済み／書き込み：行き先編集権限者）を
+//     そのまま使えて、firestore.rules の変更が不要になるため。
+// ---------------------------------------------------------------------------------------------
+const ROSTER_DOC_ID = "_roster";
+const ROSTER_MAX_BYTES = 900000;   // 1ドキュメント上限1MiBに対し、900,000B超なら更新しない（通常は数十KB）
+const ROSTER_MAX_MEMBERS = 1000;  // 索引エントリ上限（1ドキュメント40,000件。1人あたり約32件）に対する安全弁
+const ROSTER_FIELDS = ["employeeNo","name","department","departments","order","hidden","isSharedAccount",
+  "status","note","statusUpdatedAt","statusUpdatedBy","timeLeaveDate","timeLeaveStart","timeLeaveEnd","timeLeaveType"];
+function rosterKey(email){ return String(email).replace(/%/g,"%25").replace(/\./g,"%2E"); }
+function rosterEntryFromData(email, data){
+  const o = { email };
+  data = data || {};
+  ROSTER_FIELDS.forEach(f=>{ if(data[f] !== undefined) o[f] = data[f]; });
+  return o;
+}
+let rosterMembersRaw = null;       // まとめドキュメントの members（まとめ方式で動作中のみ）
+let rosterUnsub = null;
+let rosterFallbackActive = false;  // true：まとめを使わず employees 全件購読で動作している
+let rosterFallbackReason = "";     // "missing"（まとめが無い/壊れている）／"error"（購読エラー）／"off"（?diet=0）
+let rosterBuildTried = false;
+function rosterUsable(){ return DIET.rosterBundle && !rosterFallbackActive && !!rosterMembersRaw; }
+function rosterValidData(data){
+  if(!data || !data.members || typeof data.members !== "object" || Array.isArray(data.members)) return false;
+  const keys = Object.keys(data.members);
+  if(keys.length === 0) return false;
+  return keys.every(k=>{ const m = data.members[k]; return m && typeof m === "object" && typeof m.email === "string" && m.email; });
+}
+function rebuildEmployeesAllFromRoster(){
+  const list = Object.values(rosterMembersRaw || {}).map(m=>Object.assign({}, m));
+  // 自分の社員レコードがまとめに無い場合（管理画面で未反映の新規ユーザーなど）は、自分の分だけ補う
+  if(myEmployeeDoc && myEmployeeDoc.name && !list.some(m=>m.email === currentUser.email)){
+    list.push(rosterEntryFromData(currentUser.email, myEmployeeDoc));
+  }
+  employeesAll = list;
+}
+function onEmployeesAllUpdated(){
+  renderWhereabouts();
+  renderNotices();
+  openChatFromUrlIfNeeded();
+  openChatFromSwMessageIfNeeded();
+  // 社員選択ダイアログ（共通部品）が既に開いている状態で全件購読が完了した場合に備えて、
+  // 一覧を再描画する（開いていなければ内部で何もしない）
+  if(document.getElementById("employee-picker-modal")?.classList.contains("show")){
+    renderEmpPickerNameSelect();
+  }
+}
+function startRosterFallback(reason){
+  if(rosterFallbackActive) return;
+  rosterFallbackActive = true;
+  rosterFallbackReason = reason;
+  if(rosterUnsub){ try{ rosterUnsub(); }catch(e){} rosterUnsub = null; }
+  rosterMembersRaw = null;
+  console.warn("[社員名簿] まとめを使わず employees 全件購読に切り替えます：" + reason);
+  initEmployeesListenerLegacy();
+}
 function initEmployeesListener(){
+  if(!DIET.rosterBundle){
+    rosterFallbackActive = true; rosterFallbackReason = "off";
+    initEmployeesListenerLegacy();
+    return;
+  }
+  rosterUnsub = onSnapshot(doc(db,"wb_presets", ROSTER_DOC_ID), snap=>{
+    if(rosterFallbackActive) return;
+    const data = snap.exists() ? snap.data() : null;
+    if(!rosterValidData(data)){ startRosterFallback("missing"); return; }
+    rosterMembersRaw = data.members;
+    rebuildEmployeesAllFromRoster();
+    onEmployeesAllUpdated();
+  }, (err)=>{
+    console.error("[社員名簿まとめ取得エラー]", err);
+    startRosterFallback("error");
+  });
+}
+function initEmployeesListenerLegacy(){
   onSnapshot(collection(db,"employees"), snap=>{
     employeesAll = snap.docs.map(d=>({ email:d.id, ...d.data() }));
-    renderWhereabouts();
-    renderNotices();
-    openChatFromUrlIfNeeded();
-    openChatFromSwMessageIfNeeded();
-    // 社員選択ダイアログ（共通部品）が既に開いている状態で全件購読が完了した場合に備えて、
-    // 一覧を再描画する（開いていなければ内部で何もしない）
-    if(document.getElementById("employee-picker-modal")?.classList.contains("show")){
-      renderEmpPickerNameSelect();
-    }
+    maybeBuildRosterFromSnapshot(snap);
+    onEmployeesAllUpdated();
   }, (err)=>{ console.error("[社員名簿取得エラー]", err); });
+}
+// まとめが無い／壊れている時に、権限者（行き先編集権限者・管理者）が全件購読した場合は、その内容でまとめを作る（1回だけ）。
+// 一般社員は書き込み権限が無いので何もしない（権限者の誰かが開くか、管理画面を開くと作成される）。
+async function maybeBuildRosterFromSnapshot(snap){
+  try{
+    if(!DIET.rosterBundle || rosterFallbackReason !== "missing" || rosterBuildTried) return;
+    if(!(isAdmin || isWhereaboutsEditor)) return;
+    if(snap.metadata && snap.metadata.fromCache) return;
+    if(snap.size === 0 || snap.size > ROSTER_MAX_MEMBERS) return;
+    rosterBuildTried = true;
+    const members = {};
+    snap.docs.forEach(d=>{ members[rosterKey(d.id)] = rosterEntryFromData(d.id, d.data()); });
+    const payload = { members, v: Date.now(), count: snap.size, updatedBy: currentUser.email, updatedAt: serverTimestamp() };
+    if(estimateDocBytes(payload) > ROSTER_MAX_BYTES){ console.warn("[社員名簿] まとめが大きすぎるため作成しません"); return; }
+    await setDoc(doc(db,"wb_presets", ROSTER_DOC_ID), payload);
+  }catch(e){ console.error("[社員名簿まとめ作成エラー]", e); }
+}
+// 代理設定・事前設定の自動反映・表示順の保存で employees を更新した時に、まとめにも同じ内容を反映する。
+// map: { メール: {更新したフィールド} }。まとめに載っている社員だけを対象にする（部分的な行を作らないため）。
+// まとめが無い時／使っていない時／失敗した時は何もしない（employees 側は更新済みで、管理画面を開けば自動で整合する）。
+async function rosterMergeEntries(map){
+  try{
+    if(!DIET.rosterBundle || rosterFallbackActive) return;
+    if(!map || Object.keys(map).length === 0) return;   // 反映対象が無ければ何も読まない・書かない
+    // 朝の自動反映などは、社員名簿タブを開く前（まとめを購読する前）に走る。その場合は1回だけ取得して確認する
+    let base = rosterMembersRaw;
+    if(!base){
+      const snap = await getDoc(doc(db,"wb_presets", ROSTER_DOC_ID));
+      const d = snap.exists() ? snap.data() : null;
+      if(!rosterValidData(d)) return;   // まとめが無い→次に権限者が全件購読した時／管理画面を開いた時に作られる
+      base = d.members;
+    }
+    const members = {};
+    Object.keys(map).forEach(email=>{
+      const k = rosterKey(email);
+      if(!base[k]) return;
+      const o = { email };
+      ROSTER_FIELDS.forEach(f=>{ if(map[email][f] !== undefined) o[f] = map[email][f]; });
+      members[k] = o;
+    });
+    if(Object.keys(members).length === 0) return;
+    const projected = Object.assign({}, base);
+    Object.keys(members).forEach(k=>{ projected[k] = Object.assign({}, projected[k], members[k]); });
+    if(estimateDocBytes({ members: projected }) > ROSTER_MAX_BYTES){ console.warn("[社員名簿] まとめが大きすぎるため更新しません"); return; }
+    await setDoc(doc(db,"wb_presets", ROSTER_DOC_ID), { members, v: Date.now(), updatedBy: currentUser.email, updatedAt: serverTimestamp() }, { merge:true });
+  }catch(e){ console.error("[社員名簿まとめ更新エラー]", e); }
 }
 
 // チャットのプッシュ通知をタップして開いた場合（?chat=送信者のメールアドレス）、
@@ -7697,6 +7828,73 @@ function renderWbBoard(){
    行き先：事前設定（日付指定・最大7日分）・初期状態
 ========================================================= */
 let wbPresetCleanupDone = false;
+// ---------------------------------------------------------------------------------------------
+// 2026-10-13：事前設定の「日付ごとのまとめドキュメント」
+//   wb_presets/day_{YYYY-MM-DD} に、その日の全社員分（entries: { メール: {status,note,timeLeave...} }）を
+//   1つのドキュメントとして持つ。従来は「日付×社員」で1人1ドキュメント（1日あたり社員数ぶん）だった。
+//   ・一般社員は「今日のまとめ1件」だけを読む（従来：今日分の社員数ぶん＝約57件）。
+//   ・事前設定画面を開く権限者は、全件購読でも「日付数ぶん＋初期設定」程度の件数で済む（従来：約300件）。
+//   ・まとめには date フィールドを持たせない（bundleDate を使う）。旧版ページの「date == 今日」クエリに
+//     まとめが混ざらないようにするため。旧形式（1人1ドキュメント）が残っている場合は、権限者が開いた時に
+//     自動でまとめへ移行して、旧形式のドキュメントを削除する（migrateLegacyWbPresets）。
+//   ・?diet=0 を付けて開くと、従来の1人1ドキュメント方式で動く（読み書きとも）。
+// ---------------------------------------------------------------------------------------------
+const WB_BUNDLE_PREFIX = "day_";
+const WB_BUNDLE_MAX_BYTES = 900000;   // 1ドキュメント上限1MiBに対し、900,000Bで保存を止める（通常は数十KB）
+function wbBundleId(dateStr){ return WB_BUNDLE_PREFIX + dateStr; }
+function wbCleanEntry(e){
+  e = e || {};
+  return {
+    status: e.status || "", note: e.note || "",
+    timeLeaveType: e.timeLeaveType || "", timeLeaveStart: e.timeLeaveStart || "", timeLeaveEnd: e.timeLeaveEnd || ""
+  };
+}
+function wbBundleEntriesToMap(entries){
+  const m = {};
+  if(entries && typeof entries === "object"){
+    Object.keys(entries).forEach(email=>{ m[email] = wbCleanEntry(entries[email]); });
+  }
+  return m;
+}
+let wbLegacyIdsByDate = {};          // 旧形式（1人1ドキュメント）が残っている日付 -> [ドキュメントID...]
+const wbMigrationTried = new Set();  // 移行を試みた旧形式ドキュメントID（失敗しても繰り返さない）
+let wbMigrating = false;
+// その日の事前設定を、まとめドキュメントとして保存する（全体を置き換える）。大きすぎる場合は保存せずエラーにする。
+async function writeWbBundle(dateStr, map){
+  const entries = {};
+  Object.keys(map).forEach(email=>{ entries[email] = wbCleanEntry(map[email]); });
+  const payload = { bundleDate: dateStr, entries, updatedBy: currentUser.email, updatedAt: new Date().toISOString() };
+  const bytes = estimateDocBytes(payload);
+  if(bytes > WB_BUNDLE_MAX_BYTES){
+    throw new Error(`事前設定のデータ量が上限に近いため保存できません（約${bytes}バイト）`);
+  }
+  await setDoc(doc(db,"wb_presets", wbBundleId(dateStr)), payload);
+}
+// 旧形式の事前設定（1人1ドキュメント）を、今日以降の日付についてまとめへ移行し、旧形式を削除する（権限者のみ）。
+async function migrateLegacyWbPresets(){
+  if(!DIET.presetBundle || wbMigrating) return;
+  if(!(isAdmin || isWhereaboutsEditor)) return;
+  const today = todayStr();
+  const targets = Object.keys(wbLegacyIdsByDate).filter(dt=> dt >= today && (wbLegacyIdsByDate[dt]||[]).some(id=> !wbMigrationTried.has(id)));
+  if(targets.length===0) return;
+  wbMigrating = true;
+  try{
+    for(const dt of targets){
+      const ids = (wbLegacyIdsByDate[dt]||[]).slice();
+      ids.forEach(id=> wbMigrationTried.add(id));
+      try{
+        // wbPresetsByDate[dt] は、まとめ＋旧形式を合成済み（旧形式が優先）
+        await writeWbBundle(dt, wbPresetsByDate[dt] || {});
+      }catch(e){
+        console.error("[事前設定の移行エラー]", dt, e);
+        continue; // まとめを書けなかった日付は、旧形式を削除しない
+      }
+      for(const id of ids){ try{ await deleteDoc(doc(db,"wb_presets", id)); }catch(e){ /* 無視して続行 */ } }
+    }
+  }finally{
+    wbMigrating = false;
+  }
+}
 // 2026-10-12：事前設定の全件購読は、事前設定画面を開く時まで開始しない（権限者のみ。ensureWbPresetsFullListener）
 let wbPresetsFullListenerStarted = false;
 function ensureWbPresetsFullListener(){
@@ -7711,9 +7909,36 @@ function ensureWbPresetsFullListener(){
 async function runWbPresetMaintenanceLight(){
   try{
     const today = todayStr();
-    const snap = await getDocs(query(collection(db,"wb_presets"), where("date","<", today)));
-    for(const d of snap.docs){
-      try{ await deleteDoc(d.ref); }catch(e){ /* 無視して続行 */ }
+    if(DIET.presetBundle){
+      // 2026-10-13：まとめ方式。①今日より前の日付のまとめを削除 ②旧形式（1人1ドキュメント）が残っていれば
+      // 今日以降の分をまとめへ移行（過去日の旧形式は削除）。通常はどちらも0件＝読み取り各1件。
+      const pastBundles = await getDocs(query(collection(db,"wb_presets"), where("bundleDate","<", today)));
+      for(const d of pastBundles.docs){
+        try{ await deleteDoc(d.ref); }catch(e){ /* 無視して続行 */ }
+      }
+      const legacySnap = await getDocs(query(collection(db,"wb_presets"), where("date",">=", "2000-01-01")));
+      const legacyByDate = {};
+      legacySnap.docs.forEach(d=>{
+        const x = d.data();
+        if(!x.date || !x.email) return;
+        if(!legacyByDate[x.date]) legacyByDate[x.date] = { ids: [], map: {} };
+        legacyByDate[x.date].ids.push(d.id);
+        legacyByDate[x.date].map[x.email] = wbCleanEntry(x);
+      });
+      for(const dt of Object.keys(legacyByDate)){
+        const L = legacyByDate[dt];
+        if(dt >= today){
+          const merged = { ...(wbPresetsByDate[dt] || {}), ...L.map };   // 旧形式が優先
+          try{ await writeWbBundle(dt, merged); }catch(e){ console.error("[事前設定の移行エラー]", dt, e); continue; }
+          wbPresetsByDate[dt] = merged;
+        }
+        for(const id of L.ids){ try{ await deleteDoc(doc(db,"wb_presets", id)); }catch(e){ /* 無視して続行 */ } }
+      }
+    } else {
+      const snap = await getDocs(query(collection(db,"wb_presets"), where("date","<", today)));
+      for(const d of snap.docs){
+        try{ await deleteDoc(d.ref); }catch(e){ /* 無視して続行 */ }
+      }
     }
     await consumeTodayWbPresets(today);
   }catch(e){ console.error("[事前設定の日次メンテナンスエラー]", e); }
@@ -7722,15 +7947,25 @@ async function runWbPresetMaintenanceLight(){
 function initWbPresetsListener(){
   onSnapshot(collection(db,"wb_presets"), snap=>{
     wbPresetsByDate = {};
+    wbLegacyIdsByDate = {};
+    // ①まとめドキュメント（day_YYYY-MM-DD）  ②旧形式（1人1ドキュメント。残っていればこちらを優先して合成する）
     snap.docs.forEach(d=>{
-      if(d.id==="_defaults") return;
+      if(d.id==="_defaults" || d.id===ROSTER_DOC_ID) return;
+      if(!DIET.presetBundle) return;
+      if(!d.id.startsWith(WB_BUNDLE_PREFIX)) return;
+      const data = d.data();
+      if(!data.bundleDate || !data.entries) return;
+      if(!wbPresetsByDate[data.bundleDate]) wbPresetsByDate[data.bundleDate] = {};
+      Object.assign(wbPresetsByDate[data.bundleDate], wbBundleEntriesToMap(data.entries));
+    });
+    snap.docs.forEach(d=>{
+      if(d.id==="_defaults" || d.id===ROSTER_DOC_ID) return;
       const data = d.data();
       if(!data.date || !data.email) return;
       if(!wbPresetsByDate[data.date]) wbPresetsByDate[data.date] = {};
-      wbPresetsByDate[data.date][data.email] = {
-        status: data.status||"", note: data.note||"",
-        timeLeaveType: data.timeLeaveType||"", timeLeaveStart: data.timeLeaveStart||"", timeLeaveEnd: data.timeLeaveEnd||""
-      };
+      wbPresetsByDate[data.date][data.email] = wbCleanEntry(data);
+      if(!wbLegacyIdsByDate[data.date]) wbLegacyIdsByDate[data.date] = [];
+      wbLegacyIdsByDate[data.date].push(d.id);
     });
     wbPresetDefaults = {};
     const defaultsDoc = snap.docs.find(d=>d.id==="_defaults");
@@ -7746,6 +7981,7 @@ function initWbPresetsListener(){
       wbPresetCleanupDone = true;
       cleanupPastWbPresets();
     }
+    migrateLegacyWbPresets();   // 旧形式が残っていれば、今日以降の分をまとめへ移行（権限者のみ。失敗しても繰り返さない）
     renderWhereabouts();
     if(wbCurrentView==="preset"){ renderWbPresetTable(); }
   }, (err)=>{ console.error("[行き先事前設定取得エラー]", err); });
@@ -7770,22 +8006,30 @@ function subscribeWbPresetsToday(){
   if(wbPresetsTodayUnsub){ wbPresetsTodayUnsub(); wbPresetsTodayUnsub = null; }
   const dateNow = todayStr();
   wbPresetsTodayDateCached = dateNow;
-  wbPresetsTodayUnsub = onSnapshot(query(collection(db,"wb_presets"), where("date","==", dateNow)), snap=>{
-    const todayMap = {};
-    snap.docs.forEach(d=>{
-      const data = d.data();
-      if(!data.email) return;
-      todayMap[data.email] = {
-        status: data.status||"", note: data.note||"",
-        timeLeaveType: data.timeLeaveType||"", timeLeaveStart: data.timeLeaveStart||"", timeLeaveEnd: data.timeLeaveEnd||""
-      };
-    });
+  const applyTodayMap = (todayMap)=>{
     wbPresetsByDate[dateNow] = todayMap;
     if(DIET.wbPresetsLazy && (isAdmin || isWhereaboutsEditor) && !wbPresetCleanupDone){
       wbPresetCleanupDone = true;   // 従来の全件購読側のゲートと共通（どちらか一方が1回だけ実行する）
       runWbPresetMaintenanceLight();
     }
     renderWhereabouts();
+  };
+  if(DIET.presetBundle){
+    // 2026-10-13：今日のまとめドキュメント1件だけを購読する（従来は「date == 今日」クエリ＝社員数ぶん）
+    wbPresetsTodayUnsub = onSnapshot(doc(db,"wb_presets", wbBundleId(dateNow)), snap=>{
+      const data = snap.exists() ? (snap.data() || {}) : {};
+      applyTodayMap(wbBundleEntriesToMap(data.entries));
+    }, (err)=>{ console.error("[行き先当日分事前設定取得エラー]", err); });
+    return;
+  }
+  wbPresetsTodayUnsub = onSnapshot(query(collection(db,"wb_presets"), where("date","==", dateNow)), snap=>{
+    const todayMap = {};
+    snap.docs.forEach(d=>{
+      const data = d.data();
+      if(!data.email) return;
+      todayMap[data.email] = wbCleanEntry(data);
+    });
+    applyTodayMap(todayMap);
   }, (err)=>{ console.error("[行き先当日分事前設定取得エラー]", err); });
 }
 
@@ -7809,6 +8053,7 @@ async function cleanupPastWbPresets(){
 async function consumeTodayWbPresets(dateStr){
   const todayPresets = wbPresetsByDate[dateStr];
   if(!todayPresets || Object.keys(todayPresets).length===0) return;
+  const rosterUpdates = {};   // 名簿まとめへの反映は、全員分を最後に1回の書き込みでまとめて行う
   for(const email of Object.keys(todayPresets)){
     const preset = todayPresets[email];
     try{
@@ -7821,7 +8066,7 @@ async function consumeTodayWbPresets(dateStr){
       // 本人が既に今日その場で編集済みなら、それを優先してこちらでは上書きしない
       const updatedToday = emp.statusUpdatedAt && toLocalDateStr(emp.statusUpdatedAt) === dateStr;
       if(updatedToday) continue;
-      await updateDoc(doc(db,"employees", email), {
+      const consumed = {
         status: preset.status || "",
         note: preset.note || "",
         statusUpdatedAt: new Date().toISOString(),
@@ -7830,13 +8075,26 @@ async function consumeTodayWbPresets(dateStr){
         timeLeaveStart: preset.timeLeaveType ? (preset.timeLeaveStart||"") : "",
         timeLeaveEnd: preset.timeLeaveType ? (preset.timeLeaveEnd||"") : "",
         timeLeaveType: preset.timeLeaveType || ""
-      });
+      };
+      await updateDoc(doc(db,"employees", email), consumed);
+      rosterUpdates[email] = consumed;
     }catch(e){ /* 反映に失敗しても他の人の処理は続行する */ }
   }
+  await rosterMergeEntries(rosterUpdates);
   await deleteWbPresetsForDate(dateStr);
 }
 
 async function deleteWbPresetsForDate(dateStr){
+  if(DIET.presetBundle){
+    // まとめドキュメント1件＋（残っていれば）旧形式のドキュメント
+    try{ await deleteDoc(doc(db,"wb_presets", wbBundleId(dateStr))); }catch(e){ /* 無視して続行 */ }
+    const legacyIds = wbLegacyIdsByDate[dateStr] || [];
+    for(const id of legacyIds){
+      try{ await deleteDoc(doc(db,"wb_presets", id)); }catch(e){ /* 無視して続行 */ }
+    }
+    delete wbLegacyIdsByDate[dateStr];
+    return;
+  }
   const entries = wbPresetsByDate[dateStr] || {};
   for(const email of Object.keys(entries)){
     try{ await deleteDoc(doc(db,"wb_presets", `${dateStr}_${email}`)); }catch(e){ /* 無視して続行 */ }
@@ -8291,6 +8549,28 @@ async function saveWbPresetPendingEdits(){
       // 変更した社員・していない社員を問わず、全員分をその日の事前設定として明示的に保存する
       const fallbackDefaults = wbPresetDefaults;
       let failCount = 0;
+      let wbSaveSizeError = "";
+      if(DIET.presetBundle){
+        // 2026-10-13：全員分を、その日のまとめドキュメント1件として保存する（書き込み1件）
+        const map = {};
+        list.forEach(emp=>{
+          const preset = wbPresetEffectiveForEmail(emp.email);
+          const fallback = fallbackDefaults[emp.email] || null;
+          const effective = preset ? preset : ((fallback && fallback.status) ? fallback : null);
+          map[emp.email] = wbCleanEntry(effective);
+        });
+        try{
+          await writeWbBundle(wbPresetSelectedDate, map);
+          // この日に旧形式が残っていれば削除する（まとめと二重に残らないように）
+          const legacyIds = wbLegacyIdsByDate[wbPresetSelectedDate] || [];
+          for(const id of legacyIds){ try{ await deleteDoc(doc(db,"wb_presets", id)); }catch(e){ /* 無視して続行 */ } }
+          delete wbLegacyIdsByDate[wbPresetSelectedDate];
+        }catch(e){
+          console.error("[事前設定の保存エラー]", e);
+          failCount = list.length;
+          if(e && typeof e.message==="string" && e.message.startsWith("事前設定のデータ量")) wbSaveSizeError = e.message;
+        }
+      } else
       await Promise.all(list.map(emp=>{
         const preset = wbPresetEffectiveForEmail(emp.email);
         const fallback = fallbackDefaults[emp.email] || null;
@@ -8311,7 +8591,7 @@ async function saveWbPresetPendingEdits(){
         }).catch(()=>{ failCount++; });
       }));
       if(failCount>0){
-        toast(`${failCount}件の保存に失敗しました。権限をご確認ください。`);
+        toast(wbSaveSizeError ? `保存できませんでした。${wbSaveSizeError}。備考の文字数を減らしてください。` : `${failCount}件の保存に失敗しました。権限をご確認ください。`);
       } else {
         toast(`${formatDateJP(wbPresetSelectedDate)}の事前設定を保存しました（${list.length}名分）。`);
       }
@@ -8360,9 +8640,11 @@ document.getElementById("wb-order-toggle-btn")?.addEventListener("click", ()=>{
 async function saveWbOrder(){
   const rows = [...document.querySelectorAll("#wb-preset-columns tr[data-email]")];
   let failCount = 0;
+  const rosterOrders = {};
   await Promise.all(rows.map((row, idx)=>
-    updateDoc(doc(db,"employees", row.dataset.email), { order: (idx+1)*10 }).catch(()=>{ failCount++; })
+    updateDoc(doc(db,"employees", row.dataset.email), { order: (idx+1)*10 }).then(()=>{ rosterOrders[row.dataset.email] = { order: (idx+1)*10 }; }).catch(()=>{ failCount++; })
   ));
+  await rosterMergeEntries(rosterOrders);   // 名簿まとめにも反映（表示順）
   toast(failCount===0 ? "表示順を保存しました。" : `一部の保存に失敗しました（${failCount}件）。権限をご確認ください。`);
 }
 {
@@ -8673,6 +8955,7 @@ document.getElementById("wb-save").addEventListener("click", async ()=>{
       // 他者の行き先を代理で変更する場合（行き先の他者設定権限者）は頻度が低いため、
       // 従来通りFirestore側（employeesドキュメント）を更新する。
       await updateDoc(doc(db,"employees", wbEditingEmail), payload);
+      rosterMergeEntries({ [wbEditingEmail]: payload });   // 名簿まとめにも反映（失敗しても保存自体は成功扱い）
     }
     wbModal.classList.remove("show");
     toast("行き先を更新しました。");
@@ -9454,6 +9737,149 @@ let calWindowCacheMode = false;     // 2026-10-12：一般社員の窓を版数�
 let calWindowRange = null;          // { startId, endId }
 let calYearsFirstLoaded = false;    // calendar_years の最初の配信を受け取ったか（版数が分かるまで待つため）
 let calWindowFetchToken = null;     // 同じ版数での重複取得を防ぐ
+// ---------------------------------------------------------------------------------------------
+// 2026-10-13：公開カレンダーの「年度まとめドキュメント」
+//   calendar_days_published/_bundle_{年度} に、その年度の公開済み全日付を1つのドキュメントとしてまとめて持つ。
+//   一般社員は日別ドキュメント（窓61件・年度365件）の代わりにこの1件だけを読む（読み取り 365→1）。
+//   ・ドキュメントIDが "_" で始まるため、従来の日付範囲クエリ（"2026-04-01"〜）には入らない。
+//   ・bundle.version は、公開時に calendar_years/{年度}.lastPublishedAt と同じ値（ミリ秒）で書く。
+//     読む側は bundle.version >= lastPublishedAt の時だけまとめを信用する。
+//     旧版ページが公開した場合（lastPublishedAt の方が新しい）や、まとめが無い・壊れている場合は、
+//     従来どおりの日別ドキュメント（getDocs 範囲クエリ）に自動で戻る。＝いつでも安全側に倒れる。
+//   ・?diet=0 を付けて開くと、このまとめを使わない（従来動作）。
+// ---------------------------------------------------------------------------------------------
+const CAL_BUNDLE_PREFIX = "_bundle_";
+const CAL_BUNDLE_MAX_BYTES = 900000;   // Firestoreの1ドキュメント上限は1MiB(1,048,576B)。余裕を見て900,000Bで止める
+function calBundleId(year){ return CAL_BUNDLE_PREFIX + year; }
+function estimateDocBytes(obj){
+  try{ return new TextEncoder().encode(JSON.stringify(obj)).length; }catch(e){ return 0; }
+}
+const calBundleMem = {};        // year -> { marker, days }  このページを開いている間のメモリ内キャッシュ
+const calBundleInflight = {};   // "year@marker" -> Promise  同じまとめの同時取得（窓とタブ）を1回にまとめる
+function calBundleUsableOrNull(b, marker){
+  if(!b || typeof b.version !== "number" || !b.days || typeof b.days !== "object") return null;
+  if(marker === null || b.version < marker) return null;
+  return b.days;
+}
+async function fetchPublishedYearBundle(year){
+  if(!DIET.calBundle) return null;
+  const rec = calYearsAll.find(r=> r.year === String(year));
+  if(!rec) return null;                         // 年度ドキュメントが無い年度は従来どおり日別を読む
+  const marker = calYearLastPublishedMillis(year);
+  if(marker === null) return null;              // 版数が分からない年度は、まとめを信用できない
+  const mem = calBundleMem[year];
+  if(mem && mem.marker === marker) return mem.days;
+  const key = year + "@" + marker;
+  if(calBundleInflight[key]) return calBundleInflight[key];
+  calBundleInflight[key] = (async ()=>{
+    try{
+      const snap = await getDoc(doc(db,"calendar_days_published", calBundleId(year)));
+      if(!snap.exists()) return null;
+      const days = calBundleUsableOrNull(snap.data(), marker);
+      if(days) calBundleMem[year] = { marker, days };
+      return days;
+    }catch(e){
+      console.error("[カレンダーまとめ取得エラー]", e);
+      return null;
+    }finally{
+      delete calBundleInflight[key];
+    }
+  })();
+  return calBundleInflight[key];
+}
+// 公開済みカレンダーの指定期間（startId〜endId、YYYY-MM-DD）を { 日付: {isHoliday,label} } で返す。
+// まとめが使えれば1〜2件の読み取り、使えなければ従来どおりの範囲クエリ（日別ドキュメント）。
+async function fetchPublishedRange(startId, endId){
+  if(DIET.calBundle){
+    const years = [...new Set([fiscalYearOfDateStr(startId), fiscalYearOfDateStr(endId)])];
+    const out = {};
+    let allOk = true;
+    for(const y of years){
+      const days = await fetchPublishedYearBundle(y);
+      if(days === null){ allOk = false; break; }
+      Object.keys(days).forEach(k=>{ if(k >= startId && k <= endId) out[k] = days[k]; });
+    }
+    if(allOk) return out;
+  }
+  const q = query(collection(db,"calendar_days_published"), where(documentId(), ">=", startId), where(documentId(), "<=", endId));
+  const snap = await getDocs(q);
+  const data = {};
+  snap.docs.forEach(d=>{ data[d.id] = d.data(); });
+  return data;
+}
+// ---- 編集権限者側：まとめの作成・更新 ----
+// 日別の公開ドキュメントから、その年度の公開済み全日付を読み直す（まとめが無い・古い時の再構築用。最大366件）
+async function readPublishedYearDaysLegacy(year){
+  const startId = `${year}-04-01`;
+  const endId = `${year+1}-03-31`;
+  const q = query(collection(db,"calendar_days_published"), where(documentId(), ">=", startId), where(documentId(), "<=", endId));
+  const snap = await getDocs(q);
+  const days = {};
+  snap.docs.forEach(d=>{ days[d.id] = d.data(); });
+  return days;
+}
+// まとめを書く。大きすぎる場合は書かない（読む側は版数の不一致で日別に戻るので、表示は壊れない）
+// mergeEntries を渡すと、その日付だけを既存のまとめへ「マージ」して書く（複数の編集者が同時に公開しても、
+// 互いの日付を消さないため）。省略すると、days 全体でまとめを作り直す（新規作成・再構築）。
+async function writeCalBundle(year, days, version, mergeEntries){
+  const payload = { fy: year, days, version, updatedBy: currentUser.email, updatedAt: new Date().toISOString() };
+  const bytes = estimateDocBytes(payload);   // マージの場合も、マージ後の全体の大きさで判定する
+  if(bytes > CAL_BUNDLE_MAX_BYTES){
+    console.error(`[カレンダーまとめ] データ量が上限に近いため作成しません（約${bytes}バイト）。日別ドキュメントで動作します。`);
+    return false;
+  }
+  const ref = doc(db,"calendar_days_published", calBundleId(year));
+  if(mergeEntries){
+    await setDoc(ref, { fy: year, days: mergeEntries, version, updatedBy: currentUser.email, updatedAt: payload.updatedAt }, { merge:true });
+  } else {
+    await setDoc(ref, payload);
+  }
+  calBundleMem[year] = { marker: version, days };
+  return true;
+}
+// 公開操作（「公開する」・備考の即時公開）の時：変更した日付だけをまとめに反映する。
+// まとめが無い・古い場合だけ、日別ドキュメントから全体を作り直す（今回の分は書き込み済みなので含まれる）。
+async function upsertCalBundleOnPublish(year, entries, newVersion){
+  if(!DIET.calBundle) return;
+  try{
+    const prevMarker = calYearLastPublishedMillis(year);
+    let days = null;
+    let canMerge = false;
+    try{
+      const snap = await getDoc(doc(db,"calendar_days_published", calBundleId(year)));
+      if(snap.exists()){
+        const usable = calBundleUsableOrNull(snap.data(), prevMarker);
+        if(usable){ days = { ...usable }; canMerge = true; }
+      }
+    }catch(e){ /* 読めなければ再構築に回す */ }
+    if(days === null) days = await readPublishedYearDaysLegacy(year);
+    const changed = {};
+    entries.forEach(([id, data])=>{ days[id] = { ...data }; changed[id] = { ...data }; });
+    await writeCalBundle(year, days, newVersion, canMerge ? changed : null);
+  }catch(e){
+    console.error("[カレンダーまとめ更新エラー]", e); // 失敗しても公開自体は成立する（読む側は日別に戻る）
+  }
+}
+// 公開済みで、まとめがまだ無い／古い年度を、編集権限者がカレンダーを開いた時に1回だけ作る（版数は既存の値に合わせる）
+const calBundleEnsureTried = new Set();
+async function ensureCalBundlesForEditor(){
+  if(!isCalendarEditor || !DIET.calBundle) return;
+  for(const rec of [...calYearsAll]){
+    const key = rec.year;
+    if(calBundleEnsureTried.has(key)) continue;
+    const year = Number(key);
+    if(!year || calYearStatus(year) === "draft") continue;
+    const marker = calYearLastPublishedMillis(year);
+    if(marker === null) continue;               // 版数が付く前の年度は、既存の補完処理（backfill）の後に再度ここへ来る
+    calBundleEnsureTried.add(key);              // 書き込みの前に記録する（失敗しても繰り返さない）
+    try{
+      const snap = await getDoc(doc(db,"calendar_days_published", calBundleId(year)));
+      if(snap.exists() && calBundleUsableOrNull(snap.data(), marker)) continue;
+      const days = await readPublishedYearDaysLegacy(year);
+      await writeCalBundle(year, days, marker);
+    }catch(e){ console.error("[カレンダーまとめ作成エラー]", e); }
+  }
+}
 // 窓の期間が属する年度の lastPublishedAt（版数マーカー）が全て分かっていて、前回保存した版数と一致すれば
 // Firestoreを読まずに保存済みデータを使う。不一致・未保存・版数不明（lastPublishedAt未設定の年度）の時は
 // getDocs で1回だけ取得し直す（ライブ購読ではない）。calendar_years は常時購読済みなので、公開操作があれば
@@ -9488,10 +9914,7 @@ async function refreshCalHolidayWindowCached(){
   if(calWindowFetchToken === token) return;
   calWindowFetchToken = token;
   try{
-    const q = query(collection(db,"calendar_days_published"), where(documentId(), ">=", startId), where(documentId(), "<=", endId));
-    const snap = await getDocs(q);
-    const data = {};
-    snap.docs.forEach(d=>{ data[d.id] = d.data(); });
+    const data = await fetchPublishedRange(startId, endId);   // 2026-10-13：まとめドキュメント（1〜2件）。使えなければ従来の範囲クエリ
     calHolidayWindowData = data;
     refreshDashboardIfActive();
     if(canCache){
@@ -9660,9 +10083,13 @@ document.getElementById("cal-publish-btn")?.addEventListener("click", async ()=>
       done += batch.length;
       publishBtn.textContent = `公開中… ${done}/${total}`;
     }
+    // 2026-10-13：年度まとめドキュメントを更新してから、最後に版数マーカー（lastPublishedAt）を更新する。
+    // 版数は、まとめの version と同じ値（クライアントの現在時刻ミリ秒）にする。
+    const newVersion = Date.now();
+    await upsertCalBundleOnPublish(calFiscalYearStart, docs.map(d=>[d.id, d.data()]), newVersion);
     // lastPublishedAt：公開操作のたびに更新する版数マーカー。一般社員側のローカルキャッシュ
     // （loadCalendarYearFromCacheOrFetch）は、この値が変わった時だけ公開データを再取得する。
-    await setDoc(doc(db,"calendar_years", yearDocId), { status: "published", pendingDates: [], lastPublishedAt: serverTimestamp() }, { merge:true });
+    await setDoc(doc(db,"calendar_years", yearDocId), { status: "published", pendingDates: [], lastPublishedAt: DIET.calBundle ? Timestamp.fromMillis(newVersion) : serverTimestamp() }, { merge:true });
     toast(total>0 ? `公開しました（${total}日分を更新）。` : "公開しました。");
   }catch(e){
     toast("公開に失敗しました。権限をご確認ください。");
@@ -9701,6 +10128,7 @@ function loadCalendarYear(year){
     // 編集権限者がこの年度を開いたタイミングで、未公開の変更が無ければ一度だけ補完しておく
     // （公開操作を待たず、現状の公開データ＝最新という前提で版数だけ追記する）。
     backfillLastPublishedAtIfMissing(year);
+    ensureCalBundlesForEditor();   // 2026-10-13：公開済み年度のまとめドキュメントが無い／古い時に1回だけ作る（読み取りは最大366件・初回のみ）
     return;
   }
   // 編集権限が無い一般社員は、最後に公開されたスナップショット（calendar_days_published）を見る
@@ -9765,10 +10193,7 @@ async function loadCalendarYearFromCacheOrFetch(year, startId, endId){
     }catch(e){ /* localStorageが使えない・壊れている場合はキャッシュを無視して通常取得する */ }
   }
   try{
-    const q = query(collection(db,"calendar_days_published"), where(documentId(), ">=", startId), where(documentId(), "<=", endId));
-    const snap = await getDocs(q);
-    calDaysData = {};
-    snap.docs.forEach(d=>{ calDaysData[d.id] = d.data(); });
+    calDaysData = await fetchPublishedRange(startId, endId);   // 2026-10-13：まとめドキュメント（1件）。使えなければ従来の範囲クエリ
     renderCalendar();
     refreshDashboardIfActive();
     if(currentVersion !== null){
@@ -9941,6 +10366,9 @@ document.getElementById("cal-label-save-btn").addEventListener("click", async ()
     if(publishNow){
       // この日だけ、通常の「公開する」を待たずにその場で公開スナップショットへ反映する
       await setDoc(doc(db,"calendar_days_published", dateStr), dayData);
+      // 2026-10-13：年度まとめドキュメントにもこの1日を反映する（版数は下のlastPublishedAtと同じ値）
+      const newVersionLabel = Date.now();
+      await upsertCalBundleOnPublish(fiscalYearOfDateStr(dateStr), [[dateStr, dayData]], newVersionLabel);
       // この日については下書きと公開版が一致した状態なので、「編集中」への変更は行わない
       // （他に未公開の変更が残っている場合は、そちらの編集時に既に「編集中」になっているはず）。
       // ただし、この日が既にpendingDates（未公開一覧）に入っていた場合は、公開済みになった
@@ -9949,7 +10377,7 @@ document.getElementById("cal-label-save-btn").addEventListener("click", async ()
       try{
         // lastPublishedAtも更新する（この即時公開1日分についても、一般社員側のローカル
         // キャッシュを無効化して再取得させる必要があるため）。
-        await setDoc(doc(db,"calendar_years", String(yearForRemoval)), { pendingDates: arrayRemove(dateStr), lastPublishedAt: serverTimestamp() }, { merge:true });
+        await setDoc(doc(db,"calendar_years", String(yearForRemoval)), { pendingDates: arrayRemove(dateStr), lastPublishedAt: DIET.calBundle ? Timestamp.fromMillis(newVersionLabel) : serverTimestamp() }, { merge:true });
       }catch(e){ /* 失敗しても致命的ではない（次回の公開時に無駄が1日分残るだけ） */ }
     } else {
       await markCalYearAsDraft(dateStr);
