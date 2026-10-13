@@ -4979,7 +4979,10 @@ async function syncRosterDoc(){
 }
 function initRosterDocWatcher(){
   if(!ROSTER_SYNC_ENABLED) return;
-  onSnapshot(doc(db,"wb_presets", ROSTER_DOC_ID), snap=>{
+  // includeMetadataChanges：キャッシュが温まっていると、最初の結果が「キャッシュ由来」で届き、
+  // サーバーの確認結果が同じ内容だと追加のスナップショットが来ない。メタデータ変更も受け取ることで、
+  // 「サーバー確定」の通知を確実に受け取る（読み取り課金は増えない）。
+  onSnapshot(doc(db,"wb_presets", ROSTER_DOC_ID), { includeMetadataChanges:true }, snap=>{
     if(snap.metadata && snap.metadata.fromCache) return;   // サーバーの確定値だけで判断する
     rosterDocData = snap.exists() ? snap.data() : null;
     rosterDocLoaded = true;
@@ -4988,7 +4991,7 @@ function initRosterDocWatcher(){
 }
 function initEmployeesListener(){
   initRosterDocWatcher();
-  onSnapshot(collection(db,"employees"), snap=>{
+  onSnapshot(collection(db,"employees"), { includeMetadataChanges:true }, snap=>{
     employeesAll = snap.docs.map(d=>({email:d.id, ...d.data()}));
     if(!(snap.metadata && snap.metadata.fromCache)){ rosterEmployeesFromServer = true; scheduleRosterSync(); }
     // 初期状態は社員番号順。ただし「行き先」の事前設定画面（index.html）で表示順（社員のorder）を

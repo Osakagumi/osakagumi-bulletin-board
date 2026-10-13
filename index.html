@@ -6965,7 +6965,10 @@ function initEmployeesListener(){
   });
 }
 function initEmployeesListenerLegacy(){
-  onSnapshot(collection(db,"employees"), snap=>{
+  // まとめを作る権限者の場合だけ includeMetadataChanges を付ける：キャッシュが温まっていると最初の結果が
+  // 「キャッシュ由来」で届き、サーバー確認が同じ内容だと追加通知が来ず、作成条件（!fromCache）を満たせないため
+  const opts = (DIET.rosterBundle && rosterFallbackReason === "missing" && (isAdmin || isWhereaboutsEditor)) ? { includeMetadataChanges:true } : {};
+  onSnapshot(collection(db,"employees"), opts, snap=>{
     employeesAll = snap.docs.map(d=>({ email:d.id, ...d.data() }));
     maybeBuildRosterFromSnapshot(snap);
     onEmployeesAllUpdated();
