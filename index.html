@@ -2670,6 +2670,11 @@ let equipmentAll = [];
 //  equipmentLazy  : ダッシュボードの「自分の機材」は自分が借用中の分だけの軽い購読にし、設備の全件購読は
 //                   機材・予約タブを開く／予約へジャンプする時まで開始しない
 //  rosterBundle   : 社員名簿（employees全件購読）を wb_presets/_roster の1ドキュメント購読に置き換える（2026-10-13）
+//  editorCalLight : カレンダー編集権限者が「出入予定」タブを開いた時の年間カレンダー購読を、編集中データ
+//                   （calendar_days、365件）ではなく公開済みバンドル（版数キャッシュ）にする。
+//                   「カレンダー」タブを開いた時は従来どおり編集中データをライブ購読する（2026-10-14）
+//  consumeFromRoster : 朝の事前設定の自動反映（consumeTodayWbPresets）で、社員ごとに employees を getDoc
+//                   していた（約57読み取り）のをやめ、名簿まとめ（_roster、1件）の更新日時で判定する（2026-10-14）
 //  wbPresetsLazy  : 管理者・行き先編集権限者の事前設定「全件購読」を、事前設定画面を開く時まで遅延する
 //                   （朝の自動反映・過去分の削除は、軽量購読＋過去分だけの1回クエリで従来どおり実行）
 // URLに ?diet=0 を付けて開くと、その画面だけ全対策がOFF（従来動作）になる（A/B確認・緊急時用）
@@ -2677,7 +2682,7 @@ let equipmentAll = [];
 const DIET = (()=>{
   let off = false;
   try{ off = new URLSearchParams(location.search).get("diet") === "0"; }catch(e){}
-  return { calWindowCache: !off, equipmentLazy: !off, wbPresetsLazy: !off, calBundle: !off, presetBundle: !off, rosterBundle: !off };
+  return { calWindowCache: !off, equipmentLazy: !off, wbPresetsLazy: !off, calBundle: !off, presetBundle: !off, rosterBundle: !off, editorCalLight: !off, consumeFromRoster: !off };
 })();
 let selectedCategory = null;
 let selectedCheckoutCategory = null;
@@ -3645,7 +3650,7 @@ function switchToTab(viewName){
     // で実用上十分なため、全社員に全件購読のコストを負わせない（読み取り数削減、2026年10月）。
     if(isVisitorManager){
       ensureVisitorSchedulesFullListener(); // 出入予定タブを開いた時だけ、過去分も含む全件購読に切り替える
-      ensureCalendarFullYearListener(); // 出入予定カレンダーの休日ハイライトに年間データを使うため
+      ensureCalendarFullYearListener(false); // 出入予定カレンダーの休日ハイライトに年間データを使うため（編集中データは不要）
     }
     try{ renderActiveVisitorView(); }catch(e){ console.error("[出入予定タブの表示エラー]", e); }
   }
@@ -3656,7 +3661,7 @@ function switchToTab(viewName){
     try{ renderContractsTab(); }catch(e){ console.error("[契約タブの表示エラー]", e); }
   }
   if(viewName==="calendar"){
-    ensureCalendarFullYearListener();
+    ensureCalendarFullYearListener(true);
   }
   if(viewName==="whereabouts" || viewName==="notices" || viewName==="chat" || viewName==="safety"){
     // 2026年10月：社員名簿（employeesAll、全件）は、これらのタブ（本人以外の名前・一覧が
@@ -8057,15 +8062,38 @@ async function consumeTodayWbPresets(dateStr){
   const todayPresets = wbPresetsByDate[dateStr];
   if(!todayPresets || Object.keys(todayPresets).length===0) return;
   const rosterUpdates = {};   // 名簿まとめへの反映は、全員分を最後に1回の書き込みでまとめて行う
+  // 2026-10-14：「今日すでに本人が更新済みか」の判定に、社員ごとの employees getDoc（約57読み取り）を使わず、
+  // 名簿まとめ（wb_presets/_roster、1ドキュメント）の statusUpdatedAt を使う。まとめが使えない／
+  // まとめに載っていない社員は、従来どおり employees を1件ずつ読む（安全側）。
+  // ?diet=0 では従来動作（全員 getDoc）。
+  let rosterBase = null;
+  if(DIET.consumeFromRoster && DIET.rosterBundle && !rosterFallbackActive){
+    try{
+      if(rosterMembersRaw){
+        rosterBase = rosterMembersRaw;
+      }else{
+        const rs = await getDoc(doc(db,"wb_presets", ROSTER_DOC_ID));
+        const rd = rs.exists() ? rs.data() : null;
+        if(rosterValidData(rd)) rosterBase = rd.members;
+      }
+    }catch(e){ rosterBase = null; }
+  }
   for(const email of Object.keys(todayPresets)){
     const preset = todayPresets[email];
     try{
-      const empSnap = await getDoc(doc(db,"employees", email));
-      if(!empSnap.exists()) continue;
+      let empData = null;
+      const rEntry = rosterBase ? rosterBase[rosterKey(email)] : null;
+      if(rEntry){
+        empData = rEntry;   // 名簿まとめの内容（statusUpdatedAt を含む）
+      }else{
+        const empSnap = await getDoc(doc(db,"employees", email));
+        if(!empSnap.exists()) continue;
+        empData = empSnap.data();
+      }
       // 本人の自己編集はRTDB側に書き込まれているため、ここでもwithLiveWbStatusで
       // マージしてから判定する（Firestore側だけ見ると、自己編集済みなのに見落として
       // 事前設定で上書きしてしまう）。
-      const emp = withLiveWbStatus({ email, ...empSnap.data() });
+      const emp = withLiveWbStatus({ ...empData, email });
       // 本人が既に今日その場で編集済みなら、それを優先してこちらでは上書きしない
       const updatedToday = emp.statusUpdatedAt && toLocalDateStr(emp.statusUpdatedAt) === dateStr;
       if(updatedToday) continue;
@@ -9727,10 +9755,26 @@ function initCalendarTab(){
 // 購読中なので何もしない）。行き先の休日自動判定など、タブを開かなくても必要になる分は
 // initCalHolidayWindowListener（ログイン時から常時購読）で別途カバーしている。
 let calFullYearListenerStarted = false;
-function ensureCalendarFullYearListener(){
-  if(calFullYearListenerStarted) return;
-  calFullYearListenerStarted = true;
-  initCalendarTab();
+// 2026-10-14：calFullYearMode … "live"（編集中データの購読。編集権限者がカレンダータブを開いた時）／
+// "published"（公開済みバンドル。出入予定タブだけを開いた編集権限者）。編集権限者が出入予定タブだけを
+// 開いた場合は公開済みで足りるため、365件のライブ購読を避ける。後でカレンダータブを開いたら live に切り替える。
+let calFullYearMode = null;
+let calForcePublishedLoad = false;
+// needLive=false：出入予定タブからの呼び出し（休日ハイライトに公開済みデータで足りる）
+function ensureCalendarFullYearListener(needLive=true){
+  const wantPublished = !needLive && isCalendarEditor && DIET.editorCalLight;
+  if(!calFullYearListenerStarted){
+    calFullYearListenerStarted = true;
+    calFullYearMode = wantPublished ? "published" : "live";
+    calForcePublishedLoad = wantPublished;
+    try{ initCalendarTab(); } finally { calForcePublishedLoad = false; }
+    return;
+  }
+  // 出入予定タブだけで開始済みの編集権限者が、後からカレンダータブを開いた：編集中データのライブ購読に切り替える
+  if(needLive && calFullYearMode === "published"){
+    calFullYearMode = "live";
+    initCalendarTab();
+  }
 }
 // 行き先タブの「休日なら自動的に休みにする」判定・次稼働日（nextWorkingDayStr、最大14日先まで）の
 // 算出にだけ使う、軽量な期間限定の購読。ログイン時から常に動いている（全社員が使う機能のため）。
@@ -10118,7 +10162,8 @@ function loadCalendarYear(year){
   const startId = `${year}-04-01`;
   const endId = `${year+1}-03-31`;
   // 編集権限者は編集中(ライブ)のデータを見る（リアルタイム購読のまま）。
-  if(isCalendarEditor){
+  // ただし出入予定タブだけを開いた場合（calForcePublishedLoad）は公開済みバンドルで足りるため下の経路へ進む。
+  if(isCalendarEditor && !calForcePublishedLoad){
     const q = query(collection(db,"calendar_days"), where(documentId(), ">=", startId), where(documentId(), "<=", endId));
     calDaysUnsub = onSnapshot(q, snap=>{
       calDaysData = {};
