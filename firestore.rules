@@ -132,6 +132,14 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // マスターデータのまとめ（所属・行き先ステータス・設備カテゴリを1ドキュメントに集約。2026-10-15）:
+    // 全員が読める。書き込みはマスターを編集できる人（行き先の他者設定権限者・設備管理者・システム管理者）。
+    // 管理画面（admin.html）／一般画面のマスター編集権限者が、内容が変わった時に自動で作り直す。
+    match /master_bundle/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isWhereaboutsEditor() || isEquipmentManager();
+    }
+
     // 行き先の事前設定（次の営業日用の下書き・初期状態テンプレート・自動反映済み日付の記録）
     // 全員が読める。書き込みは行き先の他者設定権限者・システム管理者のみ。
     match /wb_presets/{docId} {
@@ -247,11 +255,13 @@ service cloud.firestore {
     match /equipment/{equipmentId} {
       allow read: if isSignedIn();
       allow create, delete: if isAdmin() || isEquipmentManager();
+      // 2026-10-15：一般社員の借用・返却が権限確認の読み取り（exists）を伴わないよう、
+      // 条件の並びを「安価な判定→権限確認」の順に入れ替えた（意味は変わらない。ORの順序のみ）。
       allow update: if isSignedIn() &&
-        (isAdmin() || isEquipmentManager() ||
-          !("status" in resource.data) ||
+        (!("status" in resource.data) ||
           resource.data.status == "in_stock" ||
-          resource.data.holderEmail == request.auth.token.email);
+          resource.data.holderEmail == request.auth.token.email ||
+          isAdmin() || isEquipmentManager());
     }
 
     // 予約: ログインしていれば読める。
@@ -269,9 +279,11 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if (isPoster() || isNoticeManager()) &&
         request.resource.data.authorEmail == request.auth.token.email;
+      // 2026-10-15：一般社員の既読マーク（readByAtのみの更新）が権限確認の読み取り（exists）を伴わないよう、
+      // 条件の並びを「安価な判定→権限確認」の順に入れ替えた（意味は変わらない。ORの順序のみ）。
       allow update: if isSignedIn() &&
-        (resource.data.authorEmail == request.auth.token.email || isAdmin() || isNoticeManager() ||
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(["readByAt"]));
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(["readByAt"]) ||
+         resource.data.authorEmail == request.auth.token.email || isAdmin() || isNoticeManager());
       allow delete: if isSignedIn() &&
         (resource.data.authorEmail == request.auth.token.email || isAdmin() || isNoticeManager());
     }
