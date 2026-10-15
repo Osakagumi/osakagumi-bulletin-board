@@ -4319,7 +4319,7 @@ async function confirmAndTransition(eq, targetStatus, extra){
     await updateDoc(doc(db,"equipment", eq.id), payload);
     toast(`「${eq.name}」を${label}に変更しました。`);
   }catch(e){
-    toast("更新に失敗しました。権限をご確認ください。");
+    toast(await explainWriteFailure(e, doc(db,"equipment", eq.id), "更新に失敗しました。権限をご確認ください。", { changed: equipmentChangedMsg(eq), goneMsg:`「${eq.name}」はすでに削除されています。画面を更新して確認してください。` }));
   }
 }
 
@@ -4389,7 +4389,7 @@ document.getElementById("checkout-modal-confirm").addEventListener("click", asyn
     toast(`「${eq.name}」を${equipmentStatusInfo(targetStatus).label}に変更しました。`);
     document.getElementById("checkout-modal").classList.remove("show");
   }catch(e){
-    document.getElementById("checkout-modal-error").textContent = "更新に失敗しました。権限をご確認ください。";
+    document.getElementById("checkout-modal-error").textContent = await explainWriteFailure(e, doc(db,"equipment", eq.id), "更新に失敗しました。権限をご確認ください。", { changed: equipmentChangedMsg(eq), goneMsg:`「${eq.name}」はすでに削除されています。画面を更新して確認してください。` });
   }
 });
 
@@ -5118,7 +5118,9 @@ document.getElementById("visitor-modal-save").addEventListener("click", async ()
     }
     document.getElementById("visitor-modal").classList.remove("show");
   }catch(e){
-    if(e && e.code === "permission-denied"){
+    if(e && e.code === "not-found" && editingVisitorId){
+      errEl.textContent = "この出入予定はすでに削除されています（他の人が削除した可能性があります）。画面を閉じて、一覧を確認してください。";
+    } else if(e && e.code === "permission-denied"){
       errEl.textContent = editingVisitorId
         ? "この出入予定を更新する権限がありません。Firestoreのセキュリティルールが最新の内容で公開されているかご確認ください。"
         : "この出入予定を登録する権限がありません。Firestoreのセキュリティルールが最新の内容で公開されているかご確認ください。";
@@ -5154,7 +5156,7 @@ document.getElementById("inspection-modal-save").addEventListener("click", async
     toast("点検日を更新しました。");
     document.getElementById("inspection-modal").classList.remove("show");
   }catch(e){
-    document.getElementById("inspection-modal-error").textContent = "更新に失敗しました。権限をご確認ください。";
+    document.getElementById("inspection-modal-error").textContent = await explainWriteFailure(e, null, "更新に失敗しました。権限をご確認ください。", { goneMsg:"この設備はすでに削除されています。画面を更新して確認してください。" });
   }
 });
 
@@ -5830,7 +5832,9 @@ async function confirmReservation(){
     delete tlPendingByDate[dateStr];
     refreshDayPanel(dateStr);
   }catch(e){
-    errEl.textContent = "予約の登録に失敗しました。時間をおいて再度お試しください。";
+    errEl.textContent = (e && e.code === "not-found" && editingReservationId)
+      ? "この予約はすでに取り消されています（削除された可能性があります）。画面を閉じて、予約状況を確認してください。"
+      : "予約の登録に失敗しました。時間をおいて再度お試しください。";
   }
 }
 
@@ -5879,8 +5883,12 @@ function renderMyReservations(list){
       btn.textContent = "キャンセル";
       btn.addEventListener("click", async ()=>{
         if(!confirm("この予約をキャンセルしますか？")) return;
-        await deleteDoc(doc(db,"reservations", r.id));
-        toast("予約をキャンセルしました。");
+        try{
+          await deleteDoc(doc(db,"reservations", r.id));
+          toast("予約をキャンセルしました。");
+        }catch(e){
+          toast("キャンセルに失敗しました。時間をおいて再度お試しください。");
+        }
       });
       actions.appendChild(btn);
       item.appendChild(actions);
@@ -6292,7 +6300,7 @@ function renderNotices(){
     const detailBtn = document.createElement("button");
     detailBtn.className = "n-detail-btn";
     detailBtn.textContent = "詳細";
-    detailBtn.addEventListener("click", ()=> openNoticeDetailModal(n));
+    detailBtn.addEventListener("click", ()=> openNoticeDetailChecked(n));
     actionsTd.appendChild(detailBtn);
     el.appendChild(tr);
   });
@@ -6410,6 +6418,70 @@ function renderNoticeDetailView(n){
   toggleBtn.style.display = isRead ? "inline-block" : "none";
   toggleBtn.textContent = isKeptVisible ? "一覧から外す（非表示にする）" : "一覧に残す（グレー表示）";
 }
+// 2026-10-15：一般社員は新着マーカー方式で、お知らせ本体を常時購読しない（差分取得は最大60分、削除を取り込まない）ため、
+// 他の人に削除されたお知らせが手元の一覧に残ることがある。詳細を開く時（読み取り1件）と、既読・編集で失敗した時に、
+// 存在を確認し、削除済みなら「削除済み」を伝えて一覧から外す。確認自体に失敗した時は存在する扱いで従来どおり進める。
+// 共用アカウント（掲示板モード）は常時購読なので確認しない。
+async function noticeFetchFresh(n){
+  try{
+    const sd = await getDoc(doc(db,"announcements", n.id));
+    if(!sd.exists()) return { state:"gone" };
+    return { state:"ok", n:{ id:sd.id, ...sd.data() } };
+  }catch(e){ return { state:"unknown" }; }
+}
+async function noticeStillExists(n){
+  const r = await noticeFetchFresh(n);
+  return r.state !== "gone";
+}
+/* 2026-10-15：更新・削除の反映タイミングで起きる失敗を、利用者に分かる言葉で伝える共通処理。
+   ・not-found（更新しようとした相手がすでに削除されている）→ 削除済みのメッセージ
+   ・permission-denied等：対象を読み直し、削除済みなら削除済みのメッセージ、
+     opts.changed(最新データ)がメッセージを返せば（他の人が先に状態を変えた等）それを返す
+   ・それ以外は従来のメッセージ(fallback)をそのまま返す */
+const WRITE_GONE_MSG = "対象はすでに削除されています（他の人が削除した可能性があります）。画面を更新して確認してください。";
+async function explainWriteFailure(e, ref, fallback, opts){
+  opts = opts || {};
+  const code = e && e.code;
+  if(code === "not-found") return opts.goneMsg || WRITE_GONE_MSG;
+  if(ref && (code === "permission-denied" || code === "failed-precondition" || code === "aborted")){
+    try{
+      const sd = await getDoc(ref);
+      if(!sd.exists()) return opts.goneMsg || WRITE_GONE_MSG;
+      if(typeof opts.changed === "function"){ const m = opts.changed(sd.data()); if(m) return m; }
+    }catch(_){ /* 読み直せない時は従来のメッセージ */ }
+  }
+  return fallback;
+}
+// 設備：他の人が先に状態を変えていた場合の説明
+function equipmentChangedMsg(eq){
+  return (fresh)=>{
+    const was = (eq.status||"in_stock"), now = (fresh.status||"in_stock");
+    if(was === now && (eq.holderEmail||"") === (fresh.holderEmail||"")) return null;
+    const holder = fresh.holderName ? `／${fresh.holderName}` : "";
+    return `他の人が先に状態を変更しました（現在：${equipmentStatusInfo(now).label}${holder}）。画面を更新して確認してください。`;
+  };
+}
+function dropDeletedNotice(n){
+  noticesAll = noticesAll.filter(x=> x.id !== n.id);
+  renderNotices();
+  refreshDashboardIfActive();
+  document.getElementById("notice-detail-modal").classList.remove("show");
+  try{ noticeModal.classList.remove("show"); }catch(e){}
+  toast("このお知らせは削除済みです。一覧から外しました。");
+}
+async function openNoticeDetailChecked(n){
+  if(isSharedAccount || !DIET.noticesDelta){ openNoticeDetailModal(n); return; }
+  const r = await noticeFetchFresh(n);
+  if(r.state === "gone"){ dropDeletedNotice(n); return; }
+  if(r.state === "ok"){
+    // 他の人が内容を更新していた場合に備え、最新の内容で一覧と詳細を更新する（すでに読み取り済みの1件）
+    const i = noticesAll.findIndex(x=> x.id === n.id);
+    if(i >= 0){ noticesAll[i] = r.n; renderNotices(); }
+    openNoticeDetailModal(r.n);
+    return;
+  }
+  openNoticeDetailModal(n);
+}
 function openNoticeDetailModal(n){
   noticeDetailCurrent = n;
   renderNoticeDetailView(n);
@@ -6437,6 +6509,7 @@ document.getElementById("notice-detail-read-hide-btn").addEventListener("click",
     document.getElementById("notice-detail-modal").classList.remove("show");
   }catch(e){
     console.error("[既読処理エラー：非表示]", e);
+    if(!isSharedAccount && !(await noticeStillExists(n))){ dropDeletedNotice(n); return; }
     toast("既読にできませんでした。");
   }
 });
@@ -6453,18 +6526,27 @@ document.getElementById("notice-detail-read-keep-btn").addEventListener("click",
     document.getElementById("notice-detail-modal").classList.remove("show");
   }catch(e){
     console.error("[既読処理エラー：一覧に残す]", e);
+    if(!isSharedAccount && !(await noticeStillExists(n))){ dropDeletedNotice(n); return; }
     toast("既読にできませんでした。");
   }
 });
-document.getElementById("notice-detail-edit-btn").addEventListener("click", ()=>{
+document.getElementById("notice-detail-edit-btn").addEventListener("click", async ()=>{
   if(!noticeDetailCurrent) return;
+  let target = noticeDetailCurrent;
+  if(!isSharedAccount && DIET.noticesDelta){
+    // 詳細を開いてから時間が経っていると、他の人が更新・削除している場合がある。編集画面を開く前に最新を確認する
+    const r = await noticeFetchFresh(target);
+    if(r.state === "gone"){ dropDeletedNotice(target); return; }
+    if(r.state === "ok"){ target = r.n; const i = noticesAll.findIndex(x=> x.id === target.id); if(i >= 0){ noticesAll[i] = target; renderNotices(); } }
+  }
   document.getElementById("notice-detail-modal").classList.remove("show");
-  openNoticeEditModal(noticeDetailCurrent);
+  openNoticeEditModal(target);
 });
 document.getElementById("notice-detail-delete-btn").addEventListener("click", async ()=>{
   if(!noticeDetailCurrent) return;
   const n = noticeDetailCurrent;
   if(!confirm("このお知らせを削除しますか？")) return;
+  if(!isSharedAccount && DIET.noticesDelta && !(await noticeStillExists(n))){ dropDeletedNotice(n); return; }
   await deleteDoc(doc(db,"announcements", n.id));
   if(n.attachmentStoragePath){
     try{ await deleteFileFromStorage(n.attachmentStoragePath); }catch(e){ /* 削除に失敗しても致命的ではない */ }
@@ -6702,6 +6784,7 @@ document.getElementById("notice-submit").addEventListener("click", async ()=>{
         openNoticeMailtoModal(recipients, title, body, attachmentUrl);
       }
     }catch(e){
+      if(!isSharedAccount && editingNoticeId && !(await noticeStillExists({ id:editingNoticeId }))){ dropDeletedNotice({ id:editingNoticeId }); return; }
       errEl.textContent = "更新に失敗しました。権限をご確認ください。";
     }
     return;
@@ -9202,7 +9285,7 @@ document.getElementById("wb-save").addEventListener("click", async ()=>{
     wbModal.classList.remove("show");
     toast("行き先を更新しました。");
   }catch(e){
-    errEl.textContent = "更新に失敗しました。権限をご確認ください。";
+    errEl.textContent = await explainWriteFailure(e, null, "更新に失敗しました。権限をご確認ください。", { goneMsg:"この社員の情報は見つかりません（削除された可能性があります）。画面を更新して確認してください。" });
   }
 });
 
@@ -11231,7 +11314,7 @@ document.getElementById("sp-save-btn")?.addEventListener("click", async ()=>{
     }
     document.getElementById("sp-modal").classList.remove("show");
   }catch(e){
-    errEl.textContent = "保存に失敗しました。権限をご確認ください。";
+    errEl.textContent = await explainWriteFailure(e, null, "保存に失敗しました。権限をご確認ください。", { goneMsg:"この記録はすでに削除されています（他の人が削除した可能性があります）。画面を閉じて、一覧を確認してください。" });
   }
 });
 // 複写：編集中の内容をもとに、既存の記録は変更せず「新しい記録」として保存する
@@ -11305,7 +11388,7 @@ document.getElementById("sp-type-save-btn")?.addEventListener("click", async ()=
     }
     document.getElementById("sp-type-modal").classList.remove("show");
   }catch(e){
-    errEl.textContent = "保存に失敗しました。権限をご確認ください。";
+    errEl.textContent = await explainWriteFailure(e, null, "保存に失敗しました。権限をご確認ください。", { goneMsg:"この種類はすでに削除されています（他の人が削除した可能性があります）。画面を閉じて、一覧を確認してください。" });
   }
 });
 document.getElementById("sp-type-delete-btn")?.addEventListener("click", async ()=>{
