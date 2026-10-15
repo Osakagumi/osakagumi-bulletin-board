@@ -2682,7 +2682,7 @@ let equipmentAll = [];
 const DIET = (()=>{
   let off = false;
   try{ off = new URLSearchParams(location.search).get("diet") === "0"; }catch(e){}
-  return { calWindowCache: !off, equipmentLazy: !off, wbPresetsLazy: !off, calBundle: !off, presetBundle: !off, rosterBundle: !off, editorCalLight: !off, consumeFromRoster: !off };
+  return { calWindowCache: !off, equipmentLazy: !off, wbPresetsLazy: !off, calBundle: !off, presetBundle: !off, rosterBundle: !off, editorCalLight: !off, consumeFromRoster: !off, cleanupScoped: !off, visitorWindow: !off, masterBundle: !off, noticesDelta: !off, editorWindowPublished: !off };
 })();
 let selectedCategory = null;
 let selectedCheckoutCategory = null;
@@ -2935,7 +2935,7 @@ onAuthStateChanged(auth, async (user)=>{
       initSafetyCampaignListener();
       initCalendarYearsListenerGeneral();
       if(isSafetySender){ initSafetyCampaignsAdminListener(); }
-      initCategoriesListener();
+      initMasterDataListeners(); // 2026-10-15：設備カテゴリ・所属・行き先ステータスをまとめドキュメント1件で購読（無ければ従来の3購読）
       if(DIET.equipmentLazy){ initMyEquipmentLightListener(); } // 2026-10-12：ダッシュボード「自分の機材」用（自分が借用中の分だけ）
       // 2026年10月：設備本体（equipment）の購読は、カレンダー・出入予定と同じ理由
       // （全社員が毎回ログインするだけで全件購読していたコストの削減）により、ログイン時には
@@ -2947,8 +2947,6 @@ onAuthStateChanged(auth, async (user)=>{
       cleanupPastReservations();
       initNoticeReadsListener();
       initNoticesMetaListener();
-      initDepartmentsListener();
-      initWbStatusesListener();
       initWbColumnsListener();
       // 2026年10月：社員名簿（employees、全件）の購読は、6章「Firestore読み取り件数の棚卸し」で
       // 判明した通り、行き先・お知らせ・チャット・機材（貸出先選択）など本人以外の社員情報が
@@ -3925,15 +3923,23 @@ function waitEquipmentLoaded(){
     setTimeout(fin, 8000);
   });
 }
+function applyCategoriesList(list){
+  categoriesAll = list.slice();
+  categoriesAll.sort((a,b)=> (a.order??0)-(b.order??0));
+  recomputeSpPlateTypes();
+  renderCategoryRow();
+  renderEquipmentGrid();
+  renderCheckoutCategoryRow();
+  renderCheckoutTab();
+}
 function initCategoriesListener(){
-  onSnapshot(collection(db,"equipment_categories"), snap=>{
-    categoriesAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
-    categoriesAll.sort((a,b)=> (a.order??0)-(b.order??0));
-    recomputeSpPlateTypes();
-    renderCategoryRow();
-    renderEquipmentGrid();
-    renderCheckoutCategoryRow();
-    renderCheckoutTab();
+  const o = masterSyncOptions();
+  onSnapshot(collection(db,"equipment_categories"), o, snap=>{
+    if(masterSyncActive && !(snap.metadata && snap.metadata.fromCache)){ masterSrvLoaded.c = true; scheduleMasterSync(); }
+    if(o.includeMetadataChanges && masterLastApplied.c === masterCanon(snap.docs.map(d=>({id:d.id, ...d.data()})))) return; // メタデータだけの更新は再描画しない
+    const list = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    masterLastApplied.c = masterCanon(list);
+    applyCategoriesList(list);
   });
 }
 
@@ -4464,18 +4470,72 @@ let visitorSchedulesFull = null; // 出入予定タブを一度でも開くま�
 function getVisitorSchedulesAll(){
   return visitorSchedulesFull || visitorSchedulesLight;
 }
-function initVisitorSchedulesListener(){
-  const cutoff = new Date(Date.now() - 30*24*60*60*1000);
-  const cutoffStr = `${cutoff.getFullYear()}-${pad2(cutoff.getMonth()+1)}-${pad2(cutoff.getDate())}`;
-  const q = query(collection(db,"visitor_schedules"), where("date",">=", cutoffStr));
-  onSnapshot(q, snap=>{
-    visitorSchedulesLight = snap.docs.map(d=>({id:d.id, ...d.data()}));
-    populateVisitorFilterSelects();
-    if(document.getElementById("view-visitors").style.display !== "none"){
-      renderActiveVisitorView();
-    }
-    refreshDashboardIfActive();
-  }, (err)=>{ console.error("[出入予定取得エラー（軽量購読）]", err); });
+// 2026-10-15：軽量購読の読み取り範囲は「出入予定の自動削除日数」（app_settings/visitor_cleanup）に合わせる。
+// 削除日数Nの場合、最終日がN日以上前の予定は削除対象なので、読むのは開始日が「今日-(N-1)日」以降のもの
+// （N=1なら本日以降だけ）。開始日が範囲より前でも終了日が範囲内の複数日予定は、endDate条件の2本目の
+// クエリで拾う。日数設定はlocalStorageにキャッシュし、6時間ごとに1件だけ読み直す。
+// ?diet=0 では従来通り直近30日。
+const VISITOR_DAYS_CACHE_KEY = "visitorCleanupDaysCache";
+function readVisitorDaysCache(){
+  try{
+    const o = JSON.parse(localStorage.getItem(VISITOR_DAYS_CACHE_KEY) || "null");
+    if(o && Number(o.days) >= 1) return { days:Number(o.days), ts:Number(o.ts)||0 };
+  }catch(e){}
+  return null;
+}
+async function fetchVisitorCleanupDays(){
+  let days = 14; // 設定ドキュメントが無い場合の既定（自動削除側の既定と同じ）
+  try{
+    const sd = await getDoc(doc(db,"app_settings","visitor_cleanup"));
+    if(sd.exists() && sd.data().days){ days = Number(sd.data().days) || 14; }
+  }catch(e){ return null; }
+  try{ localStorage.setItem(VISITOR_DAYS_CACHE_KEY, JSON.stringify({ days, ts:Date.now() })); }catch(e){}
+  return days;
+}
+let visitorLightUnsubs = [];
+let visitorLightDays = null;
+let visitorLightParts = [new Map(), new Map()];
+function rebuildVisitorLight(){
+  const m = new Map();
+  visitorLightParts.forEach(part => part.forEach((v,k)=>m.set(k,v)));
+  visitorSchedulesLight = Array.from(m.values());
+  populateVisitorFilterSelects();
+  if(document.getElementById("view-visitors").style.display !== "none"){
+    renderActiveVisitorView();
+  }
+  refreshDashboardIfActive();
+}
+function startVisitorLightListeners(days){
+  visitorLightUnsubs.forEach(u=>{ try{ u(); }catch(e){} });
+  visitorLightUnsubs = [];
+  visitorLightDays = days;
+  visitorLightParts = [new Map(), new Map()];
+  const fmt = dt => `${dt.getFullYear()}-${pad2(dt.getMonth()+1)}-${pad2(dt.getDate())}`;
+  const backDays = DIET.visitorWindow ? Math.max(0, days-1) : 30;
+  const startStr = fmt(new Date(Date.now() - backDays*24*60*60*1000));
+  const col = collection(db,"visitor_schedules");
+  visitorLightUnsubs.push(onSnapshot(query(col, where("date",">=", startStr)), snap=>{
+    visitorLightParts[0] = new Map(snap.docs.map(d=>[d.id, {id:d.id, ...d.data()}]));
+    rebuildVisitorLight();
+  }, (err)=>{ console.error("[出入予定取得エラー（軽量購読）]", err); }));
+  if(DIET.visitorWindow){
+    // 開始日が範囲より前でも、終了日が範囲内の複数日予定を取りこぼさないための補助クエリ
+    visitorLightUnsubs.push(onSnapshot(query(col, where("endDate",">=", startStr)), snap=>{
+      visitorLightParts[1] = new Map(snap.docs.map(d=>[d.id, {id:d.id, ...d.data()}]));
+      rebuildVisitorLight();
+    }, (err)=>{ console.error("[出入予定取得エラー（軽量購読・複数日）]", err); }));
+  }
+}
+async function initVisitorSchedulesListener(){
+  if(!DIET.visitorWindow){ startVisitorLightListeners(14); return; }
+  const cached = readVisitorDaysCache();
+  let days = cached ? cached.days : null;
+  if(days === null){ days = await fetchVisitorCleanupDays(); if(days === null) days = 14; }
+  startVisitorLightListeners(days);
+  if(cached && Date.now() - cached.ts > 6*60*60*1000){
+    const fresh = await fetchVisitorCleanupDays();
+    if(fresh !== null && fresh !== visitorLightDays){ startVisitorLightListeners(fresh); }
+  }
 }
 let visitorSchedulesFullListenerStarted = false;
 // 出入予定タブを実際に開いた時にだけ、過去分も含む全件購読を開始する（1度だけ）。
@@ -4514,15 +4574,16 @@ const VISITOR_CLEANUP_INTERVAL_MS = 6*60*60*1000; // 6時間（予約・お知�
 // 同様の対策が漏れており、ログイン・リロードのたびに毎回visitor_schedules全件スキャンが発生していた
 // （2026年10月、読み取り数の見直しにより、他の2つと揃える形で対応）。
 async function cleanupOldVisitorSchedules(){
+  // 2026-10-15：出入予定の自動削除は、出入予定管理権限者（管理者を含む）だけが走らせる。
+  // 一般社員は、他人の期限切れ分まで6時間おきに全件読んでいた（削除できるのは自分が対象の分だけ）。
+  if(DIET.cleanupScoped && !isVisitorManager) return;
   if(visitorCleanupRunning) return;
   if(!shouldRunLocalThrottledCleanup("visitorCleanupLastRun", VISITOR_CLEANUP_INTERVAL_MS)) return;
   visitorCleanupRunning = true;
   try{
     let cleanupDays = 14;
-    try{
-      const settingsDoc = await getDoc(doc(db,"app_settings","visitor_cleanup"));
-      if(settingsDoc.exists() && settingsDoc.data().days){ cleanupDays = settingsDoc.data().days; }
-    }catch(e){ /* 設定取得に失敗した場合は既定値のまま続行 */ }
+    const fetchedDays = await fetchVisitorCleanupDays(); // 失敗時はnull（既定値のまま続行）。取得できた値は軽量購読用にキャッシュされる
+    if(fetchedDays !== null) cleanupDays = fetchedDays;
     const cutoff = new Date(Date.now() - cleanupDays*24*60*60*1000);
     const cutoffStr = `${cutoff.getFullYear()}-${String(cutoff.getMonth()+1).padStart(2,"0")}-${String(cutoff.getDate()).padStart(2,"0")}`;
     // 2026年10月：削除日数の意味を「予定の最終日（複数日の予定は終了日）から、何日経過した日に削除するか」に変更した。
@@ -5781,6 +5842,7 @@ function initMyReservationsListener(){
     const list = snap.docs.map(d=>({id:d.id, ...d.data()}));
     list.sort((a,b)=> (a.date+a.startTime).localeCompare(b.date+b.startTime));
     myReservationsAll = list;
+    pruneOwnPastReservations(list);
     renderMyReservations(list);
     refreshDashboardIfActive();
   });
@@ -5915,13 +5977,33 @@ function initNoticesMetaListener(){
     if(document.querySelector(".tab-btn.active")?.dataset.view==="notices"){ ensureNoticesFresh(); }
   }, (err)=>{ console.error("[お知らせ新着マーカー取得エラー]", err); });
 }
+// 2026-10-15：一般社員のお知らせ再取得は「差分取得」にする。新着マーカーが変わるたびに、全員が最大200件を
+// 取り直していたが、手元の一覧で最も新しい投稿日時より後の分（投稿・「全て未読に戻す」更新で投稿日時が更新された分）
+// だけを取得して手元の一覧にマージする。取得し直しの基準は1分前に戻す（端末の時計のずれ対策。重複はIDで統合）。
+// 削除・軽微な修正（投稿日時が変わらない更新）は差分に現れないため、最後の全件取得から60分以上経っていれば全件を取り直す。
+// 投稿者・管理者（既読人数を見る）と共用アカウントは従来通り全件。?diet=0で全員従来動作。
+let noticesFullFetchedAt = 0;
+const NOTICES_FULL_REFRESH_MS = 60*60*1000;
 async function fetchNoticesOnce(){
   if(noticesFetching){ noticesRefetchQueued = true; return; }
   noticesFetching = true;
   const metaAtStart = noticesMetaMillis;
   try{
-    const snap = await getDocs(query(collection(db,"announcements"), orderBy("createdAt","desc"), limit(200)));
-    noticesAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    const useDelta = DIET.noticesDelta && noticesLoaded && noticesAll.length > 0 &&
+      !isSharedAccount && !isPoster && !isAdmin && !isNoticeManager &&
+      (Date.now() - noticesFullFetchedAt) < NOTICES_FULL_REFRESH_MS;
+    if(useDelta){
+      const maxMs = noticesAll.reduce((m,n)=> Math.max(m, msOf(n.createdAt)||0), 0);
+      const since = Timestamp.fromMillis(Math.max(0, maxMs - 60*1000));
+      const snap = await getDocs(query(collection(db,"announcements"), where("createdAt",">", since), orderBy("createdAt","desc"), limit(200)));
+      const merged = new Map(noticesAll.map(n=>[n.id, n]));
+      snap.docs.forEach(d=> merged.set(d.id, {id:d.id, ...d.data()}));
+      noticesAll = Array.from(merged.values()).sort((a,b)=> (msOf(b.createdAt)||0) - (msOf(a.createdAt)||0)).slice(0,200);
+    } else {
+      const snap = await getDocs(query(collection(db,"announcements"), orderBy("createdAt","desc"), limit(200)));
+      noticesAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
+      noticesFullFetchedAt = Date.now();
+    }
     noticesLoaded = true;
     noticesFetchedAt = Date.now();
     noticesFetchedForMeta = metaAtStart;
@@ -5983,7 +6065,23 @@ function shouldRunLocalThrottledCleanup(storageKey, intervalMs){
     return true;
   }
 }
+// 2026-10-15：一般社員の過去予約の自動削除は、全予約のスキャンをやめ、すでに読み込み済みの
+// 「自分の予約」リスト（initMyReservationsListener）から本人分だけを削除する（追加の読み取りなし）。
+// システム管理者だけが従来通り全件スキャン（他人の期限切れ分の掃除）を行う。
+let ownResPruned = false;
+function pruneOwnPastReservations(list){
+  if(!DIET.cleanupScoped || isAdmin || ownResPruned) return;
+  ownResPruned = true;
+  const today = todayStr();
+  const past = list.filter(r => r.date && r.date < today);
+  (async()=>{
+    for(const r of past){
+      try{ await deleteDoc(doc(db,"reservations", r.id)); }catch(e){ /* 1件失敗しても続行 */ }
+    }
+  })();
+}
 async function cleanupPastReservations(){
+  if(DIET.cleanupScoped && !isAdmin) return;
   if(reservationCleanupRunning) return;
   if(!shouldRunLocalThrottledCleanup("rsvCleanupLastRun", RESERVATION_CLEANUP_INTERVAL_MS)) return;
   reservationCleanupRunning = true;
@@ -6006,6 +6104,10 @@ async function cleanupPastReservations(){
 }
 
 async function cleanupOldNotices(){
+  // 2026-10-15：お知らせの自動削除は、投稿権限者（管理者・お知らせ管理権限者を含む）だけが走らせる。
+  // 権限のない一般社員は他人のお知らせを削除できないのに、期限切れ分（「自動削除しない」指定のものは
+  // 永久に残る）を6時間おきに全件読んでいた。?diet=0 で従来動作に戻る。
+  if(DIET.cleanupScoped && !isPoster) return;
   if(noticeCleanupRunning) return;
   if(!shouldRunLocalThrottledCleanup("noticeCleanupLastRun", NOTICE_CLEANUP_INTERVAL_MS)) return;
   noticeCleanupRunning = true;
@@ -6777,21 +6879,130 @@ document.getElementById("notice-upload-confirm-btn").addEventListener("click", (
 /* =========================================================
    行き先ボード
 ========================================================= */
+function applyDepartmentsList(list){
+  departmentsAll = list.slice();
+  departmentsAll.sort((a,b)=> (a.order??0)-(b.order??0));
+  renderWhereabouts();
+  populateCheckoutManagingDeptFilter();
+}
+function applyWbStatusesList(list){
+  wbStatusesAll = list.slice();
+  wbStatusesAll.sort((a,b)=> (a.order??0)-(b.order??0));
+  renderWhereabouts();
+  renderWbPresetBulkToggle();
+}
 function initDepartmentsListener(){
-  onSnapshot(collection(db,"departments"), snap=>{
-    departmentsAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
-    departmentsAll.sort((a,b)=> (a.order??0)-(b.order??0));
-    renderWhereabouts();
-    populateCheckoutManagingDeptFilter();
+  const o = masterSyncOptions();
+  onSnapshot(collection(db,"departments"), o, snap=>{
+    if(masterSyncActive && !(snap.metadata && snap.metadata.fromCache)){ masterSrvLoaded.d = true; scheduleMasterSync(); }
+    const list = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    if(o.includeMetadataChanges && masterLastApplied.d === masterCanon(list)) return;
+    masterLastApplied.d = masterCanon(list);
+    applyDepartmentsList(list);
   }, (err)=>{ console.error("[所属マスタ取得エラー]", err); });
 }
 function initWbStatusesListener(){
-  onSnapshot(collection(db,"wb_statuses"), snap=>{
-    wbStatusesAll = snap.docs.map(d=>({id:d.id, ...d.data()}));
-    wbStatusesAll.sort((a,b)=> (a.order??0)-(b.order??0));
-    renderWhereabouts();
-    renderWbPresetBulkToggle();
+  const o = masterSyncOptions();
+  onSnapshot(collection(db,"wb_statuses"), o, snap=>{
+    if(masterSyncActive && !(snap.metadata && snap.metadata.fromCache)){ masterSrvLoaded.s = true; scheduleMasterSync(); }
+    const list = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    if(o.includeMetadataChanges && masterLastApplied.s === masterCanon(list)) return;
+    masterLastApplied.s = masterCanon(list);
+    applyWbStatusesList(list);
   }, (err)=>{ console.error("[行き先ステータス取得エラー]", err); });
+}
+
+/* ------------------------------------------------------------
+   2026-10-15：マスターデータのまとめドキュメント（master_bundle/main）
+   所属（departments）・行き先ステータス（wb_statuses）・設備カテゴリ（equipment_categories）は、
+   従来、全社員がログインのたびに3コレクション（合計約18件）を購読していた。更新はまれなので、
+   管理画面が内容をまとめた1ドキュメントを作り、一般社員はそれ1件（読み取り1件）だけを購読する。
+   ・まとめが無い／形式が不正／権限エラー／8秒以内に有効なものが届かない場合は、従来の3購読に自動で切り替える
+   ・マスターを編集できる人（行き先の他者設定権限者・設備管理者・システム管理者）は従来の3購読のままにし、
+     内容がまとめと違えば作り直す（管理画面でも同じ同期を行う）
+   ・?diet=0 で従来動作（まとめを使わない）
+------------------------------------------------------------ */
+const MASTER_BUNDLE_MAX_BYTES = 900000;
+function masterCanon(v){
+  if(Array.isArray(v)) return "[" + v.map(masterCanon).join(",") + "]";
+  if(v && typeof v === "object"){
+    if(typeof v.toMillis === "function") return "T" + v.toMillis();
+    return "{" + Object.keys(v).sort().filter(k=>v[k] !== undefined).map(k=>JSON.stringify(k) + ":" + masterCanon(v[k])).join(",") + "}";
+  }
+  return JSON.stringify(v === undefined ? null : v);
+}
+let masterSyncActive = false;            // このセッションがまとめの同期役を兼ねるか（マスター編集権限者のみ）
+let masterSrvLoaded = { d:false, s:false, c:false };
+let masterLastApplied = { d:null, s:null, c:null };
+let masterBundleDocData = null, masterBundleDocLoaded = false, masterSyncTimer = null, masterSyncBusy = false;
+function masterSyncOptions(){ return masterSyncActive ? { includeMetadataChanges:true } : {}; }
+function scheduleMasterSync(){
+  clearTimeout(masterSyncTimer);
+  masterSyncTimer = setTimeout(syncMasterBundle, 2500);
+}
+async function syncMasterBundle(){
+  if(masterSyncBusy){ scheduleMasterSync(); return; }
+  if(!masterSyncActive || !masterBundleDocLoaded || !(masterSrvLoaded.d && masterSrvLoaded.s && masterSrvLoaded.c)) return;
+  if(departmentsAll.length === 0 || wbStatusesAll.length === 0 || categoriesAll.length === 0) return; // 空の状態では作らない（読み込み途中・全削除の誤爆防止）
+  const strip = a => a.map(x=>({ ...x }));
+  const body = { departments:strip(departmentsAll), wbStatuses:strip(wbStatusesAll), categories:strip(categoriesAll) };
+  const stored = masterBundleDocData;
+  if(stored && masterCanon({ departments:stored.departments, wbStatuses:stored.wbStatuses, categories:stored.categories }) === masterCanon(body)) return;
+  const payload = { ...body, v: Date.now(), counts:{ departments:body.departments.length, wbStatuses:body.wbStatuses.length, categories:body.categories.length }, updatedBy: currentUser.email };
+  if(new TextEncoder().encode(JSON.stringify(payload)).length > MASTER_BUNDLE_MAX_BYTES){ console.warn("[マスターまとめ] 大きすぎるため作成しません"); return; }
+  masterSyncBusy = true;
+  try{
+    await setDoc(doc(db,"master_bundle","main"), payload);
+  }catch(e){
+    console.error("[マスターまとめ更新エラー]", e);
+  }finally{
+    masterSyncBusy = false;
+  }
+}
+function validMasterBundle(d){
+  if(!d || !Array.isArray(d.departments) || !Array.isArray(d.wbStatuses) || !Array.isArray(d.categories) || !d.counts) return false;
+  if(d.counts.departments !== d.departments.length || d.counts.wbStatuses !== d.wbStatuses.length || d.counts.categories !== d.categories.length) return false;
+  if(d.departments.length === 0 || d.wbStatuses.length === 0 || d.categories.length === 0) return false;
+  const okIds = a => a.every(x => x && typeof x.id === "string" && x.id);
+  return okIds(d.departments) && okIds(d.wbStatuses) && okIds(d.categories);
+}
+let masterLegacyStarted = false, masterBundleUnsub = null, masterBundleTimer = null;
+function startLegacyMasterListeners(){
+  if(masterLegacyStarted) return;
+  masterLegacyStarted = true;
+  if(masterBundleUnsub){ try{ masterBundleUnsub(); }catch(e){} masterBundleUnsub = null; }
+  clearTimeout(masterBundleTimer);
+  initCategoriesListener();
+  initDepartmentsListener();
+  initWbStatusesListener();
+}
+function initMasterDataListeners(){
+  const canWrite = !!(isAdmin || isWhereaboutsEditor || isEquipmentManager);
+  if(!DIET.masterBundle){ startLegacyMasterListeners(); return; }
+  if(canWrite){
+    // マスター編集権限者：従来の3購読＋まとめの同期役（まとめ自体の読み取りは1件）
+    masterSyncActive = true;
+    onSnapshot(doc(db,"master_bundle","main"), { includeMetadataChanges:true }, snap=>{
+      if(snap.metadata && snap.metadata.fromCache) return;
+      masterBundleDocData = snap.exists() ? snap.data() : null;
+      masterBundleDocLoaded = true;
+      scheduleMasterSync();
+    }, (err)=>{ console.error("[マスターまとめ監視エラー]", err); });
+    startLegacyMasterListeners();
+    return;
+  }
+  masterBundleTimer = setTimeout(()=>{ if(!masterLegacyStarted && masterLastApplied.d === null) startLegacyMasterListeners(); }, 8000);
+  masterBundleUnsub = onSnapshot(doc(db,"master_bundle","main"), snap=>{
+    if(masterLegacyStarted) return;
+    if(!snap.exists()){ if(!(snap.metadata && snap.metadata.fromCache)) startLegacyMasterListeners(); return; }
+    const d = snap.data();
+    if(!validMasterBundle(d)){ startLegacyMasterListeners(); return; }
+    clearTimeout(masterBundleTimer);
+    const cd = masterCanon(d.departments), cs = masterCanon(d.wbStatuses), cc = masterCanon(d.categories);
+    if(masterLastApplied.c !== cc){ masterLastApplied.c = cc; applyCategoriesList(d.categories); }
+    if(masterLastApplied.d !== cd){ masterLastApplied.d = cd; applyDepartmentsList(d.departments); }
+    if(masterLastApplied.s !== cs){ masterLastApplied.s = cs; applyWbStatusesList(d.wbStatuses); }
+  }, (err)=>{ console.error("[マスターまとめ取得エラー（従来方式に切替）]", err); startLegacyMasterListeners(); });
 }
 function applyMainWidthForCurrentTab(){
   if(isDisplayMode) return; // サイネージモードはCSS側でmax-width:noneを常に適用済み
@@ -9987,7 +10198,10 @@ function initCalHolidayWindowListener(){
   const collectionName = isCalendarEditor ? "calendar_days" : "calendar_days_published";
   // 2026-10-12：編集権限者以外は、ライブ購読（毎回約61件読み取り）をやめ、版数マーカー＋localStorage
   // キャッシュで読む（公開操作があった時だけ再取得）。編集権限者は編集中データを見る必要があるため従来どおり。
-  if(!isCalendarEditor && DIET.calWindowCache){
+  // 2026-10-15：編集権限者も、ログイン時の窓（今月〜来月）は一般社員と同じ「公開済み＋版数キャッシュ」で読む
+  // （従来は編集権限者だけ毎回ライブ購読で約61件×人数ぶん読んでいた）。編集中データが必要なのは
+  // カレンダータブを開いている時だけで、そちらは別の購読（ensureCalendarFullYearListener）が担当する。
+  if((!isCalendarEditor || DIET.editorWindowPublished) && DIET.calWindowCache){
     calWindowCacheMode = true;
     calWindowRange = { startId: toId(start), endId: toId(end) };
     refreshCalHolidayWindowCached();
