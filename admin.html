@@ -4947,7 +4947,8 @@ const ROSTER_DOC_ID = "_roster";
 const ROSTER_MAX_BYTES = 900000;
 const ROSTER_MAX_MEMBERS = 1000;   // 索引エントリ上限（1ドキュメント40,000件。1人あたり約32件）に対する安全弁
 const ROSTER_FIELDS = ["employeeNo","name","department","departments","order","hidden","isSharedAccount",
-  "status","note","statusUpdatedAt","statusUpdatedBy","timeLeaveDate","timeLeaveStart","timeLeaveEnd","timeLeaveType"];
+  "status","note","statusUpdatedAt","statusUpdatedBy","timeLeaveDate","timeLeaveStart","timeLeaveEnd","timeLeaveType",
+  "afterHours","afterHoursStatus","afterHoursNote","afterHoursAt"];
 const ROSTER_SYNC_ENABLED = (()=>{ try{ return new URLSearchParams(location.search).get("diet") !== "0"; }catch(e){ return true; } })();
 function rosterKey(email){ return String(email).replace(/%/g,"%25").replace(/\./g,"%2E"); }
 function rosterEntryFromData(email, data){

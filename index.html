@@ -1817,6 +1817,13 @@
           <span class="field-clear-x" id="wb-note-clear-x" title="備考をクリア">✕</span>
         </div>
       </div>
+      <div class="field" id="wb-afterhours-section">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text);margin-bottom:4px;">
+          <input type="checkbox" id="wb-afterhours-check" style="width:auto;">
+          時間外の行き先
+        </label>
+        <p style="font-size:11px;color:var(--muted);margin:0;">チェックすると、就業時間外・休日でもこの行き先（状態・備考）を表示し続けます。次の稼働日の始業時間（時間外の範囲の始まり）になると自動で解除され、その日の朝の状態に戻ります。</p>
+      </div>
       <div class="field" id="wb-timeleave-section" style="border-top:1px solid var(--line);padding-top:12px;">
         <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text);margin-bottom:8px;">
           <input type="checkbox" id="wb-timeleave-check" style="width:auto;">
@@ -7197,7 +7204,8 @@ const ROSTER_DOC_ID = "_roster";
 const ROSTER_MAX_BYTES = 900000;   // 1ドキュメント上限1MiBに対し、900,000B超なら更新しない（通常は数十KB）
 const ROSTER_MAX_MEMBERS = 1000;  // 索引エントリ上限（1ドキュメント40,000件。1人あたり約32件）に対する安全弁
 const ROSTER_FIELDS = ["employeeNo","name","department","departments","order","hidden","isSharedAccount",
-  "status","note","statusUpdatedAt","statusUpdatedBy","timeLeaveDate","timeLeaveStart","timeLeaveEnd","timeLeaveType"];
+  "status","note","statusUpdatedAt","statusUpdatedBy","timeLeaveDate","timeLeaveStart","timeLeaveEnd","timeLeaveType",
+  "afterHours","afterHoursStatus","afterHoursNote","afterHoursAt"];
 function rosterKey(email){ return String(email).replace(/%/g,"%25").replace(/\./g,"%2E"); }
 function rosterEntryFromData(email, data){
   const o = { email };
@@ -7635,9 +7643,56 @@ function getEffectiveBaseStatus(emp){
   return ""; // 未設定
 }
 
+// ---------------------------------------------------------------------------------------------
+// 「時間外の行き先」（2026-10-19追加）
+//   行き先の入力画面で「時間外の行き先」をチェックして保存すると、就業時間外・休日でも、その行き先
+//   （afterHoursStatus／afterHoursNote）を表示し続ける。
+//   解除は自動：チェックした日の翌日以降で、カレンダー上の休日（土日含む）でない最初の日の
+//   「時間外の範囲の始まり（始業時刻－時間外マージン）」になった時点。それ以降は通常の優先順位
+//   （今日の本人編集 > 当日の事前設定 > 初期状態）に戻り、その日の朝の状態が表示される。
+//   ・例外：チェックした時刻が、その日の「時間外の範囲の始まり」より前（深夜・早朝）で、その日が稼働日なら、
+//     その日の始業時に解除される（翌日まで持ち越さない）。
+//   ・解除は表示時の計算だけで行う（書き込み・読み取りなし）。1分ごとの再描画で時刻をまたいだ瞬間に切り替わる。
+//   ・保存項目：afterHours(true/false)／afterHoursStatus／afterHoursNote／afterHoursAt(チェックした時刻のISO)
+//     status/note とは別に持つ理由：朝の事前設定の自動反映（consumeTodayWbPresets）が status/note を書き換えても、
+//     解除時刻までは時間外の行き先を保てるようにするため。
+// ---------------------------------------------------------------------------------------------
+function nextDateStrOf(ds){
+  const d = new Date(ds + "T00:00:00");
+  d.setDate(d.getDate()+1);
+  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+}
+function isWorkDayForAfterHours(ds){
+  const dow = new Date(ds + "T00:00:00").getDay();
+  return dow!==0 && dow!==6 && !isDateHolidaySync(ds);   // nextWorkingDayStr と同じ判定
+}
+function isAfterHoursActive(emp){
+  emp = withLiveWbStatus(emp);
+  if(!emp || !emp.afterHours || !emp.afterHoursAt) return false;
+  const setDate = toLocalDateStr(emp.afterHoursAt);
+  if(!setDate) return false;
+  const win = getWorkWindow();
+  const now = new Date();
+  const nowMin = now.getHours()*60 + now.getMinutes();
+  const setAt = new Date(emp.afterHoursAt);
+  const setMin = setAt.getHours()*60 + setAt.getMinutes();
+  const today = todayStr();
+  // 解除の判定を始める日：通常は翌日。ただし、始業前（深夜・早朝）にチェックした稼働日はその日から。
+  let d = (setMin < win.windowStartMin && isWorkDayForAfterHours(setDate)) ? setDate : nextDateStrOf(setDate);
+  for(let i=0; i<400 && d<=today; i++){
+    if(isWorkDayForAfterHours(d)){
+      if(d < today) return false;             // 解除日を過ぎている
+      return nowMin < win.windowStartMin;     // 解除日当日：時間外の範囲の始まりまで
+    }
+    d = nextDateStrOf(d);
+  }
+  return true;
+}
+
 // 実際に表示するステータスIDを返す。定時外の場合は特別な文字列 "OFFHOURS" を返す。
 function getEffectiveWbStatus(emp){
   emp = withLiveWbStatus(emp);
+  if(isAfterHoursActive(emp)) return emp.afterHoursStatus || "";   // 時間外の行き先（上のコメント参照）
   if(!isNowInWorkWindow()){
     return "OFFHOURS";
   }
@@ -7672,6 +7727,9 @@ function renderWbNoteCell(tdNote, tlText, baseNote){
 }
 function getWbNoteLines(emp){
   emp = withLiveWbStatus(emp);
+  if(isAfterHoursActive(emp)){
+    return { tlText: "", baseNote: emp.afterHoursNote || "" };   // 時間外の行き先：時間休は表示しない
+  }
   if(!isNowInWorkWindow()){
     return { tlText: "", baseNote: "" };
   }
@@ -8391,11 +8449,18 @@ async function consumeTodayWbPresets(dateStr){
       // 本人が既に今日その場で編集済みなら、それを優先してこちらでは上書きしない
       const updatedToday = emp.statusUpdatedAt && toLocalDateStr(emp.statusUpdatedAt) === dateStr;
       if(updatedToday) continue;
+      // 「時間外の行き先」が解除前なら、その内容を引き継ぐ（status/note は朝の状態に更新しても、解除時刻までは
+      // 時間外の行き先を表示し続ける）。解除済み・未設定ならクリアする。
+      const ahOn = isAfterHoursActive(emp);
       const consumed = {
         status: preset.status || "",
         note: preset.note || "",
         statusUpdatedAt: new Date().toISOString(),
         statusUpdatedBy: "事前設定（自動反映）",
+        afterHours: ahOn,
+        afterHoursStatus: ahOn ? (emp.afterHoursStatus || "") : "",
+        afterHoursNote: ahOn ? (emp.afterHoursNote || "") : "",
+        afterHoursAt: ahOn ? (emp.afterHoursAt || "") : "",
         timeLeaveDate: preset.timeLeaveType ? dateStr : "",
         timeLeaveStart: preset.timeLeaveType ? (preset.timeLeaveStart||"") : "",
         timeLeaveEnd: preset.timeLeaveType ? (preset.timeLeaveEnd||"") : "",
@@ -9166,8 +9231,12 @@ function openWbModal(email){
   }
   // 事前設定・初期状態も含めた「実際に有効な内容」を初期値として表示する。
   // 何も無ければ（これまでのように先頭のステータスへフォールバックさせず）「未設定」を選択状態にする。
-  sel.value = getEffectiveBaseStatus(emp) || "";
-  document.getElementById("wb-note").value = getBaseWbNote(emp);
+  // 「時間外の行き先」が有効な間は、その内容（状態・備考）とチェック状態を初期値にする
+  const ahActive = isAfterHoursActive(emp);
+  const ahEmp = withLiveWbStatus(emp);
+  sel.value = (ahActive ? ahEmp.afterHoursStatus : getEffectiveBaseStatus(emp)) || "";
+  document.getElementById("wb-note").value = ahActive ? (ahEmp.afterHoursNote || "") : getBaseWbNote(emp);
+  document.getElementById("wb-afterhours-check").checked = ahActive;
   document.getElementById("wb-error").textContent = "";
 
   const effectiveTl = getEffectiveTimeLeave(emp);
@@ -9262,10 +9331,20 @@ document.getElementById("wb-save").addEventListener("click", async ()=>{
       return;
     }
   }
+  const ahChecked = document.getElementById("wb-afterhours-check").checked;
+  if(ahChecked && !status){
+    errEl.textContent = "「時間外の行き先」を使うときは、状態を選んでください。";
+    return;
+  }
+  const nowIso = new Date().toISOString();
   const payload = {
     status, note,
-    statusUpdatedAt: new Date().toISOString(),
+    statusUpdatedAt: nowIso,
     statusUpdatedBy: currentUser.email,
+    afterHours: ahChecked,
+    afterHoursStatus: ahChecked ? status : "",
+    afterHoursNote: ahChecked ? note : "",
+    afterHoursAt: ahChecked ? nowIso : "",
     timeLeaveDate: tlChecked ? todayStr() : "",
     timeLeaveStart: tlChecked ? tlStart : "",
     timeLeaveEnd: tlChecked ? tlEnd : "",
