@@ -819,6 +819,11 @@
           <thead><tr><th></th><th>ステータス名</th><th>色</th><th></th><th>操作</th></tr></thead>
           <tbody id="status-table-body"></tbody>
         </table>
+        <div style="display:flex;align-items:center;gap:6px;margin:12px 0 0;">
+          <input type="checkbox" id="wb-timeleave-self-set-disabled" style="width:auto;">
+          <label style="margin:0;font-size:12.5px;">時間休（AM休・PM休・時間休）の自己設定を禁止する</label>
+          <span style="font-size:11px;color:var(--muted);">（チェックを変えるとすぐに保存されます）</span>
+        </div>
       </div>
 
       <div class="panel">
@@ -840,11 +845,7 @@
             <select id="cal-work-buffer-input"></select>
           </div>
         </div>
-        <div style="display:flex;align-items:center;gap:6px;margin:12px 0;">
-          <input type="checkbox" id="wb-timeleave-self-set-disabled" style="width:auto;">
-          <label style="margin:0;font-size:12.5px;">時間休（AM休・PM休・時間休）の自己設定を禁止する</label>
-        </div>
-        <button class="btn btn-primary" id="cal-work-save-btn">保存</button>
+        <button class="btn btn-primary" id="cal-work-save-btn" style="margin-top:12px;">保存</button>
       </div>
 
       <div class="panel">
@@ -917,6 +918,13 @@
         <div style="display:flex;align-items:center;gap:6px;margin-top:10px;">
           <input type="checkbox" id="status-self-set-disabled" style="width:auto;">
           <label style="margin:0;font-size:12.5px;">自己設定を禁止する</label>
+        </div>
+        <div style="margin-top:10px;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <input type="checkbox" id="status-after-hours" style="width:auto;">
+            <label style="margin:0;font-size:12.5px;">時間外の行き先</label>
+          </div>
+          <p style="font-size:11px;color:var(--muted);margin:4px 0 0;">このステータスを行き先に設定すると、就業時間外・休日でも表示し続けます。次の稼働日の始業時間（時間外の範囲の始まり）になると自動で解除され、その日の朝の状態に戻ります。</p>
         </div>
         <div class="modal-err" id="status-edit-error"></div>
         <div class="modal-actions">
@@ -3105,12 +3113,22 @@ document.getElementById("cal-work-save-btn").addEventListener("click", async ()=
   const workStart = document.getElementById("cal-work-start-input").value || "08:00";
   const workEnd = document.getElementById("cal-work-end-input").value || "17:00";
   const workBuffer = Number(document.getElementById("cal-work-buffer-input").value) || 0;
-  const timeLeaveSelfSetDisabled = document.getElementById("wb-timeleave-self-set-disabled").checked;
   if(workStart >= workEnd){ toast("終業時刻は始業時刻より後にしてください。"); return; }
   try{
-    await setDoc(doc(db,"app_settings","whereabouts"), { workStartTime: workStart, workEndTime: workEnd, offHoursBufferMin: workBuffer, timeLeaveSelfSetDisabled }, { merge:true });
+    await setDoc(doc(db,"app_settings","whereabouts"), { workStartTime: workStart, workEndTime: workEnd, offHoursBufferMin: workBuffer }, { merge:true });
     toast("定時を保存しました。");
   }catch(e){
+    toast("保存に失敗しました。");
+  }
+});
+// 時間休の自己設定禁止：行き先ステータスカードの一覧の下に移動（2026-10-19）。チェックを変えた時点で保存する
+document.getElementById("wb-timeleave-self-set-disabled").addEventListener("change", async (e)=>{
+  const el = e.currentTarget;
+  try{
+    await setDoc(doc(db,"app_settings","whereabouts"), { timeLeaveSelfSetDisabled: el.checked }, { merge:true });
+    toast("時間休の自己設定の設定を保存しました。");
+  }catch(err){
+    el.checked = !el.checked;
     toast("保存に失敗しました。");
   }
 });
@@ -3265,7 +3283,7 @@ function renderWbStatuses(){
   }
   wbStatusesAll.forEach(st=>{
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td style="width:24px;color:var(--muted);">⠿</td><td>${escapeHtml(st.name)}</td><td><span class="color-dot" style="background:${st.color}"></span></td><td style="font-size:12px;color:var(--muted);white-space:nowrap;">${st.selfSetDisabled ? "自己設定不可" : ""}</td><td class="actions"></td>`;
+    tr.innerHTML = `<td style="width:24px;color:var(--muted);">⠿</td><td>${escapeHtml(st.name)}</td><td><span class="color-dot" style="background:${st.color}"></span></td><td style="font-size:12px;color:var(--muted);white-space:nowrap;">${[st.selfSetDisabled ? "自己設定不可" : "", st.afterHours ? "時間外の行き先" : ""].filter(Boolean).join("／")}</td><td class="actions"></td>`;
     makeRowDraggable(tr, st.id, ()=> saveTableOrder("status-table-body","wb_statuses"));
     const editBtn = document.createElement("button");
     editBtn.className = "btn btn-ghost"; editBtn.textContent = "編集";
@@ -3288,6 +3306,7 @@ function openStatusModal(st){
   document.getElementById("status-name").value = st ? st.name : "";
   document.getElementById("status-color").value = (st && st.color) || "#4B5FA3";
   document.getElementById("status-self-set-disabled").checked = !!(st && st.selfSetDisabled);
+  document.getElementById("status-after-hours").checked = !!(st && st.afterHours);
   document.getElementById("status-save-btn").textContent = st ? "変更を保存" : "追加";
   document.getElementById("status-edit-error").textContent = "";
   document.getElementById("status-edit-modal").classList.add("show");
@@ -3302,7 +3321,8 @@ document.getElementById("status-save-btn").addEventListener("click", async ()=>{
   const payload = {
     name,
     color: document.getElementById("status-color").value,
-    selfSetDisabled: document.getElementById("status-self-set-disabled").checked
+    selfSetDisabled: document.getElementById("status-self-set-disabled").checked,
+    afterHours: document.getElementById("status-after-hours").checked
   };
   try{
     if(editingStatusId){

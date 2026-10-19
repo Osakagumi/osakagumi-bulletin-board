@@ -1817,13 +1817,6 @@
           <span class="field-clear-x" id="wb-note-clear-x" title="備考をクリア">✕</span>
         </div>
       </div>
-      <div class="field" id="wb-afterhours-section">
-        <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text);margin-bottom:4px;">
-          <input type="checkbox" id="wb-afterhours-check" style="width:auto;">
-          時間外の行き先
-        </label>
-        <p style="font-size:11px;color:var(--muted);margin:0;">チェックすると、就業時間外・休日でもこの行き先（状態・備考）を表示し続けます。次の稼働日の始業時間（時間外の範囲の始まり）になると自動で解除され、その日の朝の状態に戻ります。</p>
-      </div>
       <div class="field" id="wb-timeleave-section" style="border-top:1px solid var(--line);padding-top:12px;">
         <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text);margin-bottom:8px;">
           <input type="checkbox" id="wb-timeleave-check" style="width:auto;">
@@ -7645,8 +7638,9 @@ function getEffectiveBaseStatus(emp){
 
 // ---------------------------------------------------------------------------------------------
 // 「時間外の行き先」（2026-10-19追加）
-//   行き先の入力画面で「時間外の行き先」をチェックして保存すると、就業時間外・休日でも、その行き先
-//   （afterHoursStatus／afterHoursNote）を表示し続ける。
+//   管理画面の「ステータス」登録・編集で「時間外の行き先」にチェックしたステータス（wb_statuses.afterHours）を
+//   行き先として保存すると、就業時間外・休日でも、その行き先（afterHoursStatus／afterHoursNote）を表示し続ける。
+//   （個人ごとのチェックではなく、ステータス側の属性。行き先入力画面にチェックは無い）
 //   解除は自動：チェックした日の翌日以降で、カレンダー上の休日（土日含む）でない最初の日の
 //   「時間外の範囲の始まり（始業時刻－時間外マージン）」になった時点。それ以降は通常の優先順位
 //   （今日の本人編集 > 当日の事前設定 > 初期状態）に戻り、その日の朝の状態が表示される。
@@ -9236,7 +9230,6 @@ function openWbModal(email){
   const ahEmp = withLiveWbStatus(emp);
   sel.value = (ahActive ? ahEmp.afterHoursStatus : getEffectiveBaseStatus(emp)) || "";
   document.getElementById("wb-note").value = ahActive ? (ahEmp.afterHoursNote || "") : getBaseWbNote(emp);
-  document.getElementById("wb-afterhours-check").checked = ahActive;
   document.getElementById("wb-error").textContent = "";
 
   const effectiveTl = getEffectiveTimeLeave(emp);
@@ -9331,11 +9324,8 @@ document.getElementById("wb-save").addEventListener("click", async ()=>{
       return;
     }
   }
-  const ahChecked = document.getElementById("wb-afterhours-check").checked;
-  if(ahChecked && !status){
-    errEl.textContent = "「時間外の行き先」を使うときは、状態を選んでください。";
-    return;
-  }
+  // 「時間外の行き先」は、選んだステータスの設定（管理画面のステータス登録で指定）から自動的に決まる
+  const ahChecked = !!(status && wbStatusInfo(status) && wbStatusInfo(status).afterHours);
   const nowIso = new Date().toISOString();
   const payload = {
     status, note,
