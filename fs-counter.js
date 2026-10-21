@@ -12,8 +12,7 @@
    元に戻す時は import 先を元のURLに戻せばよい。
 
    【使い方】
-   ・画面右下にカウンタを出す：URLの末尾に ?fscount=1 を付けて開く
-     （一度付ければ、そのブラウザでは以降も表示。消す時は ?fscount=0）
+   ・（v3で廃止）画面右下のカウンタ ?fscount=1 は使えない。件数はスプレッドシートのログで確認する。
    ・F12 コンソールで：
        __fs.top()      … コレクション別の読み取り/書き込み件数（多い順）
        __fs.report()   … 上記を貼り付け用テキストで取得（クロに送る用）
@@ -58,6 +57,18 @@
      追加の読み取りは発生しない。
    ・ログが OFF の間は、これらの行も一切送らない（従来どおり）。
 
+   【2026年10月21日 v3.0：ログ1本化（画面のカウンタは廃止）と、取りこぼしの削減】
+   ・読み書きの件数は、スプレッドシートのログだけで確認する。画面右下のカウンタ（?fscount）は廃止。
+     （F12コンソールの __fs.top() / __fs.report() は残してある）
+   ・ログ（種別「件数」）の 読・書 を合計すれば、一般画面・管理画面とも、そのページが数えた読み書きの合計になる。
+   ・種別「env」でコレクションが「累計」の行 ＝ そのセッションの累計（読・書・推定・除）。件数行の合計と突き合わせれば、
+     送信の取りこぼしがあったかどうかが分かる（seq が飛んでいれば、その送信が届いていない）。
+   ・30分以上の切断のあとに再接続すると、Firestoreは購読中の結果を丸ごと再課金する（公式の料金説明）。
+     ブラウザからは差分しか見えないため、切断が30分以上だったと判断できたとき、購読中の件数を
+     「★再接続推定 コレクション名」の件数行として加える（推定値。実測ではない）。
+   ・送信間隔 5分→2分、初回 30〜90秒→10〜25秒。送信失敗時は破棄せず次回に再送。バッファ上限 300→1000。
+   ・ログ監視用の購読（app_settings/activity_log）の読み取りも、件数に含める。
+
    【2026年10月12日 v2.1：異常急増の自動停止（ブレーカー）と、v2の既知の不具合2件の修正】
    ・ブレーカー：サーバーから届いた読み取りが「1分で2,000件超」または「10分で6,000件超」、
      書き込みが「1分で800件超」になったら、自動で
@@ -70,7 +81,7 @@
    ・修正1：ログON判定が届く前に来る「起動直後のlisten行」が失われていた → 判定が届くまで保留し、ONなら送る。
    ・修正2：__fs.reset() が logPrev を消さないため、ログに負の差分行が出た → logPrev も初期化する。
    ========================================================= */
-const FS_COUNTER_VERSION = "v2.1 2026-10-12";
+const FS_COUNTER_VERSION = "v3.0 2026-10-21";
 import * as FS from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 export * from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
@@ -104,7 +115,10 @@ let breakerTripped = false;
 let breakerDisabled = false;
 const breakerReadTimes = [];    // [時刻, 件数]
 const breakerWriteTimes = [];
-const liveUnsubs = new Set();   // onSnapshot の購読解除関数（トリップ時に全て解除する）
+const liveUnsubs = new Set();
+const liveSizes = new Map();    // v3: 購読ID -> { label, size }（再接続の再課金を推定するため、購読中の件数を覚えておく）
+let liveSeq = 0;
+const estStats = {};            // v3: label -> 推定の再課金件数（累計）   // onSnapshot の購読解除関数（トリップ時に全て解除する）
 try{
   const bq = new URLSearchParams(location.search).get("fsbreaker");
   if(bq === "0") localStorage.setItem("fsbreaker_off", "1");
@@ -228,11 +242,17 @@ function countSnapshot(label, snap){
   breakerNote("r", srv);
 }
 // v2: リスナーごとに「最初のサーバー配信」を記録する（課金される再送の上限の目安）
-function makeCb(label, orig, ref){
+function makeCb(label, orig, ref, lid){
   let firstDone = false;
   return (snap, ...r)=>{
     try{
       countSnapshot(label, snap);
+      try{
+        const ent = liveSizes.get(lid);
+        if(ent && !(snap.metadata && snap.metadata.fromCache && ent.size)){
+          ent.size = (typeof snap.docChanges === "function") ? snap.size : (snap.exists() ? 1 : 0);
+        }
+      }catch(e){}
       if(!firstDone){
         const fromCache = !!(snap.metadata && snap.metadata.fromCache);
         const pending = !!(snap.metadata && snap.metadata.hasPendingWrites);
@@ -248,23 +268,25 @@ function makeCb(label, orig, ref){
 export function onSnapshot(ref, ...args){
   if(breakerTripped) return ()=>{};   // v2.1：自動停止中は新しい購読を開始しない
   const label = labelOf(ref);
+  const lid = ++liveSeq;
+  liveSizes.set(lid, { label, size: 0 });
   const a = args.slice();
   try{
     if(typeof a[0] === "function"){
-      a[0] = makeCb(label, a[0], ref);
+      a[0] = makeCb(label, a[0], ref, lid);
     } else if(a[0] && typeof a[0].next === "function"){
-      const obs = a[0]; const cb = makeCb(label, obs.next.bind(obs), ref);
+      const obs = a[0]; const cb = makeCb(label, obs.next.bind(obs), ref, lid);
       a[0] = Object.assign({}, obs, { next: cb });
     } else if(typeof a[1] === "function"){
       // onSnapshot(ref, options, onNext, onError)
-      a[1] = makeCb(label, a[1], ref);
+      a[1] = makeCb(label, a[1], ref, lid);
     } else if(a[1] && typeof a[1].next === "function"){
-      const obs = a[1]; const cb = makeCb(label, obs.next.bind(obs), ref);
+      const obs = a[1]; const cb = makeCb(label, obs.next.bind(obs), ref, lid);
       a[1] = Object.assign({}, obs, { next: cb });
     }
-  }catch(e){ /* ラップに失敗したら、元の引数のまま本物を呼ぶ */ return FS.onSnapshot(ref, ...args); }
+  }catch(e){ /* ラップに失敗したら、元の引数のまま本物を呼ぶ */ liveSizes.delete(lid); return FS.onSnapshot(ref, ...args); }
   const unsub = FS.onSnapshot(ref, ...a);
-  const wrapped = ()=>{ liveUnsubs.delete(wrapped); unsub(); };
+  const wrapped = ()=>{ liveUnsubs.delete(wrapped); liveSizes.delete(lid); unsub(); };
   liveUnsubs.add(wrapped);
   return wrapped;
 }
@@ -300,29 +322,13 @@ const api = {
     rows().slice(0, 25).forEach(r=> lines.push(`${r.collection}: 読${r.reads} 書${r.writes} local${r.local} 配信${r.snapshots}回`));
     const text = lines.join("\n"); console.log(text); return text;
   },
-  reset(){ Object.keys(stats).forEach(k=> delete stats[k]); Object.keys(writeTimes).forEach(k=> delete writeTimes[k]); logPrev = {}; }, // v2.1：logPrev も初期化（負の差分行を防ぐ）
+  reset(){ Object.keys(stats).forEach(k=> delete stats[k]); Object.keys(writeTimes).forEach(k=> delete writeTimes[k]); logPrev = {}; Object.keys(estStats).forEach(k=> delete estStats[k]); }, // v2.1：logPrev も初期化（負の差分行を防ぐ）
   stats
 };
 try{ window.__fs = api; }catch(e){}
 
-/* ---------- 画面右下の小さなカウンタ（?fscount=1 のときだけ表示） ---------- */
-try{
-  const qp = new URLSearchParams(location.search).get("fscount");
-  if(qp === "1") localStorage.setItem("fscount", "1");
-  if(qp === "0") localStorage.removeItem("fscount");
-  if(localStorage.getItem("fscount") === "1"){
-    const mount = ()=>{
-      const el = document.createElement("div");
-      el.style.cssText = "position:fixed;right:6px;bottom:6px;z-index:2147483647;background:rgba(0,0,0,.78);color:#fff;font:11px/1.35 monospace;padding:6px 8px;border-radius:6px;pointer-events:none;max-width:320px;white-space:pre";
-      document.body.appendChild(el);
-      setInterval(()=>{
-        const t = totals();
-        el.textContent = `FS 読${t.reads} 書${t.writes}\n` + rows().slice(0,5).map(r=>`${r.collection.slice(0,24)} 読${r.reads} 書${r.writes}`).join("\n");
-      }, 2000);
-    };
-    if(document.body) mount(); else document.addEventListener("DOMContentLoaded", mount);
-  }
-}catch(e){}
+/* ---------- 画面右下のカウンタは v3 で廃止（ログに一本化）。以前に ?fscount=1 で保存された設定だけ消しておく ---------- */
+try{ localStorage.removeItem("fscount"); }catch(e){}
 
 
 /* =========================================================
@@ -331,9 +337,9 @@ try{
    ・失敗しても握りつぶす。アプリの動作・Firestoreの読み書きには影響しない
      （送信先は Google Apps Script であり、Firestoreは使わない）。
    ========================================================= */
-const LOG_FLUSH_MS = 5 * 60 * 1000;   // 通常の送信間隔（初回のみ0〜60秒のばらつきを足す）
-const LOG_MAX_WRITES_PER_FLUSH = 100; // 1回の送信に載せる「書き込み1件ごとの記録」の上限（超過分は件数のみ）
-const LOG_MAX_BUFFER = 300;           // 送信できないまま溜め込む上限（超えたら古いものから捨てる）
+const LOG_FLUSH_MS = 2 * 60 * 1000;   // 通常の送信間隔（v3: 5分→2分。送るものが無ければ送信しない）
+const LOG_MAX_WRITES_PER_FLUSH = 300; // 1回の送信に載せる「書き込み1件ごとの記録」の上限（超過分は件数のみ）
+const LOG_MAX_BUFFER = 1000;          // 送信できないまま溜め込む上限（超えたら古いものから捨てる）
 const LOG_SID = Math.random().toString(36).slice(2, 10); // このページ読み込み単位の識別子
 
 let logCfg = null;            // { webAppUrl, secret }（有効なときだけ入る）
@@ -348,6 +354,11 @@ let logSettingSubscribed = false;
 let logConnSince = Date.now();   // 直近の接続・表示状態変化の時刻
 let logEnvSent = false;
 let logSdkOffline = null;        // SDKが「キャッシュのみ＝サーバーに繋がっていない」状態か
+let logWatchLast = null;
+let logSeq = 0;                  // v3: 送信の通し番号（飛んでいれば、その送信は届いていない）
+let logLastCum = "";             // v3: 前回送った累計行の内容（変化が無ければ送らない）
+let lastVisibleAt = Date.now(), lastHiddenAt = 0;   // v3: 再接続の切断時間の推定用
+let sdkOfflineAt = 0, sdkOfflineFromHidden = 0;
 let logSettingKnown = false;     // v2.1：ログON/OFFの判定が届いたか（届くまで listen 行を保留する）
 let logPendingListen = [];       // v2.1：判定が届く前に来た listen 行（最大60件）
 const LOG_MAX_CONN_PER_FLUSH = 60;
@@ -425,12 +436,27 @@ function logEnvInfo(){
     path: `${os}/${br}/${standalone ? "standalone" : "browser"}/${sw ? "SW有" : "SW無"}`,
     caller: `w${window.innerWidth}x${window.innerHeight} online=${navigator.onLine}` };
 }
-function logBuildPayload(){
+// v3: 30分以上の切断のあとの再接続では、購読中の結果が丸ごと再課金される（公式の料金説明）。
+//     ブラウザには差分しか届かないため、購読中の件数を「推定」として加える（実測ではない）。
+function estimateReconnect(gapSec){
+  try{
+    let total = 0;
+    liveSizes.forEach(ent=>{
+      const n = Math.max(ent.size || 0, 1);
+      estStats[ent.label] = (estStats[ent.label] || 0) + n;
+      total += n;
+    });
+    if(typeof console !== "undefined") console.info(`[FS] 切断${Math.round(gapSec/60)}分後の再接続：再課金の推定 ${total}件`);
+  }catch(e){}
+}
+let logEstPrev = {};
+function logBuildPayload(reason){
   // コレクション別の差分（前回送信からの増分）
   const now = Date.now();
   if(!logEnabled){
     // OFFの間は何も送らない。ONにした時点から数え始めるよう、基準値だけ最新にしておく。
     for(const [label, s] of Object.entries(stats)) logPrev[label] = { reads: s.reads, writes: s.writes, local: s.local, removed: s.removed };
+    for(const [label, n] of Object.entries(estStats)) logEstPrev[label] = n;
     logBuf = []; logWriteOverflow = 0;
     return [];
   }
@@ -445,39 +471,61 @@ function logBuildPayload(){
     }
     logPrev[label] = { reads: s.reads, writes: s.writes, local: s.local, removed: s.removed };
   }
+  for(const [label, n] of Object.entries(estStats)){
+    const d = n - (logEstPrev[label] || 0);
+    if(d > 0) logPush({ t: now, type: "count", tab: logCurTab, coll: "★再接続推定 " + label, reads: d, writes: 0, local: 0 });
+    logEstPrev[label] = n;
+  }
   if(logWriteOverflow){
     logPush({ t: now, type: "write-overflow", tab: logCurTab, writes: logWriteOverflow });
     logWriteOverflow = 0;
   }
   if(!logEnvSent){ logEnvSent = true; try{ logPush(logEnvInfo()); }catch(e){} }
+  // v3: セッション累計（件数行の合計と突き合わせて、取りこぼしの有無を確認するための行）
+  try{
+    let R = 0, W = 0, L = 0, RM = 0, E = 0;
+    for(const s of Object.values(stats)){ R += s.reads; W += s.writes; L += s.local; RM += s.removed; }
+    for(const n of Object.values(estStats)) E += n;
+    const cum = `読${R} 書${W} 推定${E} local${L} 除${RM}`;
+    if(cum !== logLastCum){
+      logLastCum = cum;
+      logPush({ t: now, type: "env", tab: logCurTab, coll: "累計", path: cum, caller: `seq=${logSeq + 1} ${(location.pathname.split("/").pop() || "index")} ${reason || ""}`.trim() });
+    }
+  }catch(e){}
   const events = logBuf; logBuf = [];
   return events;
 }
 async function logFlush(useBeacon){
   if(!logCfg) return;
+  let events = null;
   try{
-    const events = logBuildPayload();
+    events = logBuildPayload(useBeacon ? "hide" : "timer");
     if(!events.length) return;
+    logSeq++;
     const email = await logResolveEmail();
-    const body = JSON.stringify({
-      secret: logCfg.secret, action: "log",
-      email: email || "(unknown)",
-      page: (location.pathname.split("/").pop() || "index"),
-      sid: LOG_SID, events
-    });
-    if(useBeacon && navigator.sendBeacon){
-      const ok = navigator.sendBeacon(logCfg.webAppUrl, new Blob([body], { type: "text/plain;charset=UTF-8" }));
-      if(!ok){ logBuf = events.concat(logBuf).slice(-LOG_MAX_BUFFER); }
-      return;
+    const page = (location.pathname.split("/").pop() || "index");
+    // 1回の送信は150件ずつに分ける（sendBeacon / keepalive は約64KBまで）
+    const CH = 150;
+    for(let i = 0; i < events.length; i += CH){
+      const body = JSON.stringify({
+        secret: logCfg.secret, action: "log",
+        email: email || "(unknown)", page, sid: LOG_SID, seq: logSeq, events: events.slice(i, i + CH)
+      });
+      if(useBeacon && navigator.sendBeacon){
+        const ok = navigator.sendBeacon(logCfg.webAppUrl, new Blob([body], { type: "text/plain;charset=UTF-8" }));
+        if(!ok){ logBuf = events.slice(i).concat(logBuf).slice(-LOG_MAX_BUFFER); return; }
+      } else {
+        // text/plain＋no-cors：Apps Scriptはプリフライトに応答できないため。レスポンスは読まない。
+        await fetch(logCfg.webAppUrl, { method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain;charset=UTF-8" }, body, keepalive: true });
+      }
     }
-    // text/plain＋no-cors：Apps Scriptはプリフライトに応答できないため。レスポンスは読まない。
-    await fetch(logCfg.webAppUrl, { method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain;charset=UTF-8" }, body, keepalive: true });
   }catch(e){
-    // 失敗しても何もしない（次回の送信で、溜まった分は再送されない＝取りこぼしを許容）
+    // v3: 送れなかった分は捨てずに、次回の送信に回す（通信エラーのときのみ。送信先が受け取ってから失敗した場合は検知できない）
+    if(events && events.length) logBuf = events.concat(logBuf).slice(-LOG_MAX_BUFFER);
   }
 }
 function logScheduleNext(first){
-  const wait = first ? (Math.random() * 60000 + 30000) : LOG_FLUSH_MS;
+  const wait = first ? (Math.random() * 15000 + 10000) : LOG_FLUSH_MS;
   logTimer = setTimeout(async ()=>{ await logFlush(false); logScheduleNext(false); }, wait);
 }
 (async function logInit(){
@@ -499,6 +547,7 @@ function logScheduleNext(first){
     }, 2000);
     // ページを閉じる・隠すときに、残りをまとめて送る
     document.addEventListener("visibilitychange", ()=>{
+      if(document.visibilityState === "hidden") lastHiddenAt = Date.now(); else lastVisibleAt = Date.now();
       try{ logConn(document.visibilityState === "hidden" ? "hidden" : "visible"); }catch(e){}
       if(document.visibilityState === "hidden") logFlush(true);
     });
@@ -531,6 +580,23 @@ function logWatchSetting(){
       clearInterval(waitTimer);
       FS.onSnapshot(FS.doc(FS.getFirestore(), "app_settings", "activity_log"), { includeMetadataChanges: true }, (snap)=>{
         const off = !!(snap.metadata && snap.metadata.fromCache);
+        // v3: SDKが切断→復帰した時、切断が30分以上なら再課金を推定する（画面が凍結されていた場合は、隠れた時刻から数える）
+        try{
+          if(off && !sdkOfflineAt){ sdkOfflineAt = Date.now(); sdkOfflineFromHidden = (lastHiddenAt && Date.now() - lastVisibleAt < 20000) ? lastHiddenAt : 0; }
+          if(!off && sdkOfflineAt){
+            const gap = (Date.now() - (sdkOfflineFromHidden || sdkOfflineAt)) / 1000;
+            sdkOfflineAt = 0; sdkOfflineFromHidden = 0;
+            if(gap >= 1800) estimateReconnect(gap);
+          }
+        }catch(e){}
+        // v3: このログ監視用の購読自体の読み取りも数える（サーバー配信で、内容が変わった時だけ）
+        try{
+          if(!off && !(snap.metadata && snap.metadata.hasPendingWrites)){
+            const en = !!(snap.exists() && snap.data().enabled === true);
+            if(logWatchLast === null || en !== logWatchLast){ bucket("app_settings/activity_log (ログ監視)").reads += 1; breakerNote("r", 1); }
+            logWatchLast = en;
+          }
+        }catch(e){}
         if(logSdkOffline !== null && off !== logSdkOffline){ logConn(off ? "sdk-offline" : "sdk-online"); }
         logSdkOffline = off;
         const was = logEnabled;
