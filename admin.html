@@ -4686,11 +4686,17 @@ async function saveBizAutoConfig(okMsg){
   });
   const alertEmails = document.getElementById("bizauto-alert-emails").value.trim();
   try{
+    // 切り分け用：送った内容と、保存後にサーバーから返ってきた内容を、コンソールと画面に出す（2026-10-21）
+    const sentSummary = Object.keys(targets).map(id=>`${targets[id].name}=${targets[id].enabled?"ON":"OFF"}`).join(" / ");
+    console.info("[自動更新] 送信：", JSON.parse(JSON.stringify(targets)));
     await autoSaveConfig({ alertEmails, targets });
     if(msg){ msg.textContent = okMsg || "保存しました。"; msg.style.color = "var(--muted)"; }
     bizAutoState = null;
     await loadBizAutoState();
-    if(msg) msg.textContent = okMsg || "保存しました。";
+    const back = (bizAutoState && bizAutoState.cfg && bizAutoState.cfg.targets) || {};
+    const backSummary = Object.keys(back).map(id=>`${back[id].name}=${back[id].enabled===false?"OFF":"ON"}`).join(" / ");
+    console.info("[自動更新] 保存後にサーバーから返った内容：", JSON.parse(JSON.stringify(back)));
+    if(msg) msg.textContent = (okMsg || "保存しました。") + `（送信：${sentSummary || "なし"} ／ サーバー：${backSummary || "なし"}）`;
   }catch(e){
     if(msg){ msg.textContent = "保存に失敗しました：" + (e.message||""); msg.style.color = "var(--danger)"; }
   }
