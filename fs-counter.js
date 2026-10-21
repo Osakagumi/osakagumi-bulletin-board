@@ -69,6 +69,14 @@
    ・送信間隔 5分→2分、初回 30〜90秒→10〜25秒。送信失敗時は破棄せず次回に再送。バッファ上限 300→1000。
    ・ログ監視用の購読（app_settings/activity_log）の読み取りも、件数に含める。
 
+   【2026年10月21日 v3.2：実験で分かったこと（間が空いた後の読み込みは、キャッシュ分も全件課金される）の反映】
+   ・実験（12:40〜12:56）：数分前に開いた画面の再読み込みは、課金が実測分（約18）だけ。42分空けた後の一般画面の読み込みは、
+     コンソールが+48（実測8＋キャッシュ表示37＋他の人2＝47に一致）。→ 30分を超えて間が空くと、購読の結果が丸ごと課金される。
+   ・そこで、前回の稼働（localStorage の心拍）から30分以上空いて読み込んだセッションでは、「★初回全件推定」を課金扱いで加算する。
+     30分以内なら「☆初回全件（続き）」として別枠にし、課金には数えない（参考）。
+   ・画面が休止していた（タイマーが2分以上止まった）場合も、その時間を再接続の切断時間として使う。
+   ・env行の呼び出し元欄に「前回稼働から○秒」を追記。
+
    【2026年10月21日 v3.1：コンソールの件数との差を調べるための追加ログ】
    ・操作数：env行・コレクション「操作数」・パス=対象 に、前回送信からの getDoc/getDocs/count/listen開始/書き込み(set,update,add,delete)の回数
      （サーバー由来とキャッシュ由来を分ける）。Firestoreルール内の exists()/get() の読み取りを、ルールの内容と突き合わせて見積もるための材料。
@@ -92,7 +100,7 @@
    ・修正1：ログON判定が届く前に来る「起動直後のlisten行」が失われていた → 判定が届くまで保留し、ONなら送る。
    ・修正2：__fs.reset() が logPrev を消さないため、ログに負の差分行が出た → logPrev も初期化する。
    ========================================================= */
-const FS_COUNTER_VERSION = "v3.1 2026-10-21";
+const FS_COUNTER_VERSION = "v3.2 2026-10-21";
 import * as FS from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 export * from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
@@ -100,6 +108,25 @@ const stats = {};            // label -> { reads, writes, local, removed, snapCa
 const writeTimes = {};       // label -> [timestamps]
 const lastWarnAt = {};       // label -> timestamp
 const startedAt = Date.now();
+// v3.2: 前回の稼働からの経過（読み込み時）と、画面休止の検出
+const ALIVE_KEY = "fs_alive_at";
+let coldGapSec = 0, coldKnown = false;
+let lastTick = Date.now(), frozenGapSec = 0, frozenAt = 0;
+try{
+  const prev = Number(localStorage.getItem(ALIVE_KEY) || 0);
+  if(prev){ coldGapSec = Math.round((Date.now() - prev) / 1000); coldKnown = true; }
+}catch(e){}
+const IS_COLD = !coldKnown || coldGapSec >= 1800;   // 記録が無い＝初回は、課金されるものとして扱う
+function aliveTouch(){ try{ localStorage.setItem(ALIVE_KEY, String(Date.now())); }catch(e){} }
+aliveTouch();
+try{
+  setInterval(()=>{
+    const n = Date.now(), g = n - lastTick;
+    if(g > 120000){ frozenGapSec = Math.round(g / 1000); frozenAt = n; }
+    lastTick = n; aliveTouch();
+  }, 20000);
+  window.addEventListener("pagehide", aliveTouch);
+}catch(e){}
 
 function bucket(label){
   return stats[label] || (stats[label] = { reads:0, writes:0, local:0, removed:0, snapCalls:0 });
@@ -195,6 +222,7 @@ function breakerGuard(){
 const ops = {};   // label -> { getDoc, getDocCache, getDocs, getDocsCache, count, listen, set, update, add, delete }
 function opNote(label, k){ try{ const o = ops[label] || (ops[label] = {}); o[k] = (o[k] || 0) + 1; }catch(e){} }
 let opsPrev = {};
+const estWarm = {};    // v3.2: 参考（30分以内の再読み込みでキャッシュから表示された分。課金には数えない）
 const estFirst = {};   // v3.1: label -> 初回全件推定（累計）
 let estFirstPrev = {};
 let snapTotal = 0;
@@ -318,7 +346,10 @@ function makeCb(label, orig, ref, lid){
           try{
             const size0 = (typeof snap.docChanges === "function") ? snap.size : (snap.exists() ? 1 : 0);
             extra = Math.max(0, size0 - srvN);
-            if(extra > 0) estFirst[label] = (estFirst[label] || 0) + extra;
+            if(extra > 0){
+              if(IS_COLD) estFirst[label] = (estFirst[label] || 0) + extra;   // 前回稼働から30分超：課金扱い
+              else estWarm[label] = (estWarm[label] || 0) + extra;           // 30分以内：続きから再開＝課金は少ない（参考）
+            }
           }catch(e){}
           logListen(label, snap, ent0, extra);
         }
@@ -479,7 +510,7 @@ function logListen(label, snap, ent, extra){
   else { size = snap.exists() ? 1 : 0; changes = size; }
   const sec = ent ? Math.round((Date.now() - ent.start) / 1000) : 0;
   const ev = { t: Date.now(), type: "listen", tab: logCurrentTab(), coll: label, reads: size, local: changes,
-    caller: `size=${size} changes=${changes} 初回全件推定+${extra || 0} 購読から${sec}秒 ${ent && ent.caller ? ent.caller : ""}`.trim() };
+    caller: `size=${size} changes=${changes} 初回全件推定${IS_COLD ? "+" : "(参考・課金少)="}${extra || 0} 購読から${sec}秒 ${ent && ent.caller ? ent.caller : ""}`.trim() };
   if(!logSettingKnown){ if(logPendingListen.length < 60) logPendingListen.push(ev); return; } // v2.1：判定待ち（設定の読み込み前でも取りこぼさない）
   if(!logCfg || !logEnabled) return;
   logPush(ev);
@@ -513,7 +544,7 @@ function logEnvInfo(){
   try{ sw = !!(navigator.serviceWorker && navigator.serviceWorker.controller); }catch(e){}
   return { t: Date.now(), type: "env", tab: logCurrentTab(), coll: FS_COUNTER_VERSION,
     path: `${os}/${br}/${standalone ? "standalone" : "browser"}/${sw ? "SW有" : "SW無"}`,
-    caller: `w${window.innerWidth}x${window.innerHeight} online=${navigator.onLine}` };
+    caller: `w${window.innerWidth}x${window.innerHeight} online=${navigator.onLine} 前回稼働から${coldKnown ? coldGapSec + "秒" : "記録なし"}` };
 }
 // v3: 30分以上の切断のあとの再接続では、購読中の結果が丸ごと再課金される（公式の料金説明）。
 //     ブラウザには差分しか届かないため、購読中の件数を「推定」として加える（実測ではない）。
@@ -683,7 +714,8 @@ function logWatchSetting(){
         try{
           if(off && !sdkOfflineAt){ sdkOfflineAt = Date.now(); sdkOfflineFromHidden = (lastHiddenAt && Date.now() - lastVisibleAt < 20000) ? lastHiddenAt : 0; }
           if(!off && sdkOfflineAt){
-            const gap = (Date.now() - (sdkOfflineFromHidden || sdkOfflineAt)) / 1000;
+            let gap = (Date.now() - (sdkOfflineFromHidden || sdkOfflineAt)) / 1000;
+            if(frozenAt && Date.now() - frozenAt < 60000) gap = Math.max(gap, frozenGapSec);   // v3.2: 画面休止の時間も使う
             sdkOfflineAt = 0; sdkOfflineFromHidden = 0;
             if(gap >= 1800) estimateReconnect(gap);
           }
