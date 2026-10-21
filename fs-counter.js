@@ -69,6 +69,11 @@
    ・送信間隔 5分→2分、初回 30〜90秒→10〜25秒。送信失敗時は破棄せず次回に再送。バッファ上限 300→1000。
    ・ログ監視用の購読（app_settings/activity_log）の読み取りも、件数に含める。
 
+   【2026年10月21日 v3.3：初回全件推定の取りこぼしを修正】
+   ・v3.2は、購読の「最初のサーバー配信」でだけ推定していたため、データに変化がなく配信されない購読（約半数）が漏れていた
+     （13:22の一般画面：local37に対し推定18）。購読の「最初の配信（キャッシュ由来でも）」の時点で、全件−実測の差を1回だけ推定に加える。
+   ・読み込みが30分以内（温間）の分は、従来どおり別枠（参考）で、課金には数えない。
+
    【2026年10月21日 v3.2：実験で分かったこと（間が空いた後の読み込みは、キャッシュ分も全件課金される）の反映】
    ・実験（12:40〜12:56）：数分前に開いた画面の再読み込みは、課金が実測分（約18）だけ。42分空けた後の一般画面の読み込みは、
      コンソールが+48（実測8＋キャッシュ表示37＋他の人2＝47に一致）。→ 30分を超えて間が空くと、購読の結果が丸ごと課金される。
@@ -100,7 +105,7 @@
    ・修正1：ログON判定が届く前に来る「起動直後のlisten行」が失われていた → 判定が届くまで保留し、ONなら送る。
    ・修正2：__fs.reset() が logPrev を消さないため、ログに負の差分行が出た → logPrev も初期化する。
    ========================================================= */
-const FS_COUNTER_VERSION = "v3.2 2026-10-21";
+const FS_COUNTER_VERSION = "v3.3 2026-10-21";
 import * as FS from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 export * from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
@@ -330,6 +335,19 @@ function makeCb(label, orig, ref, lid){
       snapTotal += 1;
       const ent0 = liveSizes.get(lid);
       if(ent0){ ent0.snaps += 1; ent0.srv += srvN; ent0.loc += locN; }
+      // v3.3: 購読の最初の配信（キャッシュ由来でも）で、全件(size)−実測(srvN) を1回だけ推定する
+      if(ent0 && !ent0.initDone){
+        ent0.initDone = true;
+        try{
+          const size0 = (typeof snap.docChanges === "function") ? snap.size : (snap.exists() ? 1 : 0);
+          const ex = Math.max(0, size0 - srvN);
+          ent0.extra = ex;
+          if(ex > 0){
+            if(IS_COLD) estFirst[label] = (estFirst[label] || 0) + ex;   // 前回稼働から30分超：課金扱い
+            else estWarm[label] = (estWarm[label] || 0) + ex;           // 30分以内：続きから再開＝課金は少ない（参考）
+          }
+        }catch(e){}
+      }
       try{
         const ent = liveSizes.get(lid);
         if(ent && !(snap.metadata && snap.metadata.fromCache && ent.size)){
@@ -341,16 +359,7 @@ function makeCb(label, orig, ref, lid){
         const pending = !!(snap.metadata && snap.metadata.hasPendingWrites);
         if(!fromCache && !pending){
           firstDone = true;
-          // v3.1: 最初のサーバー配信で、画面側の差分(srvN)より全件(size)が多い分は、課金されている可能性がある（上限の推定）
-          let extra = 0;
-          try{
-            const size0 = (typeof snap.docChanges === "function") ? snap.size : (snap.exists() ? 1 : 0);
-            extra = Math.max(0, size0 - srvN);
-            if(extra > 0){
-              if(IS_COLD) estFirst[label] = (estFirst[label] || 0) + extra;   // 前回稼働から30分超：課金扱い
-              else estWarm[label] = (estWarm[label] || 0) + extra;           // 30分以内：続きから再開＝課金は少ない（参考）
-            }
-          }catch(e){}
+          const extra = ent0 ? (ent0.extra || 0) : 0;
           logListen(label, snap, ent0, extra);
         }
       }
