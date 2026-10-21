@@ -91,3 +91,14 @@ export async function fetchStorageInfo(){
     secret: GAS_STORAGE_CONFIG.secret
   });
 }
+
+// ---- 業務情報の自動更新（社内ノートPC）用：設定の取得・保存（Apps Script側に保存。Firestoreは使わない） ----
+// 戻り値 { cfg, status, hb, now }
+export async function autoGetState(){
+  if(!isStorageConfigured()) throw new Error("添付ファイル機能が未設定です。");
+  return await callGasEndpoint({ action: "autoGetState", secret: GAS_STORAGE_CONFIG.secret });
+}
+export async function autoSaveConfig(cfg){
+  if(!isStorageConfigured()) throw new Error("添付ファイル機能が未設定です。");
+  return await callGasEndpoint({ action: "autoSaveConfig", secret: GAS_STORAGE_CONFIG.secret, cfg });
+}

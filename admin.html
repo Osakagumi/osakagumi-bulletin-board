@@ -1020,6 +1020,26 @@
           <tbody id="bizinfo-table-body"></tbody>
         </table>
       </div>
+      <div class="panel" id="bizauto-panel" style="display:none;">
+        <h2>自動更新（社内ノートPC）</h2>
+        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
+          社内の専用ノートPCが、15分ごとにここの設定を確認し、実行時刻になった項目のファイル（例：O:\全社共有\工務部\作業予定表.xlsx）を、業務情報のファイルに上書きします（ファイルのリンクは変わりません）。パスを空欄にした項目は対象外です。この設定は読み取り・書き込み件数を使いません。
+        </p>
+        <div id="bizauto-hb" style="font-size:12.5px;margin-bottom:10px;"></div>
+        <table id="bizauto-table">
+          <thead><tr><th>業務情報名</th><th>元ファイルのパス</th><th>スケジュール</th><th>有効</th><th>最終結果</th><th></th></tr></thead>
+          <tbody id="bizauto-table-body"></tbody>
+        </table>
+        <div class="field" style="margin-top:12px;">
+          <label>失敗・停止の通知先メール（複数はセミコロンで区切る）</label>
+          <input type="text" id="bizauto-alert-emails" placeholder="例）hine@osakagumi.co.jp" style="max-width:420px;">
+        </div>
+        <div style="margin-top:8px;">
+          <button class="btn btn-primary" id="bizauto-save-btn">設定を保存</button>
+          <button class="btn btn-ghost" id="bizauto-refresh-btn" style="border:1px solid var(--line);">状態を更新</button>
+          <span id="bizauto-msg" style="font-size:12.5px;margin-left:8px;"></span>
+        </div>
+      </div>
     </section>
 
     <!-- ============ チャット管理 ============ -->
@@ -1552,7 +1572,7 @@ import {
   getCountFromServer, documentId
 } from "./fs-counter.js";
 import { firebaseConfig, CATEGORIES as SEED_CATEGORIES, EQUIPMENT_STATUSES } from "./firebase-config.js";
-import { initStorageHelper, uploadFileToStorage, deleteFileFromStorage, fetchStorageInfo } from "./storage-helper.js";
+import { initStorageHelper, uploadFileToStorage, deleteFileFromStorage, fetchStorageInfo, isStorageConfigured, autoGetState, autoSaveConfig } from "./storage-helper.js";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -4247,6 +4267,7 @@ function initBizInfoListener(){
   }, (err)=>{ console.error("[業務情報取得エラー]", err); });
 }
 function renderBizInfoTable(){
+  try{ renderBizAutoPanel(); }catch(e){ console.error("[自動更新パネル]", e); }
   const addBtn = document.getElementById("bizinfo-add-btn");
   if(addBtn) addBtn.style.display = myAdminPermissions.isAdmin ? "" : "none";
   const catPanel = document.getElementById("bizinfo-cat-panel");
@@ -4551,6 +4572,131 @@ document.getElementById("bizinfo-upload-confirm-btn")?.addEventListener("click",
   if(!bizInfoPendingUploadFile) return;
   uploadFileForBizInfo(bizInfoPendingUploadFile);
 });
+
+/* =========================================================
+   業務情報：自動更新（社内ノートPC）の設定
+   設定・実行状況はGoogle Apps Script側に保存（Firestoreは使わない）。
+   ノートPCのスクリプトが15分ごとにこの設定を取得して実行する。
+========================================================= */
+let bizAutoState = null; // { cfg, status, hb, now }
+let bizAutoLoading = false;
+let bizAutoRunNow = {}; // itemId -> 「今すぐ実行」を押したときのトークン（保存で反映）
+function bizAutoFmt(ms){
+  if(!ms) return "—";
+  const d = new Date(ms);
+  return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+}
+async function loadBizAutoState(){
+  if(bizAutoLoading) return;
+  bizAutoLoading = true;
+  const msg = document.getElementById("bizauto-msg");
+  try{
+    bizAutoState = await autoGetState();
+    document.getElementById("bizauto-alert-emails").value = (bizAutoState.cfg && bizAutoState.cfg.alertEmails) || "";
+    bizAutoRunNow = {};
+    renderBizAutoPanel();
+    if(msg) msg.textContent = "";
+  }catch(e){
+    if(msg){ msg.textContent = "状態の取得に失敗しました：" + (e.message||""); msg.style.color = "var(--danger)"; }
+  }finally{
+    bizAutoLoading = false;
+  }
+}
+function renderBizAutoPanel(){
+  const panel = document.getElementById("bizauto-panel");
+  if(!panel) return;
+  if(!myAdminPermissions.isAdmin || !isStorageConfigured()){ panel.style.display = "none"; return; }
+  panel.style.display = "";
+  if(!bizAutoState){ loadBizAutoState(); return; }
+  const cfg = bizAutoState.cfg || { targets:{} };
+  const status = bizAutoState.status || {};
+  const hb = bizAutoState.hb;
+  const hbEl = document.getElementById("bizauto-hb");
+  if(hbEl){
+    if(!hb || !hb.at){
+      hbEl.innerHTML = `<span style="color:var(--muted);">ノートPCからの連絡：まだありません</span>`;
+    } else {
+      const min = Math.round((bizAutoState.now - hb.at)/60000);
+      const stale = min >= 60;
+      hbEl.innerHTML = `<span style="color:${stale?"var(--danger)":"var(--muted)"};">ノートPCからの最終連絡：${min<1?"1分以内":min+"分前"}（${escapeHtml(hb.host||"")}）${stale?" ← 連絡が途絶えています":""}</span>`;
+    }
+  }
+  const body = document.getElementById("bizauto-table-body");
+  body.innerHTML = "";
+  bizInfoItemsAll.filter(i=>i.fileId).forEach(item=>{
+    const t = (cfg.targets||{})[item.id] || {};
+    const st = status[item.id] || {};
+    const mismatch = t.fileId && t.fileId !== item.fileId;
+    const tr = document.createElement("tr");
+    tr.dataset.id = item.id;
+    const isErr = st.lastResult === "error";
+    const stText = st.lastAttemptAt
+      ? `${bizAutoFmt(st.lastAttemptAt)} ${isErr ? "失敗" : (st.lastResult==="unchanged" ? "更新なし" : "成功")}${isErr ? `<div style="font-size:11px;">${escapeHtml(st.lastMessage||"")}</div>` : ""}`
+      : "—";
+    tr.innerHTML = `
+      <td><b>${escapeHtml(item.name||"")}</b>${mismatch ? `<div style="font-size:11px;color:var(--danger);">ファイルが差し替えられています。保存し直してください。</div>` : ""}</td>
+      <td><input type="text" class="bizauto-path" value="${escapeHtml(t.path||"")}" placeholder="O:\\全社共有\\…\\ファイル.xlsx" style="min-width:260px;"></td>
+      <td style="white-space:nowrap;">
+        <select class="bizauto-mode"><option value="daily">毎日</option><option value="interval">間隔</option></select>
+        <input type="time" class="bizauto-time" value="${escapeHtml(t.time||"08:30")}" style="width:100px;">
+        <span class="bizauto-hours-wrap" style="display:none;"><input type="number" class="bizauto-hours" min="1" max="168" value="${Number(t.hours)||24}" style="width:60px;">時間ごと</span>
+      </td>
+      <td><input type="checkbox" class="bizauto-enabled" ${t.enabled===false?"":"checked"} style="width:auto;"></td>
+      <td style="font-size:12px;${isErr?"color:var(--danger);":""}">${stText}</td>
+      <td><button class="btn btn-ghost bizauto-now" style="border:1px solid var(--line);">今すぐ</button></td>
+    `;
+    const modeSel = tr.querySelector(".bizauto-mode");
+    modeSel.value = t.mode === "interval" ? "interval" : "daily";
+    const syncMode = ()=>{
+      const iv = modeSel.value === "interval";
+      tr.querySelector(".bizauto-time").style.display = iv ? "none" : "";
+      tr.querySelector(".bizauto-hours-wrap").style.display = iv ? "" : "none";
+    };
+    modeSel.addEventListener("change", syncMode);
+    syncMode();
+    tr.querySelector(".bizauto-now").addEventListener("click", async (e)=>{
+      if(!tr.querySelector(".bizauto-path").value.trim()){ toast("先にパスを入力してください。"); return; }
+      bizAutoRunNow[item.id] = String(Date.now());
+      e.target.textContent = "予約済み";
+      await saveBizAutoConfig("保存しました。ノートPCが次に確認する時（15分以内）に実行されます。");
+    });
+    body.appendChild(tr);
+  });
+  if(!body.children.length){
+    body.innerHTML = `<tr><td colspan="6" class="empty">ファイルを登録した業務情報がありません。</td></tr>`;
+  }
+}
+async function saveBizAutoConfig(okMsg){
+  const msg = document.getElementById("bizauto-msg");
+  const targets = {};
+  document.querySelectorAll("#bizauto-table-body tr[data-id]").forEach(tr=>{
+    const id = tr.dataset.id;
+    const item = bizInfoItemsAll.find(i=>i.id===id);
+    const path = tr.querySelector(".bizauto-path").value.trim();
+    if(!item || !path) return;
+    const old = ((bizAutoState && bizAutoState.cfg && bizAutoState.cfg.targets) || {})[id] || {};
+    targets[id] = {
+      name: item.name || "", fileId: item.fileId, path,
+      mode: tr.querySelector(".bizauto-mode").value,
+      time: tr.querySelector(".bizauto-time").value || "08:30",
+      hours: Number(tr.querySelector(".bizauto-hours").value) || 24,
+      enabled: tr.querySelector(".bizauto-enabled").checked,
+      runNowToken: bizAutoRunNow[id] || old.runNowToken || ""
+    };
+  });
+  const alertEmails = document.getElementById("bizauto-alert-emails").value.trim();
+  try{
+    await autoSaveConfig({ alertEmails, targets });
+    if(msg){ msg.textContent = okMsg || "保存しました。"; msg.style.color = "var(--muted)"; }
+    bizAutoState = null;
+    await loadBizAutoState();
+    if(msg) msg.textContent = okMsg || "保存しました。";
+  }catch(e){
+    if(msg){ msg.textContent = "保存に失敗しました：" + (e.message||""); msg.style.color = "var(--danger)"; }
+  }
+}
+document.getElementById("bizauto-save-btn")?.addEventListener("click", ()=> saveBizAutoConfig());
+document.getElementById("bizauto-refresh-btn")?.addEventListener("click", ()=>{ bizAutoState = null; loadBizAutoState(); });
 
 let lastContractEditorEmails = [];
 function initContractEditorsListener(){

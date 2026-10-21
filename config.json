@@ -1,0 +1,7 @@
+{
+  "webAppUrl": "https://script.google.com/macros/s/AKfycbxN_VDxzHRkVYOPx-06v1aYPRV4uAPfLYBdSyhh9Vop9p57mIxoSRqQ6Uu5VDzJ6iMa5w/exec",
+  "autoSecret": "qj8hb3sjkhsdlkdlkjfsdfdbocnnfrye477",
+  "allowedPrefixes": ["O:\‘SŽÐ‹¤—L\"],
+  "allowedExtensions": [".xlsx", ".xlsm", ".xls", ".pdf", ".docx", ".csv"],
+  "maxBytes": 30000000
+}
