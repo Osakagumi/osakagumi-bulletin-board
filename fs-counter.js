@@ -69,6 +69,17 @@
    ・送信間隔 5分→2分、初回 30〜90秒→10〜25秒。送信失敗時は破棄せず次回に再送。バッファ上限 300→1000。
    ・ログ監視用の購読（app_settings/activity_log）の読み取りも、件数に含める。
 
+   【2026年10月21日 v3.1：コンソールの件数との差を調べるための追加ログ】
+   ・操作数：env行・コレクション「操作数」・パス=対象 に、前回送信からの getDoc/getDocs/count/listen開始/書き込み(set,update,add,delete)の回数
+     （サーバー由来とキャッシュ由来を分ける）。Firestoreルール内の exists()/get() の読み取りを、ルールの内容と突き合わせて見積もるための材料。
+   ・購読終了：env行・コレクション「購読終了 対象」に、生存秒・配信回数・読み・local・購読した場所。購読の張り直し（その都度全件が課金され得る）を見つける材料。
+   ・★初回全件推定：購読の最初のサーバー配信で、画面側の差分より全件が多いとき、その差を件数行に加える（上限の推定）。
+     キャッシュに前回の続きがある場合は実際の課金はこれより少ない。
+   ・listen行の呼び出し元欄に、購読した場所（関数@ファイル:行）を追記。
+   ・再接続検知：env行・コレクション「再接続検知」に、切断秒・購読数・推定。
+   ・getCountFromServer / getAggregateFromServer / getDocFromServer / getDocsFromServer も数える（以前は数えていなかった：件数集計は1000件ごとに最低1件分の課金）。
+   ・累計行に、稼働秒・購読中の数・配信回数・初回全件推定の累計を追記。
+
    【2026年10月12日 v2.1：異常急増の自動停止（ブレーカー）と、v2の既知の不具合2件の修正】
    ・ブレーカー：サーバーから届いた読み取りが「1分で2,000件超」または「10分で6,000件超」、
      書き込みが「1分で800件超」になったら、自動で
@@ -81,7 +92,7 @@
    ・修正1：ログON判定が届く前に来る「起動直後のlisten行」が失われていた → 判定が届くまで保留し、ONなら送る。
    ・修正2：__fs.reset() が logPrev を消さないため、ログに負の差分行が出た → logPrev も初期化する。
    ========================================================= */
-const FS_COUNTER_VERSION = "v3.0 2026-10-21";
+const FS_COUNTER_VERSION = "v3.1 2026-10-21";
 import * as FS from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 export * from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
@@ -180,6 +191,14 @@ function breakerGuard(){
   if(breakerTripped) throw new Error("FS-BREAKER: 異常な読み書きの急増を検知したため、自動停止中です。画面を再読み込みしてください。");
 }
 
+// v3.1: 操作の回数（ルール内 exists()/get() の読み取り見積もり用）
+const ops = {};   // label -> { getDoc, getDocCache, getDocs, getDocsCache, count, listen, set, update, add, delete }
+function opNote(label, k){ try{ const o = ops[label] || (ops[label] = {}); o[k] = (o[k] || 0) + 1; }catch(e){} }
+let opsPrev = {};
+const estFirst = {};   // v3.1: label -> 初回全件推定（累計）
+let estFirstPrev = {};
+let snapTotal = 0;
+
 function addRead(label, n){ try{ bucket(label).reads += n; }catch(e){} breakerNote("r", n); }
 function addLocal(label, n){ try{ bucket(label).local += n; }catch(e){} }
 function addWrite(label, op, ref){
@@ -195,6 +214,7 @@ function addWrite(label, op, ref){
       console.warn(`[FS-BURST] "${label}" への書き込みが10秒で${arr.length}件。呼び出し元：`, new Error("burst-origin").stack);
     }
   }catch(e){}
+  try{ opNote(label, op); }catch(e){}
   try{ logWrite(label, op, ref); }catch(e){}
 }
 
@@ -203,9 +223,39 @@ export async function getDoc(ref, ...rest){
   breakerGuard();
   const snap = await FS.getDoc(ref, ...rest);
   try{
-    if(snap.metadata && snap.metadata.fromCache) addLocal(labelOf(ref), 1);
-    else addRead(labelOf(ref), 1);
+    if(snap.metadata && snap.metadata.fromCache){ addLocal(labelOf(ref), 1); opNote(labelOf(ref), "getDocCache"); }
+    else { addRead(labelOf(ref), 1); opNote(labelOf(ref), "getDoc"); }
   }catch(e){}
+  return snap;
+}
+// v3.1: サーバー指定の取得・件数集計も数える
+export async function getDocFromServer(ref, ...rest){
+  breakerGuard();
+  const snap = await FS.getDocFromServer(ref, ...rest);
+  try{ addRead(labelOf(ref), 1); opNote(labelOf(ref), "getDoc"); }catch(e){}
+  return snap;
+}
+export async function getDocsFromServer(q, ...rest){
+  breakerGuard();
+  const snap = await FS.getDocsFromServer(q, ...rest);
+  try{ addRead(labelOf(q), Math.max(snap.size, 1)); opNote(labelOf(q), "getDocs"); }catch(e){}
+  return snap;
+}
+// 件数集計：インデックス1000件ごとに1件分（最低1件）の課金
+export async function getCountFromServer(q, ...rest){
+  breakerGuard();
+  const snap = await FS.getCountFromServer(q, ...rest);
+  try{
+    let n = 0; try{ n = Number(snap.data().count) || 0; }catch(e){}
+    addRead(labelOf(q) + " [count]", Math.max(1, Math.ceil(n / 1000)));
+    opNote(labelOf(q) + " [count]", "count");
+  }catch(e){}
+  return snap;
+}
+export async function getAggregateFromServer(q, spec, ...rest){
+  breakerGuard();
+  const snap = await FS.getAggregateFromServer(q, spec, ...rest);
+  try{ addRead(labelOf(q) + " [aggregate]", 1); opNote(labelOf(q) + " [aggregate]", "count"); }catch(e){}
   return snap;
 }
 export async function getDocs(q, ...rest){
@@ -213,13 +263,14 @@ export async function getDocs(q, ...rest){
   const snap = await FS.getDocs(q, ...rest);
   try{
     const label = labelOf(q);
-    if(snap.metadata && snap.metadata.fromCache) addLocal(label, snap.size);
-    else addRead(label, Math.max(snap.size, 1)); // 0件のクエリでも最低1件分の課金がある
+    if(snap.metadata && snap.metadata.fromCache){ addLocal(label, snap.size); opNote(label, "getDocsCache"); }
+    else { addRead(label, Math.max(snap.size, 1)); opNote(label, "getDocs"); } // 0件のクエリでも最低1件分の課金がある
   }catch(e){}
   return snap;
 }
 function countSnapshot(label, snap){
   let srv = 0; // このスナップショットで「サーバーから届いた」と数えた件数（ブレーカー用）
+  let loc = 0; // v3.1: ローカル扱いにした件数
   try{
     const b = bucket(label);
     b.snapCalls += 1;
@@ -229,24 +280,28 @@ function countSnapshot(label, snap){
       snap.docChanges().forEach(ch=>{
         if(ch.type === "removed"){ b.removed += 1; return; }   // v2: removed は読み取りに数えない
         const pending = !!(ch.doc && ch.doc.metadata && ch.doc.metadata.hasPendingWrites);
-        if(fromCache || pending) b.local += 1; else { b.reads += 1; srv += 1; }
+        if(fromCache || pending){ b.local += 1; loc += 1; } else { b.reads += 1; srv += 1; }
       });
       if(snap.empty && !fromCache && snap.docChanges().length === 0 && b.snapCalls === 1){ b.reads += 1; srv += 1; }
     } else {
       // ドキュメントのスナップショット
       const fromCache = !!(snap.metadata && snap.metadata.fromCache);
       const pending = !!(snap.metadata && snap.metadata.hasPendingWrites);
-      if(fromCache || pending) b.local += 1; else { b.reads += 1; srv += 1; }
+      if(fromCache || pending){ b.local += 1; loc += 1; } else { b.reads += 1; srv += 1; }
     }
   }catch(e){}
   breakerNote("r", srv);
+  return [srv, loc];
 }
 // v2: リスナーごとに「最初のサーバー配信」を記録する（課金される再送の上限の目安）
 function makeCb(label, orig, ref, lid){
   let firstDone = false;
   return (snap, ...r)=>{
     try{
-      countSnapshot(label, snap);
+      const [srvN, locN] = countSnapshot(label, snap);
+      snapTotal += 1;
+      const ent0 = liveSizes.get(lid);
+      if(ent0){ ent0.snaps += 1; ent0.srv += srvN; ent0.loc += locN; }
       try{
         const ent = liveSizes.get(lid);
         if(ent && !(snap.metadata && snap.metadata.fromCache && ent.size)){
@@ -258,7 +313,14 @@ function makeCb(label, orig, ref, lid){
         const pending = !!(snap.metadata && snap.metadata.hasPendingWrites);
         if(!fromCache && !pending){
           firstDone = true;
-          logListen(label, snap);
+          // v3.1: 最初のサーバー配信で、画面側の差分(srvN)より全件(size)が多い分は、課金されている可能性がある（上限の推定）
+          let extra = 0;
+          try{
+            const size0 = (typeof snap.docChanges === "function") ? snap.size : (snap.exists() ? 1 : 0);
+            extra = Math.max(0, size0 - srvN);
+            if(extra > 0) estFirst[label] = (estFirst[label] || 0) + extra;
+          }catch(e){}
+          logListen(label, snap, ent0, extra);
         }
       }
     }catch(e){}
@@ -269,7 +331,8 @@ export function onSnapshot(ref, ...args){
   if(breakerTripped) return ()=>{};   // v2.1：自動停止中は新しい購読を開始しない
   const label = labelOf(ref);
   const lid = ++liveSeq;
-  liveSizes.set(lid, { label, size: 0 });
+  liveSizes.set(lid, { label, size: 0, start: Date.now(), caller: (function(){ try{ return logCaller(); }catch(e){ return ""; } })(), snaps: 0, srv: 0, loc: 0 });
+  opNote(label, "listen");
   const a = args.slice();
   try{
     if(typeof a[0] === "function"){
@@ -286,7 +349,11 @@ export function onSnapshot(ref, ...args){
     }
   }catch(e){ /* ラップに失敗したら、元の引数のまま本物を呼ぶ */ liveSizes.delete(lid); return FS.onSnapshot(ref, ...args); }
   const unsub = FS.onSnapshot(ref, ...a);
-  const wrapped = ()=>{ liveUnsubs.delete(wrapped); liveSizes.delete(lid); unsub(); };
+  const wrapped = ()=>{
+    liveUnsubs.delete(wrapped);
+    try{ const ent = liveSizes.get(lid); if(ent) logListenEnd(ent); }catch(e){}
+    liveSizes.delete(lid); unsub();
+  };
   liveUnsubs.add(wrapped);
   return wrapped;
 }
@@ -322,7 +389,7 @@ const api = {
     rows().slice(0, 25).forEach(r=> lines.push(`${r.collection}: 読${r.reads} 書${r.writes} local${r.local} 配信${r.snapshots}回`));
     const text = lines.join("\n"); console.log(text); return text;
   },
-  reset(){ Object.keys(stats).forEach(k=> delete stats[k]); Object.keys(writeTimes).forEach(k=> delete writeTimes[k]); logPrev = {}; Object.keys(estStats).forEach(k=> delete estStats[k]); }, // v2.1：logPrev も初期化（負の差分行を防ぐ）
+  reset(){ Object.keys(stats).forEach(k=> delete stats[k]); Object.keys(writeTimes).forEach(k=> delete writeTimes[k]); logPrev = {}; Object.keys(estStats).forEach(k=> delete estStats[k]); Object.keys(estFirst).forEach(k=> delete estFirst[k]); opsPrev = {}; estFirstPrev = {}; logEstPrev = {}; }, // v2.1：logPrev も初期化（負の差分行を防ぐ）
   stats
 };
 try{ window.__fs = api; }catch(e){}
@@ -406,14 +473,26 @@ function logWrite(label, op, ref){
   try{ path = (ref && typeof ref.path === "string") ? ref.path : label; }catch(e){ path = label; }
   logPush({ t: Date.now(), type: "write", tab: logCurrentTab(), coll: label, path: String(path).slice(0, 120), op, caller: logCaller() });
 }
-function logListen(label, snap){
+function logListen(label, snap, ent, extra){
   let size, changes;
   if(typeof snap.docChanges === "function"){ size = snap.size; changes = snap.docChanges().length; }
   else { size = snap.exists() ? 1 : 0; changes = size; }
-  const ev = { t: Date.now(), type: "listen", tab: logCurrentTab(), coll: label, reads: size, local: changes, caller: `size=${size} changes=${changes}` };
+  const sec = ent ? Math.round((Date.now() - ent.start) / 1000) : 0;
+  const ev = { t: Date.now(), type: "listen", tab: logCurrentTab(), coll: label, reads: size, local: changes,
+    caller: `size=${size} changes=${changes} 初回全件推定+${extra || 0} 購読から${sec}秒 ${ent && ent.caller ? ent.caller : ""}`.trim() };
   if(!logSettingKnown){ if(logPendingListen.length < 60) logPendingListen.push(ev); return; } // v2.1：判定待ち（設定の読み込み前でも取りこぼさない）
   if(!logCfg || !logEnabled) return;
   logPush(ev);
+}
+// v3.1: 購読の終了（張り直しの検出用）
+let logEndCount = 0;
+function logListenEnd(ent){
+  if(!logCfg || !logEnabled) return;
+  if(logEndCount >= 200) return;
+  logEndCount++;
+  const sec = Math.round((Date.now() - ent.start) / 1000);
+  logPush({ t: Date.now(), type: "env", tab: logCurrentTab(), coll: "購読終了 " + ent.label,
+    path: `生存${sec}秒 配信${ent.snaps}回 読${ent.srv} local${ent.loc}`, caller: ent.caller || "" });
 }
 function logConn(op, extra){
   if(!logCfg || !logEnabled) return;
@@ -446,6 +525,7 @@ function estimateReconnect(gapSec){
       estStats[ent.label] = (estStats[ent.label] || 0) + n;
       total += n;
     });
+    try{ if(logCfg && logEnabled) logPush({ t: Date.now(), type: "env", tab: logCurrentTab(), coll: "再接続検知", path: `切断${Math.round(gapSec)}秒 購読${liveSizes.size}件 推定${total}`, caller: "" }); }catch(e){}
     if(typeof console !== "undefined") console.info(`[FS] 切断${Math.round(gapSec/60)}分後の再接続：再課金の推定 ${total}件`);
   }catch(e){}
 }
@@ -457,6 +537,8 @@ function logBuildPayload(reason){
     // OFFの間は何も送らない。ONにした時点から数え始めるよう、基準値だけ最新にしておく。
     for(const [label, s] of Object.entries(stats)) logPrev[label] = { reads: s.reads, writes: s.writes, local: s.local, removed: s.removed };
     for(const [label, n] of Object.entries(estStats)) logEstPrev[label] = n;
+    for(const [label, n] of Object.entries(estFirst)) estFirstPrev[label] = n;
+    for(const [label, o] of Object.entries(ops)) opsPrev[label] = Object.assign({}, o);
     logBuf = []; logWriteOverflow = 0;
     return [];
   }
@@ -471,6 +553,22 @@ function logBuildPayload(reason){
     }
     logPrev[label] = { reads: s.reads, writes: s.writes, local: s.local, removed: s.removed };
   }
+  for(const [label, n] of Object.entries(estFirst)){
+    const d = n - (estFirstPrev[label] || 0);
+    if(d > 0) logPush({ t: now, type: "count", tab: logCurTab, coll: "★初回全件推定 " + label, reads: d, writes: 0, local: 0 });
+    estFirstPrev[label] = n;
+  }
+  for(const [label, o] of Object.entries(ops)){
+    const pv = opsPrev[label] || {};
+    const parts = [];
+    for(const k of ["getDoc","getDocCache","getDocs","getDocsCache","count","listen","set","update","add","delete"]){
+      const d = (o[k] || 0) - (pv[k] || 0);
+      if(d) parts.push(`${k}${d}`);
+    }
+    opsPrev[label] = Object.assign({}, o);
+    if(parts.length) logPush({ t: now, type: "env", tab: logCurTab, coll: "操作数", path: label, caller: parts.join(" ") });
+  }
+  logEndCount = 0;
   for(const [label, n] of Object.entries(estStats)){
     const d = n - (logEstPrev[label] || 0);
     if(d > 0) logPush({ t: now, type: "count", tab: logCurTab, coll: "★再接続推定 " + label, reads: d, writes: 0, local: 0 });
@@ -486,9 +584,10 @@ function logBuildPayload(reason){
     let R = 0, W = 0, L = 0, RM = 0, E = 0;
     for(const s of Object.values(stats)){ R += s.reads; W += s.writes; L += s.local; RM += s.removed; }
     for(const n of Object.values(estStats)) E += n;
-    const cum = `読${R} 書${W} 推定${E} local${L} 除${RM}`;
-    if(cum !== logLastCum){
-      logLastCum = cum;
+    let EF = 0; for(const n of Object.values(estFirst)) EF += n;
+    const cum = `読${R} 書${W} 推定${E} 初回全件推定${EF} local${L} 除${RM} 稼働${Math.round((Date.now() - startedAt) / 1000)}秒 購読中${liveSizes.size} 配信${snapTotal}回`;
+    if(cum.replace(/稼働\d+秒/, "") !== logLastCum){
+      logLastCum = cum.replace(/稼働\d+秒/, "");
       logPush({ t: now, type: "env", tab: logCurTab, coll: "累計", path: cum, caller: `seq=${logSeq + 1} ${(location.pathname.split("/").pop() || "index")} ${reason || ""}`.trim() });
     }
   }catch(e){}
@@ -525,7 +624,7 @@ async function logFlush(useBeacon){
   }
 }
 function logScheduleNext(first){
-  const wait = first ? (Math.random() * 15000 + 10000) : LOG_FLUSH_MS;
+  const wait = first ? (Math.random() * 7000 + 5000) : LOG_FLUSH_MS;
   logTimer = setTimeout(async ()=>{ await logFlush(false); logScheduleNext(false); }, wait);
 }
 (async function logInit(){
