@@ -4641,11 +4641,19 @@ function renderBizAutoPanel(){
         <input type="time" class="bizauto-time" value="${escapeHtml(t.time||"08:30")}" style="width:100px;">
         <span class="bizauto-hours-wrap" style="display:none;"><input type="number" class="bizauto-hours" min="1" max="168" value="${Number(t.hours)||24}" style="width:60px;">時間ごと</span>
       </td>
-      <td><input type="checkbox" class="bizauto-enabled" ${t.enabled===false?"":"checked"} style="width:auto;"></td>
+      <td><input type="checkbox" class="bizauto-enabled" ${t.path ? (t.enabled===false?"":"checked") : "disabled"} style="width:auto;" title="パスを入力すると、チェックできるようになります"></td>
       <td style="font-size:12px;${isErr?"color:var(--danger);":""}">${stText}</td>
       <td><button class="btn btn-ghost bizauto-now" style="border:1px solid var(--line);">今すぐ</button></td>
     `;
     const modeSel = tr.querySelector(".bizauto-mode");
+    // パスが空の行は保存の対象外のため、チェックは無効（OFF）にしておく。パスを入力するとONで有効になる（2026-10-21）
+    const pathInput = tr.querySelector(".bizauto-path");
+    const enabledCb = tr.querySelector(".bizauto-enabled");
+    pathInput.addEventListener("input", ()=>{
+      const has = pathInput.value.trim() !== "";
+      if(has && enabledCb.disabled){ enabledCb.disabled = false; enabledCb.checked = true; }
+      if(!has){ enabledCb.checked = false; enabledCb.disabled = true; }
+    });
     modeSel.value = t.mode === "interval" ? "interval" : "daily";
     const syncMode = ()=>{
       const iv = modeSel.value === "interval";
