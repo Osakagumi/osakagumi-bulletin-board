@@ -1013,27 +1013,15 @@
         </table>
       </div>
       <div class="panel">
-        <h2>業務情報一覧</h2>
+        <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
+          <h2 style="margin:0;">業務情報一覧</h2>
+          <span id="bizauto-hb" style="font-size:11.5px;"></span>
+        </div>
         <button class="btn btn-primary" id="bizinfo-add-btn">追加</button>
         <table id="bizinfo-table" style="margin-top:14px;">
           <thead><tr><th></th><th>業務情報名</th><th>カテゴリ</th><th>表示</th><th>DL</th><th>自動更新</th><th>操作</th></tr></thead>
           <tbody id="bizinfo-table-body"></tbody>
         </table>
-      </div>
-      <div class="panel" id="bizauto-panel" style="display:none;">
-        <h2>自動更新の状況（社内ノートPC）</h2>
-        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-          設定は、各業務情報の「編集」から行います。失敗・停止の通知は、その業務情報の管理者とシステム管理者に届きます。
-        </p>
-        <div id="bizauto-hb" style="font-size:12.5px;margin-bottom:10px;"></div>
-        <table id="bizauto-table">
-          <thead><tr><th>業務情報名</th><th>元ファイルのパス</th><th>スケジュール</th><th>有効</th><th>最終結果</th></tr></thead>
-          <tbody id="bizauto-table-body"></tbody>
-        </table>
-        <div style="margin-top:8px;">
-          <button class="btn btn-ghost" id="bizauto-refresh-btn" style="border:1px solid var(--line);">状態を更新</button>
-          <span id="bizauto-msg" style="font-size:12.5px;margin-left:8px;"></span>
-        </div>
       </div>
     </section>
 
@@ -1464,7 +1452,7 @@
         </div>
         <div id="bizinfo-edit-error" style="color:var(--danger);font-size:12.5px;margin-top:4px;"></div>
         <div class="row-btns">
-          <button class="btn btn-ghost" id="bizauto-runnow-btn" style="border:1px solid var(--line);display:none;" title="保存したうえで、ノートPCが次に確認に来た時（15分以内）に実行します。">予定前実行</button>
+          <button class="btn btn-ghost" id="bizauto-runnow-btn" style="border:1px solid var(--line);display:none;" title="保存したうえで、自動更新用PCが次に確認に来た時（15分以内）に実行します。">予定前実行</button>
           <button class="btn btn-ghost" id="bizinfo-edit-cancel-btn" style="border:1px solid var(--line);">キャンセル</button>
           <button class="btn btn-primary" id="bizinfo-edit-save-btn">保存</button>
         </div>
@@ -2094,6 +2082,7 @@ function switchToAdminTab(viewName){
   if(viewName==="systemsettings") loadStorageInfo();
   if(viewName==="reservations") ensureReservationsListener();
   if(viewName==="notices") ensureNoticesAdminListener();
+  if(viewName==="bizinfo") refreshBizAutoState();
 }
 document.querySelectorAll(".tab-btn").forEach(btn=>{
   btn.addEventListener("click", ()=>{
@@ -4283,7 +4272,7 @@ function renderBizInfoTable(){
       <td><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${cat.color};vertical-align:middle;margin-right:5px;"></span>${escapeHtml(cat.label)}</td>
       <td>${item.enabled!==false ? "有効" : "無効"}</td>
       <td>${item.allowDownload ? "許可" : ""}</td>
-      <td style="font-size:12px;white-space:nowrap;">${escapeHtml(bizAutoListText(item.id))}</td>
+      <td style="font-size:12px;white-space:nowrap;">${bizAutoListCellHtml(item.id)}</td>
       <td class="actions"></td>
     `;
     if(canDrag){
@@ -4554,9 +4543,9 @@ document.getElementById("bizinfo-upload-confirm-btn")?.addEventListener("click",
 });
 
 /* =========================================================
-   業務情報：自動更新（社内ノートPC）の設定
+   業務情報：自動更新（自動更新用PC）の設定
    設定・実行状況はGoogle Apps Script側に保存（Firestoreは使わない）。
-   ノートPCのスクリプトが15分ごとにこの設定を取得して実行する。
+   自動更新用PCのスクリプトが15分ごとにこの設定を取得して実行する。
    2026-10-22：設定は業務情報の「追加・編集」モーダルに移した。一覧パネルは状況の表示のみ。
    失敗・停止の通知先は「その業務情報の管理者（infoManagers）＋システム管理者（admins）」。
    Apps ScriptはFirestoreを読めないため、保存時／管理画面を開いた時に、すでに読み込み済みの
@@ -4603,54 +4592,51 @@ function bizAutoListText(itemId){
   const sched = bizAutoSchedText(t);
   return t.enabled === false ? `停止中（${sched}）` : sched;
 }
+// 一覧の「自動更新」列：1行目＝タイミング、2行目＝最終結果（日時・状態）。失敗は赤字
+function bizAutoListCellHtml(itemId){
+  const line1 = bizAutoListText(itemId);
+  if(!line1) return "";
+  const st = (bizAutoState && bizAutoState.status && bizAutoState.status[itemId]) || {};
+  let line2 = "";
+  if(st.lastAttemptAt){
+    const isErr = st.lastResult === "error";
+    const label = isErr ? "失敗" : (st.lastResult==="unchanged" ? "更新なし" : "成功");
+    line2 = `<div style="font-size:11px;margin-top:2px;${isErr?"color:var(--danger);":"color:var(--muted);"}">${escapeHtml(bizAutoFmt(st.lastAttemptAt))} ${label}</div>`;
+  }
+  return escapeHtml(line1) + line2;
+}
 function bizAutoSchedText(t){
   return t.mode === "interval" ? `${Number(t.hours)||24}時間ごと` : `毎日 ${t.time||"08:30"}`;
 }
-function renderBizAutoPanel(){
-  const panel = document.getElementById("bizauto-panel");
-  if(!panel) return;
-  if(!bizAutoCanUse()){ panel.style.display = "none"; return; }
-  panel.style.display = "";
-  if(!bizAutoState){ loadBizAutoState(); return; }
-  const cfg = bizAutoState.cfg || { targets:{} };
-  const status = bizAutoState.status || {};
+// 状況パネルは廃止（2026-10-23）。最終結果は業務情報一覧の「自動更新」列に表示する。
+// ここでは、設定の取得と宛先の同期だけを行う。
+// 「業務情報一覧」見出しの横に、自動更新用PCからの最終連絡を小さく表示する（システム管理者のみ）
+function renderBizAutoHb(){
+  const el = document.getElementById("bizauto-hb");
+  if(!el) return;
+  if(!bizAutoCanUse() || !bizAutoState){ el.textContent = ""; return; }
   const hb = bizAutoState.hb;
-  const hbEl = document.getElementById("bizauto-hb");
-  if(hbEl){
-    if(!hb || !hb.at){
-      hbEl.innerHTML = `<span style="color:var(--muted);">ノートPCからの連絡：まだありません</span>`;
-    } else {
-      const min = Math.round((bizAutoState.now - hb.at)/60000);
-      const stale = min >= 60;
-      hbEl.innerHTML = `<span style="color:${stale?"var(--danger)":"var(--muted)"};">ノートPCからの最終連絡：${min<1?"1分以内":min+"分前"}（${escapeHtml(hb.host||"")}）${stale?" ← 連絡が途絶えています":""}</span>`;
-    }
+  if(!hb || !hb.at){
+    el.innerHTML = `<span style="color:var(--muted);">自動更新用PCからの連絡：まだありません</span>`;
+    return;
   }
-  const body = document.getElementById("bizauto-table-body");
-  body.innerHTML = "";
-  bizInfoItemsAll.filter(i=>i.fileId).forEach(item=>{
-    const t = (cfg.targets||{})[item.id];
-    if(!t) return; // 自動更新を設定していない項目は表示しない
-    const st = status[item.id] || {};
-    const mismatch = t.fileId && t.fileId !== item.fileId;
-    const isErr = st.lastResult === "error";
-    const stText = st.lastAttemptAt
-      ? `${bizAutoFmt(st.lastAttemptAt)} ${isErr ? "失敗" : (st.lastResult==="unchanged" ? "更新なし" : "成功")}${isErr ? `<div style="font-size:11px;">${escapeHtml(st.lastMessage||"")}</div>` : ""}`
-      : "—";
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td><b>${escapeHtml(item.name||"")}</b>${mismatch ? `<div style="font-size:11px;color:var(--danger);">ファイルが差し替えられています。編集で保存し直してください。</div>` : ""}</td>
-      <td style="font-size:12px;word-break:break-all;">${escapeHtml(t.path||"")}</td>
-      <td style="white-space:nowrap;font-size:12.5px;">${escapeHtml(bizAutoSchedText(t))}</td>
-      <td>${t.enabled===false ? "—" : "○"}</td>
-      <td style="font-size:12px;${isErr?"color:var(--danger);":""}">${stText}</td>`;
-    body.appendChild(tr);
-  });
-  if(!body.children.length){
-    body.innerHTML = `<tr><td colspan="5" class="empty">自動更新を設定した業務情報はありません。</td></tr>`;
-  }
+  const min = Math.round((bizAutoState.now - hb.at)/60000);
+  const stale = min >= 60;
+  el.innerHTML = `<span style="color:${stale?"var(--danger)":"var(--muted)"};">自動更新用PCからの最終連絡：${min<1?"1分以内":min+"分前"}（${escapeHtml(hb.host||"")}）${stale?" ← 連絡が途絶えています":""}</span>`;
+}
+function renderBizAutoPanel(){
+  renderBizAutoHb();
+  if(!bizAutoCanUse()) return;
+  if(!bizAutoState){ loadBizAutoState(); return; }
   scheduleBizAutoRecipientSync();
 }
-
+// 「業務情報管理」タブを開くたびに最新の状態を取り直す（Apps Scriptへの問い合わせのみ。Firestoreは読まない）
+function refreshBizAutoState(){
+  const myEmail = (currentUser?.email||"").toLowerCase();
+  const isMgr = bizInfoItemsAll.some(i=>Array.isArray(i.infoManagers) && i.infoManagers.includes(myEmail));
+  if(!isStorageConfigured() || !(myAdminPermissions.isAdmin || isMgr)) return;
+  loadBizAutoState();
+}
 /* ---- 通知先（管理者＋システム管理者）の作成と同期 ---- */
 function bizAutoNormEmails(list){
   const set = new Set();
@@ -4767,7 +4753,7 @@ document.getElementById("bizauto-path-input")?.addEventListener("input", ()=>{
   if(has && cb.disabled){ cb.disabled = false; cb.checked = true; }
   if(!has){ cb.checked = false; cb.disabled = true; }
 });
-// 「予定前実行」：保存処理も合わせて行い、ノートPCが次に確認に来た時（15分以内）に実行させる
+// 「予定前実行」：保存処理も合わせて行い、自動更新用PCが次に確認に来た時（15分以内）に実行させる
 document.getElementById("bizauto-runnow-btn")?.addEventListener("click", ()=>{
   if(!document.getElementById("bizauto-path-input").value.trim()){
     document.getElementById("bizinfo-edit-error").textContent = "先に元ファイルのパスを入力してください。";
@@ -4810,7 +4796,6 @@ async function saveBizAutoFromModal(itemLike){
     return false;
   }
 }
-document.getElementById("bizauto-refresh-btn")?.addEventListener("click", ()=>{ bizAutoState = null; loadBizAutoState(); });
 
 let lastContractEditorEmails = [];
 function initContractEditorsListener(){
