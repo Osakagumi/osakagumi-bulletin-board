@@ -2572,7 +2572,7 @@ let isContractEditor = false;
 let isSafetySender = false;
 let isBizInfoManager = false;
 let isVisitorManager = false;
-let visitorTargetOfficerEmails = []; // 来客・出張：役員予定の対象にできる社員（管理画面で設定）
+let visitorTargetOfficerEmails = []; // 来客・出張：出張の対象にできる社員（管理画面で設定）
 let isSharedAccount = false; // ログイン中の自分自身が「共用アカウント」かどうか
 // お知らせ掲示板モード（共用アカウント）のキオスク画面で、ログアウトボタンの代わりに
 // 使う「秘密のショートカットキー」の設定。管理画面（システム管理）から変更できる。
@@ -2975,7 +2975,7 @@ onAuthStateChanged(auth, async (user)=>{
       // initContractsListener();
       initVisitorSchedulesListener();
       cleanupOldVisitorSchedules();
-      // 業務情報（business_info_categories/items）と、来客・出張の「役員対象社員」設定
+      // 業務情報（business_info_categories/items）と、来客・出張の「対象社員」設定
       // （visitor_target_officers）は、いずれもダッシュボードの表示には使われず、
       // それぞれ「業務情報」タブ／「来客・出張」タブを実際に開いた時にしか参照されない。
       // ログイン直後の読み取り数を減らすため、ここでは監視を開始せず、
@@ -3302,7 +3302,7 @@ document.querySelectorAll("#dash-visitors-range-toggle .seg-btn").forEach(btn=>{
     renderDashboardVisitorsCard();
   });
 });
-// ---- 来客・出張カード（来客・役員。来客・出張管理権限者は全員分、それ以外は自分が対象の分のみ） ----
+// ---- 来客・出張カード（来客・出張。来客・出張管理権限者は全員分、それ以外は自分が対象の分のみ） ----
 function renderDashboardVisitorsCard(){
   const visitorsBody = document.getElementById("dash-visitors-body");
   if(!visitorsBody) return;
@@ -4561,11 +4561,11 @@ function ensureVisitorTargetOfficersListener(){
   visitorTargetOfficersListenerStarted = true;
   initVisitorTargetOfficersListener();
 }
-// 来客・出張：役員予定の対象にできる社員一覧（管理画面「来客・出張管理」タブで設定）
+// 来客・出張：出張の対象にできる社員一覧（管理画面「来客・出張管理」タブで設定）
 function initVisitorTargetOfficersListener(){
   onSnapshot(collection(db,"visitor_target_officers"), snap=>{
     visitorTargetOfficerEmails = snap.docs.map(d=>d.id);
-  }, (err)=>{ console.error("[来客・出張：対象役員取得エラー]", err); });
+  }, (err)=>{ console.error("[来客・出張：対象社員取得エラー]", err); });
 }
 let visitorCleanupRunning = false;
 const VISITOR_CLEANUP_INTERVAL_MS = 6*60*60*1000; // 6時間（予約・お知らせの自動削除と同じ間隔）
@@ -4611,7 +4611,7 @@ async function cleanupOldVisitorSchedules(){
   }
 }
 function canEditVisitorEntry(v){
-  // 来客・役員のどちらも、来客・出張管理権限者、または対象社員のうち誰か1人でも編集・削除可
+  // 来客・出張のどちらも、来客・出張管理権限者、または対象社員のうち誰か1人でも編集・削除可
   return isVisitorManager || getVisitorHostEmails(v).includes(currentUser.email);
 }
 // 対象社員・日付の絞り込みを単純なドロップダウンにする。
@@ -4939,7 +4939,7 @@ function setVisitorModalEndDate(dateStr){
 // 種別（来客／出張）に応じて、モーダル内の項目ラベル・表示を切り替える
 function applyVisitorTypeUI(type){
   document.getElementById("visitor-name-label").textContent = type==="officer" ? "予定内容" : "来客者名";
-  document.getElementById("visitor-host-label").textContent = type==="officer" ? "対象役員（複数可）" : "対応する社員（複数可）";
+  document.getElementById("visitor-host-label").textContent = type==="officer" ? "対象社員（複数可）" : "対応する社員（複数可）";
   document.getElementById("visitor-datetime-label").textContent = type==="officer" ? "開始日時（時刻は任意）" : "開始日時";
   document.getElementById("visitor-headcount-field").style.display = type==="officer" ? "none" : "";
   document.querySelectorAll("#visitor-type-toggle .seg-btn").forEach(b=>{
@@ -4992,11 +4992,10 @@ function openVisitorModal(v, presetDate){
 document.getElementById("visitor-new-btn").addEventListener("click", ()=> openVisitorModal(null));
 document.getElementById("visitor-host-pick-btn").addEventListener("click", async ()=>{
   if(visitorModalType==="officer"){
-    if(visitorTargetOfficerEmails.length===0){
-      document.getElementById("visitor-modal-error").textContent = "対象役員が登録されていません。管理画面「来客・出張管理」で設定してください。";
-      return;
-    }
-    const emps = await openEmployeePicker({ multi:true, restrictToEmails: visitorTargetOfficerEmails, preselectedEmails: visitorHostEmails });
+    // 2026-10-23：出張の対象は全社員から選べる。選択画面は、既定で所属「役員」の絞り込みが効いた状態で開く
+    // （部署プルダウンで「すべて」や他の部署へ切り替え可能）。所属「役員」が未登録の場合は絞り込みなし。
+    const officerDept = departmentsAll.find(d=>d.name==="役員");
+    const emps = await openEmployeePicker({ multi:true, preselectedEmails: visitorHostEmails, defaultDeptId: officerDept ? officerDept.id : undefined });
     if(emps) setVisitorHosts(emps);
   } else {
     const emps = await openEmployeePicker({ multi:true, preselectedEmails: visitorHostEmails });
@@ -5064,12 +5063,12 @@ document.getElementById("visitor-modal-save").addEventListener("click", async ()
   const headcount = (type==="visitor" && headcountRaw) ? Math.max(1, Number(headcountRaw)||0) : null;
   const purpose = document.getElementById("visitor-purpose-input").value.trim();
   const nameLabel = type==="officer" ? "予定内容" : "来客者名";
-  const hostLabel = type==="officer" ? "対象役員" : "対応する社員";
+  const hostLabel = type==="officer" ? "対象社員" : "対応する社員";
   if(!visitorName){ errEl.textContent = `${nameLabel}を入力してください。`; return; }
   if(visitorHostEmails.length===0){ errEl.textContent = `${hostLabel}を選択してください。`; return; }
   if(!visitorModalDate){ errEl.textContent = "日付を選択してください。"; return; }
-  if(type==="visitor" && !time){ errEl.textContent = "開始時刻を選択してください。"; return; } // 役員予定は時刻を任意とする
-  if(type==="officer" && !isVisitorManager){ errEl.textContent = "役員予定の登録には来客・出張管理権限が必要です。"; return; }
+  if(type==="visitor" && !time){ errEl.textContent = "開始時刻を選択してください。"; return; } // 出張は時刻を任意とする
+  if(type==="officer" && !isVisitorManager){ errEl.textContent = "出張の登録には来客・出張管理権限が必要です。"; return; }
   const endDate = visitorModalEndDate || "";
   const endTime = document.getElementById("visitor-endtime-btn").dataset.value || "";
   // 終了時刻は常に任意。ただし終了時刻だけ指定して終了日が未指定、という状態は不可とする
