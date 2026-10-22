@@ -1441,25 +1441,23 @@
           <label style="margin:0;font-size:12.5px;">ダウンロードを許可する</label>
         </div>
         <div id="bizauto-modal-section" style="display:none;border-top:1px solid var(--line);margin-top:14px;padding-top:12px;">
-          <div style="font-weight:600;font-size:13px;margin-bottom:8px;">自動更新（社内ノートPC）</div>
-          <div class="field">
-            <label>元ファイルのパス（空欄なら自動更新しない）</label>
-            <input type="text" id="bizauto-path-input" placeholder="O:\全社共有\…\ファイル.xlsx">
-          </div>
-          <div class="field" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <div style="font-weight:600;font-size:13px;margin-bottom:8px;">自動更新</div>
+          <div class="field" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <input type="checkbox" id="bizauto-enabled-input" disabled style="width:auto;">
+            <label style="margin:0;font-size:12.5px;">有効にする</label>
             <select id="bizauto-mode-select" style="width:auto;"><option value="daily">毎日</option><option value="interval">間隔</option></select>
             <input type="time" id="bizauto-time-input" value="08:30" style="width:110px;">
             <span id="bizauto-hours-wrap" style="display:none;"><input type="number" id="bizauto-hours-input" min="1" max="168" value="24" style="width:70px;"> 時間ごと</span>
           </div>
-          <div class="field" style="display:flex;align-items:center;gap:6px;">
-            <input type="checkbox" id="bizauto-enabled-input" disabled style="width:auto;">
-            <label style="margin:0;font-size:12.5px;">自動更新を有効にする</label>
+          <div class="field">
+            <label>元ファイルのパス（空欄なら自動更新しない）</label>
+            <input type="text" id="bizauto-path-input" placeholder="O:\全社共有\…\ファイル.xlsx">
           </div>
-          <div id="bizauto-modal-status" style="font-size:12px;color:var(--muted);margin-bottom:6px;"></div>
-          <button type="button" class="btn btn-ghost" id="bizauto-runnow-btn" style="border:1px solid var(--line);" title="保存後、ノートPCが次に確認に来た時（15分以内）に実行されます。">実行を予約</button>
+          <div id="bizauto-modal-status" style="font-size:12px;color:var(--muted);"></div>
         </div>
         <div id="bizinfo-edit-error" style="color:var(--danger);font-size:12.5px;margin-top:4px;"></div>
         <div class="row-btns">
+          <button class="btn btn-ghost" id="bizauto-runnow-btn" style="border:1px solid var(--line);display:none;" title="保存したうえで、ノートPCが次に確認に来た時（15分以内）に実行します。">規定前実行</button>
           <button class="btn btn-ghost" id="bizinfo-edit-cancel-btn" style="border:1px solid var(--line);">キャンセル</button>
           <button class="btn btn-primary" id="bizinfo-edit-save-btn">保存</button>
         </div>
@@ -4695,13 +4693,13 @@ function resetBizAutoModal(itemId){
   const sec = document.getElementById("bizauto-modal-section");
   if(!sec) return;
   sec.style.display = bizAutoCanUse() ? "" : "none";
+  document.getElementById("bizauto-runnow-btn").style.display = bizAutoCanUse() ? "" : "none";
   document.getElementById("bizauto-path-input").value = "";
   document.getElementById("bizauto-mode-select").value = "daily";
   document.getElementById("bizauto-time-input").value = "08:30";
   document.getElementById("bizauto-hours-input").value = 24;
   const cb = document.getElementById("bizauto-enabled-input"); cb.checked = false; cb.disabled = true;
   document.getElementById("bizauto-modal-status").textContent = "";
-  document.getElementById("bizauto-runnow-btn").textContent = "実行を予約";
   bizAutoModalSyncMode();
   if(!bizAutoCanUse()) return;
   if(bizAutoState) fillBizAutoModal(); else loadBizAutoState();
@@ -4735,10 +4733,14 @@ document.getElementById("bizauto-path-input")?.addEventListener("input", ()=>{
   if(has && cb.disabled){ cb.disabled = false; cb.checked = true; }
   if(!has){ cb.checked = false; cb.disabled = true; }
 });
-document.getElementById("bizauto-runnow-btn")?.addEventListener("click", (e)=>{
-  if(!document.getElementById("bizauto-path-input").value.trim()){ toast("先にパスを入力してください。"); return; }
+// 「規定前実行」：保存処理も合わせて行い、ノートPCが次に確認に来た時（15分以内）に実行させる
+document.getElementById("bizauto-runnow-btn")?.addEventListener("click", ()=>{
+  if(!document.getElementById("bizauto-path-input").value.trim()){
+    document.getElementById("bizinfo-edit-error").textContent = "先に元ファイルのパスを入力してください。";
+    return;
+  }
   bizAutoModalRunNow = String(Date.now());
-  e.target.textContent = "予約済み（「保存」で反映）";
+  document.getElementById("bizinfo-edit-save-btn").click();
 });
 // モーダルの「保存」から呼ぶ。成功（または変更なし）ならtrue。
 async function saveBizAutoFromModal(itemLike){
