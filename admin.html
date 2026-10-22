@@ -1016,7 +1016,7 @@
         <h2>業務情報一覧</h2>
         <button class="btn btn-primary" id="bizinfo-add-btn">追加</button>
         <table id="bizinfo-table" style="margin-top:14px;">
-          <thead><tr><th></th><th>業務情報名</th><th>カテゴリ</th><th>表示</th><th>DL</th><th>操作</th></tr></thead>
+          <thead><tr><th></th><th>業務情報名</th><th>カテゴリ</th><th>表示</th><th>DL</th><th>自動更新</th><th>操作</th></tr></thead>
           <tbody id="bizinfo-table-body"></tbody>
         </table>
       </div>
@@ -4254,12 +4254,14 @@ function renderBizInfoTable(){
   if(!body) return;
   body.innerHTML = "";
   const myEmail = (currentUser?.email||"").toLowerCase();
+  // 情報管理者も「自動更新」列を表示するため、設定の取得を開始する
+  if(!bizAutoState && !bizAutoLoading && !myAdminPermissions.isAdmin && isStorageConfigured() && bizInfoItemsAll.some(i=>Array.isArray(i.infoManagers) && i.infoManagers.includes(myEmail))) loadBizAutoState();
   // システム管理者は全件、情報管理者は自分が指定されている項目のみを一覧に表示する
   const visibleItems = myAdminPermissions.isAdmin
     ? bizInfoItemsAll
     : bizInfoItemsAll.filter(item => Array.isArray(item.infoManagers) && item.infoManagers.includes(myEmail));
   if(visibleItems.length===0){
-    body.innerHTML = `<tr><td colspan="6" class="empty">まだ登録されていません。</td></tr>`;
+    body.innerHTML = `<tr><td colspan="7" class="empty">まだ登録されていません。</td></tr>`;
     return;
   }
   visibleItems.forEach(item=>{
@@ -4281,6 +4283,7 @@ function renderBizInfoTable(){
       <td><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${cat.color};vertical-align:middle;margin-right:5px;"></span>${escapeHtml(cat.label)}</td>
       <td>${item.enabled!==false ? "有効" : "無効"}</td>
       <td>${item.allowDownload ? "許可" : ""}</td>
+      <td style="font-size:12px;white-space:nowrap;">${escapeHtml(bizAutoListText(item.id))}</td>
       <td class="actions"></td>
     `;
     if(canDrag){
@@ -4305,12 +4308,6 @@ function renderBizInfoTable(){
       }
     }
     const actionsTd = tr.querySelector(".actions");
-    const shortcutBtn = document.createElement("button");
-    shortcutBtn.className = "btn btn-ghost"; shortcutBtn.textContent = "直接修正";
-    shortcutBtn.style.border = "1px solid var(--line)";
-    shortcutBtn.disabled = !canManage;
-    shortcutBtn.addEventListener("click", ()=> openBizInfoEditScreen(item));
-    actionsTd.appendChild(shortcutBtn);
     const editBtn = document.createElement("button");
     editBtn.className = "btn btn-ghost"; editBtn.textContent = "編集";
     editBtn.style.border = "1px solid var(--line)";
@@ -4574,6 +4571,15 @@ function bizAutoFmt(ms){
   return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
 }
 function bizAutoCanUse(){ return !!(myAdminPermissions.isAdmin && isStorageConfigured()); }
+// 追加・編集モーダルの自動更新欄：システム管理者は全項目、情報管理者は自分が管理者の項目のみ（2026-10-22）
+function bizAutoCanUseForId(itemId){
+  if(!isStorageConfigured()) return false;
+  if(myAdminPermissions.isAdmin) return true;
+  if(!itemId) return false;
+  const myEmail = (currentUser?.email||"").toLowerCase();
+  const it = bizInfoItemsAll.find(i=>i.id===itemId);
+  return !!(it && Array.isArray(it.infoManagers) && it.infoManagers.includes(myEmail));
+}
 async function loadBizAutoState(){
   if(bizAutoLoading) return;
   bizAutoLoading = true;
@@ -4581,6 +4587,7 @@ async function loadBizAutoState(){
   try{
     bizAutoState = await autoGetState();
     renderBizAutoPanel();
+    try{ renderBizInfoTable(); }catch(e){ console.error("[業務情報一覧の再描画]", e); }
     fillBizAutoModal();
     if(msg) msg.textContent = "";
   }catch(e){
@@ -4588,6 +4595,13 @@ async function loadBizAutoState(){
   }finally{
     bizAutoLoading = false;
   }
+}
+// 業務情報一覧の「自動更新」列の表示（例：毎日 01:00／12時間ごと／停止中（毎日 01:00））
+function bizAutoListText(itemId){
+  const t = bizAutoState && bizAutoState.cfg && bizAutoState.cfg.targets ? bizAutoState.cfg.targets[itemId] : null;
+  if(!t || !t.path) return "";
+  const sched = bizAutoSchedText(t);
+  return t.enabled === false ? `停止中（${sched}）` : sched;
 }
 function bizAutoSchedText(t){
   return t.mode === "interval" ? `${Number(t.hours)||24}時間ごと` : `毎日 ${t.time||"08:30"}`;
@@ -4648,6 +4662,18 @@ function bizAutoRecipients(item){
 }
 // overrideItem: {id,name,fileId,infoManagers}（モーダルで保存した項目）。overrideTarget: 設定内容。nullなら自動更新を解除。
 function buildBizAutoConfig(overrideItem, overrideTarget){
+  // 情報管理者（システム管理者でない人）が保存するときは、自分の項目の分だけを差し替え、他の項目・管理者一覧は取得済みの設定のまま残す
+  if(!myAdminPermissions.isAdmin){
+    const c = (bizAutoState && bizAutoState.cfg) || {};
+    const targets = { ...(c.targets || {}) };
+    if(overrideTarget && overrideTarget.path){
+      targets[overrideItem.id] = { ...overrideTarget, name: overrideItem.name||"",
+        notifyTo: bizAutoNormEmails([...(overrideItem.infoManagers||[]), ...(c.adminEmails||[])]) };
+    } else {
+      delete targets[overrideItem.id];
+    }
+    return { adminEmails: bizAutoNormEmails(c.adminEmails), targets };
+  }
   const old = (bizAutoState && bizAutoState.cfg && bizAutoState.cfg.targets) || {};
   const items = bizInfoItemsAll.filter(i=>!overrideItem || i.id!==overrideItem.id);
   if(overrideItem) items.push(overrideItem);
@@ -4699,8 +4725,9 @@ function resetBizAutoModal(itemId){
   bizAutoModalFilledFor = undefined;
   const sec = document.getElementById("bizauto-modal-section");
   if(!sec) return;
-  sec.style.display = bizAutoCanUse() ? "" : "none";
-  document.getElementById("bizauto-runnow-btn").style.display = bizAutoCanUse() ? "" : "none";
+  const canUse = bizAutoCanUseForId(itemId);
+  sec.style.display = canUse ? "" : "none";
+  document.getElementById("bizauto-runnow-btn").style.display = canUse ? "" : "none";
   document.getElementById("bizauto-path-input").value = "";
   document.getElementById("bizauto-mode-select").value = "daily";
   document.getElementById("bizauto-time-input").value = "08:30";
@@ -4708,12 +4735,12 @@ function resetBizAutoModal(itemId){
   const cb = document.getElementById("bizauto-enabled-input"); cb.checked = false; cb.disabled = true;
   document.getElementById("bizauto-modal-status").textContent = "";
   bizAutoModalSyncMode();
-  if(!bizAutoCanUse()) return;
+  if(!canUse) return;
   if(bizAutoState) fillBizAutoModal(); else loadBizAutoState();
 }
 function fillBizAutoModal(){
   const modal = document.getElementById("bizinfo-edit-modal");
-  if(!modal || !modal.classList.contains("show") || !bizAutoState || !bizAutoCanUse()) return;
+  if(!modal || !modal.classList.contains("show") || !bizAutoState || !bizAutoCanUseForId(editingBizInfoId)) return;
   if(bizAutoModalFilledFor === (editingBizInfoId||null)) return;
   bizAutoModalFilledFor = editingBizInfoId || null;
   if(!editingBizInfoId) return; // 追加時は空欄のまま
@@ -4752,7 +4779,7 @@ document.getElementById("bizauto-runnow-btn")?.addEventListener("click", ()=>{
 // モーダルの「保存」から呼ぶ。成功（または変更なし）ならtrue。
 async function saveBizAutoFromModal(itemLike){
   const sec = document.getElementById("bizauto-modal-section");
-  if(!sec || sec.style.display === "none" || !bizAutoCanUse()) return true;
+  if(!sec || sec.style.display === "none" || !bizAutoCanUseForId(itemLike.id)) return true;
   const errEl = document.getElementById("bizinfo-edit-error");
   try{
     if(!bizAutoState) await loadBizAutoState();
