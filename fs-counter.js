@@ -105,7 +105,7 @@
    ・修正1：ログON判定が届く前に来る「起動直後のlisten行」が失われていた → 判定が届くまで保留し、ONなら送る。
    ・修正2：__fs.reset() が logPrev を消さないため、ログに負の差分行が出た → logPrev も初期化する。
    ========================================================= */
-const FS_COUNTER_VERSION = "v3.3 2026-10-21";
+const FS_COUNTER_VERSION = "v3.4 2026-10-22";
 import * as FS from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 export * from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
@@ -553,8 +553,69 @@ function logEnvInfo(){
   try{ sw = !!(navigator.serviceWorker && navigator.serviceWorker.controller); }catch(e){}
   return { t: Date.now(), type: "env", tab: logCurrentTab(), coll: FS_COUNTER_VERSION,
     path: `${os}/${br}/${standalone ? "standalone" : "browser"}/${sw ? "SW有" : "SW無"}`,
-    caller: `w${window.innerWidth}x${window.innerHeight} online=${navigator.onLine} 前回稼働から${coldKnown ? coldGapSec + "秒" : "記録なし"}` };
+    caller: `w${window.innerWidth}x${window.innerHeight} online=${navigator.onLine} 前回稼働から${coldKnown ? coldGapSec + "秒" : "記録なし"}${logUaBrief(ua)}` };
 }
+// v3.4: 端末ごとの不具合の切り分け用に、ブラウザ/OSの版を短く添える（例: " chrome=120 android=10"）
+function logUaBrief(ua){
+  try{
+    let out = "";
+    let m = ua.match(/(?:Chrome|CriOS)\/(\d+)/); if(m) out += " chrome=" + m[1];
+    m = ua.match(/Edg\/(\d+)/); if(m) out += " edge=" + m[1];
+    m = ua.match(/Android (\d+)/); if(m) out += " android=" + m[1];
+    m = ua.match(/OS (\d+)[_\d]* like Mac/); if(m) out += " ios=" + m[1];
+    return out;
+  }catch(e){ return ""; }
+}
+// v3.4: JSエラー（画面の初期化が途中で止まる不具合の原因特定用）。1ページ表示あたり最大10件。
+//       ログ種別は既存の conn のまま（受け側 activity-log.gs の変更は不要）。
+//       操作列=「JSエラー」、パス列=エラー文、呼び出し元列=発生場所（関数@ファイル:行）。
+let logJsErrCount = 0;
+function logStackBrief(stack){
+  try{
+    const out = [];
+    String(stack || "").split("\n").forEach(ln=>{
+      if(out.length >= 3) return;
+      let fn = "", file = "", line = "";
+      let m = ln.match(/at\s+(?:async\s+)?(\S+)\s+\(.*?([^\/\s)]+):(\d+):\d+\)/);   // Chrome: at fn (url/file.html:12:3)
+      if(m){ fn = m[1]; file = m[2]; line = m[3]; }
+      else{
+        m = ln.match(/at\s+.*?([^\/\s)]+):(\d+):\d+/);                                // Chrome 無名
+        if(m){ fn = "(anon)"; file = m[1]; line = m[2]; }
+        else{
+          m = ln.match(/^\s*([^@\s]*)@.*?([^\/\s]+):(\d+):\d+/);                      // Firefox/Safari
+          if(m){ fn = m[1] || "(anon)"; file = m[2]; line = m[3]; }
+        }
+      }
+      if(file) out.push(`${fn}@${file}:${line}`);
+    });
+    return out.join(" < ");
+  }catch(e){ return ""; }
+}
+function logJsError(msg, where){
+  try{
+    if(logJsErrCount >= 10) return;
+    logJsErrCount++;
+    const ev = { t: Date.now(), type: "conn", tab: logCurrentTab(), op: "JSエラー", path: String(msg || "").slice(0, 100), caller: String(where || "").slice(0, 160) };
+    if(!logSettingKnown){ if(logPendingListen.length < 60) logPendingListen.push(ev); return; }
+    if(!logCfg || !logEnabled) return;
+    logPush(ev);
+  }catch(e){}
+}
+try{
+  window.addEventListener("error", (ev)=>{
+    try{
+      const st = (ev && ev.error && ev.error.stack) ? logStackBrief(ev.error.stack) : "";
+      const base = (ev && ev.filename ? String(ev.filename).split("/").pop() : "") + ":" + (ev ? ev.lineno : "") + ":" + (ev ? ev.colno : "");
+      logJsError(ev && ev.message, st || base);
+    }catch(e){}
+  });
+  window.addEventListener("unhandledrejection", (ev)=>{
+    try{
+      const r = ev && ev.reason;
+      logJsError("未処理Promise: " + (r && r.message ? r.message : String(r)), (r && r.stack) ? logStackBrief(r.stack) : "");
+    }catch(e){}
+  });
+}catch(e){}
 // v3: 30分以上の切断のあとの再接続では、購読中の結果が丸ごと再課金される（公式の料金説明）。
 //     ブラウザには差分しか届かないため、購読中の件数を「推定」として加える（実測ではない）。
 function estimateReconnect(gapSec){
