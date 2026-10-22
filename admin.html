@@ -1442,12 +1442,12 @@
         </div>
         <div id="bizauto-modal-section" style="display:none;border-top:1px solid var(--line);margin-top:14px;padding-top:12px;">
           <div style="font-weight:600;font-size:13px;margin-bottom:8px;">自動更新</div>
-          <div class="field" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            <input type="checkbox" id="bizauto-enabled-input" disabled style="width:auto;">
-            <label style="margin:0;font-size:12.5px;">有効にする</label>
-            <select id="bizauto-mode-select" style="width:auto;"><option value="daily">毎日</option><option value="interval">間隔</option></select>
-            <input type="time" id="bizauto-time-input" value="08:30" style="width:110px;">
-            <span id="bizauto-hours-wrap" style="display:none;"><input type="number" id="bizauto-hours-input" min="1" max="168" value="24" style="width:70px;"> 時間ごと</span>
+          <div class="field" style="display:flex;align-items:center;gap:8px;flex-wrap:nowrap;">
+            <input type="checkbox" id="bizauto-enabled-input" disabled style="width:auto;flex:0 0 auto;">
+            <label style="margin:0;font-size:12.5px;white-space:nowrap;flex:0 0 auto;">有効にする</label>
+            <select id="bizauto-mode-select" style="width:auto;flex:0 0 auto;"><option value="daily">毎日</option><option value="interval">間隔</option></select>
+            <input type="time" id="bizauto-time-input" value="08:30" style="width:110px;flex:0 0 auto;">
+            <span id="bizauto-hours-wrap" style="display:none;white-space:nowrap;flex:0 0 auto;"><input type="number" id="bizauto-hours-input" min="1" max="168" value="24" style="width:64px;"> 時間ごと</span>
           </div>
           <div class="field">
             <label>元ファイルのパス（空欄なら自動更新しない）</label>
