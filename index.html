@@ -3714,7 +3714,20 @@ function applySavedTabOrder(){
   // 並び替え結果に関わらず、一番左の「表示されている」タブを初期表示にする
   const nav = document.getElementById("main-tabs");
   const firstBtn = Array.from(nav.querySelectorAll(".tab-btn")).find(b => b.style.display !== "none");
-  if(firstBtn) switchToTab(firstBtn.dataset.view);
+  // 【2026-10-22 修正】この関数はスクリプトの途中（約3811行目）で呼ばれるため、その時点では
+  // これより後ろで宣言される let 変数（例：visitorTargetOfficersListenerStarted、noticeCleanupRunning、
+  // chatListUnsub 等）がまだ初期化されていない。一番左のタブが「出入予定」「予約」「お知らせ」など、
+  // 開いた時に購読開始用の変数を触るタブだと「Cannot access '…' before initialization」で
+  // スクリプト全体が途中で止まり、カレンダー・行き先などが一切表示されなくなっていた
+  // （前田さんのAndroidで発生。端末ごとに保存された並び順の先頭タブによって起きる）。
+  // 初期表示タブの切替だけを「スクリプトの評価が全部終わった直後」（マイクロタスク）へ遅らせる。
+  // 描画の前に実行されるため、見た目のチラつきは出ない。
+  if(firstBtn){
+    const firstView = firstBtn.dataset.view;
+    Promise.resolve().then(()=>{
+      try{ switchToTab(firstView); }catch(e){ console.error("[初期タブ表示エラー]", e); }
+    });
+  }
 }
 function currentTabOrder(){
   return Array.from(document.querySelectorAll("#main-tabs .tab-btn")).map(b=>b.dataset.view);
