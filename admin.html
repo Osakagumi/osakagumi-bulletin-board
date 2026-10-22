@@ -1457,7 +1457,7 @@
         </div>
         <div id="bizinfo-edit-error" style="color:var(--danger);font-size:12.5px;margin-top:4px;"></div>
         <div class="row-btns">
-          <button class="btn btn-ghost" id="bizauto-runnow-btn" style="border:1px solid var(--line);display:none;" title="保存したうえで、ノートPCが次に確認に来た時（15分以内）に実行します。">規定前実行</button>
+          <button class="btn btn-ghost" id="bizauto-runnow-btn" style="border:1px solid var(--line);display:none;" title="保存したうえで、ノートPCが次に確認に来た時（15分以内）に実行します。">予定前実行</button>
           <button class="btn btn-ghost" id="bizinfo-edit-cancel-btn" style="border:1px solid var(--line);">キャンセル</button>
           <button class="btn btn-primary" id="bizinfo-edit-save-btn">保存</button>
         </div>
@@ -4733,7 +4733,7 @@ document.getElementById("bizauto-path-input")?.addEventListener("input", ()=>{
   if(has && cb.disabled){ cb.disabled = false; cb.checked = true; }
   if(!has){ cb.checked = false; cb.disabled = true; }
 });
-// 「規定前実行」：保存処理も合わせて行い、ノートPCが次に確認に来た時（15分以内）に実行させる
+// 「予定前実行」：保存処理も合わせて行い、ノートPCが次に確認に来た時（15分以内）に実行させる
 document.getElementById("bizauto-runnow-btn")?.addEventListener("click", ()=>{
   if(!document.getElementById("bizauto-path-input").value.trim()){
     document.getElementById("bizinfo-edit-error").textContent = "先に元ファイルのパスを入力してください。";
