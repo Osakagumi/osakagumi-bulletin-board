@@ -280,7 +280,7 @@
   .dash-row:last-child{border-bottom:none;}
   .dash-row:hover{color:var(--brand-dark);}
   .dash-row .dash-row-sub{color:var(--muted);font-size:11.5px;white-space:nowrap;}
-  /* ダッシュボード：出入予定カードの表形式表示（種別・予定・社員・日時。各セル最大2行） */
+  /* ダッシュボード：来客・出張カードの表形式表示（種別・予定・社員・日時。各セル最大2行） */
   .dvis-table{width:100%;border-collapse:collapse;table-layout:fixed;}
   .dvis-table tr{cursor:pointer;border-bottom:1px solid var(--line);}
   .dvis-table tr:last-child{border-bottom:none;}
@@ -726,7 +726,7 @@
     .notice-table td:last-child{ order:5; margin-left:auto; }
     .notice-table td:last-child .n-detail-btn{ padding:7px 16px; font-size:13px; }
   }
-  /* 出入予定一覧：各列の幅を絞り、PCでは1行に収める専用テーブル */
+  /* 来客・出張一覧：各列の幅を絞り、PCでは1行に収める専用テーブル */
   .visitor-table{width:100%;border-collapse:collapse;background:var(--surface);border:1.5px solid var(--line);border-radius:10px;overflow:hidden;table-layout:fixed;}
   .visitor-table th{text-align:left;font-size:11.5px;color:var(--muted);padding:8px 8px;border-bottom:1.5px solid var(--line);background:#F7F9FB;white-space:nowrap;}
   .visitor-table td{padding:8px 8px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:middle;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -825,7 +825,7 @@
     .visitor-toolbar{flex-wrap:wrap;overflow-x:visible;}
     .visitor-toolbar-filters{flex-wrap:wrap;}
   }
-  /* ---------- 出入予定：カレンダー表示（月単位・日付ごとの行） ---------- */
+  /* ---------- 来客・出張：カレンダー表示（月単位・日付ごとの行） ---------- */
   .vcal-day-row{display:flex;align-items:stretch;border-bottom:1px solid var(--line);background:var(--surface);}
   .vcal-day-row:last-child{border-bottom:none;}
   .vcal-day-row.vcal-past{opacity:0.6;}
@@ -1048,7 +1048,7 @@
       <button class="tab-btn" data-view="contracts" style="display:none;">入札</button>
       <button class="tab-btn" data-view="bizinfo">業務情報</button>
       <button class="tab-btn" data-view="checkout">機材</button>
-      <button class="tab-btn" data-view="visitors">出入予定</button>
+      <button class="tab-btn" data-view="visitors">来客・出張</button>
       <button class="tab-btn" data-view="safety" style="display:none;">安否確認</button>
       <button class="tab-btn" data-view="safetyresponse" style="display:none;">安否回答</button>
       <button class="tab-reorder-btn" id="tab-reorder-toggle" title="タブの並び替え">並び替え</button>
@@ -1142,7 +1142,7 @@
         </table>
       </section>
 
-      <!-- ---- 出入予定（来客・役員） ---- -->
+      <!-- ---- 来客・出張 ---- -->
       <section id="view-visitors" style="display:none;">
         <div class="section-toolbar visitor-toolbar">
           <button class="btn-primary" id="visitor-new-btn">追加</button>
@@ -1349,7 +1349,7 @@
                     <button type="button" class="seg-btn active" data-visitorsrange="today" style="padding:4px 10px;font-size:11.5px;">今日</button>
                     <button type="button" class="seg-btn" data-visitorsrange="upcoming" style="padding:4px 10px;font-size:11.5px;">近日</button>
                   </div>
-                  <span class="dash-card-link" id="dash-visitors-link" title="出入予定を見る" style="margin-left:0;">▶</span>
+                  <span class="dash-card-link" id="dash-visitors-link" title="来客・出張を見る" style="margin-left:0;">▶</span>
                 </div>
               </div>
               <div id="dash-visitors-body"></div>
@@ -1418,9 +1418,7 @@
               <button class="btn-primary" id="wb-preset-save-btn">保存</button>
             </div>
           </div>
-          <p id="wb-order-hint" style="display:none;font-size:12px;color:var(--muted);margin:0 0 10px;">
-            表の左端の「⠿」をドラッグすると並び順を変更できます。ここで設定した順番は個人ごとの設定ではなく、「行き先」の一覧・行き先別・事前設定など、システム全体の表示順として全員に反映されます。
-          </p>
+          <p id="wb-order-hint" style="display:none;font-size:12px;color:var(--muted);margin:0 0 10px;"></p>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
             <span style="font-size:12.5px;color:var(--muted);white-space:nowrap;">保存済：</span>
             <div id="wb-preset-dates-list" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
@@ -1428,9 +1426,7 @@
           <div class="howto" id="wb-preset-date-label"></div>
           <div class="wb-list-columns" id="wb-preset-columns"></div>
           <p style="font-size:11.5px;color:var(--muted);margin-top:10px;">
-            指定できるのは、カレンダー上で休日になっていない日のみです。事前設定は最大7日分まで保持されます（過去の日付は自動的に削除されます）。<br>
-            各社員の状態をクリックして変更しても、この画面上で内容が変わるだけで、まだ保存はされません。画面右上の「保存」ボタンを押した時点で、変更した社員・変更していない社員を問わず、表示されている内容がその日（または初期状態）の行き先として全員分まとめて保存されます。保存する前に日付や「初期状態」を切り替えると、変更内容は破棄されます。<br>
-            当日、本人または権限保持者が「自分の行き先を入力」などでその場で変更した場合は、事前設定の保存内容よりもその場での変更が優先して表示されます。
+            各社員の状態をクリックして変更しても、この画面上で内容が変わるだけで、まだ保存はされません。画面右上の「保存」ボタンを押した時点で、変更した社員・変更していない社員を問わず、表示されている内容がその日（または初期状態）の行き先として全員分まとめて保存されます。保存する前に日付や「初期状態」を切り替えると、変更内容は破棄されます。
           </p>
         </div>
       </section>
@@ -1519,8 +1515,7 @@
           <div class="section-toolbar">
             <button class="btn-primary" id="chat-new-btn">新しいメッセージ</button>
           </div>
-          <p id="chat-cleanup-note" style="font-size:12px;color:var(--muted);margin:-6px 0 12px;">メッセージ（テキスト）は24時間、画像・ファイルは1時間経過すると自動的に削除されます。</p>
-          <div id="chat-conversation-list"></div>
+                    <div id="chat-conversation-list"></div>
         </div>
         <div id="chat-thread-view" style="display:none;">
           <div class="section-toolbar" id="chat-thread-toolbar">
@@ -1547,8 +1542,7 @@
             <textarea id="chat-input" placeholder="メッセージを入力…" maxlength="1000" rows="1"></textarea>
             <button class="btn-primary" id="chat-send-btn">送信</button>
           </div>
-          <p id="chat-cleanup-note-2" style="font-size:11.5px;color:var(--muted);margin:6px 0 0;">メッセージ（テキスト）は24時間、画像・ファイルは1時間経過すると自動的に削除されます。</p>
-        </div>
+                  </div>
       </section>
     </main>
   </div>
@@ -1671,11 +1665,11 @@
         </div>
         <div id="notice-send-email-row" style="display:flex;align-items:center;gap:6px;margin-top:8px;">
           <input type="checkbox" id="notice-send-email" checked style="width:auto;">
-          <label id="notice-send-email-label" style="margin:0;font-size:12.5px;color:var(--text);">Eメールでも送信する（自分のメールソフトが起動します）</label>
+          <label id="notice-send-email-label" style="margin:0;font-size:12.5px;color:var(--text);">Eメールでも送信する</label>
         </div>
         <div id="notice-send-push-row" style="display:flex;align-items:center;gap:6px;margin-top:8px;">
           <input type="checkbox" id="notice-send-push" checked style="width:auto;">
-          <label id="notice-send-push-label" style="margin:0;font-size:12.5px;color:var(--text);">プッシュ通知も送る（通知を許可している端末に届きます）</label>
+          <label id="notice-send-push-label" style="margin:0;font-size:12.5px;color:var(--text);">プッシュ通知も送る</label>
         </div>
         <div id="notice-reset-read-row" style="display:flex;align-items:center;gap:6px;margin-top:8px;">
           <input type="checkbox" id="notice-reset-read" style="width:auto;">
@@ -1786,9 +1780,6 @@
   <div class="modal-overlay" id="safety-email-preview-modal">
     <div class="modal" style="max-width:520px;">
       <h3>メールのプレビュー</h3>
-      <p style="font-size:11.5px;color:var(--muted);margin:-8px 0 12px;">
-        実際にOutlookで届いたメールの見た目をもとに再現しています。メールソフトによって細部の見え方が変わる場合があります。ボタンやリンクはこの画面では動作しません。
-      </p>
       <div style="border:1px solid var(--line);border-radius:8px;overflow:hidden;">
         <div style="background:#F7F8FA;padding:10px 14px;border-bottom:1px solid var(--line);">
           <div style="font-size:11px;color:var(--muted);">件名</div>
@@ -1820,7 +1811,7 @@
       <div class="field" id="wb-timeleave-section" style="border-top:1px solid var(--line);padding-top:12px;">
         <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text);margin-bottom:8px;">
           <input type="checkbox" id="wb-timeleave-check" style="width:auto;">
-          本日、時間休を設定する
+          半休、時間休を設定する
         </label>
         <div id="wb-timeleave-fields" style="display:none;flex-direction:column;gap:8px;">
           <div class="seg-toggle" id="wb-timeleave-type-toggle" style="width:100%;">
@@ -1834,7 +1825,6 @@
             <button type="button" class="date-field-btn placeholder" id="wb-timeleave-end" data-value="" style="flex:1;"></button>
           </div>
         </div>
-        <p style="font-size:11px;color:var(--muted);margin:6px 0 0;">設定した時間帯だけ、自動的に「休み」表示になります（他の時間帯は通常の状態のままです）。</p>
       </div>
       <div class="modal-err" id="wb-error"></div>
       <div class="row-btns">
@@ -1876,7 +1866,6 @@
             <button type="button" class="date-field-btn placeholder" id="wb-preset-tl-end" data-value="" style="flex:1;"></button>
           </div>
         </div>
-        <p style="font-size:11px;color:var(--muted);margin:6px 0 0;">当日、この時間帯だけ自動的に「休み」表示になります。</p>
       </div>
       <div class="modal-err" id="wb-preset-modal-error"></div>
       <div class="row-btns">
@@ -1913,10 +1902,10 @@
     </div>
   </div>
 
-  <!-- ============ 出入予定（来客・役員） 追加・編集モーダル ============ -->
+  <!-- ============ 来客・出張 追加・編集モーダル ============ -->
   <div class="modal-overlay" id="visitor-modal">
     <div class="modal">
-      <h3 id="visitor-modal-title">出入予定を追加</h3>
+      <h3 id="visitor-modal-title">来客・出張を追加</h3>
       <div class="field" id="visitor-type-field" style="display:none;">
         <label>種別</label>
         <div class="seg-toggle" id="visitor-type-toggle">
@@ -2583,7 +2572,7 @@ let isContractEditor = false;
 let isSafetySender = false;
 let isBizInfoManager = false;
 let isVisitorManager = false;
-let visitorTargetOfficerEmails = []; // 出入予定：役員予定の対象にできる社員（管理画面で設定）
+let visitorTargetOfficerEmails = []; // 来客・出張：役員予定の対象にできる社員（管理画面で設定）
 let isSharedAccount = false; // ログイン中の自分自身が「共用アカウント」かどうか
 // お知らせ掲示板モード（共用アカウント）のキオスク画面で、ログアウトボタンの代わりに
 // 使う「秘密のショートカットキー」の設定。管理画面（システム管理）から変更できる。
@@ -2670,7 +2659,7 @@ let equipmentAll = [];
 //  equipmentLazy  : ダッシュボードの「自分の機材」は自分が借用中の分だけの軽い購読にし、設備の全件購読は
 //                   機材・予約タブを開く／予約へジャンプする時まで開始しない
 //  rosterBundle   : 社員名簿（employees全件購読）を wb_presets/_roster の1ドキュメント購読に置き換える（2026-10-13）
-//  editorCalLight : カレンダー編集権限者が「出入予定」タブを開いた時の年間カレンダー購読を、編集中データ
+//  editorCalLight : カレンダー編集権限者が「来客・出張」タブを開いた時の年間カレンダー購読を、編集中データ
 //                   （calendar_days、365件）ではなく公開済みバンドル（版数キャッシュ）にする。
 //                   「カレンダー」タブを開いた時は従来どおり編集中データをライブ購読する（2026-10-14）
 //  consumeFromRoster : 朝の事前設定の自動反映（consumeTodayWbPresets）で、社員ごとに employees を getDoc
@@ -2689,7 +2678,7 @@ let selectedCheckoutCategory = null;
 let selectedEquipment = null;
 let myResUnsub = null;
 let myReservationsAll = [];
-let calDaysData = {};          // "YYYY-MM-DD" -> {isHoliday, label}（カレンダー・出入予定タブを開くと年間ぶん読み込まれる）
+let calDaysData = {};          // "YYYY-MM-DD" -> {isHoliday, label}（カレンダー・来客・出張タブを開くと年間ぶん読み込まれる）
 let calHolidayWindowData = {}; // 同上だが、ログイン時から常に読み込まれる直近期間のみの軽量版（下記initCalHolidayWindowListener参照）
 let calHolidayWindowUnsub = null;
 let spPlateTypesAll = [];
@@ -2915,7 +2904,7 @@ onAuthStateChanged(auth, async (user)=>{
     // 2026年10月、共用アカウントのログイン処理を監査した結果、notice-board-modeはCSSで
     // 画面（お知らせ以外）を非表示にしているだけで、実際には一般社員と全く同じ初期化が
     // 毎回フルで走っていたことが判明した（カレンダー休日判定用の最大61日分クエリ・行き先
-    // 事前設定・出入予定・部署/ステータスマスタ・設備カテゴリ・権限チェック関連の軽量購読等）。
+    // 事前設定・来客・出張・部署/ステータスマスタ・設備カテゴリ・権限チェック関連の軽量購読等）。
     // 特にQRコード経由のスマホは「スキャンするたびに新しいログインセッション」になるため、
     // この無駄がスキャンの回数ぶんそのまま積み重なっていた。共用アカウントが実際に表示する
     // のはお知らせ掲示板（お知らせ本文＋自分の所属部署による絞り込み）だけなので、それに
@@ -2937,7 +2926,7 @@ onAuthStateChanged(auth, async (user)=>{
       if(isSafetySender){ initSafetyCampaignsAdminListener(); }
       initMasterDataListeners(); // 2026-10-15：設備カテゴリ・所属・行き先ステータスをまとめドキュメント1件で購読（無ければ従来の3購読）
       if(DIET.equipmentLazy){ initMyEquipmentLightListener(); } // 2026-10-12：ダッシュボード「自分の機材」用（自分が借用中の分だけ）
-      // 2026年10月：設備本体（equipment）の購読は、カレンダー・出入予定と同じ理由
+      // 2026年10月：設備本体（equipment）の購読は、カレンダー・来客・出張と同じ理由
       // （全社員が毎回ログインするだけで全件購読していたコストの削減）により、ログイン時には
       // 行わず「機材」「予約」タブを実際に開いたタイミングまで遅延させる
       // （ensureEquipmentFullListener参照。ダッシュボードの予約一覧クリックやキオスク予約表示でも、
@@ -2952,7 +2941,7 @@ onAuthStateChanged(auth, async (user)=>{
       // 判明した通り、行き先・お知らせ・チャット・機材（貸出先選択）など本人以外の社員情報が
       // 必要なタブを実際に開いた時だけ行う（ensureEmployeesFullListener参照）。
       // カレンダー本体（年間最大366日ぶん）の購読は、ログイン時には行わず「カレンダー」
-      // 「出入予定」タブを実際に開いたタイミングまで遅延させる（ensureCalendarFullYearListener参照。
+      // 「来客・出張」タブを実際に開いたタイミングまで遅延させる（ensureCalendarFullYearListener参照。
       // 2026年10月、1回のログインで365件前後のFirestore読み取りが発生していた問題への対策）。
       // ただし行き先の「休日なら自動的に休みにする」判定・次稼働日の算出は全社員が常に使う機能なので、
       // そちらに必要な直近期間だけを別途、軽量な専用リスナー（initCalHolidayWindowListener）で読み込む。
@@ -2986,9 +2975,9 @@ onAuthStateChanged(auth, async (user)=>{
       // initContractsListener();
       initVisitorSchedulesListener();
       cleanupOldVisitorSchedules();
-      // 業務情報（business_info_categories/items）と、出入予定の「役員対象社員」設定
+      // 業務情報（business_info_categories/items）と、来客・出張の「役員対象社員」設定
       // （visitor_target_officers）は、いずれもダッシュボードの表示には使われず、
-      // それぞれ「業務情報」タブ／「出入予定」タブを実際に開いた時にしか参照されない。
+      // それぞれ「業務情報」タブ／「来客・出張」タブを実際に開いた時にしか参照されない。
       // ログイン直後の読み取り数を減らすため、ここでは監視を開始せず、
       // 該当タブを初めて開いたタイミングで初めて監視を始める（switchToTab側を参照）。
       initChatCleanupSettingsListener();
@@ -3296,7 +3285,7 @@ function refreshDashboardIfActive(){
   }
 }
 let dashVisitorsRange = "today"; // "today"=本日の予定のみ／"upcoming"=今日以降（従来通り）
-// ある出入予定が指定日を含む期間かどうか（終了日が未設定なら開始日=終了日として扱う）
+// ある来客・出張が指定日を含む期間かどうか（終了日が未設定なら開始日=終了日として扱う）
 function visitorEntryCoversDate(v, dateStr){
   const end = v.endDate || v.date;
   return (v.date||"") <= dateStr && dateStr <= end;
@@ -3313,7 +3302,7 @@ document.querySelectorAll("#dash-visitors-range-toggle .seg-btn").forEach(btn=>{
     renderDashboardVisitorsCard();
   });
 });
-// ---- 出入予定カード（来客・役員。出入予定管理権限者は全員分、それ以外は自分が対象の分のみ） ----
+// ---- 来客・出張カード（来客・役員。来客・出張管理権限者は全員分、それ以外は自分が対象の分のみ） ----
 function renderDashboardVisitorsCard(){
   const visitorsBody = document.getElementById("dash-visitors-body");
   if(!visitorsBody) return;
@@ -3330,7 +3319,7 @@ function renderDashboardVisitorsCard(){
         .filter(v=> (v.date||"") >= todayStrForVisitors)
         .sort((a,b)=> (a.date+((a.time)||"")).localeCompare(b.date+((b.time)||"")));
   if(targetVisitors.length===0){
-    visitorsBody.innerHTML = `<div class="dash-empty">${dashVisitorsRange==="today" ? "本日の出入予定はありません。" : "今後の出入予定はありません。"}</div>`;
+    visitorsBody.innerHTML = `<div class="dash-empty">${dashVisitorsRange==="today" ? "本日の来客・出張はありません。" : "今後の来客・出張はありません。"}</div>`;
     return;
   }
   const table = document.createElement("table");
@@ -3641,16 +3630,16 @@ function switchToTab(viewName){
   }
   if(viewName==="visitors"){
     ensureVisitorTargetOfficersListener();
-    // 2026年10月：出入予定・カレンダーの「全件（年間/全履歴）」購読は、出入予定管理者
+    // 2026年10月：来客・出張・カレンダーの「全件（年間/全履歴）」購読は、来客・出張管理者
     // （isVisitorManager）だけに絞った。一般社員は自分がhostの予定しか表示しない仕様
     // （isVisitorManagerでの絞り込み、本関数下部参照）であり、直近30日＋将来分の軽量購読
     // （visitorSchedulesLight）・休日判定用の軽量カレンダー窓（calHolidayWindowData、直近2ヶ月分）
     // で実用上十分なため、全社員に全件購読のコストを負わせない（読み取り数削減、2026年10月）。
     if(isVisitorManager){
-      ensureVisitorSchedulesFullListener(); // 出入予定タブを開いた時だけ、過去分も含む全件購読に切り替える
-      ensureCalendarFullYearListener(false); // 出入予定カレンダーの休日ハイライトに年間データを使うため（編集中データは不要）
+      ensureVisitorSchedulesFullListener(); // 来客・出張タブを開いた時だけ、過去分も含む全件購読に切り替える
+      ensureCalendarFullYearListener(false); // 来客・出張カレンダーの休日ハイライトに年間データを使うため（編集中データは不要）
     }
-    try{ renderActiveVisitorView(); }catch(e){ console.error("[出入予定タブの表示エラー]", e); }
+    try{ renderActiveVisitorView(); }catch(e){ console.error("[来客・出張タブの表示エラー]", e); }
   }
   if(viewName==="dashboard"){
     try{ renderDashboard(); }catch(e){ console.error("[ダッシュボードの表示エラー]", e); }
@@ -3716,7 +3705,7 @@ function applySavedTabOrder(){
   const firstBtn = Array.from(nav.querySelectorAll(".tab-btn")).find(b => b.style.display !== "none");
   // 【2026-10-22 修正】この関数はスクリプトの途中（約3811行目）で呼ばれるため、その時点では
   // これより後ろで宣言される let 変数（例：visitorTargetOfficersListenerStarted、noticeCleanupRunning、
-  // chatListUnsub 等）がまだ初期化されていない。一番左のタブが「出入予定」「予約」「お知らせ」など、
+  // chatListUnsub 等）がまだ初期化されていない。一番左のタブが「来客・出張」「予約」「お知らせ」など、
   // 開いた時に購読開始用の変数を触るタブだと「Cannot access '…' before initialization」で
   // スクリプト全体が途中で止まり、カレンダー・行き先などが一切表示されなくなっていた
   // （前田さんのAndroidで発生。端末ごとに保存された並び順の先頭タブによって起きる）。
@@ -3956,7 +3945,7 @@ function initCategoriesListener(){
   });
 }
 
-// 機材・予約タブを実際に開いた時だけ全件購読を開始する（1度だけ）。カレンダー・出入予定と
+// 機材・予約タブを実際に開いた時だけ全件購読を開始する（1度だけ）。カレンダー・来客・出張と
 // 同じ「ログイン時には読み込まない」パターン（2026年10月）。ダッシュボードの「今後の自分の予約」
 // 一覧から機材詳細へジャンプする場合（jumpToReservationForView/Edit）やキオスク予約表示
 // （reserveSignageEquipmentId、switchToTab("reserve")経由）でも、使う直前にこの関数を呼ぶ。
@@ -4407,14 +4396,14 @@ document.getElementById("checkout-modal-confirm").addEventListener("click", asyn
 });
 
 /* =========================================================
-   出入予定（来客・役員）
+   来客・出張
 ========================================================= */
 let editingVisitorId = null;
 let visitorHostEmails = []; // 対象社員（複数対応）のメールアドレス一覧
 let visitorHostNames = [];  // 上記に対応する表示名の一覧（同じ並び順）
 let visitorModalDate = "";
 let visitorModalEndDate = ""; // 終了日（任意。開始日と異なる日も指定可＝複数日の予定に対応）
-let visitorModalType = "visitor"; // "visitor"=来客 / "officer"=役員（役員は出入予定管理権限者のみ選択可）
+let visitorModalType = "visitor"; // "visitor"=来客 / "officer"=役員（役員は来客・出張管理権限者のみ選択可）
 let visitorDateFilter = ""; // ""=すべて表示
 let visitorTypeFilter = ""; // ""=すべて／"visitor"／"officer"
 let visitorHostFilterEmail = null;
@@ -4471,19 +4460,19 @@ function formatVisitorDateTimeRange(v){
   const { start, end } = getVisitorDateTimeParts(v);
   return end ? `${start}${end}` : start;
 }
-// 出入予定：ダッシュボードの「出入予定カード」用の軽量購読（ログイン時から常時購読）。
+// 来客・出張：ダッシュボードの「来客・出張カード」用の軽量購読（ログイン時から常時購読）。
 // ダッシュボードは「本日分」「今日以降」しか表示しないが、複数日にまたがる予定（開始日が
 // 過去でも終了日が今日以降）を取りこぼさないよう、余裕を持って直近30日より新しいものを対象に
-// している（自動削除は既定14日のため、通常はこれで十分）。出入予定タブを実際に開いた時だけ、
+// している（自動削除は既定14日のため、通常はこれで十分）。来客・出張タブを実際に開いた時だけ、
 // 過去分も含む全件購読（visitorSchedulesFull）に切り替わる（ensureVisitorSchedulesFullListener参照。
 // カレンダー・wb_presetsと同じ「軽量＋タブ起動時フル」の二段構えパターン。2026年10月、
 // ログイン時に全件を無条件購読していたのを対策）。
 let visitorSchedulesLight = [];
-let visitorSchedulesFull = null; // 出入予定タブを一度でも開くまではnullのまま（開いたら以後は全件を保持）
+let visitorSchedulesFull = null; // 来客・出張タブを一度でも開くまではnullのまま（開いたら以後は全件を保持）
 function getVisitorSchedulesAll(){
   return visitorSchedulesFull || visitorSchedulesLight;
 }
-// 2026-10-15：軽量購読の読み取り範囲は「出入予定の自動削除日数」（app_settings/visitor_cleanup）に合わせる。
+// 2026-10-15：軽量購読の読み取り範囲は「来客・出張の自動削除日数」（app_settings/visitor_cleanup）に合わせる。
 // 削除日数Nの場合、最終日がN日以上前の予定は削除対象なので、読むのは開始日が「今日-(N-1)日」以降のもの
 // （N=1なら本日以降だけ）。開始日が範囲より前でも終了日が範囲内の複数日予定は、endDate条件の2本目の
 // クエリで拾う。日数設定はlocalStorageにキャッシュし、6時間ごとに1件だけ読み直す。
@@ -4530,13 +4519,13 @@ function startVisitorLightListeners(days){
   visitorLightUnsubs.push(onSnapshot(query(col, where("date",">=", startStr)), snap=>{
     visitorLightParts[0] = new Map(snap.docs.map(d=>[d.id, {id:d.id, ...d.data()}]));
     rebuildVisitorLight();
-  }, (err)=>{ console.error("[出入予定取得エラー（軽量購読）]", err); }));
+  }, (err)=>{ console.error("[来客・出張取得エラー（軽量購読）]", err); }));
   if(DIET.visitorWindow){
     // 開始日が範囲より前でも、終了日が範囲内の複数日予定を取りこぼさないための補助クエリ
     visitorLightUnsubs.push(onSnapshot(query(col, where("endDate",">=", startStr)), snap=>{
       visitorLightParts[1] = new Map(snap.docs.map(d=>[d.id, {id:d.id, ...d.data()}]));
       rebuildVisitorLight();
-    }, (err)=>{ console.error("[出入予定取得エラー（軽量購読・複数日）]", err); }));
+    }, (err)=>{ console.error("[来客・出張取得エラー（軽量購読・複数日）]", err); }));
   }
 }
 async function initVisitorSchedulesListener(){
@@ -4551,7 +4540,7 @@ async function initVisitorSchedulesListener(){
   }
 }
 let visitorSchedulesFullListenerStarted = false;
-// 出入予定タブを実際に開いた時にだけ、過去分も含む全件購読を開始する（1度だけ）。
+// 来客・出張タブを実際に開いた時にだけ、過去分も含む全件購読を開始する（1度だけ）。
 function ensureVisitorSchedulesFullListener(){
   if(visitorSchedulesFullListenerStarted) return;
   visitorSchedulesFullListenerStarted = true;
@@ -4562,9 +4551,9 @@ function ensureVisitorSchedulesFullListener(){
       renderActiveVisitorView();
     }
     refreshDashboardIfActive();
-  }, (err)=>{ console.error("[出入予定取得エラー（全件購読）]", err); });
+  }, (err)=>{ console.error("[来客・出張取得エラー（全件購読）]", err); });
 }
-// 出入予定タブを実際に開いた時にだけ、上記の監視をまとめて開始する（1度だけ）。
+// 来客・出張タブを実際に開いた時にだけ、上記の監視をまとめて開始する（1度だけ）。
 // ダッシュボードには使われないため、ログイン直後には開始しない。
 let visitorTargetOfficersListenerStarted = false;
 function ensureVisitorTargetOfficersListener(){
@@ -4572,22 +4561,22 @@ function ensureVisitorTargetOfficersListener(){
   visitorTargetOfficersListenerStarted = true;
   initVisitorTargetOfficersListener();
 }
-// 出入予定：役員予定の対象にできる社員一覧（管理画面「出入予定管理」タブで設定）
+// 来客・出張：役員予定の対象にできる社員一覧（管理画面「来客・出張管理」タブで設定）
 function initVisitorTargetOfficersListener(){
   onSnapshot(collection(db,"visitor_target_officers"), snap=>{
     visitorTargetOfficerEmails = snap.docs.map(d=>d.id);
-  }, (err)=>{ console.error("[出入予定：対象役員取得エラー]", err); });
+  }, (err)=>{ console.error("[来客・出張：対象役員取得エラー]", err); });
 }
 let visitorCleanupRunning = false;
 const VISITOR_CLEANUP_INTERVAL_MS = 6*60*60*1000; // 6時間（予約・お知らせの自動削除と同じ間隔）
-// 過去の日付になった出入予定を自動削除する（本人が対象の予定は誰でも、それ以外は出入予定管理権限者のみ削除できる）
+// 過去の日付になった来客・出張を自動削除する（本人が対象の予定は誰でも、それ以外は来客・出張管理権限者のみ削除できる）
 // 予約・お知らせの自動削除（cleanupPastReservations／cleanupOldNotices）は、検証時の複数端末での
 // 再読み込み等で読み取りが積み重なるのを防ぐため、ブラウザごとにlocalStorageで前回実行時刻を記録し、
-// 一定時間以内の再実行をスキップするスロットリングが入っていたが、この出入予定の自動削除だけ
+// 一定時間以内の再実行をスキップするスロットリングが入っていたが、この来客・出張の自動削除だけ
 // 同様の対策が漏れており、ログイン・リロードのたびに毎回visitor_schedules全件スキャンが発生していた
 // （2026年10月、読み取り数の見直しにより、他の2つと揃える形で対応）。
 async function cleanupOldVisitorSchedules(){
-  // 2026-10-15：出入予定の自動削除は、出入予定管理権限者（管理者を含む）だけが走らせる。
+  // 2026-10-15：来客・出張の自動削除は、来客・出張管理権限者（管理者を含む）だけが走らせる。
   // 一般社員は、他人の期限切れ分まで6時間おきに全件読んでいた（削除できるのは自分が対象の分だけ）。
   if(DIET.cleanupScoped && !isVisitorManager) return;
   if(visitorCleanupRunning) return;
@@ -4616,13 +4605,13 @@ async function cleanupOldVisitorSchedules(){
       try{ await deleteDoc(doc(db,"visitor_schedules", d.id)); }catch(e){ /* 1件失敗しても他の削除は続行 */ }
     }
   }catch(e){
-    console.error("[出入予定自動削除エラー]", e);
+    console.error("[来客・出張自動削除エラー]", e);
   }finally{
     visitorCleanupRunning = false;
   }
 }
 function canEditVisitorEntry(v){
-  // 来客・役員のどちらも、出入予定管理権限者、または対象社員のうち誰か1人でも編集・削除可
+  // 来客・役員のどちらも、来客・出張管理権限者、または対象社員のうち誰か1人でも編集・削除可
   return isVisitorManager || getVisitorHostEmails(v).includes(currentUser.email);
 }
 // 対象社員・日付の絞り込みを単純なドロップダウンにする。
@@ -4712,7 +4701,7 @@ document.querySelectorAll("#visitor-view-toggle .seg-btn").forEach(btn=>{
     renderActiveVisitorView();
   });
 });
-// ダッシュボードの出入予定カードから、該当日付のカレンダー表示へジャンプする
+// ダッシュボードの来客・出張カードから、該当日付のカレンダー表示へジャンプする
 function jumpToVisitorCalendarDate(dateStr){
   switchToTab("visitors");
   setVisitorViewMode("calendar");
@@ -4757,7 +4746,7 @@ function daysInVisitorCalMonth(){
   const [y,m] = visitorCalMonth.split("-").map(Number);
   return new Date(y, m, 0).getDate();
 }
-// 出入予定のカレンダー表示：選択した月の日付を1日ずつ行として並べ、各日の出入予定をピル表示する。
+// 来客・出張のカレンダー表示：選択した月の日付を1日ずつ行として並べ、各日の来客・出張をピル表示する。
 // 対象社員が複数日にまたがる予定（終了日が開始日と異なる）も、一覧表示同様に開始日の行にのみ表示する。
 function renderVisitorCalendar(){
   const wrap = document.getElementById("visitor-cal-panels");
@@ -4804,13 +4793,13 @@ function renderVisitorCalendar(){
     if(isDateHolidaySync(dateStr)) head.classList.add("vcal-holiday");
     if(dateStr===today) head.classList.add("vcal-today");
     head.innerHTML = `<span class="vcal-day-num">${day}</span><span class="vcal-day-dow">(${weekdayLabels[dow]})</span>`;
-    head.title = "クリックしてこの日の出入予定を追加";
+    head.title = "クリックしてこの日の来客・出張を追加";
     head.addEventListener("click", ()=> openVisitorModal(null, dateStr));
     row.appendChild(head);
 
     const body = document.createElement("div");
     body.className = "vcal-day-body";
-    body.title = "クリックしてこの日の出入予定を追加";
+    body.title = "クリックしてこの日の来客・出張を追加";
     const dayEntries = (byDate[dateStr]||[]).slice().sort((a,b)=> ((a.v.time)||"").localeCompare((b.v.time)||""));
     if(dayEntries.length===0){
       body.innerHTML = `<div class="vcal-day-empty">予定なし</div>`;
@@ -4850,7 +4839,7 @@ function renderVisitorsTab(){
   const body = document.getElementById("visitor-list");
   if(!body) return;
   body.innerHTML = "";
-  // 対象社員は自分の出入予定のみ、出入予定管理権限者は全件を表示する
+  // 対象社員は自分の来客・出張のみ、来客・出張管理権限者は全件を表示する
   const visible = isVisitorManager
     ? getVisitorSchedulesAll()
     : getVisitorSchedulesAll().filter(v=> getVisitorHostEmails(v).includes(currentUser.email));
@@ -4859,7 +4848,7 @@ function renderVisitorsTab(){
   if(visitorHostFilterEmail) filtered = filtered.filter(v=> getVisitorHostEmails(v).includes(visitorHostFilterEmail));
   const sorted = filtered.slice().sort((a,b)=> (a.date+(a.time||"")).localeCompare(b.date+(b.time||"")));
   if(sorted.length===0){
-    body.innerHTML = `<div style="color:var(--muted);text-align:center;padding:24px;">${(visitorDateFilter||visitorTypeFilter||visitorHostFilterEmail) ? "条件に一致する出入予定はありません。" : "出入予定はまだ登録されていません。"}</div>`;
+    body.innerHTML = `<div style="color:var(--muted);text-align:center;padding:24px;">${(visitorDateFilter||visitorTypeFilter||visitorHostFilterEmail) ? "条件に一致する来客・出張はありません。" : "来客・出張はまだ登録されていません。"}</div>`;
     return;
   }
   const table = document.createElement("table");
@@ -4905,13 +4894,13 @@ function renderVisitorsTab(){
       delBtn.style.cssText = "border:1px solid var(--danger);color:var(--danger);font-size:12px;padding:4px 8px;";
       delBtn.textContent = "削除";
       delBtn.addEventListener("click", async ()=>{
-        if(!confirm(`「${v.visitorName||""}」の出入予定を削除しますか？`)) return;
+        if(!confirm(`「${v.visitorName||""}」の来客・出張を削除しますか？`)) return;
         try{
           await deleteDoc(doc(db,"visitor_schedules", v.id));
           toast("削除しました。");
         }catch(e){
           if(e && e.code === "permission-denied"){
-            toast("この出入予定を削除する権限がありません。Firestoreのセキュリティルールが最新の内容で公開されているかご確認ください。");
+            toast("この来客・出張を削除する権限がありません。Firestoreのセキュリティルールが最新の内容で公開されているかご確認ください。");
           } else {
             toast("削除に失敗しました。しばらくしてから再度お試しください。");
           }
@@ -4979,7 +4968,7 @@ function openVisitorModal(v, presetDate){
   visitorModalType = v ? (v.type || "visitor") : "visitor";
   document.getElementById("visitor-type-field").style.display = isVisitorManager ? "" : "none";
   applyVisitorTypeUI(visitorModalType);
-  document.getElementById("visitor-modal-title").textContent = v ? "出入予定を編集" : "出入予定を追加";
+  document.getElementById("visitor-modal-title").textContent = v ? "来客・出張を編集" : "来客・出張を追加";
   document.getElementById("visitor-name-input").value = v ? (v.visitorName||"") : "";
   if(v){
     const emails = getVisitorHostEmails(v);
@@ -5004,7 +4993,7 @@ document.getElementById("visitor-new-btn").addEventListener("click", ()=> openVi
 document.getElementById("visitor-host-pick-btn").addEventListener("click", async ()=>{
   if(visitorModalType==="officer"){
     if(visitorTargetOfficerEmails.length===0){
-      document.getElementById("visitor-modal-error").textContent = "対象役員が登録されていません。管理画面「出入予定管理」で設定してください。";
+      document.getElementById("visitor-modal-error").textContent = "対象役員が登録されていません。管理画面「来客・出張管理」で設定してください。";
       return;
     }
     const emps = await openEmployeePicker({ multi:true, restrictToEmails: visitorTargetOfficerEmails, preselectedEmails: visitorHostEmails });
@@ -5080,7 +5069,7 @@ document.getElementById("visitor-modal-save").addEventListener("click", async ()
   if(visitorHostEmails.length===0){ errEl.textContent = `${hostLabel}を選択してください。`; return; }
   if(!visitorModalDate){ errEl.textContent = "日付を選択してください。"; return; }
   if(type==="visitor" && !time){ errEl.textContent = "開始時刻を選択してください。"; return; } // 役員予定は時刻を任意とする
-  if(type==="officer" && !isVisitorManager){ errEl.textContent = "役員予定の登録には出入予定管理権限が必要です。"; return; }
+  if(type==="officer" && !isVisitorManager){ errEl.textContent = "役員予定の登録には来客・出張管理権限が必要です。"; return; }
   const endDate = visitorModalEndDate || "";
   const endTime = document.getElementById("visitor-endtime-btn").dataset.value || "";
   // 終了時刻は常に任意。ただし終了時刻だけ指定して終了日が未指定、という状態は不可とする
@@ -5122,21 +5111,21 @@ document.getElementById("visitor-modal-save").addEventListener("click", async ()
   try{
     if(editingVisitorId){
       await updateDoc(doc(db,"visitor_schedules", editingVisitorId), payload);
-      toast("出入予定を更新しました。");
+      toast("来客・出張を更新しました。");
     } else {
       payload.createdByEmail = currentUser.email;
       payload.createdAt = new Date().toISOString();
       await addDoc(collection(db,"visitor_schedules"), payload);
-      toast("出入予定を追加しました。");
+      toast("来客・出張を追加しました。");
     }
     document.getElementById("visitor-modal").classList.remove("show");
   }catch(e){
     if(e && e.code === "not-found" && editingVisitorId){
-      errEl.textContent = "この出入予定はすでに削除されています（他の人が削除した可能性があります）。画面を閉じて、一覧を確認してください。";
+      errEl.textContent = "この来客・出張はすでに削除されています（他の人が削除した可能性があります）。画面を閉じて、一覧を確認してください。";
     } else if(e && e.code === "permission-denied"){
       errEl.textContent = editingVisitorId
-        ? "この出入予定を更新する権限がありません。Firestoreのセキュリティルールが最新の内容で公開されているかご確認ください。"
-        : "この出入予定を登録する権限がありません。Firestoreのセキュリティルールが最新の内容で公開されているかご確認ください。";
+        ? "この来客・出張を更新する権限がありません。Firestoreのセキュリティルールが最新の内容で公開されているかご確認ください。"
+        : "この来客・出張を登録する権限がありません。Firestoreのセキュリティルールが最新の内容で公開されているかご確認ください。";
     } else {
       errEl.textContent = "保存に失敗しました。しばらくしてから再度お試しください。";
     }
@@ -7564,7 +7553,7 @@ function isNowInWorkWindow(){
 }
 
 // 今日がカレンダー上で休日に設定されているか。
-// calDaysData（カレンダー・出入予定タブを開くと読み込まれる年間データ）があればそちらを優先し、
+// calDaysData（カレンダー・来客・出張タブを開くと読み込まれる年間データ）があればそちらを優先し、
 // 無ければ calHolidayWindowData（ログイン時から常に読み込まれている、直近期間だけの軽量データ。
 // 2026年10月、カレンダー本体の年間購読を遅延読み込み化した際に追加）にフォールバックする。
 function isTodayHoliday(){
@@ -10127,16 +10116,16 @@ function initCalendarTab(){
   loadCalendarYear(calFiscalYearStart);
 }
 // カレンダー本体（年間最大366日ぶん、loadCalendarYear）の購読は重いため、ログイン時には行わず
-// 「カレンダー」「出入予定」タブを実際に開いた最初の1回だけ開始する（2回目以降は既にリアルタイム
+// 「カレンダー」「来客・出張」タブを実際に開いた最初の1回だけ開始する（2回目以降は既にリアルタイム
 // 購読中なので何もしない）。行き先の休日自動判定など、タブを開かなくても必要になる分は
 // initCalHolidayWindowListener（ログイン時から常時購読）で別途カバーしている。
 let calFullYearListenerStarted = false;
 // 2026-10-14：calFullYearMode … "live"（編集中データの購読。編集権限者がカレンダータブを開いた時）／
-// "published"（公開済みバンドル。出入予定タブだけを開いた編集権限者）。編集権限者が出入予定タブだけを
+// "published"（公開済みバンドル。来客・出張タブだけを開いた編集権限者）。編集権限者が来客・出張タブだけを
 // 開いた場合は公開済みで足りるため、365件のライブ購読を避ける。後でカレンダータブを開いたら live に切り替える。
 let calFullYearMode = null;
 let calForcePublishedLoad = false;
-// needLive=false：出入予定タブからの呼び出し（休日ハイライトに公開済みデータで足りる）
+// needLive=false：来客・出張タブからの呼び出し（休日ハイライトに公開済みデータで足りる）
 function ensureCalendarFullYearListener(needLive=true){
   const wantPublished = !needLive && isCalendarEditor && DIET.editorCalLight;
   if(!calFullYearListenerStarted){
@@ -10146,7 +10135,7 @@ function ensureCalendarFullYearListener(needLive=true){
     try{ initCalendarTab(); } finally { calForcePublishedLoad = false; }
     return;
   }
-  // 出入予定タブだけで開始済みの編集権限者が、後からカレンダータブを開いた：編集中データのライブ購読に切り替える
+  // 来客・出張タブだけで開始済みの編集権限者が、後からカレンダータブを開いた：編集中データのライブ購読に切り替える
   if(needLive && calFullYearMode === "published"){
     calFullYearMode = "live";
     initCalendarTab();
@@ -10154,7 +10143,7 @@ function ensureCalendarFullYearListener(needLive=true){
 }
 // 行き先タブの「休日なら自動的に休みにする」判定・次稼働日（nextWorkingDayStr、最大14日先まで）の
 // 算出にだけ使う、軽量な期間限定の購読。ログイン時から常に動いている（全社員が使う機能のため）。
-// カレンダー・出入予定タブを開くと、別途ensureCalendarFullYearListener()が年間ぶんを購読し、
+// カレンダー・来客・出張タブを開くと、別途ensureCalendarFullYearListener()が年間ぶんを購読し、
 // isTodayHoliday()・isDateHolidaySync()はそちらのデータ（calDaysData）があれば優先して使う。
 let calWindowCacheMode = false;     // 2026-10-12：一般社員の窓を版数キャッシュで読んでいる間 true
 let calWindowRange = null;          // { startId, endId }
@@ -10541,7 +10530,7 @@ function loadCalendarYear(year){
   const startId = `${year}-04-01`;
   const endId = `${year+1}-03-31`;
   // 編集権限者は編集中(ライブ)のデータを見る（リアルタイム購読のまま）。
-  // ただし出入予定タブだけを開いた場合（calForcePublishedLoad）は公開済みバンドルで足りるため下の経路へ進む。
+  // ただし来客・出張タブだけを開いた場合（calForcePublishedLoad）は公開済みバンドルで足りるため下の経路へ進む。
   if(isCalendarEditor && !calForcePublishedLoad){
     const q = query(collection(db,"calendar_days"), where(documentId(), ">=", startId), where(documentId(), "<=", endId));
     calDaysUnsub = onSnapshot(q, snap=>{
@@ -10703,7 +10692,7 @@ function buildCalMonthBlock(y, m){
         td.className = "cal-day-cell";
       } else {
         const dateStr = `${y}-${pad2(m)}-${pad2(dayNum)}`;
-        // calDaysData（カレンダー・出入予定タブを開くと読み込まれる年間データ）が無ければ、
+        // calDaysData（カレンダー・来客・出張タブを開くと読み込まれる年間データ）が無ければ、
         // ログイン時から常時読み込まれている直近期間のcalHolidayWindowDataにフォールバックする
         // （ダッシュボードのミニカレンダーは、タブを開かなくても最初から表示されるため）。
         const info = calDaysData[dateStr] || calHolidayWindowData[dateStr] || {};
@@ -12670,9 +12659,7 @@ async function notifyChatRecipient(conversationId, recipientEmail, senderName, s
    お知らせカードや「お知らせ」タブで確認できる仕組みはそのまま残している。 */
 const NOTICE_PUSH_CHUNK = 200; // Worker側の上限（500人）より小さく、200人ずつに分けて送る
 function noticePushLabelText(){
-  return isMailOverrideActive()
-    ? "プッシュ通知も送る（現在はテスト設定のため、投稿者本人にのみ届きます）"
-    : "プッシュ通知も送る（通知を許可している端末に届きます）";
+  return "プッシュ通知も送る";
 }
 async function sendNoticePush({ kind, targetDepartments, excludedEmails }){
   try{

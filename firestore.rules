@@ -63,7 +63,7 @@ service cloud.firestore {
           exists(/databases/$(database)/documents/safety_senders/$(request.auth.token.email)));
     }
 
-    // 出入予定管理権限：本人以外の出入予定も含めて編集・削除できる（システム管理者に準じる）
+    // 来客・出張管理権限：本人以外の来客・出張も含めて編集・削除できる（システム管理者に準じる）
     function isVisitorManager() {
       return isAdmin() ||
         (isSignedIn() &&
@@ -104,7 +104,7 @@ service cloud.firestore {
     }
 
     // アプリ全体の設定（行き先ビューの列数など）: 全員が読める。書き込みはシステム管理者のみ。
-    // ただしnotice_cleanup（お知らせ自動削除の日数設定）・visitor_cleanup（出入予定自動削除の日数設定）は
+    // ただしnotice_cleanup（お知らせ自動削除の日数設定）・visitor_cleanup（来客・出張自動削除の日数設定）は
     // 下の専用ルールで別途制限するため、ここでは対象外にする
     // （同じパスに複数のmatchブロックが重なると、いずれかがtrueであれば書き込みできてしまうため）。
     match /app_settings/{settingId} {
@@ -119,7 +119,7 @@ service cloud.firestore {
       allow write: if isSignedIn() && (isAdmin() || isNoticeManager());
     }
 
-    // 出入予定自動削除の日数設定：システム管理者・出入予定管理権限者のみ変更可能。
+    // 来客・出張自動削除の日数設定：システム管理者・来客・出張管理権限者のみ変更可能。
     match /app_settings/visitor_cleanup {
       allow read: if isSignedIn();
       allow write: if isSignedIn() && (isAdmin() || isVisitorManager());
@@ -331,22 +331,22 @@ service cloud.firestore {
         (resource.data.createdByEmail == request.auth.token.email || isAdmin() || isEquipmentManager());
     }
 
-    // 出入予定管理権限一覧: ログインしていれば読めるが、書き込みはシステム管理者のみ
+    // 来客・出張管理権限一覧: ログインしていれば読めるが、書き込みはシステム管理者のみ
     match /visitor_managers/{email} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
 
-    // 出入予定（役員予定）の対象にできる社員一覧: ログインしていれば読めるが、
-    // 書き込みはシステム管理者・出入予定管理権限者のみ（admin.html「出入予定管理」タブから設定するため）
+    // 来客・出張（役員予定）の対象にできる社員一覧: ログインしていれば読めるが、
+    // 書き込みはシステム管理者・来客・出張管理権限者のみ（admin.html「来客・出張管理」タブから設定するため）
     match /visitor_target_officers/{email} {
       allow read: if isSignedIn();
       allow write: if isVisitorManager();
     }
 
-    // 出入予定（来客・役員）: 全員が読める（一覧の絞り込み表示はアプリ側で行う）。
-    // 作成は全社員が可能（本人のcreatedByEmailでのみ）。ただし役員予定（type=officer）の作成は出入予定管理権限者のみ。
-    // 更新・削除は、対象社員（hostEmails配列。複数設定可）のうち誰か1人、または出入予定管理権限者。
+    // 来客・出張: 全員が読める（一覧の絞り込み表示はアプリ側で行う）。
+    // 作成は全社員が可能（本人のcreatedByEmailでのみ）。ただし役員予定（type=officer）の作成は来客・出張管理権限者のみ。
+    // 更新・削除は、対象社員（hostEmails配列。複数設定可）のうち誰か1人、または来客・出張管理権限者。
     // hostEmailは複数対応化前の旧データとの後方互換用。
     match /visitor_schedules/{visitId} {
       allow read: if isSignedIn();

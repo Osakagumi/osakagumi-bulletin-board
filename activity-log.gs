@@ -72,12 +72,12 @@ var OP_LABEL = { "set": "登録(上書き)", "update": "更新", "add": "追加"
 var TAB_LABEL_GENERAL = {
   "dashboard": "ダッシュボード", "notices": "お知らせ", "calendar": "カレンダー", "whereabouts": "行き先",
   "chat": "チャット", "reserve": "予約", "contracts": "入札", "bizinfo": "業務情報", "checkout": "機材",
-  "visitors": "出入予定", "safety": "安否確認", "safetyresponse": "安否回答"
+  "visitors": "来客・出張", "safety": "安否確認", "safetyresponse": "安否回答"
 };
 var TAB_LABEL_ADMIN = {
   "equipment": "設備管理", "reservations": "予約状況（全体）", "userimport": "ユーザー管理", "notices": "お知らせ管理",
   "whereabouts": "行き先管理", "contracts": "入札管理", "bizinfo": "業務情報管理", "chatsettings": "チャット管理",
-  "visitorsettings": "出入予定管理", "systemsettings": "システム管理", "calendar": "カレンダー管理"
+  "visitorsettings": "来客・出張管理", "systemsettings": "システム管理", "calendar": "カレンダー管理"
 };
 
 function label(map, key) {

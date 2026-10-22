@@ -5,7 +5,7 @@
  * （ファイルを追加するには、エディタ左側の「ファイル」の「＋」→「スクリプト」）
  *
  * ■ 役割
- *  - 管理画面（業務情報管理）からの設定（対象ファイルのパス・スケジュール・通知先メール）を保存する
+ *  - 管理画面（業務情報管理）からの設定（対象ファイルのパス・スケジュール。通知先は管理画面が業務情報の管理者＋システム管理者を書き込む）を保存する
  *  - 社内ノートPCのスクリプトからの「定期確認」を受け取り、設定を返す／結果を記録する
  *  - ノートPCからのファイルを、業務情報の既存ドライブファイルに「同じファイルIDのまま」上書きする
  *  - 失敗・ノートPCの停止をメールで知らせる
@@ -22,7 +22,7 @@
  * 5. 「デプロイ」→「デプロイを管理」→ 鉛筆アイコン →「新バージョン」で再デプロイする（権限追加のため再承認が出る場合あり）。
  */
 
-var AUTO_SECRET = "qj8hb3sjkhsdlkdlkjfsdfdbocnnfrye477"; //ここをノートPC専用の長いランダム文字列に書き換える
+var AUTO_SECRET = "ここをノートPC専用の長いランダム文字列に書き換える";
 var AUTO_HEARTBEAT_STALE_MIN = 60; // ノートPCからの連絡がこの分数途絶えたらメールする
 
 function autoDispatch(body) {
@@ -63,7 +63,17 @@ function autoLoad_(key, def) {
 function autoSave_(key, obj) {
   PropertiesService.getScriptProperties().setProperty(key, JSON.stringify(obj));
 }
-function autoCfg_() { return autoLoad_("auto_cfg", { alertEmails: "", targets: {} }); }
+function autoCfg_() { return autoLoad_("auto_cfg", { adminEmails: [], targets: {} }); }
+
+// メールアドレスの配列を整える（形式チェック・重複除去・最大50件）
+function autoEmails_(list) {
+  var seen = {}, out = [];
+  (Array.isArray(list) ? list : []).forEach(function (e) {
+    var v = String(e || "").trim().toLowerCase();
+    if (/^[^@\s]+@[^@\s]+$/.test(v) && !seen[v]) { seen[v] = true; out.push(v); }
+  });
+  return out.slice(0, 50);
+}
 
 /* ---------- 管理画面向け ---------- */
 function autoGetState_() {
@@ -77,7 +87,8 @@ function autoGetState_() {
 
 function autoSaveConfig_(cfg) {
   cfg = cfg || {};
-  var out = { alertEmails: String(cfg.alertEmails || "").slice(0, 500), targets: {} };
+  // 2026-10-22：通知先は「その業務情報の管理者＋システム管理者」。管理画面が保存時に宛先を書き込む（旧alertEmailsは廃止）
+  var out = { adminEmails: autoEmails_(cfg.adminEmails), targets: {} };
   var src = cfg.targets || {};
   Object.keys(src).forEach(function (id) {
     var t = src[id] || {};
@@ -91,6 +102,7 @@ function autoSaveConfig_(cfg) {
       time: /^\d{1,2}:\d{2}$/.test(String(t.time || "")) ? String(t.time) : "08:30",
       hours: Math.max(1, Math.min(168, Number(t.hours) || 24)),
       enabled: t.enabled !== false,
+      notifyTo: autoEmails_(t.notifyTo),
       runNowToken: String(t.runNowToken || "")
     };
   });
@@ -123,7 +135,7 @@ function autoPoll_(body) {
       var key = today + "|" + st.lastMessage;
       if (st.alertedKey !== key) {
         st.alertedKey = key;
-        autoMail_(cfg, "【ポータル自動更新】失敗：" + (cfg.targets[r.itemId].name || r.itemId),
+        autoMail_(autoTargetRecipients_(cfg, cfg.targets[r.itemId]), "【ポータル自動更新】失敗：" + (cfg.targets[r.itemId].name || r.itemId),
           "業務情報「" + (cfg.targets[r.itemId].name || r.itemId) + "」の自動更新に失敗しました。\n\n" +
           "原因：" + st.lastMessage + "\n" +
           "パス：" + cfg.targets[r.itemId].path + "\n\n" +
@@ -140,7 +152,7 @@ function autoPoll_(body) {
   hb = { at: now, host: String(body.host || "").slice(0, 60), alerted: false };
   autoSave_("auto_hb", hb);
   if (wasAlerted) {
-    autoMail_(cfg, "【ポータル自動更新】ノートPCからの連絡が再開しました",
+    autoMail_(autoAdminRecipients_(cfg), "【ポータル自動更新】ノートPCからの連絡が再開しました",
       "ノートPC（" + hb.host + "）からの連絡が再開しました。");
   }
   return { cfg: cfg, serverTime: now };
@@ -176,7 +188,7 @@ function autoCheckHeartbeat() {
   if (minutes >= AUTO_HEARTBEAT_STALE_MIN) {
     hb.alerted = true;
     autoSave_("auto_hb", hb);
-    autoMail_(cfg, "【ポータル自動更新】ノートPCからの連絡が途絶えています",
+    autoMail_(autoAdminRecipients_(cfg), "【ポータル自動更新】ノートPCからの連絡が途絶えています",
       "ノートPC（" + (hb.host || "不明") + "）からの最終連絡は約" + Math.round(minutes) + "分前です。\n\n" +
       "考えられる原因：電源断／Windows Updateなどによる再起動／ネットワーク切断／スクリプトの停止。\n" +
       "ノートPCの状態を確認してください。連絡が再開すると、復旧のメールが届きます。");
@@ -190,8 +202,22 @@ function autoSetupTrigger() {
   ScriptApp.newTrigger("autoCheckHeartbeat").timeBased().everyHours(1).create();
 }
 
-function autoMail_(cfg, subject, text) {
-  var to = String((cfg && cfg.alertEmails) || "").split(/[;,\s]+/).filter(function (s) { return /^[^@\s]+@[^@\s]+$/.test(s); });
-  if (!to.length) return;
+// 宛先：失敗通知＝その業務情報の管理者＋システム管理者。未設定の場合はこのスクリプトの所有者へ送る。
+function autoTargetRecipients_(cfg, target) {
+  var to = autoEmails_((target && target.notifyTo || []).concat(cfg.adminEmails || []));
+  return to.length ? to : autoOwner_();
+}
+// 停止検知・復旧のメールはシステム管理者へ
+function autoAdminRecipients_(cfg) {
+  var to = autoEmails_(cfg.adminEmails);
+  return to.length ? to : autoOwner_();
+}
+function autoOwner_() {
+  var me = "";
+  try { me = Session.getEffectiveUser().getEmail(); } catch (e) {}
+  return me ? [me] : [];
+}
+function autoMail_(to, subject, text) {
+  if (!to || !to.length) return;
   MailApp.sendEmail(to.join(","), subject, text);
 }

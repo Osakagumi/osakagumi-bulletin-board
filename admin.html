@@ -317,7 +317,7 @@
     <button class="tab-btn" data-view="contracts" style="display:none;">入札管理</button>
     <button class="tab-btn" data-view="bizinfo">業務情報管理</button>
     <button class="tab-btn" data-view="chatsettings">チャット管理</button>
-    <button class="tab-btn" data-view="visitorsettings">出入予定管理</button>
+    <button class="tab-btn" data-view="visitorsettings">来客・出張管理</button>
     <button class="tab-btn" data-view="systemsettings">システム管理</button>
     <button class="tab-btn" data-view="calendar">カレンダー管理</button>
     <button class="tab-reorder-btn" id="tab-reorder-toggle" title="タブの並び替え">並び替え</button>
@@ -600,7 +600,7 @@
           <div class="field full">
             <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
               <input type="checkbox" id="single-emp-shared-account-check" style="width:auto;">
-              共用アカウント（掲示板端末など、特定の個人に紐づかないアカウント）
+              共用アカウント
             </label>
             <!-- <p style="font-size:11px;color:var(--muted);margin:4px 0 0;">
               チェックすると、お知らせの既読対象・行き先の表示対象・チャットの相手選択から除外されます。
@@ -620,14 +620,14 @@
         <h2>CSVで一括登録</h2>
         <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
           1行目はヘッダー行として無視されます。2行目以降を1人ずつ登録します。<br>
-          列の順番：<b id="userimport-column-order-text">社員番号, 氏名, 所属, システム管理者フラグ, お知らせ投稿フラグ, お知らせ管理権限フラグ, 行き先編集権限フラグ, 設備管理者フラグ, 入札編集権限フラグ, カレンダー編集権限フラグ, 安否確認発信権限フラグ, 出入予定管理権限フラグ, メールアドレス, パスワード, 電話番号, 備考</b><br>
+          列の順番：<b id="userimport-column-order-text">社員番号, 氏名, 所属, システム管理者フラグ, お知らせ投稿フラグ, お知らせ管理権限フラグ, 行き先編集権限フラグ, 設備管理者フラグ, 入札編集権限フラグ, カレンダー編集権限フラグ, 安否確認発信権限フラグ, 来客・出張管理権限フラグ, メールアドレス, パスワード, 電話番号, 備考</b><br>
           必須は「メールアドレス」「パスワード」のみで、他は省略可です。<br>
           各権限フラグは <code>1</code> / <code>TRUE</code> / <code>○</code> / <code>はい</code> のいずれかを入れると有効になります（空欄は無効）。業務情報の情報管理者フラグは、各項目とも最大3人までです（超過分は登録されません）。<br>
           所属欄には「ユーザー管理」タブで登録済みの部署名をそのまま入力してください（一致しない場合は未所属として登録されます）。複数の部署に所属させたい場合は「、」または「/」区切りで入力してください（例：役員、営業部）。
         </p>
         <div class="field full" style="margin-bottom:12px;">
           <label>サンプル</label>
-          <pre id="userimport-sample-text" style="background:#F7F8FA;border:1px solid var(--line);border-radius:7px;padding:10px 12px;font-size:12px;overflow-x:auto;">社員番号,氏名,所属,システム管理者フラグ,お知らせ投稿フラグ,お知らせ管理権限フラグ,行き先編集権限フラグ,設備管理者フラグ,入札編集権限フラグ,カレンダー編集権限フラグ,安否確認発信権限フラグ,出入予定管理権限フラグ,メールアドレス,パスワード,電話番号,備考
+          <pre id="userimport-sample-text" style="background:#F7F8FA;border:1px solid var(--line);border-radius:7px;padding:10px 12px;font-size:12px;overflow-x:auto;">社員番号,氏名,所属,システム管理者フラグ,お知らせ投稿フラグ,お知らせ管理権限フラグ,行き先編集権限フラグ,設備管理者フラグ,入札編集権限フラグ,カレンダー編集権限フラグ,安否確認発信権限フラグ,来客・出張管理権限フラグ,メールアドレス,パスワード,電話番号,備考
 1001,山田太郎,工務部,,1,,,,,,,,yamada@osakagumi.co.jp,Osaka2026!,090-1234-5678,現場責任者
 1002,佐藤花子,総務経理部,1,1,,,,,,1,,sato@osakagumi.co.jp,Osaka2026!,090-2345-6789,</pre>
         </div>
@@ -636,7 +636,7 @@
 
       <div class="panel">
         <div class="panel-h2-row">
-          <h2>社員一覧（氏名・メールアドレスの一覧。詳細は「編集」から）</h2>
+          <h2>社員一覧</h2>
           <button type="button" class="icon-help-btn" id="user-delete-guide-btn" title="ユーザー削除手順" aria-label="ユーザー削除手順">?</button>
         </div>
         <!-- <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">ログインすると自動的にここへ追加されます。CSV一括登録した場合は社員番号・電話番号・備考も反映されています。「編集」から詳細を変更できます。</p> -->
@@ -661,7 +661,7 @@
         <h3>登録内容の確認（<span id="userimport-count">0</span>件）</h3>
         <div style="max-height:50vh;overflow:auto;">
           <table>
-            <thead><tr id="userimport-preview-headrow"><th>登録区分</th><th>社員番号</th><th>氏名</th><th>所属</th><th>システム管理者</th><th>お知らせ投稿</th><th>お知らせ管理</th><th>行き先編集</th><th>測量機器管理</th><th>入札編集</th><th>カレンダー編集</th><th>安否確認発信</th><th>出入予定管理</th><th>メールアドレス</th><th>電話番号</th><th>備考</th></tr></thead>
+            <thead><tr id="userimport-preview-headrow"><th>登録区分</th><th>社員番号</th><th>氏名</th><th>所属</th><th>システム管理者</th><th>お知らせ投稿</th><th>お知らせ管理</th><th>行き先編集</th><th>測量機器管理</th><th>入札編集</th><th>カレンダー編集</th><th>安否確認発信</th><th>来客・出張管理</th><th>メールアドレス</th><th>電話番号</th><th>備考</th></tr></thead>
             <tbody id="userimport-preview-body"></tbody>
           </table>
         </div>
@@ -724,7 +724,7 @@
         <div class="field">
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
             <input type="checkbox" id="emp-edit-shared-account-check" style="width:auto;">
-            共用アカウント（掲示板端末など、特定の個人に紐づかないアカウント）
+            共用アカウント
           </label>
           <!-- <p style="font-size:11px;color:var(--muted);margin:4px 0 0;">
             チェックすると、お知らせの既読対象・行き先の表示対象・チャットの相手選択から除外されます。
@@ -764,9 +764,6 @@
             <li style="margin-bottom:10px;">行の右端にある「⋮」（縦の3点メニュー）をクリックし、「ユーザーを削除」を選択</li>
             <li style="margin-bottom:10px;">確認ダイアログが出るので「削除」を押して完了</li>
           </ol>
-          <p style="margin:0 0 14px;color:var(--muted);">
-            ※ 先に「削除」ボタンで社員データを消去・ログインブロックしておけば、この手順を行うまでの間もそのユーザーはアプリを利用できません。手順④の作業は、都合の良いタイミングでまとめて行っていただいて構いません。
-          </p>
           <a href="https://console.firebase.google.com/project/osakagumi-bulletin-board/authentication/users" target="_blank" rel="noopener noreferrer" class="btn btn-primary" style="display:inline-block;text-decoration:none;">Firebaseコンソール（Authentication）を開く ↗</a>
         </div>
         <div class="row-btns">
@@ -924,7 +921,6 @@
             <input type="checkbox" id="status-after-hours" style="width:auto;">
             <label style="margin:0;font-size:12.5px;">時間外の行き先</label>
           </div>
-          <p style="font-size:11px;color:var(--muted);margin:4px 0 0;">このステータスを行き先に設定すると、就業時間外・休日でも表示し続けます。次の稼働日の始業時間（時間外の範囲の始まり）になると自動で解除され、その日の朝の状態に戻ります。</p>
         </div>
         <div class="modal-err" id="status-edit-error"></div>
         <div class="modal-actions">
@@ -992,9 +988,6 @@
     <section id="view-bizinfo" style="display:none;">
       <div class="panel" id="bizinfo-cat-panel">
         <h2>業務情報のカテゴリ管理</h2>
-        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-          一般画面の「業務情報」タブは、ここで作ったカテゴリごとにタブ分けして表示されます。各業務情報には、必ずいずれか1つのカテゴリを設定する必要があります。
-        </p>
         <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px;">
           <div class="field" style="margin:0;">
             <label id="bizinfo-cat-form-title">カテゴリを追加</label>
@@ -1021,21 +1014,16 @@
         </table>
       </div>
       <div class="panel" id="bizauto-panel" style="display:none;">
-        <h2>自動更新（社内ノートPC）</h2>
+        <h2>自動更新の状況（社内ノートPC）</h2>
         <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-          社内の専用ノートPCが、15分ごとにここの設定を確認し、実行時刻になった項目のファイル（例：O:\全社共有\工務部\作業予定表.xlsx）を、業務情報のファイルに上書きします（ファイルのリンクは変わりません）。パスを空欄にした項目は対象外です。この設定は読み取り・書き込み件数を使いません。
+          設定は、各業務情報の「編集」から行います。失敗・停止の通知は、その業務情報の管理者とシステム管理者に届きます。
         </p>
         <div id="bizauto-hb" style="font-size:12.5px;margin-bottom:10px;"></div>
         <table id="bizauto-table">
-          <thead><tr><th>業務情報名</th><th>元ファイルのパス</th><th>スケジュール</th><th>有効</th><th>最終結果</th><th></th></tr></thead>
+          <thead><tr><th>業務情報名</th><th>元ファイルのパス</th><th>スケジュール</th><th>有効</th><th>最終結果</th></tr></thead>
           <tbody id="bizauto-table-body"></tbody>
         </table>
-        <div class="field" style="margin-top:12px;">
-          <label>失敗・停止の通知先メール（複数はセミコロンで区切る）</label>
-          <input type="text" id="bizauto-alert-emails" placeholder="例）hine@osakagumi.co.jp" style="max-width:420px;">
-        </div>
         <div style="margin-top:8px;">
-          <button class="btn btn-primary" id="bizauto-save-btn">設定を保存</button>
           <button class="btn btn-ghost" id="bizauto-refresh-btn" style="border:1px solid var(--line);">状態を更新</button>
           <span id="bizauto-msg" style="font-size:12.5px;margin-left:8px;"></span>
         </div>
@@ -1046,9 +1034,6 @@
     <section id="view-chatsettings" style="display:none;">
       <div class="panel">
         <h2>チャットの自動削除設定</h2>
-        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-          チャットの画像・ファイル・メッセージが自動的に削除されるまでの時間を設定します。画像・ファイル付きメッセージは、指定した時間が経過すると添付だけが削除され（メッセージ本文は残ります）。
-        </p>
         <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px;">
           <div class="field" style="margin:0;">
             <label>画像・ファイルを削除するまでの時間（時間）</label>
@@ -1064,9 +1049,6 @@
       </div>
       <div class="panel">
         <h2>チャット画像の自動圧縮設定</h2>
-        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-          チェックを入れると、貼り付けられた画像の容量が指定した値以上の場合に、指定した長辺の大きさまで自動的に縮小・圧縮してから送信します。画像以外のファイルは圧縮の対象外です。
-        </p>
         <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
           <label style="display:flex;align-items:center;gap:6px;font-size:13px;">
             <input type="checkbox" id="chat-compress-enabled" style="width:auto;">
@@ -1099,9 +1081,6 @@
       </div>
       <div class="panel">
         <h2>送信ファイルサイズの上限設定</h2>
-        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-          チェックを入れると、チャットに添付できる画像・ファイルの容量に上限を設けます。上限を超えるファイルは、エラーメッセージを表示して送信を受け付けません。
-        </p>
         <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
           <label style="display:flex;align-items:center;gap:6px;font-size:13px;">
             <input type="checkbox" id="chat-filesize-limit-enabled" style="width:auto;">
@@ -1124,9 +1103,6 @@
       </div>
       <div class="panel">
         <h2>吹き出しの色設定</h2>
-        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-          自分・相手それぞれの吹き出しの背景色・文字色を設定します。空欄のままにすると既定の色（自分：青、相手：緑）が使われます。
-        </p>
         <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:14px;">
           <div>
             <div style="font-weight:700;font-size:13px;margin-bottom:8px;">自分の吹き出し</div>
@@ -1163,12 +1139,12 @@
       </div>
     </section>
 
-    <!-- ============ 出入予定管理 ============ -->
+    <!-- ============ 来客・出張管理 ============ -->
     <section id="view-visitorsettings" style="display:none;">
       <div class="panel">
         <h2>予定削除までの日数</h2>
         <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-          出入予定（来客・役員）は、予定の最終日（複数日にわたる予定は終了日）から、ここで設定した日数が経過した日に自動的に削除されます。例：「1」＝最終日の翌日に削除、「14」＝最終日の14日後に削除。1以上の整数で指定してください。
+          来客・出張は、予定の最終日（複数日にわたる予定は終了日）から、ここで設定した日数が経過した日に自動的に削除されます。例：「1」＝最終日の翌日に削除、「14」＝最終日の14日後に削除。1以上の整数で指定してください。
         </p>
         <div style="display:flex;align-items:center;gap:10px;">
           <div class="field" style="margin:0;">
@@ -1181,9 +1157,6 @@
       </div>
       <div class="panel">
         <h2>予定公開対象役員の選択</h2>
-        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-          ここでチェックした社員だけが、出入予定タブで「役員」の予定を登録する対象として選べるようになります。
-        </p>
         <div id="visitor-target-officer-checks" style="display:flex;flex-wrap:wrap;gap:10px;border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:12px;max-height:320px;overflow:auto;"></div>
         <button class="btn btn-primary" id="visitor-target-officer-save-btn">保存</button>
         <div id="visitor-target-officer-save-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px;"></div>
@@ -1242,9 +1215,6 @@
         <!-- キオスク（共用アカウント・お知らせ掲示板）のログアウト用ショートカットキー -->
         <div class="panel" style="margin:0;">
           <h2>共用アカウントログアウト用ショートカットキー</h2>
-          <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-            休憩所等の共用アカウントでログインした画面には、誰でも押せるログアウトボタンを表示しません。代わりに、ここで設定したキーの組み合わせを押すとログアウトし、ログイン画面に戻ります。
-          </p>
           <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
             <label style="display:flex;align-items:center;gap:6px;font-size:13px;">
               <input type="checkbox" id="kiosk-shortcut-ctrl" style="width:auto;">Ctrl
@@ -1267,9 +1237,6 @@
         <!-- 同一アカウントの同時ログイン制限（RTDB無料枠の同時接続数100対策。2026年10月） -->
         <div class="panel" style="margin:0;">
           <h2>同一アカウントの同時ログイン制限</h2>
-          <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-            有効にすると、同じメールアドレスで別の端末・ブラウザから新たにログインした場合、先にログインしていた方は自動的にログアウトされます（PC・スマホの同時使用を防ぎ、Realtime Databaseの同時接続数上限＝無料枠100を節約するための設定）。共用アカウント（休憩所キオスク等）はこの制限の対象外で、常に複数台から同時ログインできます。OFFにすると、共用アカウント以外も含めて全員、複数台からの同時ログインを許可します。
-          </p>
           <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-bottom:14px;">
             <input type="checkbox" id="single-session-guard-enabled" style="width:auto;">
             有効にする
@@ -1281,9 +1248,6 @@
         <!-- 操作ログ（トライアル期間の診断用。2026年10月） -->
         <div class="panel" style="margin:0;">
           <h2>操作ログ（トライアル用）</h2>
-          <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-            有効にすると、各社員の端末から、メールアドレス・表示中のタブ・Firestoreの読み取り／書き込み件数（書き込みは対象のパスと呼び出し元の関数名）を、ログ用のGoogleスプレッドシートに、約5分おきとページを閉じるときに送信します。お知らせ・チャット・業務情報などの本文は送りません。変更はその場で全員の画面に反映されます（再ログイン不要）。記録を始める前に、社員への周知をお願いします。
-          </p>
           <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-bottom:10px;">
             <input type="checkbox" id="activity-log-enabled" style="width:auto;">
             ログを記録する
@@ -1314,9 +1278,6 @@
         <!-- 画面の背景色 -->
         <div class="panel" style="margin:0;">
           <h2>画面の背景色</h2>
-          <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-            管理画面全体と、一般画面「行き先」タブの事前設定パネルの背景色（現在はどちらもベージュ系）を、それぞれ変更できます。
-          </p>
           <div class="field">
             <label>管理画面（このadmin.html全体）の背景色</label>
             <div style="display:flex;align-items:center;gap:10px;">
@@ -1342,9 +1303,6 @@
              読み取り数の目安＝ここに出る合計件数、という前提で見積もりに使う。 -->
         <div class="panel" style="margin:0;">
           <h2>Firestore 読み取り数の診断（無料枠対策）</h2>
-          <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-            一般画面はログイン・再読み込みのたびに、以下のコレクションを丸ごと読み込みます（カレンダー関連の2コレクションのみ、今年度分に絞って読み込む作りのため、その分だけ絞って集計します）。ここでの件数確認自体はcount()集計クエリを使うため、件数がいくつあっても1クエリにつき1読み取りしか消費しません。
-          </p>
           <button class="btn btn-primary" id="fs-diag-run-btn">件数を確認する</button>
           <div id="fs-diag-status" style="font-size:12.5px;color:var(--muted);margin-top:8px;"></div>
           <table id="fs-diag-table" style="display:none;margin-top:12px;">
@@ -1365,9 +1323,6 @@
              一般画面用の診断とは別に集計する（管理画面は権限管理用の小さなコレクションを多数読むため）。 -->
         <div class="panel" style="margin:0;">
           <h2>Firestore 読み取り数の診断（admin.html＝この管理画面自体）</h2>
-          <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-            この管理画面もログインのたびに、以下のコレクションを丸ごと読み込みます（「予約状況（全体）」タブのreservationsのみ、タブを開いた時だけ読む作りのため対象外）。このほか、権限判定用のドキュメント読み取りが固定で約23件（データ量に関わらず一定）別途発生します。
-          </p>
           <button class="btn btn-primary" id="admin-diag-run-btn">件数を確認する</button>
           <div id="admin-diag-status" style="font-size:12.5px;color:var(--muted);margin-top:8px;"></div>
           <table id="admin-diag-table" style="display:none;margin-top:12px;">
@@ -1456,7 +1411,6 @@
         <div class="field" id="bizinfo-modal-dropzone-field">
           <label>ファイル</label>
           <p id="bizinfo-modal-dropzone-hint" style="font-size:11.5px;color:var(--muted);margin:0 0 8px;">
-            ドロップまたは選択したファイルをアップロードします。
           </p>
           <div id="bizinfo-dropzone">
             <div id="bizinfo-dropzone-idle">
@@ -1485,6 +1439,24 @@
         <div class="field" style="display:flex;align-items:center;gap:6px;">
           <input type="checkbox" id="bizinfo-allow-download-input" style="width:auto;">
           <label style="margin:0;font-size:12.5px;">ダウンロードを許可する</label>
+        </div>
+        <div id="bizauto-modal-section" style="display:none;border-top:1px solid var(--line);margin-top:14px;padding-top:12px;">
+          <div style="font-weight:600;font-size:13px;margin-bottom:8px;">自動更新（社内ノートPC）</div>
+          <div class="field">
+            <label>元ファイルのパス（空欄なら自動更新しない）</label>
+            <input type="text" id="bizauto-path-input" placeholder="O:\全社共有\…\ファイル.xlsx">
+          </div>
+          <div class="field" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+            <select id="bizauto-mode-select" style="width:auto;"><option value="daily">毎日</option><option value="interval">間隔</option></select>
+            <input type="time" id="bizauto-time-input" value="08:30" style="width:110px;">
+            <span id="bizauto-hours-wrap" style="display:none;"><input type="number" id="bizauto-hours-input" min="1" max="168" value="24" style="width:70px;"> 時間ごと</span>
+          </div>
+          <div class="field" style="display:flex;align-items:center;gap:6px;">
+            <input type="checkbox" id="bizauto-enabled-input" disabled style="width:auto;">
+            <label style="margin:0;font-size:12.5px;">自動更新を有効にする</label>
+          </div>
+          <div id="bizauto-modal-status" style="font-size:12px;color:var(--muted);margin-bottom:6px;"></div>
+          <button type="button" class="btn btn-ghost" id="bizauto-runnow-btn" style="border:1px solid var(--line);" title="保存後、ノートPCが次に確認に来た時（15分以内）に実行されます。">実行を予約</button>
         </div>
         <div id="bizinfo-edit-error" style="color:var(--danger);font-size:12.5px;margin-top:4px;"></div>
         <div class="row-btns">
@@ -2780,6 +2752,7 @@ function initAdminsListener(){
   onSnapshot(collection(db,"admins"), snap=>{
     lastAdminEmails = sortEmailsByEmployeeNo(snap.docs.map(d=>d.id));
     renderAdminsTable(lastAdminEmails);
+    try{ scheduleBizAutoRecipientSync(); }catch(e){}
   });
 }
 function renderAdminsTable(list){
@@ -3457,7 +3430,7 @@ const GENERAL_TAB_ORDER_DEFS = [
   // { id:"contracts", label:"入札" }, // 入札機能の凍結に伴い、タブ並び順設定の対象から除外（2026年10月）
   { id:"bizinfo", label:"業務情報" },
   { id:"checkout", label:"機材" },
-  { id:"visitors", label:"出入予定" },
+  { id:"visitors", label:"来客・出張" },
   { id:"safety", label:"安否確認" },
   { id:"safetyresponse", label:"安否回答" }
 ];
@@ -3472,7 +3445,7 @@ const ADMIN_TAB_ORDER_DEFS = [
   // { id:"contracts", label:"入札管理" }, // 入札機能の凍結に伴い、タブ並び順設定の対象から除外（2026年10月）
   { id:"bizinfo", label:"業務情報管理" },
   { id:"chatsettings", label:"チャット管理" },
-  { id:"visitorsettings", label:"出入予定管理" },
+  { id:"visitorsettings", label:"来客・出張管理" },
   { id:"systemsettings", label:"システム管理" }
 ];
 
@@ -4431,10 +4404,11 @@ function openBizInfoEditModal(item){
   // ファイルの添付欄は追加・編集どちらでも表示する。編集時は未選択なら既存ファイルのまま。
   document.getElementById("bizinfo-modal-dropzone-hint").textContent = item
     ? "ファイルを選び直すと、既存のファイルを削除して置き換えます。未選択なら中身はそのままです。"
-    : "ドロップまたは選択したファイルをアップロードします。";
+    : "";
   resetBizInfoDropzone();
   updateBizInfoModalEditFileBtn();
   document.getElementById("bizinfo-edit-modal").classList.add("show");
+  resetBizAutoModal(editingBizInfoId);
 }
 document.getElementById("bizinfo-add-btn")?.addEventListener("click", ()=> openBizInfoEditModal(null));
 document.getElementById("bizinfo-edit-cancel-btn")?.addEventListener("click", ()=>{
@@ -4461,14 +4435,18 @@ document.getElementById("bizinfo-edit-save-btn")?.addEventListener("click", asyn
       if(pendingBizInfoUpload && oldItem?.fileId && oldItem.fileId !== pendingBizInfoUpload.fileId){
         deleteFileFromStorage(oldItem.fileId); // 失敗しても無視してよい（storage-helper.js側で握りつぶし済み）
       }
+      const autoOk = await saveBizAutoFromModal({ id: editingBizInfoId, name, fileId: pendingBizInfoUpload?.fileId || oldItem?.fileId || "", infoManagers: oldItem?.infoManagers || [] });
+      if(!autoOk) return;
       toast("更新しました。");
     } else {
       if(!pendingBizInfoUpload){ errEl.textContent = "ファイルを追加してください。"; return; }
       const maxOrder = bizInfoItemsAll.reduce((m,i)=>Math.max(m,i.order??0),0);
-      await addDoc(collection(db,"business_info_items"), {
+      const newRef = await addDoc(collection(db,"business_info_items"), {
         name, category, driveUrl: pendingBizInfoUpload.driveUrl, fileId: pendingBizInfoUpload.fileId,
         lastFileName: pendingBizInfoUpload.fileName, enabled, allowDownload, infoManagers: [], order: maxOrder+10
       });
+      const autoOkNew = await saveBizAutoFromModal({ id: newRef.id, name, fileId: pendingBizInfoUpload.fileId, infoManagers: [] });
+      if(!autoOkNew) return;
       toast("追加しました。");
     }
     document.getElementById("bizinfo-edit-modal").classList.remove("show");
@@ -4577,24 +4555,28 @@ document.getElementById("bizinfo-upload-confirm-btn")?.addEventListener("click",
    業務情報：自動更新（社内ノートPC）の設定
    設定・実行状況はGoogle Apps Script側に保存（Firestoreは使わない）。
    ノートPCのスクリプトが15分ごとにこの設定を取得して実行する。
+   2026-10-22：設定は業務情報の「追加・編集」モーダルに移した。一覧パネルは状況の表示のみ。
+   失敗・停止の通知先は「その業務情報の管理者（infoManagers）＋システム管理者（admins）」。
+   Apps ScriptはFirestoreを読めないため、保存時／管理画面を開いた時に、すでに読み込み済みの
+   データから宛先メールを設定へ書き込む（Firestoreの追加読み取りは発生しない）。
 ========================================================= */
 let bizAutoState = null; // { cfg, status, hb, now }
 let bizAutoLoading = false;
-let bizAutoRunNow = {}; // itemId -> 「今すぐ実行」を押したときのトークン（保存で反映）
+let bizAutoModalRunNow = ""; // モーダルで「実行を予約」を押したときのトークン（保存で反映）
 function bizAutoFmt(ms){
   if(!ms) return "—";
   const d = new Date(ms);
   return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
 }
+function bizAutoCanUse(){ return !!(myAdminPermissions.isAdmin && isStorageConfigured()); }
 async function loadBizAutoState(){
   if(bizAutoLoading) return;
   bizAutoLoading = true;
   const msg = document.getElementById("bizauto-msg");
   try{
     bizAutoState = await autoGetState();
-    document.getElementById("bizauto-alert-emails").value = (bizAutoState.cfg && bizAutoState.cfg.alertEmails) || "";
-    bizAutoRunNow = {};
     renderBizAutoPanel();
+    fillBizAutoModal();
     if(msg) msg.textContent = "";
   }catch(e){
     if(msg){ msg.textContent = "状態の取得に失敗しました：" + (e.message||""); msg.style.color = "var(--danger)"; }
@@ -4602,10 +4584,13 @@ async function loadBizAutoState(){
     bizAutoLoading = false;
   }
 }
+function bizAutoSchedText(t){
+  return t.mode === "interval" ? `${Number(t.hours)||24}時間ごと` : `毎日 ${t.time||"08:30"}`;
+}
 function renderBizAutoPanel(){
   const panel = document.getElementById("bizauto-panel");
   if(!panel) return;
-  if(!myAdminPermissions.isAdmin || !isStorageConfigured()){ panel.style.display = "none"; return; }
+  if(!bizAutoCanUse()){ panel.style.display = "none"; return; }
   panel.style.display = "";
   if(!bizAutoState){ loadBizAutoState(); return; }
   const cfg = bizAutoState.cfg || { targets:{} };
@@ -4624,92 +4609,171 @@ function renderBizAutoPanel(){
   const body = document.getElementById("bizauto-table-body");
   body.innerHTML = "";
   bizInfoItemsAll.filter(i=>i.fileId).forEach(item=>{
-    const t = (cfg.targets||{})[item.id] || {};
+    const t = (cfg.targets||{})[item.id];
+    if(!t) return; // 自動更新を設定していない項目は表示しない
     const st = status[item.id] || {};
     const mismatch = t.fileId && t.fileId !== item.fileId;
-    const tr = document.createElement("tr");
-    tr.dataset.id = item.id;
     const isErr = st.lastResult === "error";
     const stText = st.lastAttemptAt
       ? `${bizAutoFmt(st.lastAttemptAt)} ${isErr ? "失敗" : (st.lastResult==="unchanged" ? "更新なし" : "成功")}${isErr ? `<div style="font-size:11px;">${escapeHtml(st.lastMessage||"")}</div>` : ""}`
       : "—";
+    const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td><b>${escapeHtml(item.name||"")}</b>${mismatch ? `<div style="font-size:11px;color:var(--danger);">ファイルが差し替えられています。保存し直してください。</div>` : ""}</td>
-      <td><input type="text" class="bizauto-path" value="${escapeHtml(t.path||"")}" placeholder="O:\\全社共有\\…\\ファイル.xlsx" style="min-width:260px;"></td>
-      <td style="white-space:nowrap;">
-        <select class="bizauto-mode"><option value="daily">毎日</option><option value="interval">間隔</option></select>
-        <input type="time" class="bizauto-time" value="${escapeHtml(t.time||"08:30")}" style="width:100px;">
-        <span class="bizauto-hours-wrap" style="display:none;"><input type="number" class="bizauto-hours" min="1" max="168" value="${Number(t.hours)||24}" style="width:60px;">時間ごと</span>
-      </td>
-      <td><input type="checkbox" class="bizauto-enabled" ${t.path ? (t.enabled===false?"":"checked") : "disabled"} style="width:auto;" title="パスを入力すると、チェックできるようになります"></td>
-      <td style="font-size:12px;${isErr?"color:var(--danger);":""}">${stText}</td>
-      <td><button class="btn btn-ghost bizauto-now" style="border:1px solid var(--line);">今すぐ</button></td>
-    `;
-    const modeSel = tr.querySelector(".bizauto-mode");
-    // パスが空の行は保存の対象外のため、チェックは無効（OFF）にしておく。パスを入力するとONで有効になる（2026-10-21）
-    const pathInput = tr.querySelector(".bizauto-path");
-    const enabledCb = tr.querySelector(".bizauto-enabled");
-    pathInput.addEventListener("input", ()=>{
-      const has = pathInput.value.trim() !== "";
-      if(has && enabledCb.disabled){ enabledCb.disabled = false; enabledCb.checked = true; }
-      if(!has){ enabledCb.checked = false; enabledCb.disabled = true; }
-    });
-    modeSel.value = t.mode === "interval" ? "interval" : "daily";
-    const syncMode = ()=>{
-      const iv = modeSel.value === "interval";
-      tr.querySelector(".bizauto-time").style.display = iv ? "none" : "";
-      tr.querySelector(".bizauto-hours-wrap").style.display = iv ? "" : "none";
-    };
-    modeSel.addEventListener("change", syncMode);
-    syncMode();
-    tr.querySelector(".bizauto-now").addEventListener("click", async (e)=>{
-      if(!tr.querySelector(".bizauto-path").value.trim()){ toast("先にパスを入力してください。"); return; }
-      bizAutoRunNow[item.id] = String(Date.now());
-      e.target.textContent = "予約済み";
-      await saveBizAutoConfig("保存しました。ノートPCが次に確認する時（15分以内）に実行されます。");
-    });
+      <td><b>${escapeHtml(item.name||"")}</b>${mismatch ? `<div style="font-size:11px;color:var(--danger);">ファイルが差し替えられています。編集で保存し直してください。</div>` : ""}</td>
+      <td style="font-size:12px;word-break:break-all;">${escapeHtml(t.path||"")}</td>
+      <td style="white-space:nowrap;font-size:12.5px;">${escapeHtml(bizAutoSchedText(t))}</td>
+      <td>${t.enabled===false ? "—" : "○"}</td>
+      <td style="font-size:12px;${isErr?"color:var(--danger);":""}">${stText}</td>`;
     body.appendChild(tr);
   });
   if(!body.children.length){
-    body.innerHTML = `<tr><td colspan="6" class="empty">ファイルを登録した業務情報がありません。</td></tr>`;
+    body.innerHTML = `<tr><td colspan="5" class="empty">自動更新を設定した業務情報はありません。</td></tr>`;
   }
+  scheduleBizAutoRecipientSync();
 }
-async function saveBizAutoConfig(okMsg){
-  const msg = document.getElementById("bizauto-msg");
+
+/* ---- 通知先（管理者＋システム管理者）の作成と同期 ---- */
+function bizAutoNormEmails(list){
+  const set = new Set();
+  (Array.isArray(list)?list:[]).forEach(e=>{ const v = String(e||"").trim().toLowerCase(); if(/^[^@\s]+@[^@\s]+$/.test(v)) set.add(v); });
+  return [...set].sort();
+}
+function bizAutoRecipients(item){
+  return bizAutoNormEmails([...(Array.isArray(item.infoManagers)?item.infoManagers:[]), ...lastAdminEmails]);
+}
+// overrideItem: {id,name,fileId,infoManagers}（モーダルで保存した項目）。overrideTarget: 設定内容。nullなら自動更新を解除。
+function buildBizAutoConfig(overrideItem, overrideTarget){
+  const old = (bizAutoState && bizAutoState.cfg && bizAutoState.cfg.targets) || {};
+  const items = bizInfoItemsAll.filter(i=>!overrideItem || i.id!==overrideItem.id);
+  if(overrideItem) items.push(overrideItem);
   const targets = {};
-  document.querySelectorAll("#bizauto-table-body tr[data-id]").forEach(tr=>{
-    const id = tr.dataset.id;
-    const item = bizInfoItemsAll.find(i=>i.id===id);
-    const path = tr.querySelector(".bizauto-path").value.trim();
-    if(!item || !path) return;
-    const old = ((bizAutoState && bizAutoState.cfg && bizAutoState.cfg.targets) || {})[id] || {};
-    targets[id] = {
-      name: item.name || "", fileId: item.fileId, path,
-      mode: tr.querySelector(".bizauto-mode").value,
-      time: tr.querySelector(".bizauto-time").value || "08:30",
-      hours: Number(tr.querySelector(".bizauto-hours").value) || 24,
-      enabled: tr.querySelector(".bizauto-enabled").checked,
-      runNowToken: bizAutoRunNow[id] || old.runNowToken || ""
-    };
+  items.forEach(item=>{
+    if(!item.fileId) return;
+    const t = (overrideItem && item.id===overrideItem.id) ? overrideTarget : old[item.id];
+    if(!t || !t.path) return;
+    targets[item.id] = { ...t, name: item.name||"", notifyTo: bizAutoRecipients(item) };
   });
-  const alertEmails = document.getElementById("bizauto-alert-emails").value.trim();
+  return { adminEmails: bizAutoNormEmails(lastAdminEmails), targets };
+}
+let bizAutoSyncTimer = null, bizAutoSyncing = false;
+function scheduleBizAutoRecipientSync(){
+  clearTimeout(bizAutoSyncTimer);
+  bizAutoSyncTimer = setTimeout(syncBizAutoRecipients, 3000);
+}
+// 管理者の追加・削除、システム管理者の変更があったとき、Apps Script側の宛先を最新にする
+async function syncBizAutoRecipients(){
+  if(bizAutoSyncing || !bizAutoState || !bizAutoCanUse()) return;
+  if(!lastAdminEmails.length || !bizInfoItemsAll.length) return; // 読み込み前に空で上書きしない
+  const cfg = bizAutoState.cfg || { targets:{} };
+  const next = buildBizAutoConfig(null, null);
+  const same = (a,b)=> JSON.stringify(bizAutoNormEmails(a)) === JSON.stringify(bizAutoNormEmails(b));
+  let changed = !same(cfg.adminEmails, next.adminEmails);
+  Object.keys(next.targets).forEach(id=>{ if(!same((cfg.targets||{})[id]?.notifyTo, next.targets[id].notifyTo)) changed = true; });
+  if(!changed) return;
+  bizAutoSyncing = true;
   try{
-    // 切り分け用：送った内容と、保存後にサーバーから返ってきた内容を、コンソールと画面に出す（2026-10-21）
-    const sentSummary = Object.keys(targets).map(id=>`${targets[id].name}=${targets[id].enabled?"ON":"OFF"}`).join(" / ");
-    console.info("[自動更新] 送信：", JSON.parse(JSON.stringify(targets)));
-    await autoSaveConfig({ alertEmails, targets });
-    if(msg){ msg.textContent = okMsg || "保存しました。"; msg.style.color = "var(--muted)"; }
+    await autoSaveConfig(next);
     bizAutoState = null;
     await loadBizAutoState();
-    const back = (bizAutoState && bizAutoState.cfg && bizAutoState.cfg.targets) || {};
-    const backSummary = Object.keys(back).map(id=>`${back[id].name}=${back[id].enabled===false?"OFF":"ON"}`).join(" / ");
-    console.info("[自動更新] 保存後にサーバーから返った内容：", JSON.parse(JSON.stringify(back)));
-    if(msg) msg.textContent = (okMsg || "保存しました。") + `（送信：${sentSummary || "なし"} ／ サーバー：${backSummary || "なし"}）`;
   }catch(e){
-    if(msg){ msg.textContent = "保存に失敗しました：" + (e.message||""); msg.style.color = "var(--danger)"; }
+    console.error("[自動更新：通知先の同期エラー]", e);
+  }finally{
+    bizAutoSyncing = false;
   }
 }
-document.getElementById("bizauto-save-btn")?.addEventListener("click", ()=> saveBizAutoConfig());
+
+/* ---- 追加・編集モーダルの「自動更新」欄 ---- */
+let bizAutoModalFilledFor = undefined; // 入力済みにした業務情報ID（nullは追加）。ユーザーの入力を上書きしないため
+function bizAutoModalSyncMode(){
+  const iv = document.getElementById("bizauto-mode-select").value === "interval";
+  document.getElementById("bizauto-time-input").style.display = iv ? "none" : "";
+  document.getElementById("bizauto-hours-wrap").style.display = iv ? "" : "none";
+}
+function resetBizAutoModal(itemId){
+  bizAutoModalRunNow = "";
+  bizAutoModalFilledFor = undefined;
+  const sec = document.getElementById("bizauto-modal-section");
+  if(!sec) return;
+  sec.style.display = bizAutoCanUse() ? "" : "none";
+  document.getElementById("bizauto-path-input").value = "";
+  document.getElementById("bizauto-mode-select").value = "daily";
+  document.getElementById("bizauto-time-input").value = "08:30";
+  document.getElementById("bizauto-hours-input").value = 24;
+  const cb = document.getElementById("bizauto-enabled-input"); cb.checked = false; cb.disabled = true;
+  document.getElementById("bizauto-modal-status").textContent = "";
+  document.getElementById("bizauto-runnow-btn").textContent = "実行を予約";
+  bizAutoModalSyncMode();
+  if(!bizAutoCanUse()) return;
+  if(bizAutoState) fillBizAutoModal(); else loadBizAutoState();
+}
+function fillBizAutoModal(){
+  const modal = document.getElementById("bizinfo-edit-modal");
+  if(!modal || !modal.classList.contains("show") || !bizAutoState || !bizAutoCanUse()) return;
+  if(bizAutoModalFilledFor === (editingBizInfoId||null)) return;
+  bizAutoModalFilledFor = editingBizInfoId || null;
+  if(!editingBizInfoId) return; // 追加時は空欄のまま
+  const t = ((bizAutoState.cfg && bizAutoState.cfg.targets) || {})[editingBizInfoId];
+  const st = (bizAutoState.status || {})[editingBizInfoId] || {};
+  if(t){
+    document.getElementById("bizauto-path-input").value = t.path || "";
+    document.getElementById("bizauto-mode-select").value = t.mode === "interval" ? "interval" : "daily";
+    document.getElementById("bizauto-time-input").value = t.time || "08:30";
+    document.getElementById("bizauto-hours-input").value = Number(t.hours) || 24;
+    const cb = document.getElementById("bizauto-enabled-input");
+    cb.disabled = !t.path; cb.checked = !!t.path && t.enabled !== false;
+    bizAutoModalSyncMode();
+  }
+  if(st.lastAttemptAt){
+    const r = st.lastResult === "error" ? "失敗" : (st.lastResult==="unchanged" ? "更新なし" : "成功");
+    document.getElementById("bizauto-modal-status").textContent = `最終結果：${bizAutoFmt(st.lastAttemptAt)} ${r}${st.lastResult==="error" ? "（"+(st.lastMessage||"")+"）" : ""}`;
+  }
+}
+document.getElementById("bizauto-mode-select")?.addEventListener("change", bizAutoModalSyncMode);
+document.getElementById("bizauto-path-input")?.addEventListener("input", ()=>{
+  const has = document.getElementById("bizauto-path-input").value.trim() !== "";
+  const cb = document.getElementById("bizauto-enabled-input");
+  if(has && cb.disabled){ cb.disabled = false; cb.checked = true; }
+  if(!has){ cb.checked = false; cb.disabled = true; }
+});
+document.getElementById("bizauto-runnow-btn")?.addEventListener("click", (e)=>{
+  if(!document.getElementById("bizauto-path-input").value.trim()){ toast("先にパスを入力してください。"); return; }
+  bizAutoModalRunNow = String(Date.now());
+  e.target.textContent = "予約済み（「保存」で反映）";
+});
+// モーダルの「保存」から呼ぶ。成功（または変更なし）ならtrue。
+async function saveBizAutoFromModal(itemLike){
+  const sec = document.getElementById("bizauto-modal-section");
+  if(!sec || sec.style.display === "none" || !bizAutoCanUse()) return true;
+  const errEl = document.getElementById("bizinfo-edit-error");
+  try{
+    if(!bizAutoState) await loadBizAutoState();
+    if(!bizAutoState) throw new Error("現在の設定を取得できませんでした");
+    if(bizAutoModalFilledFor === undefined) return true; // 入力欄に既存設定を反映する前なら触らない
+    const path = document.getElementById("bizauto-path-input").value.trim();
+    const old = ((bizAutoState.cfg && bizAutoState.cfg.targets) || {})[itemLike.id];
+    let target = null;
+    if(path){
+      if(!itemLike.fileId) throw new Error("先にファイルを登録してください");
+      target = {
+        fileId: itemLike.fileId, path,
+        mode: document.getElementById("bizauto-mode-select").value,
+        time: document.getElementById("bizauto-time-input").value || "08:30",
+        hours: Number(document.getElementById("bizauto-hours-input").value) || 24,
+        enabled: document.getElementById("bizauto-enabled-input").checked,
+        runNowToken: bizAutoModalRunNow || (old && old.runNowToken) || ""
+      };
+    }
+    if(!target && !old) return true;
+    const next = buildBizAutoConfig(itemLike, target);
+    await autoSaveConfig(next);
+    bizAutoState = null;
+    loadBizAutoState();
+    return true;
+  }catch(e){
+    if(errEl) errEl.textContent = "業務情報は保存しましたが、自動更新の設定の保存に失敗しました：" + (e.message||"");
+    return false;
+  }
+}
 document.getElementById("bizauto-refresh-btn")?.addEventListener("click", ()=>{ bizAutoState = null; loadBizAutoState(); });
 
 let lastContractEditorEmails = [];
@@ -4728,7 +4792,7 @@ function initVisitorManagersListener(){
 }
 
 /* ============================================================
-   出入予定管理（役員予定の対象社員・自動削除までの日数）
+   来客・出張管理（役員予定の対象社員・自動削除までの日数）
 ============================================================ */
 let lastVisitorTargetOfficerEmails = [];
 function initVisitorTargetOfficersAdminListener(){
@@ -4789,7 +4853,7 @@ function initVisitorCleanupSettingsListener(){
     const days = (snap.exists() && snap.data().days) ? snap.data().days : 14;
     const input = document.getElementById("visitor-cleanup-days-input");
     if(input && document.activeElement !== input) input.value = days;
-  }, (err)=>{ console.error("[出入予定：削除日数取得エラー]", err); });
+  }, (err)=>{ console.error("[来客・出張：削除日数取得エラー]", err); });
 }
 document.getElementById("visitor-cleanup-days-save-btn")?.addEventListener("click", async ()=>{
   const msgEl = document.getElementById("visitor-cleanup-days-save-msg");
@@ -5348,7 +5412,7 @@ const PERMISSION_DEFS = [
   // { collection: "contract_editors", label: "入札編集権限", getList: ()=> lastContractEditorEmails },
   { collection: "calendar_editors", label: "カレンダー編集権限", getList: ()=> lastCalEditorEmails },
   { collection: "safety_senders", label: "安否確認発信権限", getList: ()=> lastSafetySenderEmails },
-  { collection: "visitor_managers", label: "出入予定管理権限", getList: ()=> lastVisitorManagerEmails }
+  { collection: "visitor_managers", label: "来客・出張管理権限", getList: ()=> lastVisitorManagerEmails }
 ];
 
 /* ============================================================
@@ -5458,7 +5522,7 @@ const HIDEABLE_TABS = [
   { id:"chat", label:"チャット" },
   { id:"reserve", label:"予約" },
   { id:"checkout", label:"機材" },
-  { id:"visitors", label:"出入予定" },
+  { id:"visitors", label:"来客・出張" },
   // { id:"contracts", label:"入札" }, // 入札機能の凍結に伴い、個人ごとの表示タブ設定の対象から除外（2026年10月）
   { id:"bizinfo", label:"業務情報" }
 ];
@@ -5936,7 +6000,7 @@ function parseCsv(text){
   text = text.replace(/^\uFEFF/, "");
   const lines = text.split(/\r\n|\n|\r/).filter(l=>l.trim().length>0);
   const rows = [];
-  const fixedColCount = 12; // 社員番号〜出入予定管理権限フラグまでの固定列数
+  const fixedColCount = 12; // 社員番号〜来客・出張管理権限フラグまでの固定列数
   for(let i=1;i<lines.length;i++){ // 1行目はヘッダーとして無視
     const cols = parseCsvLine(lines[i]);
     if(cols.length===0) continue;
@@ -6029,7 +6093,7 @@ function renderUserImportPreview(){
   // ヘッダー行を業務情報の項目数に合わせて組み直す（固定11列の直後、メールアドレス列の手前に挿入）
   const headRow = document.getElementById("userimport-preview-headrow");
   headRow.querySelectorAll(".userimport-bizinfo-col").forEach(th=>th.remove());
-  const emailTh = headRow.children[12]; // 登録区分(0)+社員番号〜出入予定管理(1-11)の次＝メールアドレス列
+  const emailTh = headRow.children[12]; // 登録区分(0)+社員番号〜来客・出張管理(1-11)の次＝メールアドレス列
   bizInfoItemsAll.forEach(item=>{
     const th = document.createElement("th");
     th.className = "userimport-bizinfo-col";
@@ -6094,10 +6158,10 @@ function updateUserImportBizInfoColumns(){
   if(!orderEl || !sampleEl) return;
   const bizFlagLabels = bizInfoItemsAll.map(item => `${item.name || "（無題）"}情報管理者フラグ`);
   orderEl.textContent =
-    ["社員番号", "氏名", "所属", "システム管理者フラグ", "お知らせ投稿フラグ", "お知らせ管理権限フラグ", "行き先編集権限フラグ", "設備管理者フラグ", "入札編集権限フラグ", "カレンダー編集権限フラグ", "安否確認発信権限フラグ", "出入予定管理権限フラグ", ...bizFlagLabels, "メールアドレス", "パスワード", "電話番号", "備考"].join(", ");
+    ["社員番号", "氏名", "所属", "システム管理者フラグ", "お知らせ投稿フラグ", "お知らせ管理権限フラグ", "行き先編集権限フラグ", "設備管理者フラグ", "入札編集権限フラグ", "カレンダー編集権限フラグ", "安否確認発信権限フラグ", "来客・出張管理権限フラグ", ...bizFlagLabels, "メールアドレス", "パスワード", "電話番号", "備考"].join(", ");
   const bizHeaderCols = bizInfoItemsAll.map(item => `${item.name || "（無題）"}情報管理者フラグ`).join(",");
   const bizBlankCols = bizInfoItemsAll.map(()=> "").join(",");
-  const headerLine = `社員番号,氏名,所属,システム管理者フラグ,お知らせ投稿フラグ,お知らせ管理権限フラグ,行き先編集権限フラグ,設備管理者フラグ,入札編集権限フラグ,カレンダー編集権限フラグ,安否確認発信権限フラグ,出入予定管理権限フラグ${bizHeaderCols ? ","+bizHeaderCols : ""},メールアドレス,パスワード,電話番号,備考`;
+  const headerLine = `社員番号,氏名,所属,システム管理者フラグ,お知らせ投稿フラグ,お知らせ管理権限フラグ,行き先編集権限フラグ,設備管理者フラグ,入札編集権限フラグ,カレンダー編集権限フラグ,安否確認発信権限フラグ,来客・出張管理権限フラグ${bizHeaderCols ? ","+bizHeaderCols : ""},メールアドレス,パスワード,電話番号,備考`;
   const row1 = `1001,山田太郎,工務部,,1,,,,,,,,${bizBlankCols ? bizBlankCols+"," : ""}yamada@osakagumi.co.jp,Osaka2026!,090-1234-5678,現場責任者`;
   const row2 = `1002,佐藤花子,総務経理部,1,1,,,,,,1,${bizBlankCols ? bizBlankCols+"," : ""}sato@osakagumi.co.jp,Osaka2026!,090-2345-6789,`;
   sampleEl.textContent = `${headerLine}\n${row1}\n${row2}`;
@@ -6372,7 +6436,7 @@ document.getElementById("user-export-cancel-btn")?.addEventListener("click", ()=
 });
 document.getElementById("user-export-download-btn")?.addEventListener("click", ()=>{
   const bizFlagLabels = bizInfoItemsAll.map(item => `${item.name || "（無題）"}情報管理者フラグ`);
-  const header = ["社員番号","氏名","所属","システム管理者フラグ","お知らせ投稿フラグ","お知らせ管理権限フラグ","行き先編集権限フラグ","設備管理者フラグ","入札編集権限フラグ","カレンダー編集権限フラグ","安否確認発信権限フラグ","出入予定管理権限フラグ",...bizFlagLabels,"メールアドレス","パスワード","電話番号","備考"];
+  const header = ["社員番号","氏名","所属","システム管理者フラグ","お知らせ投稿フラグ","お知らせ管理権限フラグ","行き先編集権限フラグ","設備管理者フラグ","入札編集権限フラグ","カレンダー編集権限フラグ","安否確認発信権限フラグ","来客・出張管理権限フラグ",...bizFlagLabels,"メールアドレス","パスワード","電話番号","備考"];
   const rows = [header];
   const headersOnly = document.getElementById("user-export-headers-only").checked;
   if(!headersOnly){
