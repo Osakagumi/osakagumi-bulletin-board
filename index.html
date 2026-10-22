@@ -1149,7 +1149,7 @@
           <div class="visitor-toolbar-filters">
             <div class="visitor-type-pill-group" id="visitor-type-filter-toggle">
               <button type="button" class="visitor-type-pill-btn type-visitor" data-visitortypefilter="visitor">来客</button>
-              <button type="button" class="visitor-type-pill-btn type-officer" data-visitortypefilter="officer">役員</button>
+              <button type="button" class="visitor-type-pill-btn type-officer" data-visitortypefilter="officer">出張</button>
             </div>
             <label style="font-size:12.5px;color:var(--muted);white-space:nowrap;">社員：</label>
             <select id="visitor-host-filter-select"></select>
@@ -1343,7 +1343,7 @@
             <div class="dash-card" id="dash-card-visitors">
               <div class="dash-card-head">
                 <span class="dash-drag-handle" title="ドラッグして並び替え">⠿</span>
-                <h3>来客・役員の予定</h3>
+                <h3>来客・出張の予定</h3>
                 <div style="margin-left:auto;display:flex;align-items:center;gap:6px;">
                   <div class="seg-toggle" id="dash-visitors-range-toggle">
                     <button type="button" class="seg-btn active" data-visitorsrange="today" style="padding:4px 10px;font-size:11.5px;">今日</button>
@@ -1910,7 +1910,7 @@
         <label>種別</label>
         <div class="seg-toggle" id="visitor-type-toggle">
           <button type="button" class="seg-btn active" data-visitortype="visitor">来客</button>
-          <button type="button" class="seg-btn" data-visitortype="officer">役員</button>
+          <button type="button" class="seg-btn" data-visitortype="officer">出張</button>
         </div>
       </div>
       <div class="field">
@@ -3330,7 +3330,7 @@ function renderDashboardVisitorsCard(){
     const nameWithCount = v.headcount ? `${v.visitorName||""}(${v.headcount}名)` : (v.visitorName||"");
     const tr = document.createElement("tr");
     tr.innerHTML =
-      `<td class="dvis-col-type"><span class="visitor-type-pill ${isOfficerRow ? "type-officer" : "type-visitor"}" style="padding:1px 7px;font-size:10.5px;">${isOfficerRow ? "役員" : "来客"}</span></td>` +
+      `<td class="dvis-col-type"><span class="visitor-type-pill ${isOfficerRow ? "type-officer" : "type-visitor"}" style="padding:1px 7px;font-size:10.5px;">${isOfficerRow ? "出張" : "来客"}</span></td>` +
       `<td class="dvis-col-name"><span class="dvis-clamp2">${escapeHtml(nameWithCount)}</span></td>` +
       `<td class="dvis-col-host"><span class="dvis-clamp2">${escapeHtml(formatVisitorHostNames(v))}</span></td>` +
       `<td class="dvis-col-datetime"><span class="dvis-clamp2">${escapeHtml(formatVisitorDateTimeRange(v))}</span></td>`;
@@ -4403,7 +4403,7 @@ let visitorHostEmails = []; // 対象社員（複数対応）のメールアド�
 let visitorHostNames = [];  // 上記に対応する表示名の一覧（同じ並び順）
 let visitorModalDate = "";
 let visitorModalEndDate = ""; // 終了日（任意。開始日と異なる日も指定可＝複数日の予定に対応）
-let visitorModalType = "visitor"; // "visitor"=来客 / "officer"=役員（役員は来客・出張管理権限者のみ選択可）
+let visitorModalType = "visitor"; // "visitor"=来客 / "officer"=出張（画面表示は「出張」。来客・出張管理権限者のみ選択可）
 let visitorDateFilter = ""; // ""=すべて表示
 let visitorTypeFilter = ""; // ""=すべて／"visitor"／"officer"
 let visitorHostFilterEmail = null;
@@ -4654,7 +4654,7 @@ document.getElementById("visitor-date-filter-select").addEventListener("change",
   visitorDateFilter = e.target.value === "__today__" ? todayStr() : (e.target.value || "");
   renderVisitorsTab(); // 日付での絞り込みは一覧表示のみが対象（カレンダー表示は月送りで日付を選ぶため）
 });
-// 種別の絞り込み：「来客」「役員」の2つはグループ内でのトグル。
+// 種別の絞り込み：「来客」「出張」の2つはグループ内でのトグル。
 // 「すべて」はグループ外の独立ボタン（右端配置）で、種別だけでなく社員・日付の条件もまとめて解除する。
 function updateVisitorTypeFilterUI(){
   document.querySelectorAll("#visitor-type-filter-toggle .visitor-type-pill-btn").forEach(b=>{
@@ -4819,7 +4819,7 @@ function renderVisitorCalendar(){
         entry.className = "vcal-entry" + (isMultiDay ? " vcal-entry-period" : "");
         entry.title = "クリックして編集";
         entry.innerHTML =
-          `<span class="visitor-type-pill ${isOfficer ? "type-officer" : "type-visitor"}" style="padding:1px 7px;font-size:10.5px;">${isOfficer ? "役員" : "来客"}</span>` +
+          `<span class="visitor-type-pill ${isOfficer ? "type-officer" : "type-visitor"}" style="padding:1px 7px;font-size:10.5px;">${isOfficer ? "出張" : "来客"}</span>` +
           `<span class="vcal-entry-time">${escapeHtml(timeLabel)}</span>` +
           `<span class="vcal-entry-name">${escapeHtml(nameWithCount)}</span>` +
           `<span class="vcal-entry-host">${escapeHtml(formatVisitorHostNames(v))}</span>`;
@@ -4861,7 +4861,7 @@ function renderVisitorsTab(){
     const isOfficer = (v.type||"visitor")==="officer";
     const tdType = document.createElement("td");
     tdType.className = "vt-col-type";
-    tdType.innerHTML = `<span class="visitor-type-pill ${isOfficer ? "type-officer" : "type-visitor"}">${isOfficer ? "役員" : "来客"}</span>`;
+    tdType.innerHTML = `<span class="visitor-type-pill ${isOfficer ? "type-officer" : "type-visitor"}">${isOfficer ? "出張" : "来客"}</span>`;
     const tdName = document.createElement("td");
     tdName.className = "vt-col-name";
     const nameWithCount = v.headcount ? `${v.visitorName||""}(${v.headcount}名)` : (v.visitorName||"");
@@ -4936,7 +4936,7 @@ function setVisitorModalEndDate(dateStr){
   el.textContent = visitorModalEndDate ? formatDateJP(visitorModalEndDate) : "未設定";
   el.style.color = visitorModalEndDate ? "var(--text)" : "var(--muted)";
 }
-// 種別（来客／役員）に応じて、モーダル内の項目ラベル・表示を切り替える
+// 種別（来客／出張）に応じて、モーダル内の項目ラベル・表示を切り替える
 function applyVisitorTypeUI(type){
   document.getElementById("visitor-name-label").textContent = type==="officer" ? "予定内容" : "来客者名";
   document.getElementById("visitor-host-label").textContent = type==="officer" ? "対象役員（複数可）" : "対応する社員（複数可）";
