@@ -1262,6 +1262,51 @@
             <div id="activity-log-keepdays-msg" style="font-size:12.5px;color:var(--muted);margin-top:6px;"></div>
             <div id="activity-log-stat" style="font-size:12px;color:var(--muted);margin-top:4px;"></div>
           </div>
+
+          <!-- Firestore読み取り数の診断（旧：独立パネル）。操作ログと同じ「読み取り調査」なのでここに統合 -->
+          <details style="border-top:1px solid var(--line);margin-top:14px;padding-top:12px;">
+            <summary style="font-size:13px;font-weight:600;cursor:pointer;">Firestore 読み取り数の診断（件数の確認・見積もり）</summary>
+        <!-- Firestore無料枠診断：ログイン時に読み込まれる各コレクションの件数を、count()集計クエリ
+                 （何件あっても1読み取り扱い）でまとめて確認する。1回の「開き直し」で発生する
+                 読み取り数の目安＝ここに出る合計件数、という前提で見積もりに使う。 -->
+            <div style="margin-top:12px;">
+              <h3 style="font-size:13px;margin:0 0 8px;">一般画面（index.html）</h3>
+              <button class="btn btn-primary" id="fs-diag-run-btn">件数を確認する</button>
+              <div id="fs-diag-status" style="font-size:12.5px;color:var(--muted);margin-top:8px;"></div>
+              <table id="fs-diag-table" style="display:none;margin-top:12px;">
+                <thead><tr><th>コレクション</th><th style="text-align:right;">件数</th></tr></thead>
+                <tbody id="fs-diag-table-body"></tbody>
+                <tfoot><tr style="font-weight:700;"><td>合計（1回の開き直しあたりの目安）</td><td id="fs-diag-total" style="text-align:right;"></td></tr></tfoot>
+              </table>
+              <div id="fs-diag-estimate" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--line);">
+                <div class="field" style="max-width:220px;">
+                  <label>開き直し回数</label>
+                  <input type="number" id="fs-diag-reload-count" min="1" value="100">
+                </div>
+                <div id="fs-diag-estimate-result" style="font-size:14px;font-weight:700;margin-top:6px;"></div>
+              </div>
+            </div>
+
+            <!-- admin.html（この管理画面）自身がログイン時に無条件で読み込んでいるコレクションの診断。
+                 一般画面用の診断とは別に集計する（管理画面は権限管理用の小さなコレクションを多数読むため）。 -->
+            <div style="margin-top:12px;">
+              <h3 style="font-size:13px;margin:0 0 8px;">この管理画面（admin.html）</h3>
+              <button class="btn btn-primary" id="admin-diag-run-btn">件数を確認する</button>
+              <div id="admin-diag-status" style="font-size:12.5px;color:var(--muted);margin-top:8px;"></div>
+              <table id="admin-diag-table" style="display:none;margin-top:12px;">
+                <thead><tr><th>コレクション</th><th style="text-align:right;">件数</th></tr></thead>
+                <tbody id="admin-diag-table-body"></tbody>
+                <tfoot><tr style="font-weight:700;"><td>合計（コレクション分のみ。上記の固定約23件は別途加算）</td><td id="admin-diag-total" style="text-align:right;"></td></tr></tfoot>
+              </table>
+              <div id="admin-diag-estimate" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--line);">
+                <div class="field" style="max-width:220px;">
+                  <label>ログイン回数</label>
+                  <input type="number" id="admin-diag-login-count" min="1" value="100">
+                </div>
+                <div id="admin-diag-estimate-result" style="font-size:14px;font-weight:700;margin-top:6px;"></div>
+              </div>
+            </div>
+          </details>
         </div>
 
         <!-- 画面の背景色 -->
@@ -1287,46 +1332,6 @@
           <div id="theme-colors-save-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px;"></div>
         </div>
 
-        <!-- Firestore無料枠診断：ログイン時に読み込まれる各コレクションの件数を、count()集計クエリ
-             （何件あっても1読み取り扱い）でまとめて確認する。1回の「開き直し」で発生する
-             読み取り数の目安＝ここに出る合計件数、という前提で見積もりに使う。 -->
-        <div class="panel" style="margin:0;">
-          <h2>Firestore 読み取り数の診断（無料枠対策）</h2>
-          <button class="btn btn-primary" id="fs-diag-run-btn">件数を確認する</button>
-          <div id="fs-diag-status" style="font-size:12.5px;color:var(--muted);margin-top:8px;"></div>
-          <table id="fs-diag-table" style="display:none;margin-top:12px;">
-            <thead><tr><th>コレクション</th><th style="text-align:right;">件数</th></tr></thead>
-            <tbody id="fs-diag-table-body"></tbody>
-            <tfoot><tr style="font-weight:700;"><td>合計（1回の開き直しあたりの目安）</td><td id="fs-diag-total" style="text-align:right;"></td></tr></tfoot>
-          </table>
-          <div id="fs-diag-estimate" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--line);">
-            <div class="field" style="max-width:220px;">
-              <label>開き直し回数</label>
-              <input type="number" id="fs-diag-reload-count" min="1" value="100">
-            </div>
-            <div id="fs-diag-estimate-result" style="font-size:14px;font-weight:700;margin-top:6px;"></div>
-          </div>
-        </div>
-
-        <!-- admin.html（この管理画面）自身がログイン時に無条件で読み込んでいるコレクションの診断。
-             一般画面用の診断とは別に集計する（管理画面は権限管理用の小さなコレクションを多数読むため）。 -->
-        <div class="panel" style="margin:0;">
-          <h2>Firestore 読み取り数の診断（admin.html＝この管理画面自体）</h2>
-          <button class="btn btn-primary" id="admin-diag-run-btn">件数を確認する</button>
-          <div id="admin-diag-status" style="font-size:12.5px;color:var(--muted);margin-top:8px;"></div>
-          <table id="admin-diag-table" style="display:none;margin-top:12px;">
-            <thead><tr><th>コレクション</th><th style="text-align:right;">件数</th></tr></thead>
-            <tbody id="admin-diag-table-body"></tbody>
-            <tfoot><tr style="font-weight:700;"><td>合計（コレクション分のみ。上記の固定約23件は別途加算）</td><td id="admin-diag-total" style="text-align:right;"></td></tr></tfoot>
-          </table>
-          <div id="admin-diag-estimate" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--line);">
-            <div class="field" style="max-width:220px;">
-              <label>ログイン回数</label>
-              <input type="number" id="admin-diag-login-count" min="1" value="100">
-            </div>
-            <div id="admin-diag-estimate-result" style="font-size:14px;font-weight:700;margin-top:6px;"></div>
-          </div>
-        </div>
       </div>
     </section>
 
