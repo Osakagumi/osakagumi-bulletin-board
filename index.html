@@ -2572,7 +2572,6 @@ let isContractEditor = false;
 let isSafetySender = false;
 let isBizInfoManager = false;
 let isVisitorManager = false;
-let visitorTargetOfficerEmails = []; // 来客・出張：出張の対象にできる社員（管理画面で設定）
 let isSharedAccount = false; // ログイン中の自分自身が「共用アカウント」かどうか
 // お知らせ掲示板モード（共用アカウント）のキオスク画面で、ログアウトボタンの代わりに
 // 使う「秘密のショートカットキー」の設定。管理画面（システム管理）から変更できる。
@@ -2964,7 +2963,7 @@ onAuthStateChanged(auth, async (user)=>{
       }
       // 敷鉄板・機材の貸出/返却履歴（steel_plate_transactions）は、記録が溜まり続ける一方で
       // 自動削除の仕組みが無く、ダッシュボードの表示にも使われない（「機材」タブを実際に開いた
-      // 時にしか参照されない）ため、ensureVisitorTargetOfficersListener等と同じ遅延購読に変更
+      // 時にしか参照されない）ため、来客・出張タブを開いた時に始める遅延購読に変更
       // （2026年10月、読み取り数の見直しにより対応。initSteelPlateTxListener自体は下に残し、
       // ensureSteelPlateTxListener経由でrenderCheckoutTab内から初回だけ呼び出す）。
       // 入札（契約）情報は、業務上の方針変更によりExcel管理に一本化され、業務情報タブ経由で
@@ -2976,7 +2975,7 @@ onAuthStateChanged(auth, async (user)=>{
       initVisitorSchedulesListener();
       cleanupOldVisitorSchedules();
       // 業務情報（business_info_categories/items）と、来客・出張の「対象社員」設定
-      // （visitor_target_officers）は、いずれもダッシュボードの表示には使われず、
+      // は、いずれもダッシュボードの表示には使われず、
       // それぞれ「業務情報」タブ／「来客・出張」タブを実際に開いた時にしか参照されない。
       // ログイン直後の読み取り数を減らすため、ここでは監視を開始せず、
       // 該当タブを初めて開いたタイミングで初めて監視を始める（switchToTab側を参照）。
@@ -3629,7 +3628,6 @@ function switchToTab(viewName){
     ensureEquipmentFullListener(); // 2026年10月：予約タブを開いた時だけ設備本体を全件購読する
   }
   if(viewName==="visitors"){
-    ensureVisitorTargetOfficersListener();
     // 2026年10月：来客・出張・カレンダーの「全件（年間/全履歴）」購読は、来客・出張管理者
     // （isVisitorManager）だけに絞った。一般社員は自分がhostの予定しか表示しない仕様
     // （isVisitorManagerでの絞り込み、本関数下部参照）であり、直近30日＋将来分の軽量購読
@@ -3704,7 +3702,7 @@ function applySavedTabOrder(){
   const nav = document.getElementById("main-tabs");
   const firstBtn = Array.from(nav.querySelectorAll(".tab-btn")).find(b => b.style.display !== "none");
   // 【2026-10-22 修正】この関数はスクリプトの途中（約3811行目）で呼ばれるため、その時点では
-  // これより後ろで宣言される let 変数（例：visitorTargetOfficersListenerStarted、noticeCleanupRunning、
+  // これより後ろで宣言される let 変数（例：noticeCleanupRunning、
   // chatListUnsub 等）がまだ初期化されていない。一番左のタブが「来客・出張」「予約」「お知らせ」など、
   // 開いた時に購読開始用の変数を触るタブだと「Cannot access '…' before initialization」で
   // スクリプト全体が途中で止まり、カレンダー・行き先などが一切表示されなくなっていた
@@ -4552,20 +4550,6 @@ function ensureVisitorSchedulesFullListener(){
     }
     refreshDashboardIfActive();
   }, (err)=>{ console.error("[来客・出張取得エラー（全件購読）]", err); });
-}
-// 来客・出張タブを実際に開いた時にだけ、上記の監視をまとめて開始する（1度だけ）。
-// ダッシュボードには使われないため、ログイン直後には開始しない。
-let visitorTargetOfficersListenerStarted = false;
-function ensureVisitorTargetOfficersListener(){
-  if(visitorTargetOfficersListenerStarted) return;
-  visitorTargetOfficersListenerStarted = true;
-  initVisitorTargetOfficersListener();
-}
-// 来客・出張：出張の対象にできる社員一覧（管理画面「来客・出張管理」タブで設定）
-function initVisitorTargetOfficersListener(){
-  onSnapshot(collection(db,"visitor_target_officers"), snap=>{
-    visitorTargetOfficerEmails = snap.docs.map(d=>d.id);
-  }, (err)=>{ console.error("[来客・出張：対象社員取得エラー]", err); });
 }
 let visitorCleanupRunning = false;
 const VISITOR_CLEANUP_INTERVAL_MS = 6*60*60*1000; // 6時間（予約・お知らせの自動削除と同じ間隔）
@@ -10830,7 +10814,7 @@ function recomputeSpPlateTypes(){
 }
 // 「機材」タブ（renderCheckoutTab）を実際に開いた時にだけ、初回に1度だけ購読を始める。
 // ダッシュボードでは使われず、かつ記録が溜まり続ける一方で自動削除も無いコレクションのため、
-// ensureVisitorTargetOfficersListener等と同じ遅延購読パターンにしている
+// 来客・出張タブを開いた時に始める遅延購読パターンにしている
 // （2026年10月、読み取り数の見直しにより対応）。
 let spTxListenerStarted = false;
 function ensureSteelPlateTxListener(){

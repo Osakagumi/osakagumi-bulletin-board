@@ -1150,12 +1150,6 @@
         </div>
         <div id="visitor-cleanup-days-save-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px;"></div>
       </div>
-      <div class="panel">
-        <h2>予定公開対象役員の選択</h2>
-        <div id="visitor-target-officer-checks" style="display:flex;flex-wrap:wrap;gap:10px;border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:12px;max-height:320px;overflow:auto;"></div>
-        <button class="btn btn-primary" id="visitor-target-officer-save-btn">保存</button>
-        <div id="visitor-target-officer-save-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px;"></div>
-      </div>
     </section>
 
     <!-- ============ システム管理 ============ -->
@@ -2012,7 +2006,6 @@ onAuthStateChanged(auth, async (user)=>{
   initContractEditorsListener(); // 権限一覧（contract_editors）は一括権限設定等でも使う小さな一覧のため、凍結後も維持
   initSafetySendersListener();
   initVisitorManagersListener();
-  initVisitorTargetOfficersAdminListener();
   initVisitorCleanupSettingsListener();
   populateSingleEmpPermissionsChecks();
   initBizInfoListener();
@@ -4035,7 +4028,7 @@ const ADMIN_LOGIN_COLLECTIONS = [
   "equipment_categories", "equipment", "admins", "announcement_posters",
   "notice_managers", "announcements", "departments", "wb_statuses",
   "whereabouts_editors", "equipment_managers", "calendar_editors", "calendar_years",
-  "contract_editors", "safety_senders", "visitor_managers", "visitor_target_officers",
+  "contract_editors", "safety_senders", "visitor_managers",
   "business_info_items", "business_info_categories", "employees"
 ];
 document.getElementById("admin-diag-run-btn")?.addEventListener("click", async ()=>{
@@ -4813,62 +4806,8 @@ function initVisitorManagersListener(){
 }
 
 /* ============================================================
-   来客・出張管理（役員予定の対象社員・自動削除までの日数）
+   来客・出張管理（自動削除までの日数）
 ============================================================ */
-let lastVisitorTargetOfficerEmails = [];
-function initVisitorTargetOfficersAdminListener(){
-  onSnapshot(collection(db,"visitor_target_officers"), snap=>{
-    lastVisitorTargetOfficerEmails = sortEmailsByEmployeeNo(snap.docs.map(d=>d.id));
-    renderVisitorTargetOfficerChecks();
-  });
-}
-function renderVisitorTargetOfficerChecks(){
-  const el = document.getElementById("visitor-target-officer-checks");
-  if(!el) return;
-  // 所属＝「役員」の社員のみを候補にする
-  const officerDeptIds = departmentsAll.filter(d=>d.name==="役員").map(d=>d.id);
-  const roster = employeesAll.filter(e=>!e.hidden && !e.isSharedAccount && empDepartmentsAdmin(e).some(id=>officerDeptIds.includes(id)));
-  el.innerHTML = "";
-  if(officerDeptIds.length===0){
-    el.innerHTML = `<span style="font-size:12.5px;color:var(--muted);">「ユーザー管理」タブに所属「役員」が登録されていません。先に部署を登録してください。</span>`;
-    return;
-  }
-  if(roster.length===0){
-    el.innerHTML = `<span style="font-size:12.5px;color:var(--muted);">所属「役員」の社員がいません。</span>`;
-    return;
-  }
-  roster.forEach(emp=>{
-    const label = document.createElement("label");
-    label.style.cssText = "display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;";
-    const cb = document.createElement("input");
-    cb.type = "checkbox"; cb.style.width = "auto";
-    cb.checked = lastVisitorTargetOfficerEmails.includes(emp.email);
-    cb.className = "visitor-target-officer-check";
-    cb.value = emp.email;
-    label.appendChild(cb);
-    label.appendChild(document.createTextNode(emp.name || emp.email));
-    el.appendChild(label);
-  });
-}
-document.getElementById("visitor-target-officer-save-btn")?.addEventListener("click", async ()=>{
-  const msgEl = document.getElementById("visitor-target-officer-save-msg");
-  const checkedEmails = [...document.querySelectorAll(".visitor-target-officer-check:checked")].map(cb=>cb.value);
-  const toAdd = checkedEmails.filter(e=> !lastVisitorTargetOfficerEmails.includes(e));
-  const toRemove = lastVisitorTargetOfficerEmails.filter(e=> !checkedEmails.includes(e));
-  try{
-    for(const email of toAdd){
-      await setDoc(doc(db,"visitor_target_officers", email), { addedBy: currentUser.email, addedAt: new Date().toISOString() });
-    }
-    for(const email of toRemove){
-      await deleteDoc(doc(db,"visitor_target_officers", email));
-    }
-    msgEl.textContent = "保存しました。";
-    msgEl.style.color = "var(--muted)";
-  }catch(e){
-    msgEl.textContent = "保存に失敗しました。権限をご確認ください。";
-    msgEl.style.color = "var(--danger)";
-  }
-});
 function initVisitorCleanupSettingsListener(){
   onSnapshot(doc(db,"app_settings","visitor_cleanup"), snap=>{
     const days = (snap.exists() && snap.data().days) ? snap.data().days : 14;
@@ -5350,7 +5289,6 @@ function initEmployeesListener(){
     renderWbEditors(lastWbEditorEmails);
     renderCalendarEditors(lastCalEditorEmails);
     renderNoticesAdminTable(noticesAllAdmin);
-    renderVisitorTargetOfficerChecks();
   });
 }
 function departmentSortIndex(id){
