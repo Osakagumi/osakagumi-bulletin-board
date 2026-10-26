@@ -500,6 +500,10 @@ try{
   document.addEventListener("visibilitychange", ()=>{
     if(document.visibilityState !== "hidden"){ lastInputAt = Date.now(); idleResumeAll(); }
   });
+  // 前面の別ウィンドウが閉じる・最小化されて、このウィンドウが繰り上がって前面になった場合
+  // （ブラウザが「表のまま」と判定していて visibilitychange が出ないとき）も、フォーカスで再開する
+  window.addEventListener("focus", ()=>{ if(idleSuspended){ lastInputAt = Date.now(); idleResumeAll(); } });
+  window.addEventListener("pageshow", ()=>{ if(idleSuspended){ lastInputAt = Date.now(); idleResumeAll(); } });
   setInterval(()=>{
     if(idleExempt || idleSuspended) return;
     if(Date.now() - lastInputAt >= idleKeepMin * 60000) idleSuspendAll();
