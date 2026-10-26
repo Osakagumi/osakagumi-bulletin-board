@@ -2025,7 +2025,7 @@ import {
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
   collection, doc, getDoc, getDocs, setDoc, updateDoc, addDoc, deleteDoc, query, where,
-  onSnapshot, orderBy, limit, documentId, arrayUnion, arrayRemove, Timestamp, FieldPath, serverTimestamp
+  onSnapshot, orderBy, limit, documentId, arrayUnion, arrayRemove, Timestamp, FieldPath, serverTimestamp, configureIdle
 } from "./fs-counter.js";
 import {
   getDatabase, ref as rtdbRef, set as rtdbSet, onValue as rtdbOnValue, onDisconnect as rtdbOnDisconnect,
@@ -2215,6 +2215,8 @@ if(reserveSignageEquipmentId){
   document.body.classList.add("reserve-signage-mode");
 }
 let signageTodayOnly = false;
+// 無操作時の購読停止（fs-counter.js）：サイネージ表示（行き先・予約）は対象外。共用アカウントはログイン後に判定する
+if(isDisplayMode || reserveSignageEquipmentId) configureIdle({ exempt:true });
 
 /* ---------- お知らせ掲示板モード（共用アカウント専用端末） ----------
    URLではなく、ログインした本人が「共用アカウント」（isSharedAccount）かどうかで判定する。
@@ -2407,6 +2409,8 @@ function initSingleSessionGuard(){
   if(!rtdb || isSharedAccount) return; // RTDB未設定時・共用アカウントは対象外
   if(singleSessionGuardSettingUnsub) return; // 既に監視中なら何もしない
   singleSessionGuardSettingUnsub = onSnapshot(doc(db,"app_settings","single_session_guard"), snap=>{
+    // 同じドキュメントに「アクティブ表示維持の時間（分）」も置いている（追加の読み取りを増やさないため）
+    configureIdle({ minutes: snap.exists() ? snap.data().activeKeepMin : undefined });
     const enabled = snap.exists() ? (snap.data().enabled !== false) : true; // 未設定時は既定で有効
     if(enabled){
       startSingleSessionGuard();
@@ -2889,6 +2893,7 @@ onAuthStateChanged(auth, async (user)=>{
     }
     isBizInfoManager = !!(bizInfoManagerSnap && !bizInfoManagerSnap.empty);
     isSharedAccount = !!meData?.isSharedAccount;
+    configureIdle({ exempt: isSharedAccount || isDisplayMode || !!reserveSignageEquipmentId });
     document.getElementById("admin-link").style.display =
       (isAdmin || isPoster || isWhereaboutsEditor || isEquipmentManager || isCalendarEditor || isContractEditor || isBizInfoManager)
         ? "inline-block" : "none";

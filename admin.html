@@ -1234,6 +1234,17 @@
           <div id="single-session-guard-save-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px;"></div>
         </div>
 
+        <!-- アクティブ表示維持の時間（無操作でFirestore購読を一時停止するまでの分数。app_settings/single_session_guard に同居） -->
+        <div class="panel" style="margin:0;">
+          <h2>アクティブ表示維持の時間</h2>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <input type="number" id="active-keep-min" min="1" max="1440" step="1" style="width:90px;">
+            <span style="font-size:13px;">分</span>
+            <button class="btn btn-primary" id="active-keep-save-btn">保存</button>
+          </div>
+          <div id="active-keep-save-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px;"></div>
+        </div>
+
         <!-- 操作ログ（トライアル期間の診断用。2026年10月） -->
         <div class="panel" style="margin:0;">
           <h2>操作ログ</h2>
@@ -1533,7 +1544,7 @@ import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
   collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, setDoc,
   query, where, onSnapshot, orderBy, limit, Timestamp, arrayUnion, arrayRemove, deleteField,
-  getCountFromServer, documentId
+  getCountFromServer, documentId, configureIdle
 } from "./fs-counter.js";
 import { firebaseConfig, CATEGORIES as SEED_CATEGORIES, EQUIPMENT_STATUSES } from "./firebase-config.js";
 import { initStorageHelper, uploadFileToStorage, deleteFileFromStorage, fetchStorageInfo, isStorageConfigured, autoGetState, autoSaveConfig } from "./storage-helper.js";
@@ -3749,8 +3760,30 @@ function initSingleSessionGuardSettingListener(){
     const data = snap.exists() ? snap.data() : {};
     const enabledInput = document.getElementById("single-session-guard-enabled");
     if(enabledInput) enabledInput.checked = data.enabled !== false; // 未設定時は既定で有効
+    const keepInput = document.getElementById("active-keep-min");
+    const km = Number(data.activeKeepMin);
+    const kmValid = isFinite(km) && km >= 1 && km <= 1440;
+    if(keepInput && document.activeElement !== keepInput) keepInput.value = kmValid ? String(Math.floor(km)) : "30"; // 未設定時は既定30分
+    configureIdle({ minutes: kmValid ? km : undefined });
   }, (err)=>{ console.error("[同時ログイン制限設定取得エラー]", err); });
 }
+document.getElementById("active-keep-save-btn")?.addEventListener("click", async ()=>{
+  const msgEl = document.getElementById("active-keep-save-msg");
+  const v = Number(document.getElementById("active-keep-min").value);
+  if(!isFinite(v) || Math.floor(v) !== v || v < 1 || v > 1440){
+    msgEl.textContent = "1以上1440以下の整数で入力してください。";
+    msgEl.style.color = "var(--danger)";
+    return;
+  }
+  try{
+    await setDoc(doc(db,"app_settings","single_session_guard"), { activeKeepMin: v }, { merge:true });
+    msgEl.textContent = "保存しました。";
+    msgEl.style.color = "var(--muted)";
+  }catch(e){
+    msgEl.textContent = "保存に失敗しました。権限をご確認ください。";
+    msgEl.style.color = "var(--danger)";
+  }
+});
 document.getElementById("single-session-guard-save-btn")?.addEventListener("click", async ()=>{
   const msgEl = document.getElementById("single-session-guard-save-msg");
   const enabled = document.getElementById("single-session-guard-enabled").checked;

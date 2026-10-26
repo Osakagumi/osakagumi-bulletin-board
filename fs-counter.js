@@ -105,7 +105,7 @@
    ・修正1：ログON判定が届く前に来る「起動直後のlisten行」が失われていた → 判定が届くまで保留し、ONなら送る。
    ・修正2：__fs.reset() が logPrev を消さないため、ログに負の差分行が出た → logPrev も初期化する。
    ========================================================= */
-const FS_COUNTER_VERSION = "v3.4 2026-10-22";
+const FS_COUNTER_VERSION = "v3.5 2026-10-26";
 import * as FS from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 export * from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
@@ -388,15 +388,123 @@ export function onSnapshot(ref, ...args){
       a[1] = Object.assign({}, obs, { next: cb });
     }
   }catch(e){ /* ラップに失敗したら、元の引数のまま本物を呼ぶ */ liveSizes.delete(lid); return FS.onSnapshot(ref, ...args); }
-  const unsub = FS.onSnapshot(ref, ...a);
+  // v3.5: 画面が長時間「裏」にある間は購読を解除し、表に戻ったら同じ引数で張り直す（下の「放置時の購読停止」）
+  const handle = { suspended: false, dead: false };
+  let cur = null;
+  if(idleSuspended){
+    // 停止中に新しく作られた購読は、表に戻るまで実際には開始しない
+    handle.suspended = true;
+    cur = ()=>{};
+    try{ const e0 = liveSizes.get(lid); if(e0) e0.suspended = true; }catch(e){}
+  } else {
+    cur = FS.onSnapshot(ref, ...a);
+  }
   const wrapped = ()=>{
+    handle.dead = true;
+    idleHandles.delete(handle);
     liveUnsubs.delete(wrapped);
     try{ const ent = liveSizes.get(lid); if(ent) logListenEnd(ent); }catch(e){}
-    liveSizes.delete(lid); unsub();
+    liveSizes.delete(lid);
+    try{ cur(); }catch(e){}
   };
+  handle.suspend = ()=>{
+    if(handle.suspended || handle.dead) return;
+    handle.suspended = true;
+    try{ cur(); }catch(e){}
+    try{ const ent = liveSizes.get(lid); if(ent) ent.suspended = true; }catch(e){}
+  };
+  handle.resume = ()=>{
+    if(!handle.suspended || handle.dead || breakerTripped) return;
+    handle.suspended = false;
+    try{ const ent = liveSizes.get(lid); if(ent){ ent.suspended = false; ent.initDone = false; } }catch(e){}
+    cur = FS.onSnapshot(ref, ...a);
+  };
+  idleHandles.add(handle);
   liveUnsubs.add(wrapped);
   return wrapped;
 }
+
+/* =========================================================
+   v3.5  無操作時の購読停止（読み取り削減）
+   画面を操作しない状態が IDLE 分（既定30分。システム管理「アクティブ表示維持の時間」で変更可）続いたら、
+   全ての onSnapshot 購読を解除し、表に出ている場合は「一時停止中」の覆いを出す。
+   クリック・キー操作・タッチ（または裏のタブが表に戻る）で、同じ引数で全て張り直す。
+   理由：Firestoreは、30分を超えて切断された購読を再接続すると、購読中の結果を丸ごと再課金する。
+         放置されたタブは約55分ごとに再接続しており、これが読み取りの大きな増加要因と見られる。
+   対象外：共用アカウント、サイネージ表示（行き先 ?display=1、予約 ?reserveSignage=）。
+           index.html が configureIdle({ exempt:true }) で知らせる。
+   ========================================================= */
+let idleKeepMin = 30;
+let idleExempt = false;
+const idleHandles = new Set();
+let idleSuspended = false;
+let lastInputAt = Date.now();
+let idleOverlayEl = null;
+export function configureIdle(opts){
+  try{
+    opts = opts || {};
+    const m = Number(opts.minutes);
+    if(isFinite(m) && m >= 1 && m <= 1440) idleKeepMin = Math.floor(m);
+    if(typeof opts.exempt === "boolean" && opts.exempt !== idleExempt){
+      idleExempt = opts.exempt;
+      if(idleExempt) idleResumeAll();
+      else lastInputAt = Date.now();
+    }
+  }catch(e){}
+}
+function idleNote(msg){
+  try{ if(typeof console !== "undefined") console.info("[FS] " + msg); }catch(e){}
+  try{ if(logCfg && logEnabled) logPush({ t: Date.now(), type: "env", tab: logCurrentTab(), coll: "無操作時の購読停止", path: msg, caller: "" }); }catch(e){}
+}
+function idleShowOverlay(){
+  try{
+    if(idleOverlayEl || !document.body) return;
+    const d = document.createElement("div");
+    d.id = "idle-suspend-overlay";
+    d.style.cssText = "position:fixed;inset:0;z-index:2147483000;background:rgba(15,23,42,.88);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;font-family:inherit;text-align:center;cursor:pointer;";
+    d.innerHTML = '<div style="font-size:22px;font-weight:700;">操作がないため一時停止しています</div><div style="font-size:14px;opacity:.85;">クリックまたはキー操作で再開します</div>';
+    document.body.appendChild(d);
+    idleOverlayEl = d;
+  }catch(e){}
+}
+function idleHideOverlay(){
+  try{ if(idleOverlayEl){ idleOverlayEl.remove(); idleOverlayEl = null; } }catch(e){}
+}
+function idleSuspendAll(){
+  if(idleSuspended || breakerTripped || idleExempt) return;
+  idleSuspended = true;
+  let n = 0;
+  idleHandles.forEach(h=>{ if(!h.suspended && !h.dead){ h.suspend(); n++; } });
+  if(document.visibilityState !== "hidden") idleShowOverlay();
+  idleNote(`無操作${idleKeepMin}分：購読${n}件を解除`);
+}
+function idleResumeAll(){
+  idleHideOverlay();
+  if(!idleSuspended) return;
+  idleSuspended = false;
+  lastInputAt = Date.now();
+  let n = 0;
+  Array.from(idleHandles).forEach(h=>{ if(h.suspended && !h.dead){ h.resume(); n++; } });
+  idleNote(`再開：購読${n}件`);
+}
+try{
+  const act = ()=>{ lastInputAt = Date.now(); };
+  ["pointermove","scroll"].forEach(t=> window.addEventListener(t, act, { capture:true, passive:true }));
+  ["pointerdown","keydown","wheel","touchstart"].forEach(t=> window.addEventListener(t, (ev)=>{
+    lastInputAt = Date.now();
+    if(idleSuspended && (!ev || ev.isTrusted !== false)){
+      if(idleOverlayEl && ev && typeof ev.preventDefault === "function" && t !== "wheel" && t !== "touchstart") { try{ ev.preventDefault(); ev.stopPropagation(); }catch(e){} }
+      idleResumeAll();
+    }
+  }, { capture:true, passive:false }));
+  document.addEventListener("visibilitychange", ()=>{
+    if(document.visibilityState !== "hidden"){ lastInputAt = Date.now(); idleResumeAll(); }
+  });
+  setInterval(()=>{
+    if(idleExempt || idleSuspended) return;
+    if(Date.now() - lastInputAt >= idleKeepMin * 60000) idleSuspendAll();
+  }, 20000);
+}catch(e){}
 
 /* ---------- 書き込み系 ---------- */
 export async function setDoc(ref, ...rest){ breakerGuard(); addWrite(labelOf(ref), "set", ref); return FS.setDoc(ref, ...rest); }
@@ -622,6 +730,7 @@ function estimateReconnect(gapSec){
   try{
     let total = 0;
     liveSizes.forEach(ent=>{
+      if(ent.suspended) return;   // v3.5: 解除中の購読は再接続しないので加算しない
       const n = Math.max(ent.size || 0, 1);
       estStats[ent.label] = (estStats[ent.label] || 0) + n;
       total += n;
