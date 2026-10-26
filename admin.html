@@ -189,7 +189,9 @@
      （権限設定マトリクス・タブ設定マトリクスは既に専用の枠で横スクロールに対応済みのため、
      　ここでは対象外にする）。通常の折り返し（wrap）自体は残すので、タイトルや備考など
      長めの文章が入る列は、複数行に収まる形で読める（横に間延びしすぎない）。 */
-  .sysgrid-2col{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;}
+  /* システム管理：カードを縦に詰めて並べる（2列。上から順に左→右の列へ流れる。縦の間隔は小さく） */
+  .sysgrid-2col{column-count:2;column-gap:16px;}
+  .sysgrid-2col > .panel{break-inside:avoid;-webkit-column-break-inside:avoid;display:block;margin:0 0 10px !important;}
 
   @media (max-width:720px){
     table:not(.perm-matrix-table){
@@ -253,7 +255,7 @@
     /* システム管理の2×2カードも、スマホでは1列に積む
       （ドライブ空き容量→タブON/OFF設定→一般画面デフォルトタブ順→管理画面デフォルトタブ順の順） */
     .sysgrid-2col{
-      grid-template-columns:1fr;
+      column-count:1;
     }
   }
   .tag{font-size:10.5px;font-weight:700;color:#fff;padding:2px 7px;border-radius:4px;font-family:var(--mono);white-space:nowrap;display:inline-block;}
