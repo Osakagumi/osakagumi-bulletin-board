@@ -336,7 +336,56 @@
     <!-- ============ 設備管理 ============ -->
     <section id="view-equipment">
       <div class="panel">
-        <h2 id="cat-form-title">カテゴリを追加</h2>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;">
+          <h2 style="margin:0;">カテゴリ</h2>
+          <button class="btn btn-primary" id="cat-add-btn">カテゴリを追加</button>
+        </div>
+        <!-- <p style="font-size:12px;color:var(--muted);margin:10px 0 0;">一覧の左端（⠿）をドラッグすると並び順を変更できます。</p> -->
+        <table style="margin-top:10px;">
+          <thead><tr><th></th><th>カテゴリ名</th><th>色</th><th>方式</th><th>操作</th></tr></thead>
+          <tbody id="cat-table-body"></tbody>
+        </table>
+      </div>
+
+      <div class="panel">
+        <h2>登録済み設備一覧</h2>
+        <!-- <p style="font-size:12px;color:var(--muted);margin:-6px 0 10px;">左端（⠿）をドラッグすると並び順を変更できます。</p> -->
+        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+          <button class="btn btn-primary" id="eq-add-btn">設備を追加</button>
+          <button class="btn btn-ghost" id="eqimport-open-btn" style="border:1px solid var(--line);">インポート</button>
+          <button class="btn btn-ghost" id="eq-export-btn" style="border:1px solid var(--line);">エクスポート</button>
+        </div>
+        <input type="file" id="eqimport-file" accept=".csv,text/csv" style="display:none;">
+        <table>
+          <thead><tr><th></th><th>設備名</th><th>管理番号</th><th>カテゴリ</th><th>管理部門</th><th>備考</th><th>表示設定</th><th>貸出状況</th><th>サイネージ</th><th>操作</th></tr></thead>
+          <tbody id="eq-table-body"></tbody>
+        </table>
+      </div>
+
+      <!--
+      <div class="panel">
+        <h2>設備をCSVで一括登録</h2>
+        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
+          1行目はヘッダー行として無視されます。2行目以降を1件ずつ登録します。<br>
+          列の順番：<b>設備名, 管理番号, カテゴリ名, 管理部門名, 備考, 表示順, 総数, 単価</b><br>
+          必須は「設備名」「カテゴリ名」のみで、他は省略可です。<br>
+          カテゴリ名・管理部門名は、それぞれ既に登録済みの名称をそのまま入力してください（一致しない場合、カテゴリ未指定の行は登録されず、管理部門は未設定として登録されます）。<br>
+          「総数」「単価」は、カテゴリの方式が「在庫数管理」の場合のみ使われます（それ以外のカテゴリでは無視されます）。
+        </p>
+        <div class="field full" style="margin-bottom:12px;">
+          <label>サンプル</label>
+          <pre style="background:#F7F8FA;border:1px solid var(--line);border-radius:7px;padding:10px 12px;font-size:12px;overflow-x:auto;">設備名,管理番号,カテゴリ名,管理部門名,備考,表示順,総数,単価
+トータルステーション,ST-001,測量機器,工務部,,10,,
+敷鉄板6m,,敷鉄板,工務部,,20,50,3000</pre>
+        </div>
+      </div>
+      -->
+    </section>
+
+    <!-- ============ カテゴリ追加・編集モーダル ============ -->
+    <div class="modal-overlay" id="cat-modal">
+      <div class="modal" style="max-width:560px;">
+        <h3 id="cat-form-title">カテゴリを追加</h3>
         <div class="form-grid">
           <div class="field">
             <label>カテゴリ名</label>
@@ -359,17 +408,17 @@
             <label style="margin:0;font-size:12.5px;color:var(--text);">件名入力を受け付ける</label>
           </div>
         </div>
-        <button class="btn btn-primary" id="cat-save-btn">追加</button>
-        <button class="btn btn-ghost" id="cat-cancel-edit" style="display:none;">編集をやめる</button>
-        <!-- <p style="font-size:12px;color:var(--muted);margin:10px 0 0;">一覧の左端（⠿）をドラッグすると並び順を変更できます。</p> -->
-        <table style="margin-top:10px;">
-          <thead><tr><th></th><th>カテゴリ名</th><th>色</th><th>方式</th><th>操作</th></tr></thead>
-          <tbody id="cat-table-body"></tbody>
-        </table>
+        <div class="modal-actions">
+          <button class="btn-ghost" id="cat-cancel-edit" style="border:1px solid var(--line);">キャンセル</button>
+          <button class="btn-primary" id="cat-save-btn">保存</button>
+        </div>
       </div>
+    </div>
 
-      <div class="panel">
-        <h2 id="eq-form-title">設備を追加</h2>
+    <!-- ============ 設備追加・編集モーダル ============ -->
+    <div class="modal-overlay" id="eq-modal">
+      <div class="modal" style="max-width:640px;max-height:90vh;overflow:auto;">
+        <h3 id="eq-form-title">設備を追加</h3>
         <div class="form-grid">
           <div class="field">
             <label>設備名</label>
@@ -415,43 +464,108 @@
             <label style="margin:0;font-size:12.5px;color:var(--text);">サイネージモードを使用する</label>
           </div>
         </div>
-        <button class="btn btn-primary" id="eq-save-btn">追加</button>
-        <button class="btn btn-ghost" id="eq-cancel-edit" style="display:none;">編集をやめる</button>
-      </div>
-
-      <div class="panel">
-        <h2>登録済み設備一覧</h2>
-        <!-- <p style="font-size:12px;color:var(--muted);margin:-6px 0 10px;">左端（⠿）をドラッグすると並び順を変更できます。</p> -->
-        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
-          <button class="btn btn-ghost" id="eqimport-open-btn" style="border:1px solid var(--line);">インポート</button>
-          <button class="btn btn-ghost" id="eq-export-btn" style="border:1px solid var(--line);">エクスポート</button>
-        </div>
-        <input type="file" id="eqimport-file" accept=".csv,text/csv" style="display:none;">
-        <table>
-          <thead><tr><th></th><th>設備名</th><th>管理番号</th><th>カテゴリ</th><th>管理部門</th><th>備考</th><th>表示設定</th><th>貸出状況</th><th>サイネージ</th><th>操作</th></tr></thead>
-          <tbody id="eq-table-body"></tbody>
-        </table>
-      </div>
-
-      <!--
-      <div class="panel">
-        <h2>設備をCSVで一括登録</h2>
-        <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-          1行目はヘッダー行として無視されます。2行目以降を1件ずつ登録します。<br>
-          列の順番：<b>設備名, 管理番号, カテゴリ名, 管理部門名, 備考, 表示順, 総数, 単価</b><br>
-          必須は「設備名」「カテゴリ名」のみで、他は省略可です。<br>
-          カテゴリ名・管理部門名は、それぞれ既に登録済みの名称をそのまま入力してください（一致しない場合、カテゴリ未指定の行は登録されず、管理部門は未設定として登録されます）。<br>
-          「総数」「単価」は、カテゴリの方式が「在庫数管理」の場合のみ使われます（それ以外のカテゴリでは無視されます）。
-        </p>
-        <div class="field full" style="margin-bottom:12px;">
-          <label>サンプル</label>
-          <pre style="background:#F7F8FA;border:1px solid var(--line);border-radius:7px;padding:10px 12px;font-size:12px;overflow-x:auto;">設備名,管理番号,カテゴリ名,管理部門名,備考,表示順,総数,単価
-トータルステーション,ST-001,測量機器,工務部,,10,,
-敷鉄板6m,,敷鉄板,工務部,,20,50,3000</pre>
+        <div class="modal-actions">
+          <button class="btn-ghost" id="eq-cancel-edit" style="border:1px solid var(--line);">キャンセル</button>
+          <button class="btn-primary" id="eq-save-btn">保存</button>
         </div>
       </div>
-      -->
-    </section>
+    </div>
+
+    <!-- ============ 部署追加・編集モーダル ============ -->
+    <div class="modal-overlay" id="dept-modal">
+      <div class="modal" style="max-width:420px;">
+        <h3 id="dept-form-title">部署を追加</h3>
+        <div class="form-grid">
+          <div class="field full">
+            <label>部署名</label>
+            <input type="text" id="dept-name" placeholder="例）工務部">
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn-ghost" id="dept-cancel-edit" style="border:1px solid var(--line);">キャンセル</button>
+          <button class="btn-primary" id="dept-save-btn">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 業務情報カテゴリ追加・編集モーダル ============ -->
+    <div class="modal-overlay" id="bizinfo-cat-modal">
+      <div class="modal" style="max-width:420px;">
+        <h3 id="bizinfo-cat-form-title">カテゴリを追加</h3>
+        <div class="form-grid">
+          <div class="field full">
+            <label>カテゴリ名</label>
+            <input type="text" id="bizinfo-cat-label" placeholder="例）現場関連">
+          </div>
+          <div class="field">
+            <label>色</label>
+            <input type="color" id="bizinfo-cat-color" value="#2E9E8F" style="width:60px;padding:2px;">
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn-ghost" id="bizinfo-cat-cancel-edit" style="border:1px solid var(--line);">キャンセル</button>
+          <button class="btn-primary" id="bizinfo-cat-save-btn">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 社員1件登録モーダル ============ -->
+    <div class="modal-overlay" id="single-emp-modal">
+      <div class="modal" style="max-width:640px;max-height:90vh;overflow:auto;">
+        <h3>社員を1件登録</h3>
+        <div class="form-grid">
+        <div class="field">
+          <label>社員番号</label>
+          <input type="text" id="single-emp-no">
+        </div>
+        <div class="field">
+          <label>氏名</label>
+          <input type="text" id="single-emp-name">
+        </div>
+        <div class="field">
+          <label>所属</label>
+          <div id="single-emp-dept-checks" style="display:flex;flex-wrap:wrap;gap:10px;border:1px solid var(--line);border-radius:8px;padding:10px;max-height:150px;overflow-y:auto;"></div>
+        </div>
+        <div class="field">
+          <label>メールアドレス <span style="color:var(--danger);">*</span></label>
+          <input type="email" id="single-emp-email" placeholder="you@osakagumi.co.jp">
+        </div>
+        <div class="field">
+          <label>パスワード <span style="color:var(--danger);">*</span></label>
+          <input type="text" id="single-emp-password" placeholder="6文字以上">
+        </div>
+        <div class="field">
+          <label>電話番号</label>
+          <input type="text" id="single-emp-phone">
+        </div>
+        <div class="field full">
+          <label>備考</label>
+          <div class="field-with-clear">
+            <input type="text" id="single-emp-memo">
+            <span class="field-clear-x" id="single-emp-memo-clear-x" title="クリア">✕</span>
+          </div>
+        </div>
+        <div class="field full">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="checkbox" id="single-emp-shared-account-check" style="width:auto;">
+            共用アカウント
+          </label>
+          <!-- <p style="font-size:11px;color:var(--muted);margin:4px 0 0;">
+            チェックすると、お知らせの既読対象・行き先の表示対象・チャットの相手選択から除外されます。
+          </p> -->
+        </div>
+        <div class="field full">
+          <label>権限</label>
+          <div id="single-emp-permissions-checks" style="display:flex;flex-direction:column;gap:8px;border:1px solid var(--line);border-radius:8px;padding:10px;"></div>
+        </div>
+      </div>
+        <div id="single-emp-status" style="font-size:12.5px;color:var(--muted);margin-top:10px;white-space:pre-line;"></div>
+        <div class="modal-actions">
+          <button class="btn-ghost" id="single-emp-cancel-btn" style="border:1px solid var(--line);">キャンセル</button>
+          <button class="btn-primary" id="single-emp-register-btn">登録</button>
+        </div>
+      </div>
+    </div>
 
     <!-- ============ 設備CSVインポート：内容確認モーダル ============ -->
     <div class="modal-overlay" id="eqimport-modal">
@@ -553,15 +667,10 @@
     <!-- ============ ユーザー登録（CSV一括） ============ -->
     <section id="view-userimport" style="display:none;">
       <div class="panel">
-        <h2>所属（部署）</h2>
-        <div class="form-grid">
-          <div class="field">
-            <label>部署名</label>
-            <input type="text" id="dept-name" placeholder="例）工務部">
-          </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;">
+          <h2 style="margin:0;">所属（部署）</h2>
+          <button class="btn btn-primary" id="dept-add-btn">部署を追加</button>
         </div>
-        <button class="btn btn-primary" id="dept-save-btn">追加</button>
-        <button class="btn btn-ghost" id="dept-cancel-edit" style="display:none;">編集をやめる</button>
         <!-- <p style="font-size:12px;color:var(--muted);margin:10px 0 0;">一覧の左端（⠿）をドラッグすると並び順を変更できます。</p> -->
         <table style="margin-top:10px;">
           <thead><tr><th></th><th>部署名</th><th>操作</th></tr></thead>
@@ -570,58 +679,10 @@
       </div>
 
       <div class="panel">
-        <h2>社員を1件登録</h2>
-        <!-- <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-          この画面から1人ずつログインアカウントを作成できます。メールアドレス・パスワードは必須、他は省略可です。所属は複数選択できます。
-        </p> -->
-        <div class="form-grid">
-          <div class="field">
-            <label>社員番号</label>
-            <input type="text" id="single-emp-no">
-          </div>
-          <div class="field">
-            <label>氏名</label>
-            <input type="text" id="single-emp-name">
-          </div>
-          <div class="field">
-            <label>所属</label>
-            <div id="single-emp-dept-checks" style="display:flex;flex-wrap:wrap;gap:10px;border:1px solid var(--line);border-radius:8px;padding:10px;max-height:150px;overflow-y:auto;"></div>
-          </div>
-          <div class="field">
-            <label>メールアドレス <span style="color:var(--danger);">*</span></label>
-            <input type="email" id="single-emp-email" placeholder="you@osakagumi.co.jp">
-          </div>
-          <div class="field">
-            <label>パスワード <span style="color:var(--danger);">*</span></label>
-            <input type="text" id="single-emp-password" placeholder="6文字以上">
-          </div>
-          <div class="field">
-            <label>電話番号</label>
-            <input type="text" id="single-emp-phone">
-          </div>
-          <div class="field full">
-            <label>備考</label>
-            <div class="field-with-clear">
-              <input type="text" id="single-emp-memo">
-              <span class="field-clear-x" id="single-emp-memo-clear-x" title="クリア">✕</span>
-            </div>
-          </div>
-          <div class="field full">
-            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-              <input type="checkbox" id="single-emp-shared-account-check" style="width:auto;">
-              共用アカウント
-            </label>
-            <!-- <p style="font-size:11px;color:var(--muted);margin:4px 0 0;">
-              チェックすると、お知らせの既読対象・行き先の表示対象・チャットの相手選択から除外されます。
-            </p> -->
-          </div>
-          <div class="field full">
-            <label>権限</label>
-            <div id="single-emp-permissions-checks" style="display:flex;flex-direction:column;gap:8px;border:1px solid var(--line);border-radius:8px;padding:10px;"></div>
-          </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+          <h2 style="margin:0;">社員を1件登録</h2>
+          <button class="btn btn-primary" id="single-emp-add-btn">社員を追加</button>
         </div>
-        <button class="btn btn-primary" id="single-emp-register-btn">登録</button>
-        <div id="single-emp-status" style="font-size:12.5px;color:var(--muted);margin-top:10px;white-space:pre-line;"></div>
       </div>
 
       <!--
@@ -996,18 +1057,9 @@
     <!-- ============ 業務情報管理 ============ -->
     <section id="view-bizinfo" style="display:none;">
       <div class="panel" id="bizinfo-cat-panel">
-        <h2>業務情報のカテゴリ管理</h2>
-        <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px;">
-          <div class="field" style="margin:0;">
-            <label id="bizinfo-cat-form-title">カテゴリを追加</label>
-            <input type="text" id="bizinfo-cat-label" placeholder="例）現場関連" style="width:200px;">
-          </div>
-          <div class="field" style="margin:0;">
-            <label>色</label>
-            <input type="color" id="bizinfo-cat-color" value="#2E9E8F" style="width:60px;padding:2px;">
-          </div>
-          <button class="btn btn-primary" id="bizinfo-cat-save-btn">追加</button>
-          <button class="btn btn-ghost" id="bizinfo-cat-cancel-edit" style="border:1px solid var(--line);display:none;">キャンセル</button>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;">
+          <h2 style="margin:0;">業務情報のカテゴリ管理</h2>
+          <button class="btn btn-primary" id="bizinfo-cat-add-btn">カテゴリを追加</button>
         </div>
         <table>
           <thead><tr><th></th><th>カテゴリ名</th><th>操作</th></tr></thead>
@@ -1742,9 +1794,7 @@ function startEditCategory(c){
   document.getElementById("cat-mode").value = c.mode || "timeline";
   applyCategoryFormModeUI();
   document.getElementById("cat-accepts-subject").checked = c.acceptsSubject === true;
-  document.getElementById("cat-save-btn").textContent = "変更を保存";
-  document.getElementById("cat-cancel-edit").style.display = "inline-block";
-  window.scrollTo({top:0, behavior:"smooth"});
+  document.getElementById("cat-modal").classList.add("show");
 }
 function resetCategoryForm(){
   editingCategoryId = null;
@@ -1754,9 +1804,12 @@ function resetCategoryForm(){
   document.getElementById("cat-mode").value = "timeline";
   document.getElementById("cat-accepts-subject").checked = false;
   applyCategoryFormModeUI();
-  document.getElementById("cat-save-btn").textContent = "追加";
-  document.getElementById("cat-cancel-edit").style.display = "none";
+  document.getElementById("cat-modal").classList.remove("show");
 }
+document.getElementById("cat-add-btn").addEventListener("click", ()=>{
+  resetCategoryForm();
+  document.getElementById("cat-modal").classList.add("show");
+});
 applyCategoryFormModeUI();
 document.getElementById("cat-cancel-edit").addEventListener("click", resetCategoryForm);
 document.getElementById("cat-save-btn").addEventListener("click", async ()=>{
@@ -2336,10 +2389,7 @@ function startEditEquipment(eq){
   document.getElementById("eq-total-count").value = eq.totalCount ?? "";
   document.getElementById("eq-unit-price").value = eq.unitPricePerDay ?? "";
   applyEquipmentFormModeUI();
-  document.getElementById("eq-save-btn").textContent = "変更を保存";
-  document.getElementById("eq-cancel-edit").style.display = "inline-block";
-  // フォームの表示項目が全部切り替わり終わってから（レイアウトが確定してから）スクロールする
-  scrollToEquipmentFormTop();
+  document.getElementById("eq-modal").classList.add("show");
 }
 
 document.getElementById("eq-cancel-edit").addEventListener("click", resetEquipmentForm);
@@ -2361,9 +2411,12 @@ function resetEquipmentForm(){
   document.getElementById("eq-active").checked = true;
   applyEquipmentFormModeUI();
   document.getElementById("eq-signage").checked = false;
-  document.getElementById("eq-save-btn").textContent = "追加";
-  document.getElementById("eq-cancel-edit").style.display = "none";
+  document.getElementById("eq-modal").classList.remove("show");
 }
+document.getElementById("eq-add-btn").addEventListener("click", ()=>{
+  resetEquipmentForm();
+  document.getElementById("eq-modal").classList.add("show");
+});
 
 document.getElementById("eq-save-btn").addEventListener("click", async ()=>{
   const name = document.getElementById("eq-name").value.trim();
@@ -3215,8 +3268,8 @@ function renderDepartments(){
     editBtn.addEventListener("click", ()=>{
       editingDeptId = dep.id;
       document.getElementById("dept-name").value = dep.name;
-      document.getElementById("dept-save-btn").textContent = "変更を保存";
-      document.getElementById("dept-cancel-edit").style.display = "inline-block";
+      document.getElementById("dept-form-title").textContent = "部署を編集：" + dep.name;
+      document.getElementById("dept-modal").classList.add("show");
     });
     const delBtn = document.createElement("button");
     delBtn.className = "btn btn-danger"; delBtn.textContent = "削除";
@@ -3234,9 +3287,13 @@ document.getElementById("dept-cancel-edit").addEventListener("click", resetDeptF
 function resetDeptForm(){
   editingDeptId = null;
   document.getElementById("dept-name").value = "";
-  document.getElementById("dept-save-btn").textContent = "追加";
-  document.getElementById("dept-cancel-edit").style.display = "none";
+  document.getElementById("dept-form-title").textContent = "部署を追加";
+  document.getElementById("dept-modal").classList.remove("show");
 }
+document.getElementById("dept-add-btn").addEventListener("click", ()=>{
+  resetDeptForm();
+  document.getElementById("dept-modal").classList.add("show");
+});
 document.getElementById("dept-save-btn").addEventListener("click", async ()=>{
   const name = document.getElementById("dept-name").value.trim();
   if(!name){ toast("部署名を入力してください。"); return; }
@@ -3664,17 +3721,19 @@ function startEditBizInfoCategory(c){
   document.getElementById("bizinfo-cat-form-title").textContent = "カテゴリを編集：" + c.label;
   document.getElementById("bizinfo-cat-label").value = c.label || "";
   document.getElementById("bizinfo-cat-color").value = c.color || "#2E9E8F";
-  document.getElementById("bizinfo-cat-save-btn").textContent = "変更を保存";
-  document.getElementById("bizinfo-cat-cancel-edit").style.display = "inline-block";
+  document.getElementById("bizinfo-cat-modal").classList.add("show");
 }
 function resetBizInfoCategoryForm(){
   editingBizInfoCategoryId = null;
   document.getElementById("bizinfo-cat-form-title").textContent = "カテゴリを追加";
   document.getElementById("bizinfo-cat-label").value = "";
   document.getElementById("bizinfo-cat-color").value = "#2E9E8F";
-  document.getElementById("bizinfo-cat-save-btn").textContent = "追加";
-  document.getElementById("bizinfo-cat-cancel-edit").style.display = "none";
+  document.getElementById("bizinfo-cat-modal").classList.remove("show");
 }
+document.getElementById("bizinfo-cat-add-btn")?.addEventListener("click", ()=>{
+  resetBizInfoCategoryForm();
+  document.getElementById("bizinfo-cat-modal").classList.add("show");
+});
 document.getElementById("bizinfo-cat-cancel-edit")?.addEventListener("click", resetBizInfoCategoryForm);
 document.getElementById("bizinfo-cat-save-btn")?.addEventListener("click", async ()=>{
   const label = document.getElementById("bizinfo-cat-label").value.trim();
@@ -6290,10 +6349,23 @@ document.getElementById("single-emp-register-btn")?.addEventListener("click", as
     document.querySelectorAll(".single-emp-permission-check").forEach(cb=> cb.checked = false);
     document.getElementById("single-emp-shared-account-check").checked = false;
     document.querySelectorAll(".single-emp-dept-check").forEach(cb=> cb.checked = false);
+    // 全員追加できたらモーダルを閉じる。追加できなかった項目があるときは、結果の文を読めるように開いたままにする
+    if(cappedItems.length === 0){
+      document.getElementById("single-emp-modal").classList.remove("show");
+      statusEl.textContent = "";
+    }
   }catch(e){
     statusEl.textContent = accountResult + " ただし社員情報の登録に失敗しました：" + (e.code || e.message);
     statusEl.style.color = "var(--danger)";
   }
+});
+document.getElementById("single-emp-add-btn")?.addEventListener("click", ()=>{
+  document.getElementById("single-emp-status").textContent = "";
+  document.getElementById("single-emp-modal").classList.add("show");
+});
+document.getElementById("single-emp-cancel-btn")?.addEventListener("click", ()=>{
+  document.getElementById("single-emp-modal").classList.remove("show");
+  document.getElementById("single-emp-status").textContent = "";
 });
 document.getElementById("single-emp-memo-clear-x")?.addEventListener("click", ()=>{
   const el = document.getElementById("single-emp-memo");
