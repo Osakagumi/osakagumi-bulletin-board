@@ -554,11 +554,6 @@
   }
   .time-slot:hover{background:#F0F3F8;}
   .time-slot.selected{background:var(--brand);color:#fff;}
-  .time-manual{position:sticky;top:-6px;z-index:1;background:#fff;padding:2px 0 6px;margin:-6px -6px 4px;padding:6px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:4px;}
-  .time-manual-input{flex:1;min-width:0;border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-size:13px;font-family:var(--mono);}
-  .time-manual-ok{border:none;background:var(--brand);color:#fff;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;}
-  .time-manual-err{width:100%;font-size:11px;color:var(--danger);}
-  .time-manual-err:empty{display:none;}
 
   /* ---------- カレンダー ---------- */
   .date-nav-btn{border:1px solid var(--line);background:#fff;border-radius:6px;width:30px;height:30px;font-size:14px;}
@@ -5004,7 +4999,7 @@ document.getElementById("visitor-date-picker").addEventListener("click", (e)=>{
 document.getElementById("visitor-time-btn").addEventListener("click", (e)=>{
   const el = e.currentTarget;
   openTimePicker(el, el.dataset.value, {
-    stepMinutes: 30, minTime: "06:00", maxTime: "20:00", allowManual: true,
+    stepMinutes: 30, minTime: "06:00", maxTime: "20:00",
     onSelect: (v)=> setTimeFieldValue(el, v)
   });
 });
@@ -5017,7 +5012,7 @@ document.getElementById("visitor-enddate-picker").addEventListener("click", (e)=
 document.getElementById("visitor-endtime-btn").addEventListener("click", (e)=>{
   const el = e.currentTarget;
   openTimePicker(el, el.dataset.value, {
-    stepMinutes: 30, minTime: "06:00", maxTime: "20:00", allowManual: true,
+    stepMinutes: 30, minTime: "06:00", maxTime: "20:00",
     onSelect: (v)=> setTimeFieldValue(el, v, "未設定")
   });
 });
@@ -5314,40 +5309,6 @@ function openTimePicker(anchorEl, currentValue, opts){
   document.body.appendChild(popup);
   calendarPopupEl = popup;
 
-  // 手入力欄（opts.allowManual 指定時のみ）：10:15 や 1015、930 のように入力して Enter／「決定」で確定する
-  if(opts?.allowManual){
-    const man = document.createElement("div");
-    man.className = "time-manual";
-    const inp = document.createElement("input");
-    inp.type = "text"; inp.inputMode = "numeric"; inp.maxLength = 5; inp.autocomplete = "off";
-    inp.placeholder = "手入力 例 10:15";
-    inp.className = "time-manual-input";
-    const ok = document.createElement("button");
-    ok.type = "button"; ok.className = "time-manual-ok"; ok.textContent = "決定";
-    const err = document.createElement("div");
-    err.className = "time-manual-err";
-    const parse = (raw)=>{
-      const t = String(raw||"").trim().replace(/[：．.]/g,":").replace(/[０-９]/g, c=>String.fromCharCode(c.charCodeAt(0)-65248));
-      let h, m;
-      let mt = t.match(/^(\d{1,2}):(\d{2})$/);
-      if(mt){ h = +mt[1]; m = +mt[2]; }
-      else if((mt = t.match(/^(\d{3,4})$/))){ const n = mt[1].padStart(4,"0"); h = +n.slice(0,2); m = +n.slice(2); }
-      else return null;
-      if(h>23 || m>59) return null;
-      return `${pad2(h)}:${pad2(m)}`;
-    };
-    const commit = ()=>{
-      const v = parse(inp.value);
-      if(!v){ err.textContent = "「10:15」の形式で入力してください"; return; }
-      onSelect(v); closeCalendarPopup();
-    };
-    ok.addEventListener("click", commit);
-    inp.addEventListener("keydown", (e)=>{ if(e.key==="Enter"){ e.preventDefault(); commit(); } });
-    inp.addEventListener("input", ()=>{ err.textContent = ""; });
-    man.appendChild(inp); man.appendChild(ok); man.appendChild(err);
-    popup.appendChild(man);
-  }
-
   const list = document.createElement("div");
   list.className = "time-list";
   for(let h=0; h<24; h++){
@@ -5364,7 +5325,7 @@ function openTimePicker(anchorEl, currentValue, opts){
   }
   popup.appendChild(list);
 
-  const popupWidth = opts?.allowManual ? 176 : 140;
+  const popupWidth = 140;
   const rect = anchorEl.getBoundingClientRect();
   let left = rect.left;
   if(left + popupWidth > window.innerWidth - 8){ left = window.innerWidth - popupWidth - 8; }
