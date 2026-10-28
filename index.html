@@ -10351,14 +10351,19 @@ function initCalHolidayWindowListener(){
   }, (err)=>{ console.error("[休日判定用カレンダー取得エラー]", err); });
 }
 
-document.getElementById("cal-prev-year").addEventListener("click", ()=>{
-  calFiscalYearStart--;
+// 2026-10-28：前年度・翌年度ボタンは、管理画面で「年度作成」済みの年度（calendar_years にドキュメントがある年度）にだけ移動する。
+// 作成していない年度には移動しない（年度一覧がまだ届いていない間は従来どおり移動を許可する）。
+function moveCalYear(delta){
+  const target = calFiscalYearStart + delta;
+  if(calYearsFirstLoaded && !calYearsAll.some(y=> y.year === String(target))){
+    toast(`${target}年度のカレンダーは作成されていません。`);
+    return;
+  }
+  calFiscalYearStart = target;
   loadCalendarYear(calFiscalYearStart);
-});
-document.getElementById("cal-next-year").addEventListener("click", ()=>{
-  calFiscalYearStart++;
-  loadCalendarYear(calFiscalYearStart);
-});
+}
+document.getElementById("cal-prev-year").addEventListener("click", ()=> moveCalYear(-1));
+document.getElementById("cal-next-year").addEventListener("click", ()=> moveCalYear(1));
 function scrollToCalMonth(ym, attemptsLeft=40){
   const wrap = document.getElementById("cal-grid-wrap");
   const block = wrap && wrap.querySelector(`.cal-month-block[data-cal-ym="${ym}"]`);
@@ -10434,7 +10439,16 @@ function applyPublishedCalEdit(dateStr, dayData){
   p.catch(()=>{ try{ loadCalendarYear(calFiscalYearStart); }catch(e){} });   // 失敗時は表示を公開データに戻す
   return p;
 }
+// 2026-10-28：未作成の年度（calendar_years に無い年度）への移動ボタンをグレーアウトする。
+function updateCalNavButtons(){
+  const prev = document.getElementById("cal-prev-year"), next = document.getElementById("cal-next-year");
+  if(!prev || !next || calFiscalYearStart === null || !calYearsFirstLoaded) return;
+  const has = (y)=> calYearsAll.some(r=> r.year === String(y));
+  prev.disabled = !has(calFiscalYearStart - 1);
+  next.disabled = !has(calFiscalYearStart + 1);
+}
 function updateCalStatusUI(){
+  updateCalNavButtons();
   const status = calYearStatus(calFiscalYearStart);
   const calBadge = document.getElementById("cal-status-badge");
   if(calBadge){
