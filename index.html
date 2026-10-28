@@ -3522,15 +3522,27 @@ function renderDashboard(){
   }
 
   // ---- カレンダー（月を前後に移動できる月間カレンダー。作成済みの年度の範囲内のみ） ----
+  // 2026-10-28：移動できる範囲は、カレンダータブで開いている年度ではなく、作成済みの年度（calendar_years）全体。
+  // 表示する月の休日データが、カレンダータブの年間データに無い場合は、公開済みデータ（まとめ1件）から取る。
   const fyStart = calFiscalYearStart ?? defaultFiscalYearStart();
-  // 年度の範囲：{fyStart}年4月 〜 {fyStart+1}年3月
-  const minYm = fyStart*12 + 4;
-  const maxYm = (fyStart+1)*12 + 3;
+  const fyOfYm = (ym)=>{ const y = Math.floor((ym-1)/12), m = ym - y*12; return m >= 4 ? y : y-1; };
+  const fyCreated = (fy)=> calYearsAll.some(r=> r.year === String(fy));
+  const useCreated = calYearsFirstLoaded && calYearsAll.length > 0;
+  let minYm, maxYm;
+  if(useCreated){
+    const ys = calYearsAll.map(r=> Number(r.year)).filter(n=> n > 0);
+    minYm = Math.min(...ys)*12 + 4;
+    maxYm = (Math.max(...ys)+1)*12 + 3;
+  } else {
+    minYm = fyStart*12 + 4;
+    maxYm = (fyStart+1)*12 + 3;
+  }
   let curYm = dashCalYear*12 + dashCalMonth;
   if(curYm < minYm){ curYm = minYm; }
   if(curYm > maxYm){ curYm = maxYm; }
   dashCalYear = Math.floor((curYm-1)/12);
   dashCalMonth = curYm - dashCalYear*12;
+  ensureDashCalMonthData(dashCalYear, dashCalMonth);
 
   const calBody = document.getElementById("dash-calendar-body");
   calBody.innerHTML = "";
@@ -3541,12 +3553,35 @@ function renderDashboard(){
   }catch(e){
     calBody.innerHTML = `<div class="dash-empty">カレンダーを表示できませんでした。</div>`;
   }
-  document.getElementById("dash-cal-prev-btn").disabled = (curYm <= minYm);
-  document.getElementById("dash-cal-next-btn").disabled = (curYm >= maxYm);
+  document.getElementById("dash-cal-prev-btn").disabled = useCreated ? (curYm <= minYm || !fyCreated(fyOfYm(curYm-1))) : (curYm <= minYm);
+  document.getElementById("dash-cal-next-btn").disabled = useCreated ? (curYm >= maxYm || !fyCreated(fyOfYm(curYm+1))) : (curYm >= maxYm);
 
   // カード本文を描画し終えた（＝実際の高さが確定した）このタイミングで、個人設定が無い場合のみ
   // 左右の高さバランスを再計算する。中身の分量は都度変わりうるため、描画のたびに再適用する。
   tryApplyOrgDashCardOrder();
+}
+// ダッシュボードのミニカレンダーが表示する月の休日データを用意する。
+// カレンダータブの年間データ（calDaysData）が別の年度・未読み込みで、ログイン時の窓（今月〜来月）にも無い月だけ、
+// 公開済みデータ（年度まとめ1件。無ければその月の日別ドキュメント）から取得して dashCalExtraData に入れる。
+const dashCalExtraData = {};        // "YYYY-MM-DD" -> {isHoliday,label}
+const dashCalExtraKeys = {};        // "YYYY-MM" -> 取得時の版数（同じ版数なら取り直さない）
+function ensureDashCalMonthData(y, m){
+  const ym = `${y}-${pad2(m)}`;
+  const fy = m >= 4 ? y : y-1;
+  const hasTabData = (fy === calFiscalYearStart) && Object.keys(calDaysData).length > 0;
+  if(hasTabData) return;
+  const now = new Date();
+  const curYm = now.getFullYear()*12 + now.getMonth()+1;
+  if(y*12 + m >= curYm && y*12 + m <= curYm + 1) return;   // 今月・来月はログイン時の窓で足りる
+  if(!calYearsFirstLoaded) return;
+  const ver = String(calYearLastPublishedMillis(fy));
+  if(dashCalExtraKeys[ym] === ver) return;
+  dashCalExtraKeys[ym] = ver;                                // 取得前に記録（失敗しても繰り返さない）
+  const startId = `${ym}-01`, endId = `${ym}-${pad2(new Date(y, m, 0).getDate())}`;
+  fetchPublishedRange(startId, endId).then(data=>{
+    Object.keys(data).forEach(k=>{ dashCalExtraData[k] = data[k]; });
+    refreshDashboardIfActive();
+  }).catch(e=>{ console.error("[ダッシュボードカレンダー取得エラー]", e); });
 }
 document.getElementById("dash-cal-prev-btn").addEventListener("click", ()=>{
   dashCalMonth--;
@@ -10728,7 +10763,7 @@ function buildCalMonthBlock(y, m){
         // calDaysData（カレンダー・来客・出張タブを開くと読み込まれる年間データ）が無ければ、
         // ログイン時から常時読み込まれている直近期間のcalHolidayWindowDataにフォールバックする
         // （ダッシュボードのミニカレンダーは、タブを開かなくても最初から表示されるため）。
-        const info = calDaysData[dateStr] || calHolidayWindowData[dateStr] || {};
+        const info = calDaysData[dateStr] || calHolidayWindowData[dateStr] || dashCalExtraData[dateStr] || {};
         const isSatHolidayNote = (col===6) && info.isHoliday && !!(info.label && info.label.trim());
         const isToday = dateStr === todayStr();
         td.className = "cal-day-cell" + (info.isHoliday ? " cal-holiday" : "") + (isSatHolidayNote ? " cal-sat-holiday-note" : "") + (isToday ? " cal-today" : "") + (isCalendarEditor ? " cal-clickable" : "");
