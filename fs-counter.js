@@ -57,6 +57,10 @@
      追加の読み取りは発生しない。
    ・ログが OFF の間は、これらの行も一切送らない（従来どおり）。
 
+   【2026年10月28日 v3.6：無操作時の購読停止から、カレンダー編集中データの購読（calendar_days、約365件）を除外】
+   ・停止→再開のたびに365件が丸ごと再課金されていたため（10/26〜28のログ：ヒネの再開で約365〜458件が6回）。
+     つながったままなら、変更があった日付の分だけが課金される。それ以外の購読は、従来どおり停止・再開する。
+
    【2026年10月21日 v3.0：ログ1本化（画面のカウンタは廃止）と、取りこぼしの削減】
    ・読み書きの件数は、スプレッドシートのログだけで確認する。画面右下のカウンタ（?fscount）は廃止。
      （F12コンソールの __fs.top() / __fs.report() は残してある）
@@ -105,7 +109,7 @@
    ・修正1：ログON判定が届く前に来る「起動直後のlisten行」が失われていた → 判定が届くまで保留し、ONなら送る。
    ・修正2：__fs.reset() が logPrev を消さないため、ログに負の差分行が出た → logPrev も初期化する。
    ========================================================= */
-const FS_COUNTER_VERSION = "v3.5 2026-10-26";
+const FS_COUNTER_VERSION = "v3.6 2026-10-28";
 import * as FS from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 export * from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
@@ -367,6 +371,8 @@ function makeCb(label, orig, ref, lid){
     return orig(snap, ...r);
   };
 }
+// v3.6: 無操作時の購読停止の対象外にする購読のラベル（labelOf の結果）
+const IDLE_KEEP_LABELS = ["calendar_days [query]"];
 export function onSnapshot(ref, ...args){
   if(breakerTripped) return ()=>{};   // v2.1：自動停止中は新しい購読を開始しない
   const label = labelOf(ref);
@@ -389,9 +395,12 @@ export function onSnapshot(ref, ...args){
     }
   }catch(e){ /* ラップに失敗したら、元の引数のまま本物を呼ぶ */ liveSizes.delete(lid); return FS.onSnapshot(ref, ...args); }
   // v3.5: 画面が長時間「裏」にある間は購読を解除し、表に戻ったら同じ引数で張り直す（下の「放置時の購読停止」）
-  const handle = { suspended: false, dead: false };
+  // v3.6: 件数が多く、変更が少ない購読（編集権限者のカレンダー編集中データ、約365件）は、停止の対象にしない。
+  // 停止すると、再開は必ず「30分超の切断後」になり、365件が毎回丸ごと再課金されていた（10/26〜28のログで確認）。
+  // つながったままなら、変更された日付の分しか課金されない。
+  const handle = { suspended: false, dead: false, keep: IDLE_KEEP_LABELS.indexOf(label) !== -1 };
   let cur = null;
-  if(idleSuspended){
+  if(idleSuspended && !handle.keep){
     // 停止中に新しく作られた購読は、表に戻るまで実際には開始しない
     handle.suspended = true;
     cur = ()=>{};
@@ -408,7 +417,7 @@ export function onSnapshot(ref, ...args){
     try{ cur(); }catch(e){}
   };
   handle.suspend = ()=>{
-    if(handle.suspended || handle.dead) return;
+    if(handle.suspended || handle.dead || handle.keep) return;
     handle.suspended = true;
     try{ cur(); }catch(e){}
     try{ const ent = liveSizes.get(lid); if(ent) ent.suspended = true; }catch(e){}
@@ -474,7 +483,7 @@ function idleSuspendAll(){
   if(idleSuspended || breakerTripped || idleExempt) return;
   idleSuspended = true;
   let n = 0;
-  idleHandles.forEach(h=>{ if(!h.suspended && !h.dead){ h.suspend(); n++; } });
+  idleHandles.forEach(h=>{ if(!h.suspended && !h.dead && !h.keep){ h.suspend(); n++; } });
   if(document.visibilityState !== "hidden") idleShowOverlay();
   idleNote(`無操作${idleKeepMin}分：購読${n}件を解除`);
 }

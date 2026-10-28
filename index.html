@@ -1470,13 +1470,6 @@
               <span class="field-clear-x" id="cal-label-clear-x" title="クリア">✕</span>
             </div>
           </div>
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:8px;">
-            <input type="checkbox" id="cal-label-publish-now" style="width:auto;">
-            即時公開する
-          </label>
-          <p style="font-size:11px;color:var(--muted);margin:-4px 0 12px;">
-            チェックしない場合、この変更は「編集中」のまま保存され、通常通り「公開する」を押すまで社員には表示されません。チェックすると、この日の内容だけその場で公開されます。
-          </p>
           <div class="modal-err" id="cal-label-error"></div>
           <div class="modal-actions">
             <button class="btn-ghost" id="cal-label-cancel-btn" style="border:1px solid var(--line);">キャンセル</button>
@@ -10413,6 +10406,34 @@ function calYearStatus(year){
   if(!rec) return "published";
   return rec.status || "published";
 }
+// 2026-10-28 案B：「作成中の新年度」か。年度ドキュメントの status が "draft"（管理画面の年度作成で作られ、
+// まだ一度も「公開する」を押していない年度）、または年度ドキュメントがまだ無い年度。
+// 一度公開された年度（status が "published"、または status 無しの旧年度）は、以後ずっとこれに当たらない。
+function calYearIsInCreation(year){
+  const rec = calYearsAll.find(y=>y.year===String(year));
+  return !rec || rec.status === "draft";
+}
+// 公開済みの年度への編集（休日ON/OFF・備考）：画面に即反映し、公開データ＋年度まとめ＋版数を更新して全員へ反映する。
+// 連続操作でも互いのまとめを壊さないよう、書き込みは1件ずつ順番に行う。
+let calPublishedEditQueue = Promise.resolve();
+function applyPublishedCalEdit(dateStr, dayData){
+  calDaysData[dateStr] = { ...dayData };       // 自分の画面は待たずに更新
+  renderCalendar();
+  refreshDashboardIfActive();
+  const year = fiscalYearOfDateStr(dateStr);
+  const run = async ()=>{
+    await setDoc(doc(db,"calendar_days", dateStr), dayData);              // 編集用の原本（Excel出力・休日判定などが参照）
+    await setDoc(doc(db,"calendar_days_published", dateStr), dayData);    // 公開データ（まとめが使えない時の読み取り元）
+    const prev = calYearLastPublishedMillis(year) || 0;
+    const newVersion = Math.max(Date.now(), prev + 1);
+    await upsertCalBundleOnPublish(year, [[dateStr, dayData]], newVersion);
+    await setDoc(doc(db,"calendar_years", String(year)), { lastPublishedAt: DIET.calBundle ? Timestamp.fromMillis(newVersion) : serverTimestamp() }, { merge:true });
+  };
+  const p = calPublishedEditQueue.then(run);
+  calPublishedEditQueue = p.catch(()=>{});
+  p.catch(()=>{ try{ loadCalendarYear(calFiscalYearStart); }catch(e){} });   // 失敗時は表示を公開データに戻す
+  return p;
+}
 function updateCalStatusUI(){
   const status = calYearStatus(calFiscalYearStart);
   const calBadge = document.getElementById("cal-status-badge");
@@ -10504,6 +10525,7 @@ document.getElementById("cal-publish-btn")?.addEventListener("click", async ()=>
 // 編集操作のたびに呼び出す。対象の日付が属する年度を「編集中」に戻す（未公開の状態にする）。
 async function markCalYearAsDraft(dateStr){
   const year = fiscalYearOfDateStr(dateStr);
+  if(!calYearIsInCreation(year)) return;   // 2026-10-28 案B：公開済みの年度を「編集中」に戻すことはしない
   try{
     // pendingDates：前回の公開以降に変更があった日付の一覧。「公開する」を押した時に
     // 年度365日分をまるごと読み書きするのではなく、ここに記録された日付だけを
@@ -10511,15 +10533,23 @@ async function markCalYearAsDraft(dateStr){
     await setDoc(doc(db,"calendar_years", String(year)), { status: "draft", pendingDates: arrayUnion(dateStr) }, { merge:true });
   }catch(e){ /* 失敗しても日付データ自体の更新は別途行われているので致命的ではない */ }
 }
+let calLiveSubYear = null;
 function loadCalendarYear(year){
-  if(calDaysUnsub){ calDaysUnsub(); calDaysUnsub = null; }
+  // 2026-10-28 案B：編集権限者がライブ購読（calendar_days 365件）を使うのは「作成中の新年度」だけ。
+  // 公開済みの年度は、一般社員と同じ公開データ（年度まとめ1件＋版数キャッシュ）で読む。
+  const wantLive = isCalendarEditor && !calForcePublishedLoad;
+  if(wantLive && !calYearsFirstLoaded) return;   // 年度の状態が分かるまで待つ（届けば listener から再度呼ばれる）
+  const live = wantLive && calYearIsInCreation(year);
+  if(live && calDaysUnsub && calLiveSubYear === year){ updateCalStatusUI(); return; }  // 同じ年度を購読中なら張り直さない
+  if(calDaysUnsub){ calDaysUnsub(); calDaysUnsub = null; calLiveSubYear = null; }
   document.getElementById("cal-year-label").textContent = `${year}年度（${year}/4〜${year+1}/3）`;
   updateCalStatusUI();
   const startId = `${year}-04-01`;
   const endId = `${year+1}-03-31`;
   // 編集権限者は編集中(ライブ)のデータを見る（リアルタイム購読のまま）。
   // ただし来客・出張タブだけを開いた場合（calForcePublishedLoad）は公開済みバンドルで足りるため下の経路へ進む。
-  if(isCalendarEditor && !calForcePublishedLoad){
+  if(live){
+    calLiveSubYear = year;
     const q = query(collection(db,"calendar_days"), where(documentId(), ">=", startId), where(documentId(), "<=", endId));
     calDaysUnsub = onSnapshot(q, snap=>{
       calDaysData = {};
@@ -10540,6 +10570,7 @@ function loadCalendarYear(year){
   // ライブ購読（onSnapshot）のまま年度まるごと（最大366件）購読すると、ログイン・タブ切替の
   // たびに読み取りが発生してしまうため、ローカル保存（localStorage）＋版数マーカーによる
   // キャッシュを使い、実際に公開操作があった時だけ再取得する（loadCalendarYearFromCacheOrFetch）。
+  if(isCalendarEditor){ backfillLastPublishedAtIfMissing(year); ensureCalBundlesForEditor(); }
   loadCalendarYearFromCacheOrFetch(year, startId, endId);
 }
 // calendar_years/{year}.lastPublishedAt：公開操作のたびに更新される版数マーカー。
@@ -10726,11 +10757,13 @@ async function toggleCalHoliday(dateStr){
   if(!isCalendarEditor) return;
   const current = calDaysData[dateStr] || {};
   try{
-    await setDoc(doc(db,"calendar_days", dateStr), {
-      isHoliday: !current.isHoliday,
-      label: current.label || ""
-    });
-    await markCalYearAsDraft(dateStr);
+    const dayData = { isHoliday: !current.isHoliday, label: current.label || "" };
+    if(calYearIsInCreation(fiscalYearOfDateStr(dateStr))){
+      await setDoc(doc(db,"calendar_days", dateStr), dayData);
+      await markCalYearAsDraft(dateStr);
+    } else {
+      await applyPublishedCalEdit(dateStr, dayData);   // 公開済みの年度：その場で全員に反映
+    }
   }catch(e){
     toast("更新に失敗しました。権限をご確認ください。");
   }
@@ -10743,7 +10776,6 @@ function editCalLabel(dateStr){
   const current = calDaysData[dateStr] || {};
   document.getElementById("cal-label-modal-title").textContent = `${formatDateJP(dateStr)}の名称・備考`;
   document.getElementById("cal-label-input").value = current.label || "";
-  document.getElementById("cal-label-publish-now").checked = false;
   document.getElementById("cal-label-error").textContent = "";
   document.getElementById("cal-label-modal").classList.add("show");
 }
@@ -10760,31 +10792,18 @@ document.getElementById("cal-label-save-btn").addEventListener("click", async ()
   if(!dateStr) return;
   const current = calDaysData[dateStr] || {};
   const input = document.getElementById("cal-label-input").value;
-  const publishNow = document.getElementById("cal-label-publish-now").checked;
   try{
     const dayData = {
       isHoliday: !!current.isHoliday,
       label: input.trim()
     };
-    await setDoc(doc(db,"calendar_days", dateStr), dayData);
-    if(publishNow){
-      // この日だけ、通常の「公開する」を待たずにその場で公開スナップショットへ反映する
-      await setDoc(doc(db,"calendar_days_published", dateStr), dayData);
-      // 2026-10-13：年度まとめドキュメントにもこの1日を反映する（版数は下のlastPublishedAtと同じ値）
-      const newVersionLabel = Date.now();
-      await upsertCalBundleOnPublish(fiscalYearOfDateStr(dateStr), [[dateStr, dayData]], newVersionLabel);
-      // この日については下書きと公開版が一致した状態なので、「編集中」への変更は行わない
-      // （他に未公開の変更が残っている場合は、そちらの編集時に既に「編集中」になっているはず）。
-      // ただし、この日が既にpendingDates（未公開一覧）に入っていた場合は、公開済みになった
-      // ので取り除いておく（次回の「公開する」で再度読み書きしないようにするため）。
-      const yearForRemoval = fiscalYearOfDateStr(dateStr);
-      try{
-        // lastPublishedAtも更新する（この即時公開1日分についても、一般社員側のローカル
-        // キャッシュを無効化して再取得させる必要があるため）。
-        await setDoc(doc(db,"calendar_years", String(yearForRemoval)), { pendingDates: arrayRemove(dateStr), lastPublishedAt: DIET.calBundle ? Timestamp.fromMillis(newVersionLabel) : serverTimestamp() }, { merge:true });
-      }catch(e){ /* 失敗しても致命的ではない（次回の公開時に無駄が1日分残るだけ） */ }
-    } else {
+    if(calYearIsInCreation(fiscalYearOfDateStr(dateStr))){
+      // 作成中の新年度：従来どおり下書きへ保存し、「公開する」までは社員に表示しない
+      await setDoc(doc(db,"calendar_days", dateStr), dayData);
       await markCalYearAsDraft(dateStr);
+    } else {
+      // 公開済みの年度：その場で全員に反映する（2026-10-28 案B）
+      await applyPublishedCalEdit(dateStr, dayData);
     }
     document.getElementById("cal-label-modal").classList.remove("show");
   }catch(e){
