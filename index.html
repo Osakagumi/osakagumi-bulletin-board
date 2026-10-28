@@ -4823,13 +4823,13 @@ function renderVisitorCalendar(){
     if(isDateHolidaySync(dateStr)) head.classList.add("vcal-holiday");
     if(dateStr===today) head.classList.add("vcal-today");
     head.innerHTML = `<span class="vcal-day-num">${day}</span><span class="vcal-day-dow">(${weekdayLabels[dow]})</span>`;
-    head.title = "クリックしてこの日の来客・出張を追加";
+    head.title = `クリックしてこの日の${visitorKindLabel()}を追加`;
     head.addEventListener("click", ()=> openVisitorModal(null, dateStr));
     row.appendChild(head);
 
     const body = document.createElement("div");
     body.className = "vcal-day-body";
-    body.title = "クリックしてこの日の来客・出張を追加";
+    body.title = `クリックしてこの日の${visitorKindLabel()}を追加`;
     const dayEntries = (byDate[dateStr]||[]).slice().sort((a,b)=> ((a.v.time)||"").localeCompare((b.v.time)||""));
     if(dayEntries.length===0){
       body.innerHTML = `<div class="vcal-day-empty">予定なし</div>`;
@@ -4924,13 +4924,13 @@ function renderVisitorsTab(){
       delBtn.style.cssText = "border:1px solid var(--danger);color:var(--danger);font-size:12px;padding:4px 8px;";
       delBtn.textContent = "削除";
       delBtn.addEventListener("click", async ()=>{
-        if(!confirm(`「${v.visitorName||""}」の来客・出張を削除しますか？`)) return;
+        if(!confirm(`「${v.visitorName||""}」の${visitorKindLabel()}を削除しますか？`)) return;
         try{
           await deleteDoc(doc(db,"visitor_schedules", v.id));
           toast("削除しました。");
         }catch(e){
           if(e && e.code === "permission-denied"){
-            toast("この来客・出張を削除する権限がありません。Firestoreのセキュリティルールが最新の内容で公開されているかご確認ください。");
+            toast(`この${visitorKindLabel()}を削除する権限がありません。Firestoreのセキュリティルールが最新の内容で公開されているかご確認ください。`);
           } else {
             toast("削除に失敗しました。しばらくしてから再度お試しください。");
           }
@@ -5005,6 +5005,8 @@ document.querySelectorAll("#visitor-type-toggle .seg-btn").forEach(btn=>{
     setTimeFieldValue(timeBtn, timeBtn.dataset.value || "", type==="officer" ? "未設定（任意）" : "未設定");
   });
 });
+// 一般ユーザーは来客のみ扱うため、通知・確認文言は「来客」、権限保持者は「来客・出張」
+function visitorKindLabel(){ return isVisitorManager ? "来客・出張" : "来客"; }
 function openVisitorModal(v, presetDate){
   editingVisitorId = v ? v.id : null;
   editingVisitorCreatedBy = v ? (v.createdByEmail || null) : null;
@@ -5012,7 +5014,9 @@ function openVisitorModal(v, presetDate){
   visitorModalType = v ? (v.type || "visitor") : "visitor";
   document.getElementById("visitor-type-field").style.display = isVisitorManager ? "" : "none";
   applyVisitorTypeUI(visitorModalType);
-  document.getElementById("visitor-modal-title").textContent = v ? "来客・出張を編集" : "来客・出張を追加";
+  // 一般ユーザーは来客のみ扱うため、タイトルも「来客」だけにする（権限保持者は来客・出張の両方）
+  { const kind = isVisitorManager ? "来客・出張" : "来客";
+    document.getElementById("visitor-modal-title").textContent = v ? `${kind}を編集` : `${kind}を追加`; }
   document.getElementById("visitor-name-input").value = v ? (v.visitorName||"") : "";
   if(v){
     const emails = getVisitorHostEmails(v);
@@ -5158,21 +5162,21 @@ document.getElementById("visitor-modal-save").addEventListener("click", async ()
   try{
     if(editingVisitorId){
       await updateDoc(doc(db,"visitor_schedules", editingVisitorId), payload);
-      toast("来客・出張を更新しました。");
+      toast(`${visitorKindLabel()}を更新しました。`);
     } else {
       payload.createdByEmail = currentUser.email;
       payload.createdAt = new Date().toISOString();
       await addDoc(collection(db,"visitor_schedules"), payload);
-      toast("来客・出張を追加しました。");
+      toast(`${visitorKindLabel()}を追加しました。`);
     }
     document.getElementById("visitor-modal").classList.remove("show");
   }catch(e){
     if(e && e.code === "not-found" && editingVisitorId){
-      errEl.textContent = "この来客・出張はすでに削除されています（他の人が削除した可能性があります）。画面を閉じて、一覧を確認してください。";
+      errEl.textContent = `この${visitorKindLabel()}はすでに削除されています（他の人が削除した可能性があります）。画面を閉じて、一覧を確認してください。`;
     } else if(e && e.code === "permission-denied"){
       errEl.textContent = editingVisitorId
-        ? "この来客・出張を更新する権限がありません。Firestoreのセキュリティルールが最新の内容で公開されているかご確認ください。"
-        : "この来客・出張を登録する権限がありません。Firestoreのセキュリティルールが最新の内容で公開されているかご確認ください。";
+        ? `この${visitorKindLabel()}を更新する権限がありません。Firestoreのセキュリティルールが最新の内容で公開されているかご確認ください。`
+        : `この${visitorKindLabel()}を登録する権限がありません。Firestoreのセキュリティルールが最新の内容で公開されているかご確認ください。`;
     } else {
       errEl.textContent = "保存に失敗しました。しばらくしてから再度お試しください。";
     }
