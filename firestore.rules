@@ -352,10 +352,25 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && request.resource.data.createdByEmail == request.auth.token.email &&
         (request.resource.data.type != "officer" || isVisitorManager());
-      allow update, delete: if isSignedIn() &&
-        (resource.data.get('hostEmails', []).hasAny([request.auth.token.email])
-          || resource.data.get('hostEmail', '') == request.auth.token.email
-          || isVisitorManager());
+      // 2026-10-29：出張（type == "officer"）の更新・削除は来客・出張管理権限者のみ。
+      // 来客は、管理権限者、対象社員（hostEmails／旧hostEmail）、または「自分の予定に表示する」を選んだ作成者
+      // （showToCreator == true かつ createdByEmail が本人）が更新・削除できる。
+      // 一般ユーザーが来客を出張に書き換えることもできない。
+      allow update: if isSignedIn() &&
+        (isVisitorManager()
+          || (resource.data.get('type', 'visitor') != 'officer'
+              && request.resource.data.get('type', 'visitor') != 'officer'
+              && (resource.data.get('hostEmails', []).hasAny([request.auth.token.email])
+                  || resource.data.get('hostEmail', '') == request.auth.token.email
+                  || (resource.data.get('showToCreator', false) == true
+                      && resource.data.get('createdByEmail', '') == request.auth.token.email))));
+      allow delete: if isSignedIn() &&
+        (isVisitorManager()
+          || (resource.data.get('type', 'visitor') != 'officer'
+              && (resource.data.get('hostEmails', []).hasAny([request.auth.token.email])
+                  || resource.data.get('hostEmail', '') == request.auth.token.email
+                  || (resource.data.get('showToCreator', false) == true
+                      && resource.data.get('createdByEmail', '') == request.auth.token.email))));
     }
   }
 }
