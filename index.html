@@ -1924,6 +1924,13 @@
           <button type="button" class="btn-ghost" id="visitor-host-pick-btn" style="border:1px solid var(--line);">選択</button>
         </div>
       </div>
+      <div class="field" id="visitor-show-to-creator-field" style="display:none;">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+          <input type="checkbox" id="visitor-show-to-creator" style="width:auto;" checked>
+          自分の予定に表示する
+        </label>
+        <p style="font-size:11px;color:var(--muted);margin:4px 0 0;">チェックすると、この来客があなた自身の一覧・ダッシュボードにも表示され、あなたも編集・削除できます。チェックしない場合は、対応する社員（と管理権限者）にだけ表示されます。</p>
+      </div>
       <div class="field">
         <label id="visitor-datetime-label">開始日時</label>
         <div style="display:flex;gap:8px;">
@@ -3305,9 +3312,7 @@ function renderDashboardVisitorsCard(){
   if(!visitorsBody) return;
   visitorsBody.innerHTML = "";
   const todayStrForVisitors = todayStr();
-  const visibleVisitors = isVisitorManager
-    ? getVisitorSchedulesAll()
-    : getVisitorSchedulesAll().filter(v=> getVisitorHostEmails(v).includes(currentUser.email));
+  const visibleVisitors = getVisibleVisitorEntries();
   const targetVisitors = dashVisitorsRange==="today"
     ? visibleVisitors
         .filter(v=> visitorEntryCoversDate(v, todayStrForVisitors))
@@ -4616,7 +4621,7 @@ async function cleanupOldVisitorSchedules(){
     if(expired.length===0) return;
     const targets = isVisitorManager
       ? expired
-      : expired.filter(d => getVisitorHostEmails(d.data()).includes(currentUser.email));
+      : expired.filter(d => (d.data().type||"visitor") !== "officer" && getVisitorHostEmails(d.data()).includes(currentUser.email));
     if(targets.length===0) return;
     for(const d of targets){
       try{ await deleteDoc(doc(db,"visitor_schedules", d.id)); }catch(e){ /* 1件失敗しても他の削除は続行 */ }
@@ -4627,9 +4632,21 @@ async function cleanupOldVisitorSchedules(){
     visitorCleanupRunning = false;
   }
 }
+// 2026-10-29：表示範囲。来客は「来客・出張管理権限者＝全員分／一般＝自分が対象の分だけ」、出張は全員が全員分を見られる。
+function getVisibleVisitorEntries(){
+  const all = getVisitorSchedulesAll();
+  if(isVisitorManager) return all;
+  return all.filter(v=> (v.type||"visitor")==="officer" || getVisitorHostEmails(v).includes(currentUser.email) || isVisitorShownToCreator(v));
+}
+// 2026-10-29：他の人が対応する来客を登録した人（作成者）が、「自分の予定に表示する」を選んだ場合は、作成者にも見える
+function isVisitorShownToCreator(v){
+  return !!v && v.showToCreator === true && !!v.createdByEmail && v.createdByEmail === currentUser.email;
+}
 function canEditVisitorEntry(v){
-  // 来客・出張のどちらも、来客・出張管理権限者、または対象社員のうち誰か1人でも編集・削除可
-  return isVisitorManager || getVisitorHostEmails(v).includes(currentUser.email);
+  // 2026-10-29：出張の編集・削除は来客・出張管理権限者のみ。来客は、管理権限者、または対象社員のうち誰か1人でも編集・削除可
+  if(isVisitorManager) return true;
+  if((v.type||"visitor")==="officer") return false;
+  return getVisitorHostEmails(v).includes(currentUser.email) || isVisitorShownToCreator(v);
 }
 // 対象社員・日付の絞り込みを単純なドロップダウンにする。
 // 選択肢は固定リストではなく、その時点で（自分に見えている）一覧に実際に登場している
@@ -4638,9 +4655,7 @@ function populateVisitorFilterSelects(){
   const hostSel = document.getElementById("visitor-host-filter-select");
   const dateSel = document.getElementById("visitor-date-filter-select");
   if(!hostSel || !dateSel) return;
-  const visible = isVisitorManager
-    ? getVisitorSchedulesAll()
-    : getVisitorSchedulesAll().filter(v=> getVisitorHostEmails(v).includes(currentUser.email));
+  const visible = getVisibleVisitorEntries();
 
   const hostMap = new Map(); // email -> name
   visible.forEach(v=>{
@@ -4775,9 +4790,7 @@ function renderVisitorCalendar(){
   const weekdayLabels = ["日","月","火","水","木","金","土"];
   const today = todayStr();
 
-  const visible = isVisitorManager
-    ? getVisitorSchedulesAll()
-    : getVisitorSchedulesAll().filter(v=> getVisitorHostEmails(v).includes(currentUser.email));
+  const visible = getVisibleVisitorEntries();
   let filtered = visible;
   if(visitorTypeFilter) filtered = filtered.filter(v=> (v.type||"visitor")===visitorTypeFilter);
   if(visitorHostFilterEmail) filtered = filtered.filter(v=> getVisitorHostEmails(v).includes(visitorHostFilterEmail));
@@ -4834,7 +4847,9 @@ function renderVisitorCalendar(){
         }
         const entry = document.createElement("div");
         entry.className = "vcal-entry" + (isMultiDay ? " vcal-entry-period" : "");
-        entry.title = "クリックして編集";
+        const canEditEntry = canEditVisitorEntry(v);
+        entry.title = canEditEntry ? "クリックして編集" : "";
+        if(!canEditEntry) entry.style.cursor = "default";
         entry.innerHTML =
           `<span class="visitor-type-pill ${isOfficer ? "type-officer" : "type-visitor"}" style="padding:1px 7px;font-size:10.5px;">${isOfficer ? "出張" : "来客"}</span>` +
           `<span class="vcal-entry-time">${escapeHtml(timeLabel)}</span>` +
@@ -4842,7 +4857,7 @@ function renderVisitorCalendar(){
           `<span class="vcal-entry-host">${escapeHtml(formatVisitorHostNames(v))}</span>`;
         entry.addEventListener("click", (e)=>{
           e.stopPropagation();
-          openVisitorModal(v);
+          if(canEditEntry) openVisitorModal(v);   // 2026-10-29：編集できない予定（他人の出張など）は開かない
         });
         body.appendChild(entry);
       });
@@ -4857,9 +4872,7 @@ function renderVisitorsTab(){
   if(!body) return;
   body.innerHTML = "";
   // 対象社員は自分の来客・出張のみ、来客・出張管理権限者は全件を表示する
-  const visible = isVisitorManager
-    ? getVisitorSchedulesAll()
-    : getVisitorSchedulesAll().filter(v=> getVisitorHostEmails(v).includes(currentUser.email));
+  const visible = getVisibleVisitorEntries();
   let filtered = visitorDateFilter ? visible.filter(v=> v.date===visitorDateFilter) : visible;
   if(visitorTypeFilter) filtered = filtered.filter(v=> (v.type||"visitor")===visitorTypeFilter);
   if(visitorHostFilterEmail) filtered = filtered.filter(v=> getVisitorHostEmails(v).includes(visitorHostFilterEmail));
@@ -4940,6 +4953,17 @@ function setVisitorHosts(emps){
   const display = document.getElementById("visitor-host-display");
   display.textContent = visitorHostNames.length>0 ? visitorHostNames.join("、") : "未選択";
   display.style.color = visitorHostNames.length>0 ? "var(--text)" : "var(--muted)";
+  updateVisitorShowToCreatorField();
+}
+// 「自分の予定に表示する」チェックは、来客で、かつ自分が作成者（新規は本人）で、対応する社員に自分が入っていない時だけ表示する
+let editingVisitorCreatedBy = null;
+function updateVisitorShowToCreatorField(){
+  const field = document.getElementById("visitor-show-to-creator-field");
+  if(!field) return;
+  const isVisitorType = visitorModalType !== "officer";
+  const iAmCreator = !editingVisitorId || editingVisitorCreatedBy === currentUser.email;
+  const hostsExcludeMe = visitorHostEmails.length > 0 && !visitorHostEmails.includes(currentUser.email);
+  field.style.display = (isVisitorType && iAmCreator && hostsExcludeMe) ? "" : "none";
 }
 function setVisitorModalDate(dateStr){
   visitorModalDate = dateStr || "";
@@ -4962,6 +4986,7 @@ function applyVisitorTypeUI(type){
   document.querySelectorAll("#visitor-type-toggle .seg-btn").forEach(b=>{
     b.classList.toggle("active", b.dataset.visitortype===type);
   });
+  updateVisitorShowToCreatorField();
 }
 document.querySelectorAll("#visitor-type-toggle .seg-btn").forEach(btn=>{
   btn.addEventListener("click", ()=>{
@@ -4982,6 +5007,8 @@ document.querySelectorAll("#visitor-type-toggle .seg-btn").forEach(btn=>{
 });
 function openVisitorModal(v, presetDate){
   editingVisitorId = v ? v.id : null;
+  editingVisitorCreatedBy = v ? (v.createdByEmail || null) : null;
+  document.getElementById("visitor-show-to-creator").checked = v ? (v.showToCreator === true) : true;   // 新規は初期値オン
   visitorModalType = v ? (v.type || "visitor") : "visitor";
   document.getElementById("visitor-type-field").style.display = isVisitorManager ? "" : "none";
   applyVisitorTypeUI(visitorModalType);
@@ -5124,6 +5151,10 @@ document.getElementById("visitor-modal-save").addEventListener("click", async ()
     updatedBy: currentUser.email,
     updatedAt: new Date().toISOString()
   };
+  // 「自分の予定に表示する」：チェックが画面に出ている時だけ値を書く（出ていない時は、既存の値を変えない）
+  if(document.getElementById("visitor-show-to-creator-field").style.display !== "none"){
+    payload.showToCreator = !!document.getElementById("visitor-show-to-creator").checked;
+  }
   try{
     if(editingVisitorId){
       await updateDoc(doc(db,"visitor_schedules", editingVisitorId), payload);
