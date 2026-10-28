@@ -2667,7 +2667,7 @@ let equipmentAll = [];
 const DIET = (()=>{
   let off = false;
   try{ off = new URLSearchParams(location.search).get("diet") === "0"; }catch(e){}
-  return { calWindowCache: !off, equipmentLazy: !off, wbPresetsLazy: !off, calBundle: !off, presetBundle: !off, rosterBundle: !off, editorCalLight: !off, consumeFromRoster: !off, cleanupScoped: !off, visitorWindow: !off, masterBundle: !off, noticesDelta: !off, editorWindowPublished: !off };
+  return { calWindowCache: !off, equipmentLazy: !off, wbPresetsLazy: !off, calBundle: !off, presetBundle: !off, rosterBundle: !off, editorCalLight: !off, consumeFromRoster: !off, cleanupScoped: !off, visitorWindow: !off, masterBundle: !off, noticesDelta: !off, editorWindowPublished: !off, editorMasterBundle: !off };
 })();
 let selectedCategory = null;
 let selectedCheckoutCategory = null;
@@ -7067,6 +7067,20 @@ function validMasterBundle(d){
   const okIds = a => a.every(x => x && typeof x.id === "string" && x.id);
   return okIds(d.departments) && okIds(d.wbStatuses) && okIds(d.categories);
 }
+// 2026-10-28：画面側（index.html）で設備カテゴリを新規作成した時に、まとめを1回だけ作り直す（めったに起きない操作。読み取り約18件）。
+// 通常のマスター編集は管理画面で行い、そちらがまとめを同期する。失敗しても、管理画面を開いた時に同期される。
+async function rebuildMasterBundleOnce(){
+  if(!DIET.masterBundle) return;
+  try{
+    const snaps = await Promise.all(["departments","wb_statuses","equipment_categories"].map(n=> getDocs(collection(db,n))));
+    const mk = sn => sn.docs.map(x=>({ id:x.id, ...x.data() }));
+    const body = { departments: mk(snaps[0]), wbStatuses: mk(snaps[1]), categories: mk(snaps[2]) };
+    if(body.departments.length === 0 || body.wbStatuses.length === 0 || body.categories.length === 0) return;
+    const payload = { ...body, v: Date.now(), counts:{ departments:body.departments.length, wbStatuses:body.wbStatuses.length, categories:body.categories.length }, updatedBy: currentUser.email };
+    if(new TextEncoder().encode(JSON.stringify(payload)).length > MASTER_BUNDLE_MAX_BYTES) return;
+    await setDoc(doc(db,"master_bundle","main"), payload);
+  }catch(e){ console.error("[マスターまとめ再作成エラー]", e); }
+}
 let masterLegacyStarted = false, masterBundleUnsub = null, masterBundleTimer = null;
 function startLegacyMasterListeners(){
   if(masterLegacyStarted) return;
@@ -7080,8 +7094,11 @@ function startLegacyMasterListeners(){
 function initMasterDataListeners(){
   const canWrite = !!(isAdmin || isWhereaboutsEditor || isEquipmentManager);
   if(!DIET.masterBundle){ startLegacyMasterListeners(); return; }
-  if(canWrite){
+  if(canWrite && !DIET.editorMasterBundle){
     // マスター編集権限者：従来の3購読＋まとめの同期役（まとめ自体の読み取りは1件）
+    // 2026-10-28：通常は下の「まとめ1件」方式を使う（?diet=0 の時だけこの従来方式）。
+    //   理由：所属・行き先ステータス・設備カテゴリを編集するのは管理画面（admin.html）で、そこがまとめを同期している。
+    //   編集権限者の端末が毎回3コレクション（約18件）を購読し、起動・無操作からの再開のたびに再課金されていたため。
     masterSyncActive = true;
     onSnapshot(doc(db,"master_bundle","main"), { includeMetadataChanges:true }, snap=>{
       if(snap.metadata && snap.metadata.fromCache) return;
@@ -10938,6 +10955,7 @@ async function ensureSteelPlateCategoryAndMigrate(){
         label:"敷鉄板", color:"#8B5E3C", mode:"inventory", order:maxOrder+10
       });
       catId = newCatRef.id;
+      rebuildMasterBundleOnce();   // 2026-10-28：まとめにも反映（編集権限者もまとめ方式になったため）
     }
     const oldTypesSnap = await getDocs(collection(db,"steel_plate_types"));
     for(const d of oldTypesSnap.docs){
@@ -11508,6 +11526,7 @@ document.getElementById("sp-type-save-btn")?.addEventListener("click", async ()=
           label:"敷鉄板", color:"#8B5E3C", mode:"inventory", order:maxOrder+10
         });
         catId = newCatRef.id;
+        rebuildMasterBundleOnce();   // 2026-10-28：まとめにも反映
       }
       const nextOrder = spPlateTypesAll.reduce((max,t)=> Math.max(max, t.order??0), 0) + 1;
       await addDoc(collection(db,"equipment"), { name, category: catId, totalCount, unitPricePerDay, order: nextOrder, active: true });
