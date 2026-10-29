@@ -1193,7 +1193,7 @@
       <div class="panel">
         <h2>予定削除までの日数</h2>
         <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px;">
-          来客・出張は、予定の最終日（複数日にわたる予定は終了日）から、ここで設定した日数が経過した日に自動的に削除されます。例：「1」＝最終日の翌日に削除、「14」＝最終日の14日後に削除。1以上の整数で指定してください。
+          来客・出張は、予定の最終日（複数日にわたる予定は終了日）から、ここで設定した日数が経過した日に自動的に削除されます。例：「1」＝最終日の翌日に削除、「14」＝最終日の14日後に削除。初期値は「1」です。1以上の整数で指定してください。
         </p>
         <div style="display:flex;align-items:center;gap:10px;">
           <div class="field" style="margin:0;">
@@ -4909,7 +4909,7 @@ function initVisitorManagersListener(){
 ============================================================ */
 function initVisitorCleanupSettingsListener(){
   onSnapshot(doc(db,"app_settings","visitor_cleanup"), snap=>{
-    const days = (snap.exists() && snap.data().days) ? snap.data().days : 14;
+    const days = (snap.exists() && snap.data().days) ? snap.data().days : 1;
     const input = document.getElementById("visitor-cleanup-days-input");
     if(input && document.activeElement !== input) input.value = days;
   }, (err)=>{ console.error("[来客・出張：削除日数取得エラー]", err); });

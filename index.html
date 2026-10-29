@@ -4522,10 +4522,10 @@ function readVisitorDaysCache(){
   return null;
 }
 async function fetchVisitorCleanupDays(){
-  let days = 14; // 設定ドキュメントが無い場合の既定（自動削除側の既定と同じ）
+  let days = 1; // 設定ドキュメントが無い場合の既定（自動削除側の既定と同じ）
   try{
     const sd = await getDoc(doc(db,"app_settings","visitor_cleanup"));
-    if(sd.exists() && sd.data().days){ days = Number(sd.data().days) || 14; }
+    if(sd.exists() && sd.data().days){ days = Number(sd.data().days) || 1; }
   }catch(e){ return null; }
   try{ localStorage.setItem(VISITOR_DAYS_CACHE_KEY, JSON.stringify({ days, ts:Date.now() })); }catch(e){}
   return days;
@@ -4568,7 +4568,7 @@ async function initVisitorSchedulesListener(){
   if(!DIET.visitorWindow){ startVisitorLightListeners(14); return; }
   const cached = readVisitorDaysCache();
   let days = cached ? cached.days : null;
-  if(days === null){ days = await fetchVisitorCleanupDays(); if(days === null) days = 14; }
+  if(days === null){ days = await fetchVisitorCleanupDays(); if(days === null) days = 1; }
   startVisitorLightListeners(days);
   if(cached && Date.now() - cached.ts > 6*60*60*1000){
     const fresh = await fetchVisitorCleanupDays();
@@ -4605,7 +4605,7 @@ async function cleanupOldVisitorSchedules(){
   if(!shouldRunLocalThrottledCleanup("visitorCleanupLastRun", VISITOR_CLEANUP_INTERVAL_MS)) return;
   visitorCleanupRunning = true;
   try{
-    let cleanupDays = 14;
+    let cleanupDays = 1;
     const fetchedDays = await fetchVisitorCleanupDays(); // 失敗時はnull（既定値のまま続行）。取得できた値は軽量購読用にキャッシュされる
     if(fetchedDays !== null) cleanupDays = fetchedDays;
     const cutoff = new Date(Date.now() - cleanupDays*24*60*60*1000);
