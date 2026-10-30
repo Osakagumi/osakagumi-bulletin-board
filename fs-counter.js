@@ -57,6 +57,17 @@
      追加の読み取りは発生しない。
    ・ログが OFF の間は、これらの行も一切送らない（従来どおり）。
 
+   【2026年10月30日 v3.7：無操作からの「再開」で課金される読み取りを、ログで説明できるようにする（観測のみ・挙動は変えない）】
+   ・10/30のログとコンソールの突き合わせで、読み取りのスパイクは「無操作30分で解除した購読の再開」と時刻が一致した
+     （14:25・14:35・14:40・14:50・15:38・15:40）。従来のログは、この再開で再課金される分を数えていなかった。
+   ・再開のたびに、種別「env」・コレクション「復帰」の行を1本送る（件数行は送信のタイミングで時刻がずれるため、事象の時刻はこの行で見る）。
+       パス   ＝ 原因（input:pointerdown / visible / focus / pageshow / exempt）・停止していた秒数・再開した購読の数・
+                 再課金の上限（各購読の直近の件数の合計）・冷（30分以上停止）／温
+       呼び出し元 ＝ 件数の多い購読の上位（ラベル:件数）
+   ・冷（停止が30分以上）のときは、再課金の上限を「推定」に加える（件数行「★再接続推定 (再開)…」。累計の「推定」にも入る）。
+     温（30分未満）は推定に加えない（環境行のみ）。実際に課金されたかどうかは、コンソールのグラフと見比べて判断する。
+   ・解除した時刻（無操作30分）も、既存の「無操作時の購読停止」行に残る。
+
    【2026年10月28日 v3.6：無操作時の購読停止から、カレンダー編集中データの購読（calendar_days、約365件）を除外】
    ・停止→再開のたびに365件が丸ごと再課金されていたため（10/26〜28のログ：ヒネの再開で約365〜458件が6回）。
      つながったままなら、変更があった日付の分だけが課金される。それ以外の購読は、従来どおり停止・再開する。
@@ -109,7 +120,7 @@
    ・修正1：ログON判定が届く前に来る「起動直後のlisten行」が失われていた → 判定が届くまで保留し、ONなら送る。
    ・修正2：__fs.reset() が logPrev を消さないため、ログに負の差分行が出た → logPrev も初期化する。
    ========================================================= */
-const FS_COUNTER_VERSION = "v3.6 2026-10-28";
+const FS_COUNTER_VERSION = "v3.7 2026-10-30";
 import * as FS from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 export * from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
@@ -447,6 +458,7 @@ let idleKeepMin = 30;
 let idleExempt = false;
 const idleHandles = new Set();
 let idleSuspended = false;
+let idleSuspendedAt = 0;     // v3.7: 購読を解除した時刻（再開時に「何秒止めていたか」を出すため）
 let lastInputAt = Date.now();
 let idleOverlayEl = null;
 export function configureIdle(opts){
@@ -456,7 +468,7 @@ export function configureIdle(opts){
     if(isFinite(m) && m >= 1 && m <= 1440) idleKeepMin = Math.floor(m);
     if(typeof opts.exempt === "boolean" && opts.exempt !== idleExempt){
       idleExempt = opts.exempt;
-      if(idleExempt) idleResumeAll();
+      if(idleExempt) idleResumeAll("exempt");
       else lastInputAt = Date.now();
     }
   }catch(e){}
@@ -482,16 +494,35 @@ function idleHideOverlay(){
 function idleSuspendAll(){
   if(idleSuspended || breakerTripped || idleExempt) return;
   idleSuspended = true;
+  idleSuspendedAt = Date.now();
   let n = 0;
   idleHandles.forEach(h=>{ if(!h.suspended && !h.dead && !h.keep){ h.suspend(); n++; } });
   if(document.visibilityState !== "hidden") idleShowOverlay();
   idleNote(`無操作${idleKeepMin}分：購読${n}件を解除`);
 }
-function idleResumeAll(){
+function idleResumeAll(reason){
   idleHideOverlay();
   if(!idleSuspended) return;
   idleSuspended = false;
   lastInputAt = Date.now();
+  // v3.7: 再開で再課金される読み取りの見積もりと、事象の記録（再開する前に、解除中の購読の件数を集計する）
+  try{
+    const gapSec = idleSuspendedAt ? Math.round((Date.now() - idleSuspendedAt) / 1000) : 0;
+    const cold = gapSec >= 1800;
+    const rows = [];
+    let total = 0, cnt = 0;
+    liveSizes.forEach(ent=>{
+      if(!ent.suspended) return;
+      const n = Math.max(ent.size || 0, 1);
+      rows.push([ent.label, n]); total += n; cnt++;
+      if(cold) estStats["(再開)" + ent.label] = (estStats["(再開)" + ent.label] || 0) + n;
+    });
+    rows.sort((a, b)=> b[1] - a[1]);
+    const top = rows.slice(0, 5).map(r=> r[0] + ":" + r[1]).join(" ");
+    if(logCfg && logEnabled) logPush({ t: Date.now(), type: "env", tab: logCurrentTab(), coll: "復帰",
+      path: `原因=${reason || "?"} 停止${gapSec}秒 購読${cnt}件 再課金上限${total} ${cold ? "冷(推定に加算)" : "温(推定に加算せず)"}`, caller: top });
+    if(typeof console !== "undefined") console.info(`[FS] 復帰 原因=${reason || "?"} 停止${gapSec}秒 購読${cnt}件 再課金上限${total} ${cold ? "冷" : "温"}`);
+  }catch(e){}
   let n = 0;
   Array.from(idleHandles).forEach(h=>{ if(h.suspended && !h.dead){ h.resume(); n++; } });
   idleNote(`再開：購読${n}件`);
@@ -503,16 +534,16 @@ try{
     lastInputAt = Date.now();
     if(idleSuspended && (!ev || ev.isTrusted !== false)){
       if(idleOverlayEl && ev && typeof ev.preventDefault === "function" && t !== "wheel" && t !== "touchstart") { try{ ev.preventDefault(); ev.stopPropagation(); }catch(e){} }
-      idleResumeAll();
+      idleResumeAll("input:" + t);
     }
   }, { capture:true, passive:false }));
   document.addEventListener("visibilitychange", ()=>{
-    if(document.visibilityState !== "hidden"){ lastInputAt = Date.now(); idleResumeAll(); }
+    if(document.visibilityState !== "hidden"){ lastInputAt = Date.now(); idleResumeAll("visible"); }
   });
   // 前面の別ウィンドウが閉じる・最小化されて、このウィンドウが繰り上がって前面になった場合
   // （ブラウザが「表のまま」と判定していて visibilitychange が出ないとき）も、フォーカスで再開する
-  window.addEventListener("focus", ()=>{ if(idleSuspended){ lastInputAt = Date.now(); idleResumeAll(); } });
-  window.addEventListener("pageshow", ()=>{ if(idleSuspended){ lastInputAt = Date.now(); idleResumeAll(); } });
+  window.addEventListener("focus", ()=>{ if(idleSuspended){ lastInputAt = Date.now(); idleResumeAll("focus"); } });
+  window.addEventListener("pageshow", ()=>{ if(idleSuspended){ lastInputAt = Date.now(); idleResumeAll("pageshow"); } });
   setInterval(()=>{
     if(idleExempt || idleSuspended) return;
     if(Date.now() - lastInputAt >= idleKeepMin * 60000) idleSuspendAll();
